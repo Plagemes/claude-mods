@@ -1,7 +1,7 @@
 # mod-store
 > An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.
 
-**Category:** Core · **Version:** 1.1.1
+**Category:** Core · **Version:** 1.1.2
 
 ## What it does
 `/mods` opens a store pane listing every mod of the collection, grouped by category, with what you already have installed and what has an update. Search as you type, filter by category (or by *Installed* / *Updates*), open a mod to read its README, then install, update or uninstall it with one key. The catalog is cached, so the store still opens offline, and a session start tells you once when a new update is out.
@@ -39,3 +39,39 @@ In the pane (keys work while it has the keyboard; Tab walks the controls, Esc cl
 - Fetches `.claude-plugin/marketplace.json` (and `catalog.json` for category titles, when present) raw from GitHub with `$.http.fetch`, caches it in `$.store` with its timestamp, and falls back to that cache when GitHub cannot be reached.
 - Installed versions and every change go through the `claude plugin` CLI (`list`, `marketplace add/update`, `install`, `update`, `uninstall`, all with `--json`) via `$.process.run`; there is no `$` API for plugins. The marketplace is added on first install.
 - Changes take effect after `/reload-plugins`. Installs come from the marketplace's default branch whatever `branch` says, and every step runs the `claude` CLI: the session's own binary when the engine names it, else the one the desktop app installed (under `%APPDATA%\Claude\claude-code` on Windows, `~/Library/Application Support/Claude/claude-code` on macOS), else `claude` from PATH. If none is found, the pane says "install status unknown" and shows why.
+
+## What it fetches, runs and sends
+mod-store has no telemetry and sends none of your data anywhere. This is everything it reaches outside the session.
+
+**Network** (`$.http.fetch`, `hooks/register.tsx`): only `GET` requests, with no body and no credentials, to
+`https://raw.githubusercontent.com/<repository>/<branch>/<file>`. `<repository>` and `<branch>` are the `repository` and `branch` settings (default `plagemes/claude-mods` and `main`). `<file>` is one of:
+- `.claude-plugin/marketplace.json`, the list of mods and their versions;
+- `catalog.json`, category titles and tiers;
+- `mods/<mod>/README.md`, the README shown on a mod's page, fetched only when you open that page.
+
+Each request has a 15 s timeout. The answers are cached in `$.store` on this machine.
+
+**Programs** (`$.process.run`): only the `claude` CLI, always with a fixed argument list and never through a shell. It runs the session's own binary, else the desktop app's, else `claude` from PATH. These are the only commands:
+
+| Command | When |
+| --- | --- |
+| `claude plugin list --json` | opening the store, `/mods refresh`, after every change, and at session start for the update check (off with `checkForUpdates: false`) |
+| `claude plugin marketplace list --json` | before the first install, to see whether the marketplace is already added |
+| `claude plugin marketplace add <repository> --json` | on the first install, when the marketplace is missing |
+| `claude plugin marketplace update <marketplace> --json` | before updates, before `install-all`, and when an install reports the mod as not found |
+| `claude plugin install <mod>@<marketplace> --scope user --json` | when you press Install, or run `/mods install <mod>` or `/mods install-all` |
+| `claude plugin update <mod>@<marketplace> --scope <scope> --json` | when you press Update, or run `/mods update <mod>` or `/mods update-all` |
+| `claude plugin uninstall <mod>@<marketplace> --scope <scope> --json` | when you press Uninstall, or run `/mods uninstall <mod>` |
+
+`<mod>` is always a name from the fetched catalog that passes a strict name check. `<scope>` is the scope the CLI reported for that mod. Nothing fetched is ever run as a command.
+
+**Slash commands** (`$.command.run`): only `/reload-plugins`, and only when you press **Reload plugins** (`l`) after a change.
+
+**Hooks**:
+- `session.start` registers `/mods` and, unless `checkForUpdates` is off, checks for updates.
+- `command.run` answers `/mods` only. It does not see or change any other command.
+- `ui.render` draws the store's own pane.
+
+mod-store does not hook tool calls, prompts or files.
+
+**Local data**: it reads the list of installed plugins through the CLI, and keeps the catalog cache, the README cache and the last update toast in `$.store` and `$.state`.
