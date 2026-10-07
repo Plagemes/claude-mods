@@ -8,7 +8,8 @@ A command that never exits, run in the foreground, holds the whole turn until it
 
 ## Install
 ```
-/plugin install watch-mode-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install watch-mode-guard@claude-mods
 ```
 
 ## Usage

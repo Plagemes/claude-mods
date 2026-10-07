@@ -8,7 +8,8 @@ After every turn, the tokens it used are added to a one-line chart in the band j
 
 ## Install
 ```
-/plugin install token-sparkline --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install token-sparkline@claude-mods
 ```
 
 ## Usage

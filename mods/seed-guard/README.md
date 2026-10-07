@@ -8,7 +8,8 @@ Before Claude runs a Bash command, seed-guard checks whether it seeds, resets or
 
 ## Install
 ```
-/plugin install seed-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install seed-guard@claude-mods
 ```
 
 ## Usage

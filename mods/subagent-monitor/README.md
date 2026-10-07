@@ -8,7 +8,8 @@ Opens a live pane that lists every subagent of the session: its type, the task i
 
 ## Install
 ```
-/plugin install subagent-monitor --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install subagent-monitor@claude-mods
 ```
 
 ## Usage

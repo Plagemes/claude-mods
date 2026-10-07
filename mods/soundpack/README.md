@@ -14,7 +14,8 @@ Gives four moments of a Claude Code session a sound, in the style you pick: a lo
 
 ## Install
 ```
-/plugin install soundpack --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install soundpack@claude-mods
 ```
 
 ## Usage

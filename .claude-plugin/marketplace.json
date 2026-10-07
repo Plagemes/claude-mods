@@ -13,7 +13,7 @@
       "name": "mod-store",
       "source": "./mods/mod-store",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -140,7 +140,7 @@
       "name": "path-jail",
       "source": "./mods/path-jail",
       "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"

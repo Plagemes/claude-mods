@@ -8,7 +8,8 @@ url-allowlist checks the host of every WebFetch Claude makes. In the default all
 
 ## Install
 ```
-/plugin install url-allowlist --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install url-allowlist@claude-mods
 ```
 
 ## Usage

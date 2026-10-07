@@ -136,7 +136,7 @@
       "category": "core",
       "tier": "complex",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "core",
@@ -244,7 +244,7 @@
       "category": "security",
       "tier": "complex",
       "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "keywords": [
         "claude-mods",
         "security",

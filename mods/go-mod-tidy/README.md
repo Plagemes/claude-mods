@@ -8,7 +8,8 @@ When Claude edits or writes a `.go` file and the change adds or removes an impor
 
 ## Install
 ```
-/plugin install go-mod-tidy --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install go-mod-tidy@claude-mods
 ```
 
 ## Usage

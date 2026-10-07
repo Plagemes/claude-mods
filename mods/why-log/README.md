@@ -8,7 +8,8 @@ Every time Claude edits files, why-log notes which files a turn changed, how man
 
 ## Install
 ```
-/plugin install why-log --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install why-log@claude-mods
 ```
 
 ## Usage

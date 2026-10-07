@@ -8,7 +8,8 @@ After Claude edits or writes a file in `.github/workflows/`, ci-yaml-check reads
 
 ## Install
 ```
-/plugin install ci-yaml-check --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install ci-yaml-check@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ When a turn that edited files ends, self-check asks the model one more question 
 
 ## Install
 ```
-/plugin install self-check --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install self-check@claude-mods
 ```
 
 ## Usage

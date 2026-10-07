@@ -8,7 +8,8 @@ When Claude runs `kubectl apply`, `replace` or `delete`, this mod first runs a s
 
 ## Install
 ```
-/plugin install k8s-dry-run --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install k8s-dry-run@claude-mods
 ```
 
 ## Usage

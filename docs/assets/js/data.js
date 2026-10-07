@@ -48,8 +48,8 @@ export function iconSvg(categoryId, className = 'icon') {
   return `<svg class="${className}" aria-hidden="true"><use href="${iconHref(categoryId)}"/></svg>`
 }
 
-export function installCommand(name, repository) {
-  return `/plugin install ${name} --marketplace ${repository}`
+export function installCommand(name, marketplace = 'claude-mods') {
+  return `/plugin install ${name}@${marketplace}`
 }
 
 export function sourceUrl(name, repository) {

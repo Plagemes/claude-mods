@@ -16,7 +16,8 @@ When a turn of Claude's edited TypeScript or Python files, typecheck-gate runs y
 
 ## Install
 ```
-/plugin install typecheck-gate --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install typecheck-gate@claude-mods
 ```
 
 ## Usage

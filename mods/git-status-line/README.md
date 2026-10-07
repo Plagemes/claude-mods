@@ -10,7 +10,8 @@ modified, staged or untracked. Outside a git repository it shows nothing.
 
 ## Install
 ```
-/plugin install git-status-line --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install git-status-line@claude-mods
 ```
 
 ## Usage

@@ -11,7 +11,8 @@ Turn on `auto` and it does this by itself a few seconds after Claude edits compo
 
 ## Install
 ```
-/plugin install screenshot-check --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install screenshot-check@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ At session start it scans your component folders and reads every React, Vue, Sve
 
 ## Install
 ```
-/plugin install component-catalog --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install component-catalog@claude-mods
 ```
 
 ## Usage

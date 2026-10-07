@@ -11,7 +11,8 @@ overwrite commits you have not seen, and a toast tells you it did.
 
 ## Install
 ```
-/plugin install force-push-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install force-push-guard@claude-mods
 ```
 
 ## Usage

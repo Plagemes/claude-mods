@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install jwt-decode --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install jwt-decode@claude-mods
 ```
 
 ## Usage

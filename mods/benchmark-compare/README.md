@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install benchmark-compare --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install benchmark-compare@claude-mods
 ```
 
 ## Usage

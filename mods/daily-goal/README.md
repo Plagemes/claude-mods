@@ -10,7 +10,8 @@ Claude Code ships its own `/goal` command (a stop condition for Claude), so this
 
 ## Install
 ```
-/plugin install daily-goal --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install daily-goal@claude-mods
 ```
 
 ## Usage

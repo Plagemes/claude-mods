@@ -12,7 +12,8 @@ suggests an index you already have.
 
 ## Install
 ```
-/plugin install query-explain --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install query-explain@claude-mods
 ```
 
 ## Usage

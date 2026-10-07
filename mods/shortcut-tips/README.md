@@ -8,7 +8,8 @@ The first time a session starts each day, shortcut-tips shows one tip in a toast
 
 ## Install
 ```
-/plugin install shortcut-tips --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install shortcut-tips@claude-mods
 ```
 
 ## Usage

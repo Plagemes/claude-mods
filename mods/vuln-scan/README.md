@@ -8,7 +8,8 @@ Whenever Claude (or you, through Claude's shell) installs packages, vuln-scan ru
 
 ## Install
 ```
-/plugin install vuln-scan --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install vuln-scan@claude-mods
 ```
 
 ## Usage

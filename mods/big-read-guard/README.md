@@ -8,7 +8,8 @@ Before Claude reads a file in full, it checks the file's size. A file over the l
 
 ## Install
 ```
-/plugin install big-read-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install big-read-guard@claude-mods
 ```
 
 ## Usage

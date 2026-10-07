@@ -8,7 +8,8 @@ It finds your schema (the files `codegen.yml` or `.graphqlrc` point to, else eve
 
 ## Install
 ```
-/plugin install graphql-context --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install graphql-context@claude-mods
 ```
 
 ## Usage

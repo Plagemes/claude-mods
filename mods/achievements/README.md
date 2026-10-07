@@ -16,7 +16,8 @@ achievements counts what you and Claude do: prompts, commits, test runs, edits, 
 
 ## Install
 ```
-/plugin install achievements --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install achievements@claude-mods
 ```
 
 ## Usage

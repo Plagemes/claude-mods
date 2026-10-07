@@ -8,7 +8,8 @@ After Claude edits or writes a file, copyright-guard looks at the lines that wer
 
 ## Install
 ```
-/plugin install copyright-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install copyright-guard@claude-mods
 ```
 
 ## Usage

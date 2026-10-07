@@ -15,7 +15,8 @@
 
 ## Install
 ```
-/plugin install dev-server-pane --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install dev-server-pane@claude-mods
 ```
 
 ## Usage

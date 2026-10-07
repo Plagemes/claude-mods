@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install scope-lock --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install scope-lock@claude-mods
 ```
 
 ## Usage

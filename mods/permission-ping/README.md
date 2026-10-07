@@ -8,7 +8,8 @@ When Claude opens a permission dialog (a Bash command, a file edit, an MCP tool)
 
 ## Install
 ```
-/plugin install permission-ping --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install permission-ping@claude-mods
 ```
 
 ## Usage

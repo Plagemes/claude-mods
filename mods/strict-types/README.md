@@ -8,7 +8,8 @@ When Claude creates a new `.php` file with the `Write` tool, strict-types insert
 
 ## Install
 ```
-/plugin install strict-types --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install strict-types@claude-mods
 ```
 
 ## Usage

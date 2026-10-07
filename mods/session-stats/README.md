@@ -8,7 +8,8 @@ session-stats tallies the session as it goes: prompts and turns, every tool call
 
 ## Install
 ```
-/plugin install session-stats --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install session-stats@claude-mods
 ```
 
 ## Usage

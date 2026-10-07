@@ -8,7 +8,8 @@ When Claude runs `psql -c "SELECT * FROM users"`, `mysql -e "..."` or `sqlite3 a
 
 ## Install
 ```
-/plugin install query-result-cap --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install query-result-cap@claude-mods
 ```
 
 ## Usage

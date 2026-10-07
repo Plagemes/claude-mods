@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install status-check --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install status-check@claude-mods
 ```
 
 ## Usage

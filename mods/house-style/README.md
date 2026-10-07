@@ -8,7 +8,8 @@ Finds your project's style guide and adds it to Claude's system prompt as a **Pr
 
 ## Install
 ```
-/plugin install house-style --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install house-style@claude-mods
 ```
 
 ## Usage

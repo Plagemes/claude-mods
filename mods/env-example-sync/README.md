@@ -8,7 +8,8 @@ After Claude edits or writes a source file, env-example-sync looks for environme
 
 ## Install
 ```
-/plugin install env-example-sync --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install env-example-sync@claude-mods
 ```
 
 ## Usage

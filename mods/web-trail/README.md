@@ -8,7 +8,8 @@ Records each page Claude fetches with WebFetch and each query it runs with WebSe
 
 ## Install
 ```
-/plugin install web-trail --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install web-trail@claude-mods
 ```
 
 ## Usage

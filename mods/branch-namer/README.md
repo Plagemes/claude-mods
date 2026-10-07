@@ -15,7 +15,8 @@ names the branch from your last prompt.
 
 ## Install
 ```
-/plugin install branch-namer --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install branch-namer@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ Refuses the tool calls that would add a tracking SDK to your project unless you 
 
 ## Install
 ```
-/plugin install tracker-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install tracker-guard@claude-mods
 ```
 
 ## Usage

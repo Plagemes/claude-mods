@@ -8,7 +8,8 @@ Counts the different files Claude modifies with `Edit`, `Write` and `NotebookEdi
 
 ## Install
 ```
-/plugin install edit-limit --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install edit-limit@claude-mods
 ```
 
 ## Usage

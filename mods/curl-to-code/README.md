@@ -8,7 +8,8 @@ Paste a curl command after `/curl2code` and get ready-to-run code for `fetch`, `
 
 ## Install
 ```
-/plugin install curl-to-code --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install curl-to-code@claude-mods
 ```
 
 ## Usage

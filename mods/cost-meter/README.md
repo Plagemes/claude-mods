@@ -15,7 +15,8 @@ It does not include side requests the engine makes outside turns, and it is not 
 
 ## Install
 ```
-/plugin install cost-meter --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install cost-meter@claude-mods
 ```
 
 ## Usage

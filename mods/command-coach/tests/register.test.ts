@@ -111,7 +111,7 @@ test('suggests output-trimmer after three long outputs, with the line that insta
 
   expect(w.toasts).toHaveLength(1)
   expect(w.toasts[0]).toContain('3 commands printed very long output')
-  expect(w.toasts[0]).toContain('/plugin install output-trimmer --marketplace plagemes/claude-mods')
+  expect(w.toasts[0]).toContain('/plugin install output-trimmer@claude-mods')
 })
 
 test('suggests /compact when the context fills up; a built-in needs no install line', async ($, on) => {

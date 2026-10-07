@@ -8,14 +8,15 @@ command-coach watches how you use a session and, when a pattern shows up, tells 
 
 ## Install
 ```
-/plugin install command-coach --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install command-coach@claude-mods
 ```
 
 ## Usage
 A tip arrives as a toast after a turn, for example:
 
 ```
-💡 3 commands printed very long output and all of it went into the context. The output-trimmer mod keeps the head, tail and error lines. Install it: /plugin install output-trimmer --marketplace plagemes/claude-mods
+💡 3 commands printed very long output and all of it went into the context. The output-trimmer mod keeps the head, tail and error lines. Install it: /plugin install output-trimmer@claude-mods
 ```
 
 ```

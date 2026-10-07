@@ -8,7 +8,8 @@ When a turn that took a while finishes, a small model condenses Claude's final m
 
 ## Install
 ```
-/plugin install speak-summary --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install speak-summary@claude-mods
 ```
 
 ## Usage

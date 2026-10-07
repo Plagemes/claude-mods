@@ -19,7 +19,8 @@ After each successful Edit or Write, auto-format finds the formatter your projec
 
 ## Install
 ```
-/plugin install auto-format --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install auto-format@claude-mods
 ```
 
 ## Usage

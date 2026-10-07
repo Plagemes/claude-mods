@@ -8,7 +8,8 @@ Refuses a new `Agent` call while the maximum number of subagents is already runn
 
 ## Install
 ```
-/plugin install subagent-cap --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install subagent-cap@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ streaks counts the calendar days (by your own clock) on which you sent Claude a 
 
 ## Install
 ```
-/plugin install streaks --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install streaks@claude-mods
 ```
 
 ## Usage

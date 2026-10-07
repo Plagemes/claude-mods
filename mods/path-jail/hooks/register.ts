@@ -104,8 +104,19 @@ const targetsOf = (e: { tool: string; [field: string]: unknown }): Target[] => {
   return []
 }
 
+const orNext = (value: string | undefined, fallback: string | undefined): string | undefined =>
+  value === undefined || value === '' ? fallback : value
+
+/** The home folder: HOME, else USERPROFILE (Windows sets no HOME by default). */
+const homeOf = async ($: EngineInterface): Promise<string | undefined> =>
+  orNext(await $.env.get('HOME').catch(() => undefined), await $.env.get('USERPROFILE').catch(() => undefined))
+
+/** The temp folder: TMPDIR, else TEMP (Windows). */
+const tmpOf = async ($: EngineInterface): Promise<string | undefined> =>
+  orNext(await $.env.get('TMPDIR').catch(() => undefined), await $.env.get('TEMP').catch(() => undefined))
+
 const resolveRoot = async ($: EngineInterface, path: string, home: string | undefined): Promise<string | undefined> => {
-  const expanded = path === '~' || path.startsWith('~/') ? (home === undefined ? undefined : home + path.slice(1)) : path
+  const expanded = path === '~' || path.startsWith('~/') || path.startsWith('~\\') ? (home === undefined ? undefined : home + path.slice(1)) : path
   if (expanded === undefined) return undefined
   const stat = await $.fs.stat(expanded, { resolve: true }).catch(() => undefined)
   return stat?.kind === 'dir' ? stat.realPath : undefined
@@ -116,8 +127,8 @@ const loadJail = async ($: EngineInterface, extraRoots: readonly string[]): Prom
   const [root, cwd, home, tmp, settings, added] = await Promise.all([
     $.session.root(),
     $.session.cwd(),
-    $.env.get('HOME'),
-    $.env.get('TMPDIR'),
+    homeOf($),
+    tmpOf($),
     $.settings.read().catch(() => ({})),
     read($, addedRoots),
   ])

@@ -8,7 +8,8 @@ If you step away from a session with work uncommitted, a toast reminds you when 
 
 ## Install
 ```
-/plugin install idle-nudge --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install idle-nudge@claude-mods
 ```
 
 ## Usage

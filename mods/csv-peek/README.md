@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install csv-peek --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install csv-peek@claude-mods
 ```
 
 ## Usage

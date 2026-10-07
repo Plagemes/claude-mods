@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install mock-server --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install mock-server@claude-mods
 ```
 
 ## Usage

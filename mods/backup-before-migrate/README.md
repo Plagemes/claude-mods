@@ -12,7 +12,8 @@ lets the migration run. Claude is told where the backup is, and `/db-restore` pr
 
 ## Install
 ```
-/plugin install backup-before-migrate --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install backup-before-migrate@claude-mods
 ```
 
 ## Usage

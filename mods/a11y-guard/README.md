@@ -8,7 +8,8 @@ After Claude edits or writes a `.jsx`, `.tsx`, `.vue`, `.svelte`, `.html` or `.a
 
 ## Install
 ```
-/plugin install a11y-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install a11y-guard@claude-mods
 ```
 
 ## Usage

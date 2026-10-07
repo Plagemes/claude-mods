@@ -11,7 +11,8 @@ relations. The records are validated as JSON and shown in a pane, ready to save 
 
 ## Install
 ```
-/plugin install fixture-factory --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install fixture-factory@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install second-opinion --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install second-opinion@claude-mods
 ```
 
 ## Usage

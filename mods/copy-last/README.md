@@ -8,7 +8,8 @@ Two commands put Claude's output on your clipboard without selecting anything: `
 
 ## Install
 ```
-/plugin install copy-last --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install copy-last@claude-mods
 ```
 
 ## Usage

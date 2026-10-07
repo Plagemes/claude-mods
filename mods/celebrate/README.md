@@ -8,7 +8,8 @@ Watches the test commands Claude runs (jest, vitest, pytest, mocha, rspec, go te
 
 ## Install
 ```
-/plugin install celebrate --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install celebrate@claude-mods
 ```
 
 ## Usage

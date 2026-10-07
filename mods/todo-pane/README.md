@@ -8,7 +8,8 @@ Follows Claude's task list as it changes, from the `TodoWrite` tool and from the
 
 ## Install
 ```
-/plugin install todo-pane --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install todo-pane@claude-mods
 ```
 
 ## Usage

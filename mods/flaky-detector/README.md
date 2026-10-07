@@ -8,7 +8,8 @@ Every test run through Claude's shell is read for per-test results (jest, vitest
 
 ## Install
 ```
-/plugin install flaky-detector --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install flaky-detector@claude-mods
 ```
 
 ## Usage

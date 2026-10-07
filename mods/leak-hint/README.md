@@ -8,7 +8,8 @@ After Claude edits or writes a JavaScript, TypeScript, Vue or Svelte file, leak-
 
 ## Install
 ```
-/plugin install leak-hint --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install leak-hint@claude-mods
 ```
 
 ## Usage

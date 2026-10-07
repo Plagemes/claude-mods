@@ -8,7 +8,8 @@ Every time Claude successfully edits or writes a file, skill-tracker counts the 
 
 ## Install
 ```
-/plugin install skill-tracker --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install skill-tracker@claude-mods
 ```
 
 ## Usage

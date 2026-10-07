@@ -8,7 +8,8 @@ After Claude runs a build (`npm run build`, `pnpm build`, `vite build`, `next bu
 
 ## Install
 ```
-/plugin install bundle-size-watch --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install bundle-size-watch@claude-mods
 ```
 
 ## Usage

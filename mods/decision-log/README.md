@@ -8,7 +8,8 @@ Once you and Claude have talked a decision through, `/decide <title>` turns that
 
 ## Install
 ```
-/plugin install decision-log --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install decision-log@claude-mods
 ```
 
 ## Usage

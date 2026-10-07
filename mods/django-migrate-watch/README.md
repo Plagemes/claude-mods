@@ -8,7 +8,8 @@ When Claude edits a `models.py` (or a file in a `models/` package) in a Django p
 
 ## Install
 ```
-/plugin install django-migrate-watch --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install django-migrate-watch@claude-mods
 ```
 
 ## Usage

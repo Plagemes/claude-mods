@@ -8,7 +8,8 @@ When Claude edits a Prisma schema (`*.prisma`) or a file your `drizzle.config` n
 
 ## Install
 ```
-/plugin install schema-sync --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install schema-sync@claude-mods
 ```
 
 ## Usage

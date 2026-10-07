@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install data-map --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install data-map@claude-mods
 ```
 
 ## Usage

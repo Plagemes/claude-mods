@@ -14,6 +14,10 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-eee7db?style=flat-square&labelColor=1e1c19"></a>
   <a href="#quick-start"><img alt="Claude Code 2.1.292 or later" src="https://img.shields.io/badge/Claude%20Code-2.1.292%2B-ee8a4f?style=flat-square&labelColor=1e1c19"></a>
   <a href="https://plagemes.github.io/claude-mods/"><img alt="Browse the store" src="https://img.shields.io/badge/store-plagemes.github.io%2Fclaude--mods-eee7db?style=flat-square&labelColor=1e1c19"></a>
+  <br>
+  <a href=".claude-plugin/marketplace.json"><img alt="Claude Code plugin marketplace" src="https://img.shields.io/badge/Claude%20Code-plugin%20marketplace-ee8a4f?style=flat-square&labelColor=1e1c19"></a>
+  <a href="https://github.com/Plagemes/claude-mods/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Plagemes/claude-mods?style=flat-square&color=eee7db&labelColor=1e1c19"></a>
+  <a href="https://github.com/Plagemes/claude-mods"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Plagemes/claude-mods?style=flat-square&color=ee8a4f&labelColor=1e1c19"></a>
 </p>
 
 <p align="center">
@@ -51,7 +55,8 @@
 **1. Install the mod store**
 
 ```text
-/plugin install mod-store --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install mod-store@claude-mods
 ```
 
 **2. Open it**
@@ -65,7 +70,7 @@ Search, filter by category, then install, update or uninstall from a pane inside
 **Prefer one mod at a time?** Install any mod from the [catalog](#catalog) directly:
 
 ```text
-/plugin install <mod> --marketplace plagemes/claude-mods
+/plugin install <mod>@claude-mods
 ```
 
 > [!NOTE]

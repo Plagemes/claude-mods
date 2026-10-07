@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install settings-sync --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install settings-sync@claude-mods
 ```
 
 ## Usage

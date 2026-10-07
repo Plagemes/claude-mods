@@ -8,7 +8,8 @@ In a project that has a dark theme, dark-mode-check reads what Claude adds to ma
 
 ## Install
 ```
-/plugin install dark-mode-check --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install dark-mode-check@claude-mods
 ```
 
 ## Usage

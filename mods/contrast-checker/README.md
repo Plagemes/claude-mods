@@ -11,7 +11,8 @@ and dark-theme overrides, so changing `--muted` re-checks every rule that uses i
 
 ## Install
 ```
-/plugin install contrast-checker --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install contrast-checker@claude-mods
 ```
 
 ## Usage

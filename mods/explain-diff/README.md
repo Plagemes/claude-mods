@@ -8,7 +8,8 @@ While Claude works, explain-diff keeps each file as it was before the turn first
 
 ## Install
 ```
-/plugin install explain-diff --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install explain-diff@claude-mods
 ```
 
 ## Usage

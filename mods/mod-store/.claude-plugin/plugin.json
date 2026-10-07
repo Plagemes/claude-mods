@@ -1,6 +1,6 @@
 {
   "name": "mod-store",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#mod-store",

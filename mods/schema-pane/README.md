@@ -11,7 +11,8 @@ and migrations with the real table and column names.
 
 ## Install
 ```
-/plugin install schema-pane --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install schema-pane@claude-mods
 ```
 
 ## Usage

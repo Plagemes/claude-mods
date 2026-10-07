@@ -8,7 +8,8 @@ Every tool call, prompt and finished turn becomes one JSON line in a file per da
 
 ## Install
 ```
-/plugin install audit-trail --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install audit-trail@claude-mods
 ```
 
 ## Usage

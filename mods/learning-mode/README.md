@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install learning-mode --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install learning-mode@claude-mods
 ```
 
 ## Usage

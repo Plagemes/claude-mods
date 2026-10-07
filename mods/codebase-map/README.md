@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install codebase-map --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install codebase-map@claude-mods
 ```
 
 ## Usage

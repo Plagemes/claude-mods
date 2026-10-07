@@ -8,7 +8,8 @@ Every time a test command runs through Bash (`npm test`, `npx vitest run`, `pyte
 
 ## Install
 ```
-/plugin install regression-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install regression-guard@claude-mods
 ```
 
 ## Usage

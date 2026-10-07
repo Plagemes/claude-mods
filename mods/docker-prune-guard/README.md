@@ -8,7 +8,8 @@ Before Claude runs a Bash command, docker-prune-guard checks it for Docker and P
 
 ## Install
 ```
-/plugin install docker-prune-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install docker-prune-guard@claude-mods
 ```
 
 ## Usage

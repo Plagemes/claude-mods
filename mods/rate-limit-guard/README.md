@@ -8,7 +8,8 @@ rate-limit-guard counts the requests Claude's Bash commands send to each externa
 
 ## Install
 ```
-/plugin install rate-limit-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install rate-limit-guard@claude-mods
 ```
 
 ## Usage

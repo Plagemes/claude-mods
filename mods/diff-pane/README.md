@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install diff-pane --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install diff-pane@claude-mods
 ```
 
 ## Usage

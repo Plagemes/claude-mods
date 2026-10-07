@@ -8,7 +8,8 @@ After Claude edits or writes a Dockerfile (`Dockerfile`, `Dockerfile.dev`, `app.
 
 ## Install
 ```
-/plugin install docker-lint --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install docker-lint@claude-mods
 ```
 
 ## Usage

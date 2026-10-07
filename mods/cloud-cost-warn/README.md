@@ -8,7 +8,8 @@ Before Claude runs a Bash command, cloud-cost-warn checks it for AWS, Google Clo
 
 ## Install
 ```
-/plugin install cloud-cost-warn --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install cloud-cost-warn@claude-mods
 ```
 
 ## Usage

@@ -11,7 +11,8 @@ shows what changed (`+8`, `−4`), and one button hands the top issues to Claude
 
 ## Install
 ```
-/plugin install lighthouse-run --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install lighthouse-run@claude-mods
 ```
 
 ## Usage

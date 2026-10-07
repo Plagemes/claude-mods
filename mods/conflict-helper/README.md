@@ -8,7 +8,8 @@ After a `git merge`, `rebase`, `pull`, `cherry-pick`, `revert` or `stash pop` st
 
 ## Install
 ```
-/plugin install conflict-helper --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install conflict-helper@claude-mods
 ```
 
 ## Usage

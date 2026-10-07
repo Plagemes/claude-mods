@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install sbom --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install sbom@claude-mods
 ```
 
 ## Usage

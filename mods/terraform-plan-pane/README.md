@@ -8,7 +8,8 @@ Whenever Claude runs `terraform plan` or `tofu plan`, this mod reads the plan an
 
 ## Install
 ```
-/plugin install terraform-plan-pane --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install terraform-plan-pane@claude-mods
 ```
 
 ## Usage

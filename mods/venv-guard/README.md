@@ -8,7 +8,8 @@ Before Claude runs a Bash command, venv-guard looks for `pip install`, `pip3 ins
 
 ## Install
 ```
-/plugin install venv-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install venv-guard@claude-mods
 ```
 
 ## Usage

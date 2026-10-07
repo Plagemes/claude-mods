@@ -8,7 +8,8 @@ When Claude writes a new file into a migrations folder with a name like `migrati
 
 ## Install
 ```
-/plugin install migration-namer --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install migration-namer@claude-mods
 ```
 
 ## Usage

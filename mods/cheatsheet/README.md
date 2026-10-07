@@ -8,7 +8,8 @@ Ten embedded cheat sheets (git, docker, regex, tmux, vim, bash, sql, curl, kubec
 
 ## Install
 ```
-/plugin install cheatsheet --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install cheatsheet@claude-mods
 ```
 
 ## Usage

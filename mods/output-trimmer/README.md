@@ -8,7 +8,8 @@ When a Bash command prints more than 12,000 characters, Claude reads the first 6
 
 ## Install
 ```
-/plugin install output-trimmer --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install output-trimmer@claude-mods
 ```
 
 ## Usage

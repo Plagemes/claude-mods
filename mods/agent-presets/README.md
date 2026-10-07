@@ -8,7 +8,8 @@ Adds four subagent types Claude can delegate to, each with a carefully written b
 
 ## Install
 ```
-/plugin install agent-presets --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install agent-presets@claude-mods
 ```
 
 ## Usage

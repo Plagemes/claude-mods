@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install quiet-mode --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install quiet-mode@claude-mods
 ```
 
 ## Usage

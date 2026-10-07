@@ -8,7 +8,8 @@ Type `/queue <prompt>` while Claude is busy (or idle) and the prompt waits its t
 
 ## Install
 ```
-/plugin install task-queue --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install task-queue@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ Keeps every prompt you type, with when you sent it and from which project, acros
 
 ## Install
 ```
-/plugin install prompt-history --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install prompt-history@claude-mods
 ```
 
 ## Usage

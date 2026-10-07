@@ -19,7 +19,8 @@ After every edit, crypto-guard reads the lines the edit added and flags the clas
 
 ## Install
 ```
-/plugin install crypto-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install crypto-guard@claude-mods
 ```
 
 ## Usage

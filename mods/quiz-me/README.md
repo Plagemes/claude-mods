@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install quiz-me --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install quiz-me@claude-mods
 ```
 
 ## Usage

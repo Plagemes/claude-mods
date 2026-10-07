@@ -8,7 +8,8 @@ When a test command finishes in Bash, slow-test-flag reads the timings the runne
 
 ## Install
 ```
-/plugin install slow-test-flag --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install slow-test-flag@claude-mods
 ```
 
 ## Usage

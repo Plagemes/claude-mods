@@ -8,7 +8,8 @@ Whenever Claude edits or writes a file, sql-safety looks at the SQL the change a
 
 ## Install
 ```
-/plugin install sql-safety --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install sql-safety@claude-mods
 ```
 
 ## Usage

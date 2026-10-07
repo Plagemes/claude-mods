@@ -8,7 +8,8 @@ Before a Bash command that writes a lot (a dependency install, a build, `docker 
 
 ## Install
 ```
-/plugin install disk-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install disk-guard@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ In a project with Storybook (a `.storybook/` folder), storybook-nudge notices wh
 
 ## Install
 ```
-/plugin install storybook-nudge --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install storybook-nudge@claude-mods
 ```
 
 ## Usage

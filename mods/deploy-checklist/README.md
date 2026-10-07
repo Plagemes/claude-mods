@@ -12,7 +12,8 @@ red); the approval covers that exact command, once.
 
 ## Install
 ```
-/plugin install deploy-checklist --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install deploy-checklist@claude-mods
 ```
 
 ## Usage

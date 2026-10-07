@@ -8,7 +8,8 @@ When a turn runs longer than a minute (configurable), it posts a short report to
 
 ## Install
 ```
-/plugin install webhook-notify --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install webhook-notify@claude-mods
 ```
 The install screen asks for the webhook URL (stored in secure storage).
 

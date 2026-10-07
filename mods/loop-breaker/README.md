@@ -8,7 +8,8 @@ Watches Bash commands and file edits. When the very same call fails three times 
 
 ## Install
 ```
-/plugin install loop-breaker --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install loop-breaker@claude-mods
 ```
 
 ## Usage

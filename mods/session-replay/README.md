@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install session-replay --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install session-replay@claude-mods
 ```
 
 ## Usage

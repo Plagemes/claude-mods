@@ -102,7 +102,7 @@ export const RULES: readonly Rule[] = [
   },
 ]
 
-export const installLine = (mod: string): string => `Install it: /plugin install ${mod} --marketplace plagemes/claude-mods`
+export const installLine = (mod: string): string => `Install it: /plugin marketplace add plagemes/claude-mods, then /plugin install ${mod}@claude-mods`
 
 /** The rules whose condition holds, in priority order. */
 export const dueRules = (signals: Signals): Rule[] => RULES.filter(rule => rule.isDue(signals))

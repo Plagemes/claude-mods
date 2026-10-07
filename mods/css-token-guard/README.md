@@ -8,7 +8,8 @@ In a project that has design tokens, css-token-guard watches what Claude adds to
 
 ## Install
 ```
-/plugin install css-token-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install css-token-guard@claude-mods
 ```
 
 ## Usage

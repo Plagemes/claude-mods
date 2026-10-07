@@ -8,7 +8,8 @@ When Claude writes a file or runs a shell command that puts an image, video or f
 
 ## Install
 ```
-/plugin install heavy-asset-warn --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install heavy-asset-warn@claude-mods
 ```
 
 ## Usage

@@ -17,7 +17,8 @@ Each time Claude edits or writes a `.jsx` / `.tsx` file (or a `.js` / `.ts` file
 
 ## Install
 ```
-/plugin install react-doctor --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install react-doctor@claude-mods
 ```
 
 ## Usage

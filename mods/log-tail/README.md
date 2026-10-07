@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install log-tail --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install log-tail@claude-mods
 ```
 
 ## Usage

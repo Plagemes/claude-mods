@@ -8,7 +8,8 @@ Every tool result (a `cat .env`, a log dump, an API response) is scanned before 
 
 ## Install
 ```
-/plugin install redactor --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install redactor@claude-mods
 ```
 
 ## Usage

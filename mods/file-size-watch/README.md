@@ -8,7 +8,8 @@ After Claude edits or writes a file, file-size-watch checks whether the edit mad
 
 ## Install
 ```
-/plugin install file-size-watch --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install file-size-watch@claude-mods
 ```
 
 ## Usage

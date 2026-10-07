@@ -8,7 +8,8 @@ After Claude installs a package with `npm`, `pnpm`, `yarn`, `bun`, `pip`, `uv` o
 
 ## Install
 ```
-/plugin install license-checker --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install license-checker@claude-mods
 ```
 
 ## Usage

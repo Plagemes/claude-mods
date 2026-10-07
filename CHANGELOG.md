@@ -32,7 +32,7 @@ Each mod also carries its own version in `mods/<name>/.claude-plugin/plugin.json
 ### Added
 
 - First release: 101 mods in 11 categories, including `mod-store`, the in-terminal store opened with `/mods`.
-- Marketplace file, so any mod installs with `/plugin install <mod> --marketplace plagemes/claude-mods`.
+- Marketplace file: `/plugin marketplace add plagemes/claude-mods`, then `/plugin install <mod>@claude-mods`.
 - Showcase site on GitHub Pages, README, contribution guide and issue templates.
 
 [2.0.0]: https://github.com/plagemes/claude-mods/releases/tag/v2.0.0

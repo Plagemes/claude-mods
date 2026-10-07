@@ -8,7 +8,8 @@ When Claude edits or writes a `.jsx`, `.tsx`, `.vue` or `.svelte` file, i18n-gua
 
 ## Install
 ```
-/plugin install i18n-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install i18n-guard@claude-mods
 ```
 
 ## Usage

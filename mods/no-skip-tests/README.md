@@ -8,7 +8,8 @@ A failing test is information; a skipped test is a lie. When Claude edits or wri
 
 ## Install
 ```
-/plugin install no-skip-tests --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install no-skip-tests@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install http-client --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install http-client@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ Gives Claude a working persona that lasts until you switch it off: a code review
 
 ## Install
 ```
-/plugin install persona-switch --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install persona-switch@claude-mods
 ```
 
 ## Usage

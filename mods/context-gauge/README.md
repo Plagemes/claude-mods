@@ -8,7 +8,8 @@ Draws a one-line band above the prompt with a 20-cell bar, the percentage of the
 
 ## Install
 ```
-/plugin install context-gauge --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install context-gauge@claude-mods
 ```
 
 ## Usage

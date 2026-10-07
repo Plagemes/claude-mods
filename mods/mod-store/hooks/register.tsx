@@ -51,13 +51,14 @@ import { argv, claudeBinary, parseInstalled, parseMarketplaceNames, parseOutcome
 
 type Dollar = EngineInterface
 type Action = 'install' | 'update' | 'uninstall'
+type Bulk = 'install-all' | 'update-all'
 /** The store's settings, read from userConfig: where the catalog lives, or why it cannot be read. */
 type Config = { source: Source; problem: string | undefined }
 
 const PANE = 'mod-store'
 const PANE_TITLE = 'Mod Store'
 const PANE_ROWS = 26
-const ARGUMENT_HINT = '[search <words> | refresh | update-all | install|update|uninstall <mod>]'
+const ARGUMENT_HINT = '[search <words> | refresh | install-all | update-all | install|update|uninstall <mod>]'
 const CACHE_KEY = 'catalog'
 const ANNOUNCED_KEY = 'announced-updates'
 const FRESH_MS = 10 * 60_000
@@ -66,6 +67,7 @@ const LIST_TIMEOUT_MS = 30_000
 const CHANGE_TIMEOUT_MS = 180_000
 const ANNOUNCE_TOAST_MS = 8_000
 const ANNOUNCE_NAMES = 3
+const NOTICE_NAMES = 3
 const LISTING_LIMIT = 25
 const README_LIMIT = 20
 const WIDE_COLUMNS = 64
@@ -323,6 +325,50 @@ async function install($: Dollar, catalog: StoreCatalog, bin: string, name: stri
     : failure(`Could not install ${name}: ${outcome.message}`)
 }
 
+/**
+ * Installs, one after another, every mod of `names` (every mod of the catalog
+ * when undefined) that is not installed yet, drawing the progress as busy.
+ */
+async function installMods($: Dollar, catalog: StoreCatalog, bin: string, names: readonly string[] | undefined): Promise<StoreNotice> {
+  const installed = await knownInstalled($, catalog)
+  if (!installed.isKnown) {
+    return failure(`Could not read the installed mods: ${installed.error}`)
+  }
+  const targets = catalog.mods
+    .map(mod => mod.name)
+    .filter(name => installed.mods[name] === undefined && (names === undefined || names.includes(name)))
+  if (targets.length === 0) {
+    return info('Every mod is already installed.')
+  }
+  const marketplaceError = await ensureMarketplace($, catalog, bin)
+  if (marketplaceError !== undefined) {
+    return failure(`Could not add the ${catalog.marketplace} marketplace: ${marketplaceError}`)
+  }
+  await runCli($, argv.refreshMarketplace(bin, catalog.marketplace), CHANGE_TIMEOUT_MS)
+  const added: string[] = []
+  const failed: string[] = []
+  for (const [index, name] of targets.entries()) {
+    await update($, busyState, () => ({ verb: VERBS.install, name: `${name} (${index + 1}/${targets.length})` }))
+    const outcome = parseOutcome(await runCli($, argv.install(bin, name, catalog.marketplace), CHANGE_TIMEOUT_MS))
+    if (outcome.isOk) {
+      added.push(name)
+    } else {
+      failed.push(`${name} (${outcome.message})`)
+    }
+  }
+  await refreshInstalled($, catalog.marketplace)
+  const shown = `${added.slice(0, NOTICE_NAMES).join(', ')}${added.length > NOTICE_NAMES ? ', …' : ''}`
+  const text = [
+    added.length > 0 ? `Installed ${plural(added.length, 'mod')} (${shown}).` : '',
+    failed.length > 0 ? `Failed: ${failed.join('; ')}.` : '',
+    added.length > 0 ? `Run /reload-plugins to activate ${added.length === 1 ? 'it' : 'them'}.` : '',
+  ]
+    .filter(part => part !== '')
+    .join(' ')
+
+  return added.length > 0 ? success(text) : failure(text)
+}
+
 async function updateMods($: Dollar, catalog: StoreCatalog, bin: string, names: readonly string[]): Promise<StoreNotice> {
   const installed = await knownInstalled($, catalog)
   if (!installed.isKnown) {
@@ -368,14 +414,14 @@ async function uninstall($: Dollar, catalog: StoreCatalog, bin: string, name: st
   if (!installed.isKnown) {
     return failure(`Could not read the installed mods: ${installed.error}`)
   }
-  const install = installed.mods[name]
-  if (install === undefined) {
+  const entry = installed.mods[name]
+  if (entry === undefined) {
     return info(`${name} is not installed.`)
   }
-  if (install.scope === 'managed') {
+  if (entry.scope === 'managed') {
     return failure(`${name} is managed by your organization and cannot be uninstalled here.`)
   }
-  const outcome = parseOutcome(await runCli($, argv.uninstall(bin, name, catalog.marketplace, install.scope), CHANGE_TIMEOUT_MS))
+  const outcome = parseOutcome(await runCli($, argv.uninstall(bin, name, catalog.marketplace, entry.scope), CHANGE_TIMEOUT_MS))
   await refreshInstalled($, catalog.marketplace)
 
   return outcome.isOk
@@ -397,17 +443,19 @@ async function runUpdateAll($: Dollar, catalog: StoreCatalog, bin: string): Prom
 }
 
 /**
- * Runs one action at a time (`name` a mod, or every mod with an update),
- * drawing it as busy and its outcome as the notice; a change toasts the
- * reminder to run /reload-plugins.
+ * Runs one action at a time (`name` a mod, every mod with an update, or every
+ * mod of `names` not yet installed), drawing it as busy and its outcome as the
+ * notice; a change toasts the reminder to run /reload-plugins.
  */
-async function perform($: Dollar, config: Config, action: Action | 'update-all', name: string): Promise<StoreNotice> {
+async function perform($: Dollar, config: Config, action: Action | Bulk, name: string, names?: readonly string[]): Promise<StoreNotice> {
   if (active !== null) {
     return info(`${active.verb} ${active.name} is still running; try again when it is done.`)
   }
   const busy: StoreBusy = action === 'update-all'
     ? { verb: VERBS.update, name: 'every mod with an update' }
-    : { verb: VERBS[action], name }
+    : action === 'install-all'
+      ? { verb: VERBS.install, name: names === undefined ? 'every mod not yet installed' : plural(names.length, 'mod') }
+      : { verb: VERBS[action], name }
   active = busy
   let notice: StoreNotice
   try {
@@ -419,7 +467,9 @@ async function perform($: Dollar, config: Config, action: Action | 'update-all',
       ? failure('The catalog is not available: check your connection, then run /mods refresh.')
       : action === 'update-all'
         ? await runUpdateAll($, catalog, bin)
-        : await runAction($, catalog, bin, action, name)
+        : action === 'install-all'
+          ? await installMods($, catalog, bin, names)
+          : await runAction($, catalog, bin, action, name)
   } catch (error) {
     notice = failure(`${busy.verb} ${busy.name} failed: ${describe(error)}`)
   } finally {
@@ -594,9 +644,10 @@ export const register: Register = (on, options) => {
         return openStore($, config, command.query)
       case 'refresh':
         return { text: await refreshReport($, config) }
+      case 'install-all':
       case 'update-all': {
         await refresh($, config, true)
-        return { text: said(await perform($, config, 'update-all', '')) }
+        return { text: said(await perform($, config, command.kind, '')) }
       }
       case 'install':
       case 'update':
@@ -706,7 +757,7 @@ export const register: Register = (on, options) => {
       const mod = selected
       const status = statusOf(mod, installed)
       const category = categoryOf(catalog, mod.category)
-      const line = installLine(mod.name, catalog.repository)
+      const line = installLine(mod.name, catalog.marketplace)
       const url = readmeUrl(catalog, mod)
       const readme = readmes[mod.name]
       const meta = [category.title, mod.tier, mod.author === undefined ? undefined : `by ${mod.author}`]
@@ -771,8 +822,14 @@ export const register: Register = (on, options) => {
     const filter = options.some(option => option.value === view.filter) ? view.filter : FILTER_ALL
     const mods = matchMods(catalog, installed, view.query, filter)
     const counts = countsOf(catalog, installed)
+    // Install all follows the search and the filter: it installs what the list shows.
+    const installable = installed?.isKnown === true
+      ? mods.filter(mod => statusOf(mod, installed).kind === 'available').map(mod => mod.name)
+      : []
     const bodyRows = e.props.scroll.bodyRows > 0 ? e.props.scroll.bodyRows : DEFAULT_BODY_ROWS
-    const chromeRows = 2 + (fields === undefined ? 0 : isWide ? 1 : 2) + statusRows + 2
+    // Header and sync line, the filters, the status lines, the list's top margin, and the footer with its margin
+    // (which wraps to two lines on a narrow pane): what is left is the page.
+    const chromeRows = 2 + (fields === undefined ? 0 : isWide ? 1 : 2) + statusRows + 1 + (isWide ? 2 : 3)
     const pages = paginate(rowsOf(mods, catalog, view.query.trim() === ''), Math.max(MIN_PAGE_ROWS, bodyRows - chromeRows))
     const last = Math.max(0, pages.length - 1)
     const pageIndex = Math.min(Math.max(0, view.page), last)
@@ -816,7 +873,8 @@ export const register: Register = (on, options) => {
           : row.category.tagline === '' ? `(${row.count})` : `(${row.count}) · ${row.category.tagline}`
         return (
           <Box flexDirection="row" columnGap={1}>
-            <Text bold color="claude">{row.category.title}</Text>
+            {/* The title keeps its one line (the page counts one per heading); the tagline is cut instead. */}
+            <Box flexShrink={0}><Text bold color="claude">{row.category.title}</Text></Box>
             <Text dimColor wrap="truncate-end">{tail}</Text>
           </Box>
         )
@@ -873,6 +931,9 @@ export const register: Register = (on, options) => {
           {pageIndex > 0 ? <Button key="prev" label="Prev page" plain hotkey="p" onPress={() => turnPage(-1)} /> : null}
           {pages.length > 1 ? <Text dimColor>Page {pageIndex + 1}/{pages.length}</Text> : null}
           {pageIndex < last ? <Button key="next" label="Next page" plain hotkey="n" onPress={() => turnPage(1)} /> : null}
+          {installable.length > 0 && busy === null
+            ? <Button key="install-all" label={`Install all (${installable.length})`} plain onPress={() => perform($, config, 'install-all', '', installable)} />
+            : null}
           {counts.updates > 0 && busy === null
             ? <Button key="update-all" label={`Update all (${counts.updates})`} plain hotkey="u" variant="primary" onPress={() => perform($, config, 'update-all', '')} />
             : null}
