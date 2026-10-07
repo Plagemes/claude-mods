@@ -1,0 +1,11 @@
+{
+  "name": "permission-log",
+  "version": "1.0.0",
+  "description": "Keeps a log of every tool call that was denied, and why.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#permission-log",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "observability", "permissions", "audit"],
+  "types": "./types/index.d.ts"
+}

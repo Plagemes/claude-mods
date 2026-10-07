@@ -1,0 +1,11 @@
+{
+  "name": "web-trail",
+  "version": "1.0.0",
+  "description": "/sources lists every page Claude fetched or searched this session.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#web-trail",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "observability", "web", "sources"],
+  "types": "./types/index.d.ts"
+}

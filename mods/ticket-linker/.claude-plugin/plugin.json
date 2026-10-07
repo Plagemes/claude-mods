@@ -1,0 +1,30 @@
+{
+  "name": "ticket-linker",
+  "version": "1.0.0",
+  "description": "Turns ticket references like ABC-123 or #42 into links and context for Claude.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#ticket-linker",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "prompting", "jira", "github"],
+  "userConfig": {
+    "jiraBaseUrl": {
+      "type": "string",
+      "title": "Jira base URL",
+      "description": "Your Jira address, for example https://acme.atlassian.net. Leave empty to ignore Jira-style keys.",
+      "default": ""
+    },
+    "jiraProjects": {
+      "type": "string",
+      "title": "Jira project keys",
+      "description": "Comma-separated keys to recognise, for example ABC,WEB. Leave empty to accept any KEY-123 that is not a well-known acronym such as UTF-8.",
+      "default": ""
+    },
+    "githubRepo": {
+      "type": "string",
+      "title": "GitHub repository",
+      "description": "owner/name that #123 refers to. Leave empty to read it from the git remote.",
+      "default": ""
+    }
+  }
+}

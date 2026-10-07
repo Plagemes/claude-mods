@@ -1,0 +1,18 @@
+{
+  "name": "file-size-watch",
+  "version": "1.0.0",
+  "description": "Warns when an edited file grows past a size that hurts readability.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#file-size-watch",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "quality", "readability", "refactoring"],
+  "userConfig": {
+    "maxLines": {
+      "type": "number",
+      "title": "Maximum lines",
+      "description": "Warn when an edit makes a file longer than this many lines.",
+      "default": 500
+    }
+  }
+}

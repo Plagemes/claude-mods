@@ -1,0 +1,18 @@
+{
+  "name": "language-lock",
+  "version": "1.0.0",
+  "description": "Makes Claude always answer in your language while keeping code in English.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#language-lock",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "prompting", "language", "i18n"],
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "The language Claude answers in, for example Spanish, Deutsch or 日本語.",
+      "default": "English"
+    }
+  }
+}
