@@ -1,7 +1,7 @@
 # path-jail
 > Allows writes only inside the project root, resolving symlinks and .. tricks.
 
-**Category:** Security & Guardrails · **Version:** 1.0.0
+**Category:** Security & Guardrails · **Version:** 1.0.1
 
 ## What it does
 Every `Edit`, `Write`, `MultiEdit` and `NotebookEdit` call, and every Bash command that writes a file, is checked against where the path really lands: symbolic links are followed and `..` is folded by the file system, so `out/hosts` where `out -> /etc` is caught. Writes are allowed only under the project root, `/tmp`, folders you list, and folders added with `/add-dir` or `permissions.additionalDirectories`. Anything else is refused before it runs, with the resolved path in the message.

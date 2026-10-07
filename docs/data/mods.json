@@ -176,7 +176,7 @@
       "category": "security",
       "tier": "complex",
       "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "keywords": [
         "claude-mods",
         "security",
