@@ -4,7 +4,7 @@ import { carryText, compactInstructions, decisionsIn, focusOf, isEmptyCarry, mak
 import { detectMoment, isNewTopic, keywords, milestoneOf } from '../hooks/moments'
 import type { MomentInput } from '../hooks/moments'
 import { checkRead, dedupeNote, readKey } from '../hooks/reads'
-import { isTrimmable, resultText, toolPatterns, trimText } from '../hooks/trim'
+import { isTrimmable, resultText, showsContent, toolPatterns, trimText } from '../hooks/trim'
 
 test('trimming keeps head, tail and the error lines; short results and never-trimmed tools are left alone', () => {
   const lines = Array.from({ length: 2_000 }, (_, i) => (i === 1_200 ? 'src/app.ts:12 error TS2304: cannot find name' : `match ${i}: const value = ${i}`))
@@ -88,4 +88,9 @@ test('repeated reads: same range, same file, same epoch, recent, and not right a
   expect(checkRead(entry, { mtimeMs: 100, size: 2_000 }, now, true).isRepeat).toBe(false)
   expect(checkRead(undefined, { mtimeMs: 100, size: 2_000 }, now, false).isRepeat).toBe(false)
   expect(dedupeNote('src/a.ts', 3, 12_345)).toContain('already read src/a.ts at turn 3; unchanged since, so this 12,345-character copy was left out')
+})
+
+test('diff and patch commands are recognised as content, other git commands are not', () => {
+  for (const command of ['git diff', 'git diff --cached src/', 'git show HEAD~1', 'git log -p -2', 'git log --patch', 'gh pr diff 7', 'diff -u a b', 'cd app && git diff', 'git -C app log -p -3', 'git --no-pager diff']) expect({ command, is: showsContent(command) }).toEqual({ command, is: true })
+  for (const command of ['git log --oneline', 'git status', 'npm test', 'grep -r diff .', 'git push origin main']) expect({ command, is: showsContent(command) }).toEqual({ command, is: false })
 })

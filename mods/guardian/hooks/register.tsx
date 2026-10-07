@@ -5,7 +5,7 @@ import type { GuardianBlock, GuardianRow, GuardianSnapshot } from '../types'
 import { criticalFindings } from './fallback'
 import type { Finding } from './fallback'
 import { GUARDS, GUARD_NAMES, POLICY_LEVELS, applyChanges, describeChange, isObject, isPolicyLevel, planApply, policyFile, policyFor, readPolicyFile, stamp } from './policy'
-import type { Json, Overrides, Policy, PolicyLevel } from './policy'
+import type { Change, Json, Overrides, Policy, PolicyLevel } from './policy'
 import { computeScore, scoreLine } from './score'
 
 // ── Constants ───────────────────────────────────────────────────────────────────────────────────────
@@ -23,7 +23,8 @@ const DAY_MS = 24 * 60 * 60_000
 const WINDOW_MS = 7 * DAY_MS
 const MAX_KEPT = 50
 const FEED_SHOWN = 6
-const DIFF_SHOWN = 14
+/** Longest option value the diff shows; guardian's own values are all shorter, so none is cut. */
+const DIFF_VALUE_MAX = 400
 const REFRESH_DELAY_MS = 1_500
 const NARROW = 72
 const CLAUDE_BINARY = /(^|[\\/])claude(\.exe)?$/i
@@ -396,8 +397,19 @@ async function setLevel($: EngineInterface, rt: Runtime, level: PolicyLevel): Pr
   return text
 }
 
-/** Backs settings.json up, then writes the policy's options for the installed guards into `pluginConfigs`. */
-async function applyPolicy($: EngineInterface, rt: Runtime): Promise<string> {
+/** Same option changes, value for value (what was reviewed is what gets written). */
+const sameChanges = (a: readonly Change[], b: readonly Change[]): boolean =>
+  a.length === b.length && a.every((change, index) => {
+    const other = b[index]
+    return other !== undefined && other.key === change.key && other.option === change.option && other.before === change.before && other.after === change.after
+  })
+
+/**
+ * Backs settings.json up, then writes the policy's options for the installed guards into `pluginConfigs`.
+ * `reviewed`: the diff the person confirmed in the tab; when settings.json, the installed guards or the policy
+ * changed since, nothing is written and the new diff is shown for another review.
+ */
+async function applyPolicy($: EngineInterface, rt: Runtime, reviewed?: readonly Change[]): Promise<string> {
   await update($, confirmAtom, () => false)
   if (rt.settingsPath === '') return 'Cannot find your settings file (HOME is not set).'
   const exists = await $.fs.exists(rt.settingsPath).catch(() => false)
@@ -415,6 +427,13 @@ async function applyPolicy($: EngineInterface, rt: Runtime): Promise<string> {
   }
   const installed = (await knownInstalled($, rt)) ?? new Set<string>()
   const changes = planApply(settings, rt.policy, installed, rt.options.marketplace)
+  if (reviewed !== undefined && !sameChanges(reviewed, changes)) {
+    const stale = 'Nothing applied: the changes differ from the diff you reviewed (settings.json or the installed guards changed). Review the new diff.'
+    await refresh($, rt)
+    if (changes.length > 0) await update($, confirmAtom, () => true)
+    await update($, noticeAtom, () => stale)
+    return stale
+  }
   if (changes.length === 0) {
     const done = 'Nothing to apply: the installed guards already match the policy.'
     await update($, noticeAtom, () => done)
@@ -618,12 +637,12 @@ async function drawBody($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime)
   const diff = isConfirming ? (
     <Box key="confirm" flexDirection="column" marginTop={1}>
       <Text bold>{`Apply ${plural(snapshot.changes.length, 'change')} to ${snapshot.settingsPath} (pluginConfigs only, backed up first):`}</Text>
-      {snapshot.changes.slice(0, DIFF_SHOWN).map((change, index) => (
-        <Box key={`diff-${index}`}><Text>{`  ${describeChange(change)}`}</Text></Box>
+      {/* Every change, values in full: what Confirm writes is exactly what is listed here. */}
+      {snapshot.changes.map((change, index) => (
+        <Box key={`diff-${index}`}><Text wrap="wrap">{`  ${describeChange(change, DIFF_VALUE_MAX)}`}</Text></Box>
       ))}
-      {snapshot.changes.length > DIFF_SHOWN ? <Text dimColor>{`  … and ${snapshot.changes.length - DIFF_SHOWN} more`}</Text> : null}
       <Box flexDirection="row" columnGap={1}>
-        <Button key="confirm-apply" label="Confirm" variant="primary" onPress={() => applyPolicy($, rt).then(() => undefined)} />
+        <Button key="confirm-apply" label="Confirm" variant="primary" onPress={() => applyPolicy($, rt, snapshot.changes).then(() => undefined)} />
         <Button key="cancel-apply" label="Cancel" onPress={() => update($, confirmAtom, () => false).then(() => undefined)} />
       </Box>
     </Box>

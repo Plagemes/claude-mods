@@ -233,6 +233,18 @@ test('hub: time off puts the hub in a Night-like hold and gives the old Night se
   expect(await prefs($)).toMatchObject({ isNightOn: false, quietHours: '23:00-06:00', presence: 'auto' })
 })
 
+test('hub: when the hub refuses the presence change, the Night hold it just set is given back (nothing is left on)', { options: OPTIONS, plugins: [hubStandIn()] }, async ($, on) => {
+  const w = world(on, { ics: VACATION })
+  await start($)
+  await setPrefs($, { isNightOn: false, quietHours: '23:00-06:00', refusePresence: true })
+  await beats(w, 2)
+  const modes = await calls($, 'setMode')
+  expect(modes[0]).toEqual({ isNightOn: true, quietHours: '00:00-23:59' })
+  expect(modes[1]).toEqual({ isNightOn: false, quietHours: '23:00-06:00' })
+  expect(await prefs($)).toMatchObject({ isNightOn: false, quietHours: '23:00-06:00' })
+  expect(JSON.parse(w.files.get(`${DIR}/applied.json`) ?? 'null')).toBeNull()
+})
+
 test('hub: a presence you set by hand wins over the calendar', { options: OPTIONS, plugins: [hubStandIn()] }, async ($, on) => {
   const w = world(on)
   await start($)

@@ -238,7 +238,8 @@ export class Brain {
   upsert(input: UpsertInput): { node: MemoryNode; isNew: boolean } | undefined {
     const text = cleanText(input.text)
     if (text === '') return undefined
-    const key = input.key === undefined ? normalizeKey(text) : normalizeKey(input.key)
+    // A caller's key (an error line, a command) is stored too: it is masked like the text, never kept raw.
+    const key = input.key === undefined ? normalizeKey(text) : normalizeKey(redactText(input.key).text)
     if (key === '') return undefined
     const id = Brain.idFor(input.kind, key)
     const rank = SOURCE_RANK[input.source] ?? 1
@@ -490,31 +491,41 @@ export class Brain {
       }
     }
 
-    if (this.nodes.size > this.params.maxNodes) {
+    const capped = this.enforceCaps(now, this.params.maxNodes, this.params.maxEdges)
+    prunedNodes += capped.prunedNodes
+    prunedEdges += capped.prunedEdges
+
+    for (const [id, at] of Object.entries(this.meta.tombstones)) if (now - at > TOMBSTONE_MS) delete this.meta.tombstones[id]
+    this.meta.lastSleep = now
+    return { merged, prunedEdges, prunedNodes, nodes: this.nodes.size, edges: this.edgeCount }
+  }
+
+  /** Drops the least valuable memories (never pinned or CLAUDE.md ones) and the weakest links down to the caps. */
+  enforceCaps(now: number, maxNodes: number, maxEdges: number): { prunedNodes: number; prunedEdges: number } {
+    let prunedNodes = 0
+    let prunedEdges = 0
+    if (this.nodes.size > maxNodes) {
       const value = (node: MemoryNode): number =>
         node.isPinned || node.isInPrompt
           ? Number.POSITIVE_INFINITY
           : this.salienceOf(node, now) + 0.5 * (this.neighbours(node.id, now, 1)[0]?.w ?? 0) + 0.3 * decayed(1, now - node.lastActivated, 30 * DAY)
       const ranked = [...this.nodes.values()].map(node => ({ node, value: value(node) })).sort((a, b) => a.value - b.value)
-      for (const { node } of ranked.slice(0, this.nodes.size - this.params.maxNodes)) {
+      for (const { node } of ranked.slice(0, this.nodes.size - maxNodes)) {
         this.remove(node.id)
         prunedNodes += 1
       }
     }
 
-    if (this.edgeCount > this.params.maxEdges) {
+    if (this.edgeCount > maxEdges) {
       const all: { a: string; b: string; w: number }[] = []
       for (const [id, list] of this.adj) for (const [other, edge] of list) if (id < other) all.push({ a: id, b: other, w: this.weightOf(edge, now) })
       all.sort((x, y) => x.w - y.w)
-      for (const edge of all.slice(0, this.edgeCount - this.params.maxEdges)) {
+      for (const edge of all.slice(0, this.edgeCount - maxEdges)) {
         this.unlink(edge.a, edge.b)
         prunedEdges += 1
       }
     }
-
-    for (const [id, at] of Object.entries(this.meta.tombstones)) if (now - at > TOMBSTONE_MS) delete this.meta.tombstones[id]
-    this.meta.lastSleep = now
-    return { merged, prunedEdges, prunedNodes, nodes: this.nodes.size, edges: this.edgeCount }
+    return { prunedNodes, prunedEdges }
   }
 
   /**
@@ -608,23 +619,28 @@ export class Brain {
     for (const id of Object.keys(tombstones)) if (this.nodes.has(id)) this.remove(id)
     const ids: string[] = []
     for (const row of file.nodes) {
-      const node = nodeFromRow(row)
+      const node = Array.isArray(row) ? nodeFromRow(row) : undefined
       ids.push(node?.id ?? '')
       if (node === undefined || this.nodes.has(node.id) || tombstones[node.id] !== undefined) continue
       this.nodes.set(node.id, node)
       this.indexNode(node)
       added += 1
     }
-    for (const [ai, bi, w, type, minutesAgo] of file.edges) {
+    for (const row of file.edges) {
+      // A hand-edited or damaged file must not put NaN or Infinity into recall: such rows are skipped or clamped.
+      if (!Array.isArray(row)) continue
+      const [ai, bi, w, type, minutesAgo] = row
       const a = ids[ai]
       const b = ids[bi]
       if (a === undefined || b === undefined || a === '' || b === '' || !this.nodes.has(a) || !this.nodes.has(b) || this.edge(a, b) !== undefined) continue
-      this.attach({ a, b, w, type: EDGE_TYPES[type] ?? 'related', t: file.savedAt - minutesAgo * MINUTE })
+      if (!Number.isFinite(w) || w <= 0) continue
+      const t = file.savedAt - (Number.isFinite(minutesAgo) ? Math.max(0, minutesAgo) : 0) * MINUTE
+      this.attach({ a, b, w: Math.min(this.params.wMax, w), type: EDGE_TYPES[type] ?? 'related', t: Number.isFinite(t) ? t : file.savedAt })
     }
     this.meta.imported = { ...file.meta.imported, ...this.meta.imported }
     this.meta.summarized = { ...file.meta.summarized, ...this.meta.summarized }
     this.meta.lastSleep = Math.max(this.meta.lastSleep, file.meta.lastSleep)
-    this.rev = Math.max(this.rev, file.rev)
+    this.rev = Math.max(this.rev, finite(file.rev))
     return added
   }
 
@@ -635,12 +651,18 @@ export class Brain {
       imported: { ...(file.meta.imported ?? {}) },
       tombstones: { ...(file.meta.tombstones ?? {}) },
       summarized: { ...(file.meta.summarized ?? {}) },
-      lastSleep: Number(file.meta.lastSleep) || 0,
+      lastSleep: finite(file.meta.lastSleep),
     }
     brain.absorb({ ...file, meta: brain.meta })
-    brain.rev = file.rev
+    brain.rev = finite(file.rev)
     return brain
   }
+}
+
+/** A stored number, or `fallback` when it is missing, NaN or infinite (a damaged or hand-edited file). */
+const finite = (value: unknown, fallback = 0): number => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
 }
 
 function nodeFromRow(row: NodeRow): MemoryNode | undefined {
@@ -653,15 +675,15 @@ function nodeFromRow(row: NodeRow): MemoryNode | undefined {
     key: String(key),
     source: String(source),
     ref: typeof ref === 'string' ? ref : null,
-    salience: Number(salience) || 0,
-    salienceAt: Number(salienceAt) || 0,
-    created: Number(created) || 0,
-    updated: Number(updated) || 0,
-    lastActivated: Number(lastActivated) || 0,
-    lastActivation: Number(lastActivation) || 0,
-    uses: Number(uses) || 0,
-    shown: Number(shown) || 0,
-    ignored: Number(ignored) || 0,
+    salience: Math.min(1, Math.max(0, finite(salience))),
+    salienceAt: finite(salienceAt),
+    created: finite(created),
+    updated: finite(updated),
+    lastActivated: finite(lastActivated),
+    lastActivation: Math.min(1, Math.max(0, finite(lastActivation))),
+    uses: Math.max(0, finite(uses)),
+    shown: Math.max(0, finite(shown)),
+    ignored: Math.max(0, finite(ignored)),
     isPinned: (flags & FLAG_PINNED) !== 0,
     isInPrompt: (flags & FLAG_IN_PROMPT) !== 0,
     features: [],
@@ -675,5 +697,20 @@ function nodeFromRow(row: NodeRow): MemoryNode | undefined {
 export function isBrainFile(value: unknown): value is BrainFile {
   if (typeof value !== 'object' || value === null) return false
   const file = value as Partial<BrainFile>
-  return file.v === 1 && typeof file.savedAt === 'number' && Array.isArray(file.nodes) && Array.isArray(file.edges) && typeof file.meta === 'object' && file.meta !== null
+  return file.v === 1 && typeof file.savedAt === 'number' && Number.isFinite(file.savedAt) && Array.isArray(file.nodes) && Array.isArray(file.edges) && typeof file.meta === 'object' && file.meta !== null
+}
+
+/** The UTF-8 size of a text, in bytes (what the 4 MiB limit of `$.fs.read`/`$.fs.write` counts). */
+export function utf8Bytes(text: string): number {
+  let bytes = 0
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i)
+    if (code < 0x80) bytes += 1
+    else if (code < 0x800) bytes += 2
+    else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4
+      i += 1
+    } else bytes += 3
+  }
+  return bytes
 }

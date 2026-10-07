@@ -172,3 +172,16 @@ test('robustness: an old daily series is expanded quickly, rules with no instanc
   expect(parsed.events.map(one => one.summary)).toEqual(['Fine'])
   expect(parseRule('FREQ=SECONDLY', ROME)).toBeUndefined()
 })
+
+test('DST: a skipped local time lands after the gap and a repeated one is its first occurrence, west and east of Greenwich', () => {
+  // New York springs forward at 02:00 on 8 March 2026: 02:30 does not exist and reads as 03:30 EDT.
+  expect(iso(wallToEpoch({ y: 2026, m: 3, d: 8, h: 2, mi: 30, s: 0 }, 'America/New_York'))).toBe('2026-03-08T07:30Z')
+  expect(iso(wallToEpoch({ y: 2026, m: 3, d: 29, h: 2, mi: 30, s: 0 }, ROME))).toBe('2026-03-29T01:30Z')
+  // Fall back: 01:30 New York and 02:30 Rome happen twice; the first (summer time) is meant.
+  expect(iso(wallToEpoch({ y: 2026, m: 11, d: 1, h: 1, mi: 30, s: 0 }, 'America/New_York'))).toBe('2026-11-01T05:30Z')
+  expect(iso(wallToEpoch({ y: 2026, m: 10, d: 25, h: 2, mi: 30, s: 0 }, ROME))).toBe('2026-10-25T00:30Z')
+  // Chile skips midnight: the day starts at 01:00 local, not at 23:00 the day before.
+  expect(iso(wallToEpoch({ y: 2026, m: 9, d: 6, h: 0, mi: 0, s: 0 }, 'America/Santiago'))).toBe('2026-09-06T04:00Z')
+  const daily = calendar(event('UID:ny', 'DTSTART;TZID=America/New_York:20260307T023000', 'DURATION:PT30M', 'RRULE:FREQ=DAILY;COUNT=3', 'SUMMARY:Backup'))
+  expect(startsOf(daily, '2026-03-06T00:00Z', '2026-03-12T00:00Z')).toEqual(['2026-03-07T07:30Z', '2026-03-08T07:30Z', '2026-03-09T06:30Z'])
+})

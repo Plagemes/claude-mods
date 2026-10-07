@@ -449,6 +449,40 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
   })
 }
 
+test('only a person changes things: /team edits and installs from another plugin or a peer are refused', async ($, on) => {
+  const w = world(on)
+  await start($, w)
+  const before = w.files.get(TEAM_PATH)
+  const run = (args: string, origin: Record<string, unknown>) =>
+    $.command.run({ command: 'team', args, origin: origin as never, presentation: { isFullscreen: false, columns: 100 } }).then(result => String(result.text ?? ''))
+  expect(await run('owner add mallory@evil.com', { kind: 'plugin', name: 'probe' })).toBe('Only you can run /team owner: type it yourself.')
+  expect(await run('install all', { kind: 'peer' })).toBe('Only you can run /team install: type it yourself.')
+  expect(await run('align', { kind: 'scheduled-trigger' })).toContain('Only you can run /team align')
+  expect(w.files.get(TEAM_PATH)).toBe(before)
+  expect(w.calls.some(line => line.includes('install'))).toBe(false)
+  // Reading is open to everyone.
+  expect(await run('check', { kind: 'plugin', name: 'probe' })).not.toContain('Only you')
+  expect(await run('owner add carol@acme.com', { kind: 'plugin', name: 'probe', asUser: true })).toContain('Saved')
+})
+
+test('the editor never saves over a team file that changed on disk meanwhile (a git pull)', async ($, on) => {
+  const w = world(on)
+  await start($, w)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'team-hub', props: PANE })
+  const typed = ui as unknown as { input: (query: { key: string; text: string }) => Promise<void> }
+  await ui.press({ key: 'team-edit' })
+  await typed.input({ key: 'team-add-convention', text: 'Review within a day' })
+  const pulled = TEAM_TEXT.replace('Write small commits.', 'Write small, focused commits.')
+  w.touch(TEAM_PATH, pulled)
+  await ui.press({ key: 'team-save' })
+  expect(w.files.get(TEAM_PATH)).toBe(pulled)
+  expect(await ui.find({ text: /changed on disk since you started editing/ })).toBeDefined()
+  // A command edit reads the new file first, so the pull is kept.
+  expect(await team($, 'convention Review within a day')).toContain('Saved')
+  expect(fileOf(w).conventions).toEqual(['Write small, focused commits.', 'Run the tests before a pull request.', 'Review within a day'])
+  await ui.unmount()
+})
+
 test('the pane of someone who is not an owner has no Edit button and says why', async ($, on) => {
   const w = world(on, { email: 'eve@evil.com', name: 'Eve' })
   await start($, w)

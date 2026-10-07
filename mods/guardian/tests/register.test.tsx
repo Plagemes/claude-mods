@@ -258,3 +258,24 @@ test('with mods-hub: a tab, the policy fact, its own blocks published, other gua
     await ui.unmount()
   }
 })
+
+test('Confirm writes exactly the diff that was reviewed: a settings.json changed meanwhile is shown again, not written', async ($, on) => {
+  const w = world(on, ['force-push-guard'])
+  await start($, w)
+  await guardian($, 'level strict')
+  const ui = await $.ui.mount({ plugin: 'guardian', surface: 'terminal', component: 'Pane', requestId: 'guardian', props: PANE })
+  await ui.press({ key: 'apply' })
+  expect(await ui.find({ key: 'diff-0' })).toBeDefined()
+  // Someone sets the option by hand while the diff is on screen.
+  const edited = { ...INITIAL_SETTINGS, pluginConfigs: { ...INITIAL_SETTINGS.pluginConfigs, 'force-push-guard@claude-mods': { options: { protectedBranches: 'main,trunk' } } } }
+  w.files.set(SETTINGS, JSON.stringify(edited))
+  await ui.press({ key: 'confirm-apply' })
+  expect(w.json(SETTINGS).pluginConfigs['force-push-guard@claude-mods'].options.protectedBranches).toBe('main,trunk')
+  expect([...w.files.keys()].some(path => path.includes('.guardian-'))).toBe(false)
+  // The new diff (from "main,trunk") is up for review; confirming it writes.
+  expect(await ui.find({ key: 'confirm-apply' })).toBeDefined()
+  await ui.press({ key: 'confirm-apply' })
+  expect(w.json(SETTINGS).pluginConfigs['force-push-guard@claude-mods'].options.protectedBranches).toContain('production')
+  expect(w.json(SETTINGS).theme).toBe('dark')
+  await ui.unmount()
+})

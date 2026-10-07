@@ -172,7 +172,8 @@ export function candidateFeatures(brain: Brain, candidate: Pick<Candidate, 'node
   x[8] = Math.min(1, node.ignored / 5)
   x[9] = Math.min(1, Math.log(1 + brain.degree(node.id)) / Math.log(51))
   x[KIND_SLOT[node.kind] ?? 15] = 1
-  return x
+  // Bounded inputs only: a NaN here would sort and score unpredictably.
+  return x.map(value => (Number.isFinite(value) ? value : 0))
 }
 
 /** The hand-written score used until the ranker has learnt from enough feedback. */

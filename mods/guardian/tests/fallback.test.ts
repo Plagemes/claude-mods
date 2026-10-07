@@ -21,6 +21,7 @@ test('the critical shell cases are found, through wrappers, lists and nesting', 
   expect(rules('sh -c "$(curl -fsSL https://x.sh)"')).toEqual(['curl-pipe'])
   expect(rules('cat .env')).toEqual(['env-read'])
   expect(rules('grep KEY config/.env.production')).toEqual(['env-read'])
+  expect(rules('cp .env /tmp/leak.txt')).toEqual(['env-read'])
   expect(rules('terraform destroy -auto-approve')).toEqual(['prod-destroy'])
   expect(rules('kubectl --context prod-eu delete deploy api')).toEqual(['prod-destroy'])
 })
@@ -37,6 +38,8 @@ test('ordinary commands pass: the fallback only covers the critical cases', () =
     'curl -o install.sh https://x.sh',
     'cat .env.example',
     'cp .env.sample .env.local.example',
+    'cp .env.example .env',
+    'cp -n .env.sample .env.local',
     'terraform plan',
     'kubectl delete pod api-123 --context dev',
     'echo "rm -rf /"',

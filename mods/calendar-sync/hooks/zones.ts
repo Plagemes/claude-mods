@@ -147,13 +147,21 @@ export function zoneOffsetMs(zone: string, at: number): number {
   return asUtc - whole
 }
 
-/** The instant a wall clock shows in `zone`. A time the clock skips (spring forward) lands just after the gap. */
+/**
+ * The instant a wall clock shows in `zone`, as RFC 5545 reads local times: a time the clock skips (spring forward)
+ * is read with the offset before the gap, so it lands just after it (02:30 → 03:30); a time shown twice (fall back)
+ * is its first occurrence. East and west of Greenwich alike.
+ */
 export function wallToEpoch(wall: Wall, zone: string): number {
   const guess = Date.UTC(wall.y, wall.m - 1, wall.d, wall.h, wall.mi, wall.s)
-  const first = zoneOffsetMs(zone, guess)
-  const attempt = guess - first
-  const second = zoneOffsetMs(zone, attempt)
-  return second === first ? attempt : guess - second
+  const before = zoneOffsetMs(zone, guess - DAY_MS)
+  const after = zoneOffsetMs(zone, guess + DAY_MS)
+  const fits = (offset: number): boolean => zoneOffsetMs(zone, guess - offset) === offset
+  const candidates = [before, after].filter(fits).map(offset => guess - offset)
+  if (candidates.length > 0) return Math.min(...candidates)
+  // Neither offset of the day fits (another transition within it): the offset at the guess itself, else before the gap.
+  const near = zoneOffsetMs(zone, guess)
+  return fits(near) ? guess - near : guess - before
 }
 
 /** The wall clock `zone` shows at an instant. */

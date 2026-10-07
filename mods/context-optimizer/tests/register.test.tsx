@@ -145,6 +145,20 @@ test('without output-trimmer, Bash results are trimmed too; subagent rows are le
   expect(sub).toBe(BIG)
 })
 
+test('never trims what Claude needs whole: a failed call\'s error output, or a diff it ran', async ($, on) => {
+  const w = world(on)
+  await start($, w)
+  expect({ diff: (await call($, w, { tool: 'Bash', command: 'git diff main...HEAD' }, BIG)) === BIG }).toEqual({ diff: true })
+  expect(await call($, w, { tool: 'Bash', command: 'git -C app log -p -3' }, BIG)).toBe(BIG)
+  expect(await call($, w, { tool: 'Bash', command: 'gh pr diff 42' }, BIG)).toBe(BIG)
+  await $.tool.call({ tool: 'Bash', command: 'npm run build' } as never)
+  const id = w.ids.at(-1) ?? 'x'
+  const failed = await append($, w, { door: 'tool-result', origin: { kind: 'tool', tool: 'Bash' }, uuid: `row-${id}`, message: { type: 'user', role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: BIG, is_error: true }] } })
+  expect({ failed: failed === BIG }).toEqual({ failed: true })
+  // An ordinary noisy command is still trimmed.
+  expect(await call($, w, { tool: 'Bash', command: 'git log --oneline' }, BIG)).toContain('[context-optimizer: lines')
+})
+
 test('a task boundary at 72% suggests /compact with a focus; autoCompact runs it once idle; the carry-over comes back after', { options: { autoCompact: true, idleSeconds: 30 } }, async ($, on) => {
   const w = world(on)
   await start($, w)
@@ -189,6 +203,25 @@ test('a task boundary at 72% suggests /compact with a focus; autoCompact runs it
   const band = await $.ui.mount({ plugin: 'context-optimizer', surface: 'terminal', component: 'AbovePrompt', props: BAND })
   expect(await band.find({ key: 'band-compact' })).toBeUndefined()
   await band.unmount()
+})
+
+test('autoCompact never runs mid-turn: a new-topic moment found on a prompt waits for the turn to end, then for idle', { options: { autoCompact: true, idleSeconds: 30 } }, async ($, on) => {
+  const w = world(on)
+  await start($, w)
+  await measure($, w, 80)
+  await $.prompt.submit({ text: 'Refactor the payment webhook handler signature verification code', wait: false, origin: { kind: 'composer' } })
+  await w.clock.settle()
+  await $.prompt.submit({ text: 'Translate marketing landing page headlines into Spanish and German', wait: false, origin: { kind: 'composer' } })
+  await w.clock.settle()
+  await $.turn.start({ turnId: 'long', text: 'go' })
+  await w.clock.advance(120_000)
+  expect(w.commands).toEqual([])
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 'long', reason: 'answer' } as never)
+  await w.clock.settle()
+  await w.clock.advance(10_000)
+  expect(w.commands).toEqual([])
+  await w.clock.advance(25_000)
+  expect(w.commands).toHaveLength(1)
 })
 
 test('the person’s own /compact: the summary is told what to keep, and Claude gets it back once; carryOver off keeps out of it', async ($, on) => {

@@ -17,7 +17,11 @@ export type Recalled = {
 
 export const NOTE_HEADER = 'Project memory (project-brain) recalled for this prompt; use what is relevant, ignore the rest:'
 
-const day = (ms: number): string => new Date(ms).toISOString().slice(0, 10)
+/** The date of a timestamp; `?` for one a damaged file made unreadable (toISOString would throw). */
+const day = (ms: number): string => {
+  const date = new Date(ms)
+  return Number.isNaN(date.getTime()) ? '?' : date.toISOString().slice(0, 10)
+}
 
 const LEAD: Record<string, (node: MemoryNode) => string> = {
   decision: node => `decided ${day(node.created)}`,

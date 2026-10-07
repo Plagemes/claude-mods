@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderInput, Timer } from 'claude-code'
 
 import type { BrainActive, BrainStatsView } from '../types'
-import { Brain, DEFAULT_PARAMS, type BrainParams, KNOWLEDGE_KINDS, type MemoryNode, type NodeKind, isBrainFile } from './graph'
+import { Brain, DEFAULT_PARAMS, type BrainParams, KNOWLEDGE_KINDS, type MemoryNode, type NodeKind, isBrainFile, utf8Bytes } from './graph'
 import { EXTRACTION_SYSTEM, SUMMARY_SYSTEM, type TurnDigest, extractionPrompt, isBuildCommand, parseExtraction, summaryPrompt } from './ingest'
 import { featuresOf } from './features'
 import { whyOf } from './inject'
@@ -62,6 +62,11 @@ const MAX_TOOL_LIMIT = 12
 const FACT_TOP = 10
 /** Keeps the saved graph well under what one `$.fs.read` returns (4 MiB). */
 const MAX_NODES_CAP = 6_000
+/**
+ * The most the saved graph may weigh: `$.fs.write` and `$.fs.read` refuse over 4 MiB, and long or non-Latin
+ * texts can pass that below the node cap. Over it, the weakest memories and links go before the save.
+ */
+const MAX_SAVE_BYTES = 3.75 * 1024 * 1024
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
 const KNOWLEDGE_KINDS_LIST = ['decision', 'convention', 'lesson', 'term', 'person', 'task', 'note'] as const
 
@@ -278,18 +283,33 @@ async function save($: EngineInterface, rt: Runtime): Promise<void> {
   const { brain, ranker } = await ensureBrain($, rt)
   if (!rt.isWritable) return
   const path = `${rt.dir}/${GRAPH_FILE}`
+  const now = await $.clock.now()
   if ((await mtimeOf($, path)) > rt.diskMtime) {
     const disk = await readJson($, path)
-    if (isBrainFile(disk)) brain.absorb(disk)
+    // Another session's save is merged in, then held to the caps (absorbing never prunes on its own).
+    if (isBrainFile(disk)) {
+      brain.absorb(disk)
+      brain.enforceCaps(now, brain.params.maxNodes, brain.params.maxEdges)
+    }
   }
   brain.rev += 1
   try {
-    await $.fs.write(path, JSON.stringify(brain.toFile(await $.clock.now())))
+    await $.fs.write(path, fittedJson(brain, now))
     await $.fs.write(`${rt.dir}/${RANKER_FILE}`, JSON.stringify(ranker.toFile()))
     rt.diskMtime = await mtimeOf($, path)
   } catch (error) {
     $.ui.log(`${NAME}: could not save the brain: ${errorText(error)}`, { to: 'debug' })
   }
+}
+
+/** The graph as JSON within MAX_SAVE_BYTES, dropping the weakest tenth of memories and links until it fits. */
+function fittedJson(brain: Brain, now: number): string {
+  let json = JSON.stringify(brain.toFile(now))
+  for (let pass = 0; pass < 12 && utf8Bytes(json) > MAX_SAVE_BYTES && brain.nodes.size > 0; pass += 1) {
+    brain.enforceCaps(now, Math.floor(brain.nodes.size * 0.9), Math.floor(brain.edgeCount * 0.9))
+    json = JSON.stringify(brain.toFile(now))
+  }
+  return json
 }
 
 /** The graph changed: redraw the panel, save a little later. */

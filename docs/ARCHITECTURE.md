@@ -151,7 +151,7 @@ Above the hub, `next(e)` returns the hub's frame (tab strip) and the owner appen
 | **`notify(level)`** | anything that used to be a toast and might matter away from the terminal | ci-watch, long-run-alert, typecheck-gate, night-shift |
 | **Command output / guard text** | on-demand reports; refusals | bash-history, standup; every guard's deny |
 
-Tab order convention (`order`): 10 Advisor, 20 Router, 30 Mission Control, 40 Autopilot, 50 Workflows, 60 Brain, 70 Guardian, 80 Channels, 90 Cost, 100 Tests, then the rest at 200+. Hotkeys `0`–`9` follow the order and belong to the hub's tab strip: a tab body never binds a digit (use letters).
+Tab order convention (`order`): 10 Advisor, 20 Router, 30 Mission Control, 40 Autopilot, 50 Workflows, 60 Brain, 70 Guardian, 80 Channels, 90 Cost, 95 Context, 100 Tests, then the rest at 200+ as built: 210 Errors (error-feed; issue-pilot and the telegram tab also use 210), 211–212 Slack/Discord, 220 Queue (task-queue; team-hub also uses 220), 240 Calendar, 250 Changes (one tab shared by diff-pane and files-touched), 260 Tasks, 270 Timeline, 280 Notes, 290 Stats, 300 Dev server. Hotkeys `0`–`9` follow the order and belong to the hub's tab strip: a tab body never binds a digit (use letters).
 
 ## 8. Event catalog
 
@@ -162,7 +162,7 @@ Standard topics are validated at publish (`mods/mods-hub/hooks/catalog.ts`, same
 | `test.result` | runner: string, outcome: 'passed'\|'failed'\|'error', passed: number\|null, failed: number\|null, durationMs: number?, command: string?, failures: string[]? | mods-hub, quick-commands, test-watch | mod-advisor, test-first, session-stats, error-buzz, celebrate, session-journal, deploy-checklist, smart-router +10 |
 | `build.result` | tool: string, outcome: 'passed'\|'failed'\|'error', durationMs: number?, command: string?, errors: number? | quick-commands, schema-sync, dev-server-pane, bundle-size-watch | screenshot-check, autopilot |
 | `lint.result` | tool: string, errors: number, warnings: number, files: string[]? | quick-commands, lint-on-save, debug-catcher, no-any, file-size-watch, readme-sync, i18n-guard, react-doctor +15 | autopilot |
-| `typecheck.result` | tool: string, errors: number, files: string[]? | typecheck-gate | autopilot |
+| `typecheck.result` | tool: string, errors: number, files: string[]? | quick-commands, typecheck-gate | autopilot |
 | `cost.update` | turnUsd: number, sessionUsd: number, model: string, tokens: number, isEstimate: boolean | mods-hub, smart-router | cost-meter, token-budget, cache-hit-meter, daily-spend, session-stats, token-sparkline, context-optimizer |
 | `budget.threshold` | kind: 'usd'\|'tokens', scope: 'session'\|'day'\|'week'\|'month', used: number, limit: number, percent: number | token-budget, daily-spend | smart-router, whatsapp-bridge, autopilot |
 | `context.pressure` | percent: number, tokens: number, window: number | mods-hub, context-optimizer | context-gauge, compact-coach, context-optimizer |
@@ -170,39 +170,39 @@ Standard topics are validated at publish (`mods/mods-hub/hooks/catalog.ts`, same
 | `deploy.started` | target: string, environment: string, version: string?, url: string? | k8s-dry-run, terraform-plan-pane, deploy-checklist | prod-guard, team-hub, email-digest |
 | `deploy.finished` | target: string, environment: string, version: string?, url: string?, durationMs: number? | deploy-checklist | team-hub |
 | `deploy.failed` | target: string, environment: string, reason: string, url: string? | deploy-checklist | team-hub |
-| `git.commit` | sha: string, message: string, branch: string, files: number | commit-composer | git-status-line, diff-pane, pr-describer, session-journal, changelog-keeper, standup, skill-tracker, achievements +1 |
+| `git.commit` | sha: string, message: string, branch: string, files: number | commit-composer | git-status-line, diff-pane, pr-describer, session-journal, changelog-keeper, standup, achievements, project-brain |
 | `git.push` | remote: string, branch: string, isForce: boolean | force-push-guard | git-status-line, ci-watch |
 | `pr.opened` | url: string, title: string, branch: string | pr-describer | team-hub |
-| `decision.recorded` | title: string, summary: string?, path: string?, status: string? | decision-log | session-journal, recall, handoff, why-log, project-brain, session-sync, team-hub |
-| `lesson.learned` | lesson: string, context: string?, path: string? | lessons-learned | recall, project-brain |
-| `error.repeated` | signature: string, count: number, tool: string, command: string? | mods-hub, loop-breaker | error-feed, error-buzz, lessons-learned, issue-drafter, status-check, command-coach, issue-pilot, email-digest |
+| `decision.recorded` | title: string, summary: string?, path: string?, status: string? | decision-log | session-journal, resume-brief, recall, handoff, project-brain, context-optimizer, session-sync, email-digest |
+| `lesson.learned` | lesson: string, context: string?, path: string? | lessons-learned | session-journal, recall, project-brain |
+| `error.repeated` | signature: string, count: number, tool: string, command: string? | mods-hub, loop-breaker | error-feed, error-buzz, lessons-learned, issue-drafter, command-coach, project-brain, issue-pilot, email-digest |
 | `tool.failed` | tool: string, summary: string, command: string? | error-feed | — |
 | `risk.blocked` | guard: string, tool: string, reason: string, severity: 'low'\|'medium'\|'high', command: string?, path: string? | secret-shield, env-guard, rm-rf-guard, force-push-guard, prod-guard, path-jail, curl-pipe-guard, dependency-sentinel +26 | permission-log, audit-trail, soundpack, guardian |
 | `secret.detected` | kind: string, where: 'edit'\|'result'\|'prompt'\|'command', action: 'blocked'\|'redacted'\|'warned', path: string? | secret-shield, redactor, pii-in-logs | guardian |
-| `agent.routed` | agentType: string, tier: 'light'\|'standard'\|'deep', model: string, reason: string, agentId: string? | smart-router | model-advisor, subagent-monitor, parallel-explore, subagent-cap, workflow-studio |
+| `agent.routed` | agentType: string, tier: 'light'\|'standard'\|'deep', model: string, reason: string, agentId: string? | smart-router | subagent-monitor, parallel-explore, workflow-studio |
 | `agent.finished` | agentType: string, outcome: 'ok'\|'failed', durationMs: number, agentId: string?, usd: number? | subagent-monitor, review-agent, second-opinion, parallel-explore, self-check, smart-router | workflow-studio |
-| `turn.finished` | durationMs: number, tools: number, isAborted: boolean | mods-hub | auto-checkpoint, diff-pane, turn-timer, compact-coach, todo-tracker, tool-timeline, session-stats, done-chime +5 |
-| `session.started` | project: string, cwd: string, branch: string? | mods-hub | activity-heatmap, resume-brief, node-version-check, shortcut-tips, achievements, streaks, whatsapp-bridge, session-sync |
-| `session.ended` | durationMs: number, turns: number, usd: number? | mods-hub | activity-heatmap, session-journal, standup, handoff, daily-goal, whatsapp-bridge, project-brain, session-sync +1 |
-| `session.idle` | since: number, reason: 'activity'\|'timer'\|'manual'\|'channel' | mods-hub | idle-nudge, break-reminder, task-queue, command-coach, whatsapp-bridge, session-sync |
-| `session.away` | since: number, reason: 'activity'\|'timer'\|'manual'\|'channel' | mods-hub | focus-timer, night-shift, whatsapp-bridge, autopilot, session-sync |
+| `turn.finished` | durationMs: number, tools: number, isAborted: boolean | mods-hub | turn-timer, tool-timeline, session-stats, done-chime, speak-summary, webhook-notify |
+| `session.started` | project: string, cwd: string, branch: string? | mods-hub | resume-brief, whatsapp-bridge, session-sync |
+| `session.ended` | durationMs: number, turns: number, usd: number? | mods-hub | session-journal, standup, handoff, whatsapp-bridge, session-sync, mission-control |
+| `session.idle` | since: number, reason: 'activity'\|'timer'\|'manual'\|'channel' | mods-hub | idle-nudge, break-reminder, task-queue, whatsapp-bridge, project-brain, session-sync |
+| `session.away` | since: number, reason: 'activity'\|'timer'\|'manual'\|'channel' | mods-hub | focus-timer, break-reminder, night-shift, whatsapp-bridge, autopilot, session-sync |
 | `session.back` | since: number, reason: 'activity'\|'timer'\|'manual'\|'channel', awayMs: number | mods-hub | whatsapp-bridge, session-sync |
 | `mod.recommended` | name: string, reason: string, score: number? | mod-advisor, command-coach | — |
 | `mod.installed` | name: string, version: string | mod-store, mod-profiles | mod-advisor, mod-doctor |
 | `screenshot.taken` | path: string, url: string?, width: number?, height: number?, purpose: string? | screenshot-check | — |
-| `issue.drafted` | title: string, body: string?, url: string?, labels: string[]? | issue-drafter, issue-pilot | ticket-linker, team-hub |
+| `issue.drafted` | title: string, body: string?, url: string?, labels: string[]? | issue-drafter, issue-pilot | — |
 | `task.queued` | id: string, title: string | task-queue, workflow-studio | — |
 | `task.started` | id: string, title: string | todo-pane, task-queue, night-shift, autopilot, workflow-studio | — |
 | `task.finished` | id: string, title: string, outcome: 'ok'\|'failed'\|'cancelled' | todo-pane, task-queue, night-shift, autopilot, workflow-studio | — |
 | `approval.requested` | id: string, question: string, tool: string? | permission-ping, autopilot | — |
 | `approval.answered` | id: string, answer: 'allow'\|'deny', by: string | whatsapp-bridge, telegram-bridge | autopilot |
 | `channel.inbound` | channel: string, from: string, text: string, isOwner: boolean | whatsapp-bridge, telegram-bridge, slack-bridge, discord-bridge | autopilot |
-| `focus.started` | minutes: number, label: string? | focus-timer | — |
+| `focus.started` | minutes: number, label: string? | focus-timer | break-reminder |
 | `focus.ended` | minutes: number, isCompleted: boolean | focus-timer | break-reminder |
 | `notification.sent` | level: 'info'\|'success'\|'warning'\|'error'\|'critical', title: string, source: string, targets: string[], held: boolean | mods-hub | — (email-digest gets its notices by draining its `email` channel) |
-| `control.stop` | id: string, scope: 'session'\|'all', reason: string, by: string, session: string | mods-hub, for `$.mods.stop` (whatsapp-bridge STOP / STOP ALL, `/hub stop`) | autopilot; next wave: task-queue, night-shift, mission-control, workflow-studio |
+| `control.stop` | id: string, scope: 'session'\|'all', reason: string, by: string, session: string | mods-hub, for `$.mods.stop` (whatsapp-bridge STOP / STOP ALL, `/hub stop`) | autopilot, task-queue, night-shift, mission-control, workflow-studio |
 | `control.pause` | same | mods-hub, for `$.mods.stop({ action: 'pause' })` | same |
-| `control.resume` | same | mods-hub, for `$.mods.stop({ action: 'resume' })`, `/hub resume`, Home's Resume | same |
+| `control.resume` | same | mods-hub, for `$.mods.stop({ action: 'resume' })`, `/hub resume`, Home's Resume | autopilot, task-queue, mission-control, workflow-studio (night-shift reads stop and pause only) |
 
 `control.*` events are raised only by the hub (a mod publishing one is refused), with the asking mod as `source`; with `scope: 'all'` each session's hub raises them again for its own subscribers. A mod that runs work on its own (a loop, a queue, a schedule) stops, pauses or resumes on them, and keeps any inference it had (a phone's "stop" in `channel.inbound`, a spent budget) as a fallback for an older hub.
 
@@ -250,7 +250,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `force-push-guard` | risk.blocked, git.push | — | — | guard | shell | 2 |
 | `prod-guard` | risk.blocked | deploy.started | — | guard | shell | 2 |
 | `redactor` | secret.detected | — | — | status (counts) + notify | secrets | 2 |
-| `path-jail` | risk.blocked | — | — | guard | shell | 2 |
+| `path-jail` | risk.blocked | — | — | guard | shell, secrets | 2 |
 | `curl-pipe-guard` | risk.blocked | — | — | guard | shell | 2 |
 | `dependency-sentinel` | risk.blocked | — | — | guard | shell | 2 |
 | `lockfile-guard` | risk.blocked | — | — | guard | shell | 2 |
@@ -260,14 +260,14 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | Mod | Publishes | Consumes | State | Surface | Libs | W |
 | --- | --- | --- | --- | --- | --- | --- |
 | `git-status-line` | — | git.commit, git.push | fact `git-status-line.branch` | status | — | 4 |
-| `auto-checkpoint` | x.auto-checkpoint.saved | turn.finished | — | cmd + notify | — | 4 |
+| `auto-checkpoint` | x.auto-checkpoint.saved | — | — | cmd + notify | — | 4 |
 | `commit-composer` | git.commit | — | — | cmd | — | 3 |
 | `branch-namer` | — | — | — | cmd | — | 5 |
 | `main-branch-warn` | risk.blocked | — | — | guard/notify(warning) | shell | 2 |
-| `diff-pane` | — | git.commit, turn.finished | — | **tab** Changes | — | 4 |
+| `diff-pane` | — | git.commit | — | **tab** Changes (order 250, shared with files-touched) | — | 4 |
 | `pr-describer` | pr.opened | git.commit | — | cmd | — | 3 |
-| `conflict-helper` | x.conflict-helper.found | — | — | cmd + notify(warning) | line-index | 5 |
-| `co-author-stamp` | — | — | — | — | shell | 5 |
+| `conflict-helper` | x.conflict-helper.found | — | — | cmd + notify(warning) | — | 5 |
+| `co-author-stamp` | — | — | — | — | — | 5 |
 | `gitignore-guard` | risk.blocked | — | — | guard | shell | 2 |
 
 #### Cost, Tokens & Context (10)
@@ -280,10 +280,10 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `cache-hit-meter` | — | cost.update | — | status | prices | 4 |
 | `turn-timer` | — | turn.finished | — | notify(info) | — | 4 |
 | `big-read-guard` | risk.blocked | — | — | guard | — | 4 |
-| `output-trimmer` | — | — | — | — | test-runners | 5 |
+| `output-trimmer` | — | — | — | — | — | 5 |
 | `daily-spend` | budget.threshold | cost.update (all sessions via sessions.json) | fact `daily-spend.today` | **tab** Cost | prices | 1 |
-| `model-advisor` | x.model-advisor.suggested | agent.routed | reads fact `smart-router.policy` | notify(info) | prices | 3 |
-| `compact-coach` | — | context.pressure, turn.finished | — | notify(info) | — | 4 |
+| `model-advisor` | x.model-advisor.suggested | — | reads fact `smart-router.policy` | notify(info) | prices | 3 |
+| `compact-coach` | — | context.pressure | — | notify(info) | — | 4 |
 
 #### Productivity (10)
 
@@ -291,13 +291,13 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | --- | --- | --- | --- | --- | --- | --- |
 | `quote-selection` | — | — | — | cmd | — | 5 |
 | `prompt-snippets` | — | — | — | — | — | 5 |
-| `todo-pane` | task.started, task.finished | — | — | **tab** Tasks | — | 4 |
+| `todo-pane` | task.started, task.finished | — | — | **tab** Tasks (order 260) | — | 4 |
 | `focus-timer` | focus.started, focus.ended | session.away | calls setMode(silentMinutes) during focus | status | — | 3 |
-| `scratchpad` | — | — | — | **tab** Notes | — | 4 |
+| `scratchpad` | — | — | — | **tab** Notes (order 280) | — | 4 |
 | `recent-files` | — | — | — | cmd | — | 5 |
 | `copy-last` | — | — | — | cmd | — | 5 |
 | `prompt-history` | — | — | — | pane (search) | — | 5 |
-| `quick-commands` | test.result, build.result, lint.result | — | — | cmd | test-runners | 3 |
+| `quick-commands` | test.result, build.result, lint.result, typecheck.result | — | — | cmd | test-runners | 3 |
 | `idle-nudge` | — | session.idle | — | notify(info) | — | 3 |
 
 #### Code Quality & Tests (10)
@@ -305,13 +305,13 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | Mod | Publishes | Consumes | State | Surface | Libs | W |
 | --- | --- | --- | --- | --- | --- | --- |
 | `auto-format` | — | — | — | — | — | 5 |
-| `lint-on-save` | lint.result | — | — | notify(warning) | line-index | 3 |
+| `lint-on-save` | lint.result | — | — | notify(warning) | — | 3 |
 | `test-watch` | test.result | — | fact `test-watch.plan` | status + **tab** Tests | test-runners | 1 |
 | `typecheck-gate` | typecheck.result | — | — | notify(error) | — | 3 |
-| `no-skip-tests` | risk.blocked | — | — | guard | test-runners, line-index | 3 |
-| `todo-tracker` | x.todo-tracker.added | turn.finished | — | notify(info) | line-index | 5 |
-| `debug-catcher` | lint.result | — | — | notify(warning) | line-index | 5 |
-| `no-any` | lint.result | — | — | notify(warning) | line-index | 5 |
+| `no-skip-tests` | risk.blocked | — | — | guard | test-runners | 3 |
+| `todo-tracker` | x.todo-tracker.added | — | — | notify(info) | line-index | 5 |
+| `debug-catcher` | lint.result | — | — | notify(warning) | — | 5 |
+| `no-any` | lint.result | — | — | notify(warning) | — | 5 |
 | `file-size-watch` | lint.result | — | — | notify(info) | — | 5 |
 | `test-first` | risk.blocked | test.result | — | guard + status | test-runners | 3 |
 
@@ -319,16 +319,16 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 
 | Mod | Publishes | Consumes | State | Surface | Libs | W |
 | --- | --- | --- | --- | --- | --- | --- |
-| `tool-timeline` | — | turn.finished | — | **tab** Timeline | — | 4 |
-| `files-touched` | — | — | — | **tab** Changes (merged with diff-pane) | — | 4 |
-| `session-stats` | — | cost.update, test.result, turn.finished | — | **tab** Stats | prices | 4 |
+| `tool-timeline` | — | turn.finished | — | **tab** Timeline (order 270) | — | 4 |
+| `files-touched` | — | — | — | **tab** Changes (order 250, shared with diff-pane) | — | 4 |
+| `session-stats` | — | cost.update, test.result, turn.finished | — | **tab** Stats (order 290) | — | 4 |
 | `subagent-monitor` | agent.finished | agent.routed | — | merged into **tab** Mission Control | — | 3 |
-| `error-feed` | tool.failed | error.repeated | — | **tab** Errors | — | 3 |
-| `activity-heatmap` | — | session.started, session.ended | — | pane | — | 5 |
-| `bash-history` | — | — | — | cmd | shell | 5 |
+| `error-feed` | tool.failed | error.repeated | — | **tab** Errors (order 210) | — | 3 |
+| `activity-heatmap` | — | — | — | pane | — | 5 |
+| `bash-history` | — | — | — | cmd | — | 5 |
 | `web-trail` | — | — | — | cmd | — | 5 |
 | `permission-log` | — | risk.blocked | — | cmd | — | 3 |
-| `token-sparkline` | — | cost.update | — | band | — | 4 |
+| `token-sparkline` | — | cost.update | — | band | prices | 4 |
 
 #### Prompt & System Prompt (10)
 
@@ -338,7 +338,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `language-lock` | — | — | — | — | — | 5 |
 | `concise-mode` | — | — | — | — | — | 5 |
 | `prompt-enhancer` | — | — | — | cmd | — | 5 |
-| `ticket-linker` | — | issue.drafted | — | — | — | 5 |
+| `ticket-linker` | — | — | — | — | — | 5 |
 | `date-context` | — | — | — | — | — | 5 |
 | `persona-switch` | — | — | fact `persona-switch.persona` | status | — | 5 |
 | `explain-level` | — | — | — | — | — | 5 |
@@ -357,7 +357,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `desktop-notify` | — | — | — | channel `desktop` (pull or push) | — | 2 |
 | `long-run-alert` | — | — | — | notify(warning) | shell | 2 |
 | `ci-watch` | ci.result | git.push | — | status + notify(success/error) | — | 1 |
-| `break-reminder` | — | session.idle, focus.ended | — | notify(info) | — | 3 |
+| `break-reminder` | — | session.idle, session.away, focus.started, focus.ended | — | notify(info) | — | 3 |
 | `celebrate` | — | test.result | — | notify(success) + sound | test-runners | 2 |
 | `whatsapp-bridge` | channel.inbound, approval.answered, control.stop (via `stop`) | notify via pull + `drain`; session.*; test.result; ci.result; budget.threshold | reads hub mode (replaces its own presence/interaction prefs) | channel `whatsapp` (pull) + **tab** Channels | secrets | 1 |
 
@@ -366,11 +366,11 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | Mod | Publishes | Consumes | State | Surface | Libs | W |
 | --- | --- | --- | --- | --- | --- | --- |
 | `decision-log` | decision.recorded | — | — | cmd | — | 3 |
-| `session-journal` | — | session.ended, git.commit, decision.recorded, test.result | — | — | — | 3 |
+| `session-journal` | x.session-journal.entry | session.ended, git.commit, decision.recorded, lesson.learned, test.result, cost.update | — | — | — | 3 |
 | `glossary` | — | — | fact `glossary.terms` | — | — | 5 |
 | `bookmark` | — | — | — | cmd | — | 5 |
-| `resume-brief` | — | session.started | reads sessions.json | band (first prompt) | — | 3 |
-| `lessons-learned` | lesson.learned | error.repeated | — | notify(question) | — | 3 |
+| `resume-brief` | — | session.started, decision.recorded (via sessions.json) | reads sessions.json | band (first prompt) | — | 3 |
+| `lessons-learned` | lesson.learned | error.repeated, test.result | — | notify(question) | — | 3 |
 | `codebase-map` | — | — | fact `codebase-map.summary` | cmd | — | 4 |
 | `snippet-vault` | — | — | — | cmd | — | 5 |
 | `link-vault` | — | — | — | cmd | — | 5 |
@@ -387,7 +387,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `license-header` | — | — | — | — | — | 5 |
 | `issue-drafter` | issue.drafted | error.repeated, ci.result | — | cmd | secrets | 3 |
 | `handoff` | — | session.ended, decision.recorded | — | cmd | — | 4 |
-| `i18n-guard` | lint.result | — | — | notify(warning) | line-index | 5 |
+| `i18n-guard` | lint.result | — | — | notify(warning) | — | 5 |
 | `migration-guard` | risk.blocked | — | — | guard | — | 4 |
 | `codeowners-hint` | — | — | — | notify(info) | — | 5 |
 
@@ -398,24 +398,24 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `react-doctor` | lint.result | — | — | notify(warning) | line-index | 5 |
 | `next-guard` | lint.result | — | — | notify(warning) | line-index | 5 |
 | `venv-guard` | risk.blocked | — | — | guard | shell | 2 |
-| `node-version-check` | — | session.started | — | notify(warning) | shell | 5 |
+| `node-version-check` | — | — | — | notify(warning) | shell | 5 |
 | `django-migrate-watch` | x.django-migrate-watch.missing | — | — | notify(warning) | — | 5 |
 | `go-mod-tidy` | — | — | — | — | — | 5 |
 | `strict-types` | — | — | — | — | — | 5 |
 | `schema-sync` | build.result | — | — | notify(warning) | — | 5 |
 | `env-example-sync` | lint.result | — | — | notify(info) | — | 5 |
-| `monorepo-scope` | — | — | fact `monorepo-scope.package` | status | test-runners, shell | 4 |
+| `monorepo-scope` | — | — | fact `monorepo-scope.package` | status | shell | 4 |
 
 #### DevOps & Cloud (10)
 
 | Mod | Publishes | Consumes | State | Surface | Libs | W |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docker-lint` | lint.result | — | — | notify(warning) | line-index | 5 |
-| `k8s-dry-run` | risk.blocked, deploy.started | — | — | guard + pane (diff) | shell | 3 |
+| `docker-lint` | lint.result | — | — | notify(warning) | — | 5 |
+| `k8s-dry-run` | risk.blocked, deploy.started | — | — | guard + pane (diff) | — | 3 |
 | `terraform-plan-pane` | deploy.started | — | — | pane | shell | 4 |
-| `ci-yaml-check` | lint.result | — | — | notify(warning) | line-index | 5 |
+| `ci-yaml-check` | lint.result | — | — | notify(warning) | — | 5 |
 | `port-check` | — | — | — | notify(warning) | shell | 5 |
-| `dev-server-pane` | build.result | — | — | pane (+ **tab** Dev server) | — | 4 |
+| `dev-server-pane` | build.result | — | — | pane (+ **tab** Dev server, order 300) | — | 4 |
 | `cloud-cost-warn` | risk.blocked | — | — | guard | shell | 2 |
 | `log-tail` | — | — | — | pane per tail | — | 5 |
 | `docker-prune-guard` | risk.blocked | — | — | guard | shell | 2 |
@@ -429,7 +429,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `query-explain` | — | — | — | cmd/pane | — | 5 |
 | `seed-guard` | risk.blocked | — | — | guard | shell | 2 |
 | `schema-pane` | — | — | — | pane | — | 5 |
-| `n-plus-one-hint` | lint.result | — | — | notify(info) | line-index | 5 |
+| `n-plus-one-hint` | lint.result | — | — | notify(info) | — | 5 |
 | `migration-namer` | — | — | — | — | — | 5 |
 | `query-result-cap` | — | — | — | — | shell | 2 |
 | `backup-before-migrate` | x.backup-before-migrate.saved | — | — | notify(info) | shell | 3 |
@@ -443,7 +443,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `a11y-guard` | lint.result | — | — | notify(warning) | line-index | 5 |
 | `screenshot-check` | screenshot.taken | build.result | — | notify(info) | — | 3 |
 | `bundle-size-watch` | build.result | — | — | notify(warning) | shell | 4 |
-| `css-token-guard` | lint.result | — | — | notify(info) | line-index | 5 |
+| `css-token-guard` | lint.result | — | — | notify(info) | — | 5 |
 | `lighthouse-run` | x.lighthouse-run.scores | — | — | pane | — | 5 |
 | `heavy-asset-warn` | risk.blocked | — | — | notify(warning) | shell | 5 |
 | `storybook-nudge` | — | — | — | notify(info) | — | 5 |
@@ -455,16 +455,16 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 
 | Mod | Publishes | Consumes | State | Surface | Libs | W |
 | --- | --- | --- | --- | --- | --- | --- |
-| `http-client` | — | — | — | pane | secrets | 5 |
+| `http-client` | — | — | — | pane | — | 5 |
 | `openapi-sync` | lint.result | — | — | notify(warning) | — | 5 |
 | `url-allowlist` | risk.blocked | — | — | guard | shell | 2 |
 | `offline-mode` | risk.blocked | — | fact `offline-mode.on` | status + guard | shell | 2 |
 | `mock-server` | — | — | — | cmd/status | — | 5 |
 | `rate-limit-guard` | risk.blocked | — | — | guard | shell | 2 |
-| `jwt-decode` | — | — | — | cmd | secrets | 5 |
-| `status-check` | — | error.repeated | — | cmd | — | 5 |
+| `jwt-decode` | — | — | — | cmd | — | 5 |
+| `status-check` | — | — | — | cmd | — | 5 |
 | `graphql-context` | — | — | — | — | — | 5 |
-| `curl-to-code` | — | — | — | cmd | shell | 5 |
+| `curl-to-code` | — | — | — | cmd | — | 5 |
 
 #### Agents & Orchestration (11)
 
@@ -473,11 +473,11 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `scope-lock` | risk.blocked | — | fact `scope-lock.scope` | status + guard | shell | 2 |
 | `second-opinion` | agent.finished | — | — | cmd | — | 4 |
 | `parallel-explore` | agent.finished | agent.routed | — | cmd | — | 4 |
-| `subagent-cap` | risk.blocked | agent.routed | reads fact `smart-router.policy` | guard | — | 3 |
-| `task-queue` | task.queued, task.started, task.finished | session.idle, control.* | — | band/**tab** Queue | — | 3 |
-| `night-shift` | task.started, task.finished | session.away, control.* | — | notify(success/error) → channels | — | 3 |
-| `loop-breaker` | error.repeated | — | — | guard + notify | shell | 3 |
-| `self-check` | agent.finished | turn.finished | — | — | — | 4 |
+| `subagent-cap` | risk.blocked | — | reads fact `smart-router.policy` | guard | — | 3 |
+| `task-queue` | task.queued, task.started, task.finished | session.idle, control.stop, control.pause, control.resume | — | band/**tab** Queue (order 220) | — | 3 |
+| `night-shift` | task.started, task.finished | session.away, control.stop, control.pause | — | notify(success/error) → channels | — | 3 |
+| `loop-breaker` | error.repeated | — | — | guard + notify | — | 3 |
+| `self-check` | agent.finished | — | — | — | — | 4 |
 | `edit-limit` | risk.blocked | — | — | guard | — | 4 |
 | `agent-presets` | — | — | — | — | — | 5 |
 | `smart-router` | agent.routed, agent.finished, cost.update (subagents) | budget.threshold, test.result | fact `smart-router.policy`; writes daily.json | **tab** Router (+ own pane when no hub) | prices | 1 |
@@ -486,16 +486,16 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 
 | Mod | Publishes | Consumes | State | Surface | Libs | W |
 | --- | --- | --- | --- | --- | --- | --- |
-| `explain-diff` | — | turn.finished | — | cmd | — | 5 |
+| `explain-diff` | — | — | — | cmd | — | 5 |
 | `quiz-me` | — | — | — | pane (dialog) | — | 5 |
 | `learning-mode` | — | — | — | — | — | 5 |
 | `onboarding-tour` | — | — | — | pane | — | 5 |
-| `command-coach` | mod.recommended | error.repeated, session.idle | — | notify(info) | shell | 4 |
-| `shortcut-tips` | — | session.started | — | notify(info) | — | 5 |
-| `why-log` | — | decision.recorded | — | cmd | — | 5 |
+| `command-coach` | mod.recommended | error.repeated | — | notify(info) | shell | 4 |
+| `shortcut-tips` | — | — | — | notify(info) | — | 5 |
+| `why-log` | — | — | — | cmd | — | 5 |
 | `cheatsheet` | — | — | — | cmd | — | 5 |
 | `pair-mode` | — | — | — | guard | shell | 5 |
-| `skill-tracker` | — | test.result, git.commit | — | cmd | — | 5 |
+| `skill-tracker` | — | — | — | cmd | — | 5 |
 
 #### Privacy & Compliance (10)
 
@@ -503,14 +503,14 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | --- | --- | --- | --- | --- | --- | --- |
 | `license-checker` | risk.blocked | — | — | notify(warning) | shell | 4 |
 | `pii-in-logs` | secret.detected, lint.result | — | — | notify(warning) | secrets, line-index | 2 |
-| `data-map` | — | — | — | cmd | secrets | 5 |
+| `data-map` | — | — | — | cmd | — | 5 |
 | `tracker-guard` | risk.blocked | — | — | guard | shell | 2 |
 | `no-upload` | risk.blocked | — | — | guard | shell | 2 |
-| `crypto-guard` | lint.result | — | — | notify(warning) | line-index | 5 |
+| `crypto-guard` | lint.result | — | — | notify(warning) | — | 5 |
 | `sbom` | — | — | — | cmd | — | 5 |
 | `audit-trail` | — | everything (feed) + risk.blocked | — | — | secrets | 3 |
 | `vuln-scan` | x.vuln-scan.found | — | — | pane + notify(error) | shell | 4 |
-| `copyright-guard` | lint.result | — | — | notify(warning) | line-index | 5 |
+| `copyright-guard` | lint.result | — | — | notify(warning) | — | 5 |
 
 #### Performance & Reliability (10)
 
@@ -521,7 +521,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `flaky-detector` | x.flaky-detector.suspect | test.result | — | notify(warning) + **tab** Tests section | test-runners | 2 |
 | `leak-hint` | lint.result | — | — | notify(info) | line-index | 5 |
 | `outdated-deps` | — | — | — | cmd | — | 5 |
-| `profile-run` | — | — | — | pane | line-index | 5 |
+| `profile-run` | — | — | — | pane | — | 5 |
 | `net-retry` | — | — | — | — | shell | 4 |
 | `disk-guard` | risk.blocked | — | — | notify(warning) | shell | 4 |
 | `regression-guard` | x.regression-guard.regressed | test.result | — | notify(error) | test-runners | 2 |
@@ -536,10 +536,10 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `mod-profiles` | mod.installed | — | — | cmd | — | 4 |
 | `settings-sync` | — | — | exports hub prefs.json too | cmd | — | 4 |
 | `quiet-mode` | — | — | calls setMode (alias of hub Silent; `/quiet on` is `isSilent: true`, no end) | status | — | 1 |
-| `achievements` | — | test.result, git.commit, ci.result, session.started | — | pane + notify(success) | — | 3 |
-| `streaks` | — | session.started | — | status | — | 5 |
-| `soundpack` | — | turn.finished, test.result, risk.blocked | — | sound (held by the hub) | — | 3 |
-| `daily-goal` | — | session.ended | — | band | — | 4 |
+| `achievements` | — | test.result, git.commit, ci.result | — | pane + notify(success) | — | 3 |
+| `streaks` | — | — | — | status | — | 5 |
+| `soundpack` | — | test.result, risk.blocked | — | sound (held by the hub) | — | 3 |
+| `daily-goal` | — | — | — | band | — | 4 |
 | `session-replay` | — | — | — | pane | — | 5 |
 
 #### The system mods
@@ -550,12 +550,12 @@ All soft (they work without the hub) except the three push bridges, which depend
 | --- | --- | --- | --- | --- | --- |
 | `guardian` | risk.blocked (as policy owner) | risk.blocked, secret.detected | fact `guardian.policy`: `{ level: 'permissive'\|'standard'\|'strict'\|'custom', base: 'permissive'\|'standard'\|'strict' (the level a custom policy builds on), fallback: boolean, project: string, guards: { <guard>: options } }`; read by team-hub (the level that counts is `base` when `level` is custom) | **tab** Guardian | shell, secrets |
 | `autopilot` | task.started, task.finished, approval.requested | control.*, session.away, test.result, typecheck.result, lint.result, build.result, ci.result, budget.threshold, channel.inbound, approval.answered | reads mode.canAsk | **tab** Autopilot | test-runners |
-| `project-brain` | x.project-brain.updated | decision.recorded, lesson.learned, git.commit, test.result, session.ended | facts `project-brain.*` | **tab** Brain | line-index |
-| `context-optimizer` | context.pressure, x.context-optimizer.saved | context.pressure, decision.recorded | reads facts `codebase-map.summary`, `stack-detector.stack` | band (when pressure) + tab section in Cost | prices |
+| `project-brain` | x.project-brain.recalled, x.project-brain.updated | decision.recorded, lesson.learned, error.repeated, test.result, git.commit, session.idle | facts `project-brain.stats`, `project-brain.top` | **tab** Brain (order 60) | test-runners, secrets |
+| `context-optimizer` | context.pressure, x.context-optimizer.saved | context.pressure, decision.recorded | reads the hub's installed list (output-trimmer owns Bash results when present) | **tab** Context (order 95) + band at a compaction moment | shell, test-runners |
 | `workflow-studio` | task.queued, task.started, task.finished | agent.routed, agent.finished, control.* | reads fact `smart-router.policy` | **tab** Workflows | — |
 | `mission-control` (soft) | — | everything incl. sessions.json (all sessions), control.* | reads sessions.json, latest/*; works from its own session files without the hub | **tab** Mission Control (own pane without the hub) | prices |
 | `session-sync` (soft) | x.session-sync.synced | session.*, decision.recorded | reads/writes sessions.json neighbours; its own files without the hub | tab section in Mission Control | — |
-| `team-hub` | — | pr.opened, ci.result, deploy.*, decision.recorded, issue.drafted | reads fact `guardian.policy` and the hub's routes (drift from the team's rules) | **tab** Team | secrets |
+| `team-hub` | x.team-hub.drift | — | fact `team-hub.policy`; reads fact `guardian.policy` and the hub's routes (drift from the team's rules) | **tab** Team (order 220) | secrets |
 | `telegram-bridge` (bound) | channel.inbound, approval.answered | mods.deliver | — | channel `telegram` (push) | secrets |
 | `slack-bridge` (bound) | channel.inbound | mods.deliver (audience team) | — | channel `slack` (team, push) | secrets |
 | `discord-bridge` (bound) | channel.inbound | mods.deliver (audience team) | — | channel `discord` (team, push) | secrets |
@@ -591,7 +591,7 @@ Wave 0 is this phase. Each wave lands in one PR per cluster; a mod changes only 
 - **Wave 4 — dashboards into tabs, cost/context views, ecosystem** (38): `mod-store`, `git-status-line`, `auto-checkpoint`, `diff-pane`, `context-gauge`, `cache-hit-meter`, `turn-timer`, `big-read-guard`, `compact-coach`, `todo-pane`, `scratchpad`, `tool-timeline`, `files-touched`, `session-stats`, `token-sparkline`, `codebase-map`, `standup`, `review-agent`, `handoff`, `migration-guard`, `monorepo-scope`, `terraform-plan-pane`, `dev-server-pane`, `sql-safety`, `bundle-size-watch`, `second-opinion`, `parallel-explore`, `self-check`, `edit-limit`, `command-coach`, `license-checker`, `vuln-scan`, `net-retry`, `disk-guard`, `mod-doctor`, `mod-profiles`, `settings-sync`, `daily-goal`
 - **Wave 5 — long tail: edit-time checkers (`line-index`, `lint.result`) and command-only mods** (88): `branch-namer`, `conflict-helper`, `co-author-stamp`, `output-trimmer`, `quote-selection`, `prompt-snippets`, `recent-files`, `copy-last`, `prompt-history`, `auto-format`, `todo-tracker`, `debug-catcher`, `no-any`, `file-size-watch`, `activity-heatmap`, `bash-history`, `web-trail`, `house-style`, `language-lock`, `concise-mode`, `prompt-enhancer`, `ticket-linker`, `date-context`, `persona-switch`, `explain-level`, `prompt-lint`, `glossary`, `bookmark`, `snippet-vault`, `link-vault`, `readme-sync`, `license-header`, `i18n-guard`, `codeowners-hint`, `react-doctor`, `next-guard`, `node-version-check`, `django-migrate-watch`, `go-mod-tidy`, `strict-types`, `schema-sync`, `env-example-sync`, `docker-lint`, `ci-yaml-check`, `port-check`, `log-tail`, `query-explain`, `schema-pane`, `n-plus-one-hint`, `migration-namer`, `csv-peek`, `fixture-factory`, `a11y-guard`, `css-token-guard`, `lighthouse-run`, `heavy-asset-warn`, `storybook-nudge`, `contrast-checker`, `dark-mode-check`, `component-catalog`, `http-client`, `openapi-sync`, `mock-server`, `jwt-decode`, `status-check`, `graphql-context`, `curl-to-code`, `agent-presets`, `explain-diff`, `quiz-me`, `learning-mode`, `onboarding-tour`, `shortcut-tips`, `why-log`, `cheatsheet`, `pair-mode`, `skill-tracker`, `data-map`, `crypto-guard`, `sbom`, `copyright-guard`, `benchmark-compare`, `leak-hint`, `outdated-deps`, `profile-run`, `mod-maker`, `streaks`, `session-replay`
 - **System mods (new, after wave 1):** channels first (telegram-bridge, slack-bridge, discord-bridge, email-digest), then guardian, mission-control, session-sync, project-brain, issue-pilot, team-hub, calendar-sync, context-optimizer, autopilot, workflow-studio — each built for the hub from the start, soft unless pointless without it (only the three push bridges are bound).
-- **Next:** task-queue, night-shift, mission-control and workflow-studio consume `control.*` (autopilot already does).
+- **Done since:** task-queue, night-shift, mission-control and workflow-studio consume `control.*` like autopilot (night-shift reads `control.stop` and `control.pause` only).
 
 Rationale: wave 1 gives the hub its first real publishers and consumers (cost, tests, CI, mode) and aligns the three flagships while they are fresh; wave 2 is the security and notification clusters, where one shared lexer and one router fix the most bugs and noise at once; wave 3 wires the cross-mod stories (memory, agents, deploy) the 12 system mods build on; waves 4 and 5 are dashboards moving into tabs and the long tail of edit-time checkers (mostly `line-index` and `lint.result`).
 

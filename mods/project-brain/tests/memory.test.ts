@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { approxTokens, featuresOf } from '../hooks/features'
-import { Brain, type NodeKind } from '../hooks/graph'
+import { Brain, type NodeKind, utf8Bytes } from '../hooks/graph'
 import { commandKey, errorLine, heuristicExtract, ownerPatternMatches, parseAdr, parseCodeowners, parseExtraction, parseGlossary, wasUsed } from '../hooks/ingest'
 import { NOTE_HEADER, type Recalled, composeNote, mayInject } from '../hooks/inject'
 import { addExtracted, finishTurn, importKnowledge, ingestCommand, ingestEdit, newSession, prepareInjection, takeTurn } from '../hooks/mind'
@@ -248,4 +248,57 @@ test('benchmark: recall over 5k nodes and 50k edges takes under 50 ms', { timeou
   const perRecall = (Date.now() - started) / queries.length
   expect(found).toBeGreaterThan(0)
   expect(perRecall).toBeLessThan(50)
+})
+
+test('secrets in an error line never reach the stored key either (the key is saved next to the text)', () => {
+  const brain = new Brain()
+  const session = newSession()
+  const token = `ghp_${'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'}`
+  const anthropic = `sk-ant-api03-${'x'.repeat(40)}`
+  ingestCommand(brain, session, { command: 'npm test', output: `Error: request failed with token ${token}`, hasFailed: true, at: T0 })
+  ingestCommand(brain, session, { command: 'npm test', output: `Error: ${anthropic} rejected`, hasFailed: true, at: T0 })
+  const json = JSON.stringify(brain.toFile(T0)).toLowerCase()
+  expect(json.includes(token.toLowerCase())).toBe(false)
+  expect(json.includes('sk-ant-api03')).toBe(false)
+})
+
+test('a damaged graph file loads without NaN/Infinity reaching recall, and the ranker never learns NaN', () => {
+  const brain = new Brain()
+  const a = brain.upsert({ kind: 'decision', text: 'use postgres for orders', source: 'user', at: T0 })?.node
+  const b = brain.upsert({ kind: 'file', text: 'src/orders.ts', source: 'edit', at: T0 })?.node
+  if (a === undefined || b === undefined) throw new Error('setup')
+  brain.link(a.id, b.id, 'decided-for', 0.8, T0)
+  const file = JSON.parse(JSON.stringify(brain.toFile(T0))) as ReturnType<Brain['toFile']>
+  // Damage: an edge with no weight or age, a node row that is not an array, an absurd date.
+  ;(file.edges as unknown[]).push([0, 1], null, [0, 1, 'x', 0, 0])
+  ;(file.nodes as unknown[]).push(null, 'oops')
+  const first = file.nodes[0] as unknown[]
+  first[8] = Number.POSITIVE_INFINITY
+  first[6] = Number.NaN
+  const loaded = Brain.fromFile(file)
+  expect(loaded.nodes.size).toBe(2)
+  for (const [, list] of loaded.adj) for (const edge of list.values()) expect(Number.isFinite(loaded.weightOf(edge, T0))).toBe(true)
+  const ranker = new Ranker()
+  for (let i = 0; i < 40; i += 1) ranker.train([1, 0.5, 0.2, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0], 1)
+  ranker.train([Number.NaN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0)
+  ranker.train([Number.POSITIVE_INFINITY, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 1)
+  expect(ranker.w1.every(row => row.every(Number.isFinite))).toBe(true)
+  expect(Number.isFinite(ranker.predict([1, 0.5, 0.2, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]))).toBe(true)
+  const session = newSession()
+  const injection = prepareInjection(loaded, ranker, session, 'postgres orders', T0)
+  for (const item of injection.ranked) expect(Number.isFinite(item.score)).toBe(true)
+  expect(injection.note).toContain('postgres')
+})
+
+test('caps after merging another session, and the byte size a save must fit in', () => {
+  const brain = new Brain({ ...new Brain().params, maxNodes: 50, maxEdges: 100 })
+  for (let i = 0; i < 80; i += 1) brain.upsert({ kind: 'note', text: `記憶 ${i} ${'長い文章'.repeat(60)}`, key: `k${i}`, source: 'user', at: T0 + i })
+  expect(brain.nodes.size).toBe(80)
+  const capped = brain.enforceCaps(T0 + 100, 50, 100)
+  expect(capped.prunedNodes).toBe(30)
+  expect(brain.nodes.size).toBe(50)
+  // Non-Latin text weighs three bytes a character: the save budget counts bytes, not characters.
+  const json = JSON.stringify(brain.toFile(T0))
+  expect(utf8Bytes(json)).toBeGreaterThan(json.length * 2)
+  expect(utf8Bytes('a€😀')).toBe(1 + 3 + 4)
 })

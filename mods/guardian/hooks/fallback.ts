@@ -96,7 +96,10 @@ const isEnvFile = (path: string): boolean => {
 
 function envRead(cmd: ShellCommand): string | undefined {
   if (!READERS.has(cmd.name) && !cmd.redirects.some(redirect => redirect.op === '<')) return undefined
-  const files = [...operands(cmd.argv.slice(1)), ...cmd.redirects.filter(redirect => redirect.op === '<').map(redirect => redirect.target)]
+  const args = operands(cmd.argv.slice(1))
+  // `cp .env.example .env` writes .env and reads only the template: a copy's destination is not read.
+  const read = (cmd.name === 'cp' || cmd.name === 'scp') && args.length >= 2 && !cmd.argv.some(arg => arg === '-t' || arg.startsWith('--target-directory')) ? args.slice(0, -1) : args
+  const files = [...read, ...cmd.redirects.filter(redirect => redirect.op === '<').map(redirect => redirect.target)]
   const hit = files.find(isEnvFile)
   return hit === undefined ? undefined : `reading ${hit} puts its secrets into the conversation`
 }

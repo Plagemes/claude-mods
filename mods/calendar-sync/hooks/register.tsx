@@ -276,6 +276,8 @@ async function engage($: EngineInterface, rt: Runtime, kind: PresenceKind, until
     await hubSetNight($, { isNightOn: true, quietHours: NIGHT_ALL_DAY })
   }
   if (!(await hubSetPresence($, 'away'))) {
+    // Nothing is recorded as applied, so nothing would ever give Night back: undo it now.
+    if (kind === 'off' && restore !== undefined) await hubSetNight($, restore)
     rt.hubMissingAt = now
     return false
   }

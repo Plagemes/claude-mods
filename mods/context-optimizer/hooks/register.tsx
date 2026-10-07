@@ -9,7 +9,7 @@ import type { Milestone, MomentReason } from './moments'
 import { MIN_DEDUPE_CHARS, checkRead, dedupeNote, readKey } from './reads'
 import type { ReadEntry } from './reads'
 import { describeRun, isTestCommand, summarizeRun } from './shared/test-runners'
-import { isTrimmable, resultText, tokensOf, toolPatterns, trimText } from './trim'
+import { isTrimmable, resultText, showsContent, tokensOf, toolPatterns, trimText } from './trim'
 
 // ── Constants ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ const categoriesAtom = atom({ plugin: 'context-optimizer', key: 'categories' } a
 // ── The per-load runtime ────────────────────────────────────────────────────────────────────────────
 
 type Options = { trimAboveChars: number; patterns: RegExp[]; suggestAt: number; idleMs: number; defaults: ContextOptimizerPrefs }
-type Call = { tool: string; path?: string; key?: string; repeatOf?: number }
+type Call = { tool: string; path?: string; key?: string; repeatOf?: number; command?: string }
 
 type Runtime = {
   options: Options
@@ -69,6 +69,10 @@ type Runtime = {
   prompts: Set<string>[]
   lastSuggestedTurn: number | undefined
   idleTimer: Timer | undefined
+  /** A main-loop turn is running: an automatic /compact waits for it to end. */
+  isBusy: boolean
+  /** autoCompact found a moment while busy: the idle wait starts when the turn ends. */
+  isAutoPending: boolean
   pressureStep: number
   isOutputTrimmer: boolean
   turnSaved: number
@@ -94,6 +98,8 @@ const newRuntime = (options: Options): Runtime => ({
   prompts: [],
   lastSuggestedTurn: undefined,
   idleTimer: undefined,
+  isBusy: false,
+  isAutoPending: false,
   pressureStep: 0,
   isOutputTrimmer: false,
   turnSaved: 0,
@@ -178,6 +184,8 @@ async function observeCall($: EngineInterface, rt: Runtime, e: ToolCallInput, ne
     }
   } else if (WRITERS.has(call.tool) && 'file_path' in e && typeof e.file_path === 'string') {
     call.path = e.file_path
+  } else if (e.tool === 'Bash') {
+    call.command = e.command
   }
   rt.calls.set(e.tool_use_id, call)
 
@@ -223,7 +231,14 @@ async function rewriteResults($: EngineInterface, rt: Runtime, e: SessionAppendI
       saved.deduped += 1
       saved.dedupedTokens += tokensOf(text.length - kept.length)
       if (call.key !== undefined) rt.noted.add(call.key)
-    } else if (prefs.trim && isTrimmable(tool, rt.options.patterns) && !(tool === 'Bash' && rt.isOutputTrimmer)) {
+    } else if (
+      prefs.trim &&
+      isTrimmable(tool, rt.options.patterns) &&
+      !(tool === 'Bash' && rt.isOutputTrimmer) &&
+      // A failed call's output is the error Claude must read whole; a diff it ran is the change under review.
+      block.is_error !== true &&
+      !(call?.command !== undefined && showsContent(call.command))
+    ) {
       const trimmed = trimText(text, { maxChars: rt.options.trimAboveChars, tool })
       if (trimmed !== undefined) {
         kept = trimmed
@@ -305,10 +320,25 @@ async function suggest($: EngineInterface, rt: Runtime, reason: MomentReason): P
   rt.lastSuggestedTurn = rt.turn
   await update($, suggestionAtom, () => ({ reason: REASON_LABEL[reason], focus, percent, at: carry.at }))
   await hubNotify($, { level: 'info', title: `Good moment to /compact (${percent}% full, ${REASON_LABEL[reason]})`, body: `/compact ${focus}`, audience: 'terminal' })
-  if ((await effectivePrefs($, rt)).autoCompact) {
-    rt.idleTimer?.cancel()
-    rt.idleTimer = $.clock.after(rt.options.idleMs, () => void compactNow($, rt).catch(() => undefined))
+  if ((await effectivePrefs($, rt)).autoCompact) armAutoCompact($, rt)
+}
+
+/**
+ * autoCompact: compacts once the session has been idle for `idleSeconds`. While a turn runs (a new-topic moment
+ * is found on the prompt that starts one) the wait begins only when that turn ends; a prompt cancels it.
+ */
+function armAutoCompact($: EngineInterface, rt: Runtime): void {
+  rt.idleTimer?.cancel()
+  rt.idleTimer = undefined
+  if (rt.isBusy) {
+    rt.isAutoPending = true
+    return
   }
+  rt.isAutoPending = false
+  rt.idleTimer = $.clock.after(rt.options.idleMs, () => {
+    rt.idleTimer = undefined
+    if (!rt.isBusy) void compactNow($, rt).catch(() => undefined)
+  })
 }
 
 /** Runs /compact with the carry-over as its focus (the person's button, /ctx compact, or autoCompact when idle). */
@@ -385,6 +415,7 @@ async function onCompact($: EngineInterface, rt: Runtime, e: SessionCompactInput
 async function onPrompt($: EngineInterface, rt: Runtime, e: PromptSubmitInput, next: (e: PromptSubmitInput) => Promise<PromptSubmitResult>): Promise<PromptSubmitResult> {
   rt.idleTimer?.cancel()
   rt.idleTimer = undefined
+  rt.isAutoPending = false
   const context: string[] = []
   if (isPersonOrigin(e.origin)) {
     rt.decisions = remember(rt.decisions, decisionsIn(e.text), MAX_DECISIONS)
@@ -642,6 +673,13 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'ctx' }, async ($, e) => ({ text: await runCommand($, rt, e.args, e.origin) }))
 
   on('turn.start', ($, e, next) => {
+    rt.isBusy = true
+    // An automatic /compact never runs mid-turn: a wait already started resumes when the turn ends.
+    if (rt.idleTimer !== undefined) {
+      rt.idleTimer.cancel()
+      rt.idleTimer = undefined
+      rt.isAutoPending = true
+    }
     rt.turn += 1
     rt.milestone = undefined
     rt.isTodoListDone = false
@@ -653,6 +691,8 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const ran = await next(e)
     if (e.agentId === undefined) {
+      rt.isBusy = false
+      if (rt.isAutoPending) armAutoCompact($, rt)
       const isAnswer = e.reason === 'answer' && e.isAborted !== true
       $.clock.after(0, () => void onTurnComplete($, rt, isAnswer).catch(() => undefined))
     }

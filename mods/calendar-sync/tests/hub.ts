@@ -86,6 +86,8 @@ export const hubStandIn = (): Plugin => ({
       on('mods.setPresence', async ($, e, next) => {
         await $.state.set({ plugin: 'mods-hub', key: 'feed' }, [...((await $.state.get({ plugin: 'mods-hub', key: 'feed' })).value ?? []), { id: 'setPresence', topic: 'setPresence', data: e as never, source: next.origin.plugin ?? '', at: 0, session: 's', scope: 'session' }])
         const prefs = (await $.state.get({ plugin: 'mods-hub', key: 'prefs' })).value
+        // A test may make the hub refuse presence changes (`hub set-prefs {"refusePresence":true}`).
+        if ((prefs as { refusePresence?: boolean } | undefined)?.refusePresence === true) return { deny: 'presence refused' }
         if (prefs !== undefined) await $.state.set({ plugin: 'mods-hub', key: 'prefs' }, { ...prefs, presence: e.presence })
         return { value: { presence: 'here' as const, isSilent: false, silentUntil: null, isNight: false, quietHours: '22:00-07:00', interaction: 'auto' as const, canAsk: false } }
       })

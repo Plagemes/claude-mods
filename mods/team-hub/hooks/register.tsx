@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, RenderInput, Timer } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderElement, RenderInput, Timer } from 'claude-code'
 
 import type { TeamConfig, TeamLevel, TeamRoute, TeamView } from '../types'
 import type { ModsPrefs } from '../types/mods-hub'
@@ -62,6 +62,8 @@ type Runtime = {
   phase: 'ready' | 'absent' | 'invalid'
   problems: string[]
   mtime: number
+  /** The file's mtime when the editor's working copy was taken: a save over a newer file is refused. */
+  draftMtime: number
   /** The conventions as added to the system prompt: set when the file is read, so the prompt text stays stable. */
   section: string
   who: { email: string; name: string }
@@ -78,6 +80,7 @@ const newRuntime = (settings: Settings): Runtime => ({
   root: '',
   path: '',
   isInteractive: false,
+  draftMtime: 0,
   team: null,
   phase: 'absent',
   problems: [],
@@ -277,6 +280,8 @@ const SAVED = `Saved ${TEAM_FILE}. It is a normal file: review and commit it (gi
 
 /** Applies one edit to the saved team and writes it. Returns a sentence for the person. */
 async function editTeam($: EngineInterface, rt: Runtime, op: Op): Promise<string> {
+  // The file may have changed on disk (a git pull) since it was last read: edit what is there now.
+  await check($, rt)
   if (rt.team === null) return `There is no ${TEAM_FILE} yet. /team init creates one.`
   const refused = deny(rt)
   if (refused !== '') return refused
@@ -371,6 +376,7 @@ async function startEditing($: EngineInterface, rt: Runtime): Promise<void> {
     await notice($, 'error', refused)
     return
   }
+  rt.draftMtime = rt.mtime
   await setView($, { isEditing: true, draft: (JSON.parse(JSON.stringify(rt.team)) as TeamConfig), notice: null })
 }
 
@@ -398,6 +404,11 @@ async function saveDraft($: EngineInterface, rt: Runtime): Promise<void> {
   const refused = deny(rt)
   if (refused !== '') {
     await notice($, 'error', refused)
+    return
+  }
+  const onDisk = (await $.fs.stat(rt.path).catch(() => undefined))?.mtimeMs ?? 0
+  if (onDisk !== rt.draftMtime) {
+    await notice($, 'error', `Not saved: ${TEAM_FILE} changed on disk since you started editing (a git pull?). Cancel, then edit the new version.`)
     return
   }
   const failed = await writeTeam($, rt, view.draft)
@@ -457,10 +468,16 @@ async function openPanel($: EngineInterface): Promise<boolean> {
 
 const wordsOf = (text: string): string[] => text.split(/[\s,]+/).filter(word => word !== '')
 
-async function runTeam($: EngineInterface, rt: Runtime, args: string): Promise<string> {
+/** Verbs that write the team file, install mods or change your settings: only a person may run them. */
+const CHANGING = new Set(['init', 'install', 'align', 'add-mod', 'remove-mod', 'convention', 'guard', 'budget', 'route', 'owner'])
+const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
+const isPerson = (origin: PromptOrigin): boolean => PERSON_ORIGINS.has(origin.kind) || (origin.kind === 'plugin' && origin.asUser === true)
+
+async function runTeam($: EngineInterface, rt: Runtime, args: string, origin: PromptOrigin): Promise<string> {
   const [word = '', ...rest] = args.trim().split(/\s+/)
   const command = word.toLowerCase()
   const argument = rest.join(' ').trim()
+  if (CHANGING.has(command) && !isPerson(origin)) return `Only you can run /team ${command}: type it yourself.`
   if (command === 'reload') {
     await doRefresh($, rt)
     return `Reloaded ${TEAM_FILE}.`
@@ -728,7 +745,7 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'team' }, async ($, e) => {
     try {
-      return { text: await runTeam($, rt, e.args) }
+      return { text: await runTeam($, rt, e.args, e.origin) }
     } catch (error) {
       return { text: `The /team command failed: ${messageOf(error)}` }
     }

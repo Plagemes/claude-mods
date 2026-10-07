@@ -211,3 +211,13 @@ test('with mods-hub: each deny is published as risk.blocked, with the path', asy
     },
   ])
 })
+
+test('a $ in an Edit/Write file name is a plain character (Remix/TanStack routes), not a shell expansion', async ($, on) => {
+  world(on)
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: '/proj/src/$slug.tsx', content: 'x' }))).toBeUndefined()
+  expect(denial(await $.tool.call({ tool: 'Edit', file_path: '/proj/src/posts.$id.tsx', old_string: 'a', new_string: 'b' }))).toBeUndefined()
+  // Still placed by its real path: a literal $ name outside the project is refused for being outside.
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: '/etc/$x', content: 'x' }))).toContain('outside the allowed folders')
+  // In Bash a bare $VAR is still an expansion the jail cannot check.
+  expect(denial(await $.tool.call({ tool: 'Bash', command: 'touch src/$NAME.tsx' }))).toContain('shell expansion')
+})

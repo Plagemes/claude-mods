@@ -3,6 +3,8 @@
  * (and to one-line blobs such as minified JSON, which have no lines to keep). Pure: no `$`, no I/O.
  */
 
+import { simpleCommands } from './shared/shell'
+
 /** Lines worth keeping from the part that is cut. */
 const NOTEWORTHY = /error|fail|warn|exception|traceback|panic|fatal|denied|not found/i
 const MAX_NOTEWORTHY = 40
@@ -81,4 +83,27 @@ export function resultText(content: unknown): string | undefined {
   if (!Array.isArray(content)) return undefined
   const texts = content.map(block => (typeof block === 'object' && block !== null && block.type === 'text' && typeof block.text === 'string' ? (block.text as string) : undefined))
   return texts.every(text => text !== undefined) ? texts.join('\n') : undefined
+}
+
+/** git subcommands whose output is the content asked for (a diff, a patch, a file at a revision). */
+const GIT_CONTENT = new Set(['diff', 'show', 'format-patch', 'blame', 'range-diff'])
+const GIT_VALUED = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
+
+/**
+ * Whether a Bash command prints content Claude asked to see whole: a diff or patch (`git diff`, `git show`,
+ * `git log -p`, `gh pr diff`, `diff`). Cutting its middle would hide the very change under review.
+ */
+export function showsContent(command: string): boolean {
+  return simpleCommands(command).some(cmd => {
+    const args = cmd.argv.slice(1)
+    // git's own options before the subcommand, some with a value (`git -C app log -p`).
+    let at = 0
+    while (cmd.name === 'git' && at < args.length && (args[at] ?? '').startsWith('-')) at += GIT_VALUED.has(args[at] ?? '') ? 2 : 1
+    const sub = cmd.name === 'git' ? args[at] : args.find(arg => !arg.startsWith('-'))
+    if (cmd.name === 'diff' || cmd.name === 'colordiff' || cmd.name === 'difft') return true
+    if (cmd.name === 'gh') return args[0] === 'pr' && args[1] === 'diff'
+    if (cmd.name !== 'git' || sub === undefined) return false
+    if (GIT_CONTENT.has(sub)) return true
+    return sub === 'log' && args.some(arg => arg === '-p' || arg === '--patch' || arg.startsWith('-p') || arg === '-u')
+  })
 }

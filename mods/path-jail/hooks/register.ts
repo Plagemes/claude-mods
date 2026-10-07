@@ -4,7 +4,8 @@ import type { EngineInterface, Register } from 'claude-code'
 import { writeTargets } from './bash'
 import { redactSummary } from './shared/secrets'
 
-type Target = { path: string; via: string; cdChain: readonly string[] }
+/** `isLiteral`: a tool's own path field (Edit, Write): no shell reads it, so `$` and backticks are plain characters. */
+type Target = { path: string; via: string; cdChain: readonly string[]; isLiteral?: boolean }
 type Jail = { roots: string[]; sep: string; cwd: string; home: string | undefined; tmp: string | undefined }
 type Placed = { real: string } | { problem: string }
 
@@ -61,12 +62,14 @@ const placeAbsolute = async ($: EngineInterface, path: string, sep: string, pass
 }
 
 /** Expands what a shell would before writing (`~`, `$HOME`, `$PWD`, `$TMPDIR`); undefined when it cannot. */
-const expand = (path: string, jail: Jail, cwd: string): string | undefined => {
+const expand = (path: string, jail: Jail, cwd: string, isLiteral = false): string | undefined => {
   let result = path
   if (result === '~' || result.startsWith('~/')) {
     if (jail.home === undefined) return undefined
     result = jail.home + result.slice(1)
   }
+  // `app/routes/$slug.tsx` (Remix, TanStack Router) written with Edit/Write is a real file name, not an expansion.
+  if (isLiteral) return result
   result = result
     .replace(/\$\{?HOME\}?(?![\w])/g, () => jail.home ?? '$HOME')
     .replace(/\$\{?PWD\}?(?![\w])/g, cwd)
@@ -90,7 +93,7 @@ const placeTarget = async ($: EngineInterface, target: Target, jail: Jail): Prom
     if (directory === undefined) return { problem: `it follows a \`cd ${step}\` the jail cannot follow` }
     cwd = isAbsolute(directory) ? directory : `${cwd}${jail.sep}${directory}`
   }
-  const expanded = expand(target.path, jail, cwd)
+  const expanded = expand(target.path, jail, cwd, target.isLiteral === true)
   if (expanded === undefined) return { problem: 'it uses a shell expansion the jail cannot check' }
   const literal = withoutGlob(expanded)
   if (literal === undefined) return { problem: 'it climbs out of a glob with `..`' }
@@ -100,7 +103,7 @@ const placeTarget = async ($: EngineInterface, target: Target, jail: Jail): Prom
 const targetsOf = (e: { tool: string; [field: string]: unknown }): Target[] => {
   const tool = String(e.tool)
   const field = tool === 'NotebookEdit' ? e.notebook_path : tool === 'Bash' ? undefined : e.file_path
-  if (typeof field === 'string') return [{ path: field, via: tool, cdChain: [] }]
+  if (typeof field === 'string') return [{ path: field, via: tool, cdChain: [], isLiteral: true }]
   if (tool === 'Bash' && typeof e.command === 'string') return writeTargets(e.command)
   return []
 }

@@ -93,8 +93,11 @@ export class Ranker {
 
   /** One online SGD step; records whether the prediction before the step was right. Returns that prediction. */
   train(x: readonly number[], y: number, weight = 1): number {
+    // One NaN or Infinity input would turn every weight into NaN for good: such a sample is not learnt from.
+    if (!x.every(Number.isFinite) || !Number.isFinite(weight) || (y !== 0 && y !== 1)) return this.predict(x)
     const before = this.predict(x)
     this.hits = [...this.hits, (before >= 0.5 ? 1 : 0) === y ? 1 : 0].slice(-ACCURACY_WINDOW)
+    const saved = { w1: this.w1.map(row => [...row]), b1: [...this.b1], w2: [...this.w2], b2: this.b2 }
     const grad = this.gradients(x, y)
     const rate = this.config.learningRate * weight
     for (let j = 0; j < this.w1.length; j += 1) {
@@ -105,8 +108,20 @@ export class Ranker {
       this.w2[j] = (this.w2[j] ?? 0) - rate * (grad.w2[j] ?? 0)
     }
     this.b2 -= rate * grad.b2
+    if (!this.isFinite()) this.restore(saved)
     this.samples += 1
     return before
+  }
+
+  private isFinite(): boolean {
+    return Number.isFinite(this.b2) && this.w2.every(Number.isFinite) && this.b1.every(Number.isFinite) && this.w1.every(row => row.every(Number.isFinite))
+  }
+
+  private restore(saved: { w1: number[][]; b1: number[]; w2: number[]; b2: number }): void {
+    this.w1 = saved.w1
+    this.b1 = saved.b1
+    this.w2 = saved.w2
+    this.b2 = saved.b2
   }
 
   /** Share of the last predictions that were right, or null before any. */
@@ -128,8 +143,10 @@ export class Ranker {
       file.w1.every(row => Array.isArray(row) && row.length === config.inputs && row.every(Number.isFinite)) &&
       Array.isArray(file.b1) &&
       file.b1.length === config.hidden &&
+      file.b1.every(Number.isFinite) &&
       Array.isArray(file.w2) &&
       file.w2.length === config.hidden &&
+      file.w2.every(Number.isFinite) &&
       Number.isFinite(file.b2)
     if (!isShaped) return ranker
     ranker.w1 = file.w1 as number[][]
