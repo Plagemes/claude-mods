@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { GO_FAIL } from './fixtures'
+import { fakeHub } from './hub'
 
 const PANE_PROPS = { title: 'Flaky tests', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 const GO_PASS = 'ok  \texample.com/shop/calc\t0.004s\nok  \texample.com/shop/store\t0.002s\n'
@@ -136,4 +137,71 @@ test('commands that are not test runs, and runs with no readable summary, are le
     expect(await ui.find({ type: 'Text', text: /No flaky tests seen/ })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('with mods-hub: says hello, publishes each new suspect and notifies a warning instead of toasting', async ($, on) => {
+  const state = world(on)
+  const hub = fakeHub(on)
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.flaky-detector.suspect'], consumes: [] }])
+
+  await goTest($)
+  state.output = { text: GO_PASS, fails: false }
+  await goTest($)
+
+  expect(hub.published.map(event => event.data)).toEqual([
+    { id: 'example.com/shop/calc.TestDiv', runner: 'go', scope: 'example.com/shop/calc', flips: 1, command: 'go test ./...' },
+    { id: 'example.com/shop/calc.TestTable', runner: 'go', scope: 'example.com/shop/calc', flips: 1, command: 'go test ./...' },
+    { id: 'example.com/shop/calc.TestTable/large', runner: 'go', scope: 'example.com/shop/calc', flips: 1, command: 'go test ./...' },
+  ])
+  expect(hub.published.every(event => event.topic === 'x.flaky-detector.suspect')).toBe(true)
+  expect(hub.notified.map(notice => [notice.level, notice.topic])).toEqual([
+    ['warning', 'x.flaky-detector.suspect'],
+    ['warning', 'x.flaky-detector.suspect'],
+    ['warning', 'x.flaky-detector.suspect'],
+  ])
+  expect(hub.notified[0]?.title).toBe('⚠ Flaky: example.com/shop/calc.TestDiv changed outcome with no code change (/flaky)')
+  expect(state.toasts).toEqual([])
+
+  // The next failure still tells Claude, hub or not.
+  state.output = { text: GO_FAIL, fails: true }
+  expect((await goTest($)).context?.at(-1)).toStartWith('flaky-detector: known flaky tests failed')
+})
+
+test('with mods-hub: the suspects are a section of the Tests tab beneath test-watch\'s body, on every surface', async ($, on) => {
+  const state = world(on)
+  const hub = fakeHub(on)
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['TESTS BODY'] }) as never)
+  await goTest($)
+  state.output = { text: GO_PASS, fails: false }
+  await goTest($)
+  await flaky($)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    hub.tab = 'home'
+    let ui = await $.ui.mount({ plugin: 'flaky-detector', surface, component: 'Pane', requestId: 'claude-mods', props: { ...PANE_PROPS, title: 'Claude Mods' } })
+    expect(await ui.find({ key: 'flaky-section' })).toBeUndefined()
+    await ui.unmount()
+
+    hub.tab = 'tests'
+    ui = await $.ui.mount({ plugin: 'flaky-detector', surface, component: 'Pane', requestId: 'claude-mods', props: { ...PANE_PROPS, title: 'Claude Mods' } })
+    expect(await ui.find({ type: 'Text', text: 'TESTS BODY' })).toBeDefined()
+    expect((await ui.find({ key: 'flaky-section' }))?.text).toContain('3 suspects · 0 watched')
+    expect((await ui.find({ key: 'suspect:example.com/shop/calc.TestDiv' }))?.text).toContain('1 flip')
+    expect(await ui.find({ key: 'flaky-open' })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub but no suspects yet: the Tests tab is left as test-watch drew it', async ($, on) => {
+  world(on)
+  const hub = fakeHub(on)
+  hub.tab = 'tests'
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['TESTS BODY'] }) as never)
+
+  const ui = await $.ui.mount({ plugin: 'flaky-detector', surface: 'terminal', component: 'Pane', requestId: 'claude-mods', props: { ...PANE_PROPS, title: 'Claude Mods' } })
+  expect(await ui.find({ type: 'Text', text: 'TESTS BODY' })).toBeDefined()
+  expect(await ui.find({ key: 'flaky-section' })).toBeUndefined()
+  await ui.unmount()
 })

@@ -6,11 +6,19 @@ import { applyRun, asHistory, suspectsOf } from './history'
 import type { History } from './history'
 import { isTestCommand, parseRun } from './runners'
 import type { RunReport } from './runners'
+import { isTestCommand as isTestCommandAnywhere } from './shared/test-runners'
 
 /** What this load counts: Claude's file edits (the fingerprint outside git) and the project root once found. */
 type Memory = { edits: number; root: string | undefined }
 
 const PANE = 'flaky'
+/** The hub's shared panel, and the Tests tab test-watch owns in it: the suspects are a section of that tab. */
+const HUB_PANE = 'claude-mods'
+const TESTS_TAB = 'tests'
+const SUSPECT_TOPIC = 'x.flaky-detector.suspect'
+const SECTION_ROWS = 5
+/** How much of a command line goes into a suspect event. */
+const MAX_EVENT_COMMAND = 200
 const STORE_PREFIX = 'tests:'
 const INDEX_NAME = 'flaky-detector.index'
 const EDIT_TOOLS = /^(?:Edit|MultiEdit|Write|NotebookEdit)$/
@@ -89,7 +97,17 @@ async function recordRun($: EngineInterface, memory: Memory, command: string, re
   await $.store.set(`${STORE_PREFIX}${root}`, applied.history)
   await showHistory($, root, applied.history)
 
-  for (const test of applied.newlyFlaky) $.ui.toast(`⚠ Flaky: ${shortName(test.id)} changed outcome with no code change (/flaky)`)
+  for (const test of applied.newlyFlaky) {
+    await hubPublish($, {
+      topic: SUSPECT_TOPIC,
+      data: { id: test.id, runner: test.runner, scope: test.scope, flips: test.flips, command: command.slice(0, MAX_EVENT_COMMAND) },
+    })
+    await hubNotify($, {
+      level: 'warning',
+      title: `⚠ Flaky: ${shortName(test.id)} changed outcome with no code change (/flaky)`,
+      topic: SUSPECT_TOPIC,
+    })
+  }
   if (applied.flakyFailures.length === 0) return undefined
   const names = applied.flakyFailures.map(test => `${test.id} (${test.flips} flip${test.flips === 1 ? '' : 's'})`).join('; ')
   return (
@@ -99,6 +117,22 @@ async function recordRun($: EngineInterface, memory: Memory, command: string, re
 }
 
 const shortName = (id: string): string => (id.length > 60 ? `…${id.slice(-59)}` : id)
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: [SUSPECT_TOPIC], consumes: [] })
+}
 
 async function forget($: EngineInterface, memory: Memory, id: string | undefined): Promise<void> {
   const root = await projectRoot($, memory)
@@ -148,6 +182,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'flaky', description: 'Tests that pass and fail with no code change (flaky suspects)' })
+    await greetHub($)
     return next(e)
   })
 
@@ -169,7 +204,8 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const ran = await next(e)
-    if (e.tool !== 'Bash' || ran.deny !== undefined || e.run_in_background === true || !isTestCommand(e.command)) return ran
+    if (e.tool !== 'Bash' || ran.deny !== undefined || e.run_in_background === true) return ran
+    if (!isTestCommand(e.command) && !isTestCommandAnywhere(e.command)) return ran
     const report = parseRun(e.command, outputOf(ran))
     if (report === undefined || (report.tests.length === 0 && report.passedScopes.length === 0 && !report.isComplete)) return ran
     try {
@@ -179,6 +215,43 @@ export const register: Register = on => {
       $.ui.log(`flaky-detector: could not record the run: ${String(error)}`, { to: 'debug' })
       return ran
     }
+  })
+
+  // With mods-hub and test-watch: the suspects are a section of the Tests tab, beneath test-watch's body. Any other tab passes through.
+  on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
+    if (!(await hubTabIs($, TESTS_TAB))) return next(e)
+    const current = await read($, view)
+    if (current.flaky.length + current.watching.length === 0) return next(e)
+
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const shown = current.flaky.slice(0, SECTION_ROWS)
+    const hidden = current.flaky.length - shown.length
+    return (
+      <Box flexDirection="column" gap={1}>
+        {await next(e)}
+        <Box key="flaky-section" flexDirection="column">
+          <Box flexDirection="row" justifyContent="space-between" gap={2}>
+            <Text bold color={current.flaky.length > 0 ? 'warning' : undefined}>
+              ⚠ Flaky suspects
+            </Text>
+            <Text dimColor>
+              {current.flaky.length} suspect{current.flaky.length === 1 ? '' : 's'} · {current.watching.length} watched
+            </Text>
+          </Box>
+          {shown.map(test => (
+            <Box key={`suspect:${test.id}`}>
+              <Text wrap="truncate-start">
+                {test.id} <Text dimColor>· {test.flips} flip{test.flips === 1 ? '' : 's'} · {trail(test)}</Text>
+              </Text>
+            </Box>
+          ))}
+          {hidden > 0 && <Text dimColor>+{hidden} more</Text>}
+          <Box flexDirection="row" gap={1}>
+            <Button key="flaky-open" label="All flaky tests" plain onPress={() => void $.ui.open({ id: PANE, title: 'Flaky tests' }).catch(() => undefined)} />
+          </Box>
+        </Box>
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -264,3 +337,63 @@ export const register: Register = on => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

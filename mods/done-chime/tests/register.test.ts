@@ -2,6 +2,8 @@ import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 type Played = { asset?: string; gain?: number }
 
 /** Stands in for the engine: a mocked clock, the turn's answer, and the clips that were played. */
@@ -74,4 +76,43 @@ test('volume 0 mutes the chime', { options: { volume: 0 } }, async ($, on) => {
   await finishTurn($, clock, { durationMs: 60_000 })
 
   expect(played).toEqual([])
+})
+
+test('with mods-hub: says hello once, and still chimes on a quiet afternoon', async ($, on) => {
+  const { played, clock } = engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+
+  await finishTurn($, clock, { durationMs: 45_000 })
+  expect(played).toEqual([{ asset: 'assets/chime.wav', gain: 1 }])
+  expect(hub.notified).toEqual([])
+})
+
+test('with mods-hub in Silent or Night mode: no chime is even started', async ($, on) => {
+  const { played, clock } = engine(on)
+  const hub = fakeHub(on, { isSilent: true })
+
+  await finishTurn($, clock, { durationMs: 45_000 })
+  expect(played).toEqual([])
+
+  hub.mode = { ...hub.mode, isSilent: false, isNight: true }
+  await finishTurn($, clock, { durationMs: 45_000 })
+  expect(played).toEqual([])
+
+  hub.mode = { ...hub.mode, isNight: false }
+  await finishTurn($, clock, { durationMs: 45_000 })
+  expect(played).toHaveLength(1)
+})
+
+test('without mods-hub: session start is a no-op and nothing changes', async ($, on) => {
+  const { played, clock } = engine(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await finishTurn($, clock, { durationMs: 45_000 })
+
+  expect(played).toHaveLength(1)
 })

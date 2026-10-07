@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'regression-guard'
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 12)
@@ -225,4 +227,67 @@ test('the engine band is not drawn under a Box with a size prop', async ($, on) 
     expect(sizedAbove(await band.drawn())).toEqual([])
     await band.unmount()
   }
+})
+
+test('with mods-hub: publishes the regression, notifies an error that lists the tests, and still tells Claude', async ($, on) => {
+  const { seen, clock } = world(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.regression-guard.regressed'], consumes: [] }])
+
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await clock.advance(60_000)
+  seen.output = BROKEN
+  const second = await $.tool.call({ tool: 'Bash', command: 'npm test' })
+
+  expect(second.context?.[0]).toStartWith('regression-guard: 2 tests that passed earlier in this session now fail')
+  expect(hub.published).toEqual([
+    {
+      topic: 'x.regression-guard.regressed',
+      data: { count: 2, total: 2, tests: ['src/cart.test.ts › cart › applies discounts', 'src/user.test.ts › user › has a name'], command: 'npm test' },
+    },
+  ])
+  expect(hub.notified).toEqual([
+    {
+      level: 'error',
+      title: '⚠ 2 tests that passed earlier this session now fail',
+      body: 'src/cart.test.ts › cart › applies discounts\nsrc/user.test.ts › user › has a name',
+      topic: 'x.regression-guard.regressed',
+    },
+  ])
+  expect(seen.toasts).toEqual([])
+  expect(seen.statuses.at(-1)).toBe('⚠ 2 regressions')
+})
+
+test('with mods-hub: a run that fixes every regression is a success notice, and a run that adds none publishes nothing', async ($, on) => {
+  const { seen } = world(on)
+  const hub = fakeHub(on)
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  seen.output = BROKEN
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await $.tool.call({ tool: 'Bash', command: 'npm test' }) // the same two again: not new
+  expect(hub.published).toHaveLength(1)
+  expect(hub.notified).toHaveLength(1)
+
+  seen.output = GREEN
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+
+  expect(hub.notified.at(-1)).toEqual({ level: 'success', title: '✓ Every regression passes again', topic: 'x.regression-guard.regressed' })
+  expect(hub.published).toHaveLength(1)
+  expect(seen.toasts).toEqual([])
+})
+
+test('with mods-hub: a long list of regressions is cut to five in the notice and twenty in the event', async ($, on) => {
+  const { seen } = world(on)
+  const hub = fakeHub(on)
+  const names = Array.from({ length: 25 }, (_, i) => `t${String(i).padStart(2, '0')}`)
+  seen.output = `PASS src/a.test.ts\n${names.map(name => `  ✓ ${name} (1 ms)`).join('\n')}\nTests: 25 passed, 25 total`
+  await $.tool.call({ tool: 'Bash', command: 'npx jest --verbose' })
+  seen.output = `FAIL src/a.test.ts\n${names.map(name => `  ✕ ${name} (1 ms)`).join('\n')}\nTests: 25 failed, 25 total`
+  await $.tool.call({ tool: 'Bash', command: 'npx jest --verbose' })
+
+  expect((hub.published[0]?.data as { tests: string[]; count: number }).tests).toHaveLength(20)
+  expect((hub.published[0]?.data as { count: number }).count).toBe(25)
+  expect(hub.notified[0]?.body?.split('\n')).toHaveLength(6)
+  expect(hub.notified[0]?.body?.endsWith('…and 20 more')).toBe(true)
 })

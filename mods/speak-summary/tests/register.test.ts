@@ -1,6 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const LONG_TURN: TurnCompleteInput = {
   answer: 'I fixed the **flaky** login test in `auth.spec.ts` and all 42 tests now pass. Details follow.',
   durationMs: 45_000,
@@ -114,4 +116,41 @@ test('respects the configured threshold and warns once when speech is unavailabl
 
   expect(seen.toasts).toHaveLength(1)
   expect(seen.toasts[0]).toContain('cannot speak')
+})
+
+test('with mods-hub: says hello, speaks on a quiet afternoon, and routes the cannot-speak warning through the hub', async ($, on) => {
+  const clock = mock.clock(on)
+  const hub = fakeHub(on)
+  const seen = world(on, 'Ran the build.', false)
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toHaveLength(1)
+  expect(hub.notified[0]).toMatchObject({ level: 'info', audience: 'terminal' })
+  expect(hub.notified[0]?.title).toContain('cannot speak here')
+})
+
+test('with mods-hub in Silent or Night mode: neither a summary call nor speech is started', async ($, on) => {
+  const clock = mock.clock(on)
+  const hub = fakeHub(on, { isSilent: true })
+  const seen = world(on, 'Did a thing.')
+
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+  hub.mode = { ...hub.mode, isSilent: false, isNight: true }
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+
+  expect(seen.prompts).toEqual([])
+  expect(seen.spoken).toEqual([])
+
+  hub.mode = { ...hub.mode, isNight: false }
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+  expect(seen.spoken).toEqual(['Did a thing.'])
 })

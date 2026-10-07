@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const BUZZ_ASSET = 'assets/buzz.wav'
 
 type Outcome = { isError?: true; text?: string }
@@ -97,4 +99,116 @@ test('regression: onlyTests does not count a command that merely names a runner'
     await $.tool.call({ tool: 'Bash', command })
   }
   expect(clips).toHaveLength(5)
+})
+
+const SETTLE_MS = 250
+
+/**
+ * With mods-hub: a Bash call that exits 0 with `text`, after which the hub (as its sensors do, from a timer)
+ * records `events` for the command that just ran.
+ */
+const hubbed = (on: On, text: string, events: { topic: string; data: Record<string, unknown> }[] = []) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const hub = fakeHub(on)
+  const clips: unknown[] = []
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('tool.call', () => ({ result: { stdout: text, stderr: '', interrupted: false }, text }))
+  on('audio.play', (_$, e) => {
+    clips.push(e.clip)
+    return { value: undefined }
+  })
+  const publish = (command: string) => {
+    for (const event of events) hub.events.push({ ...event, data: { ...event.data, command }, at: clock.now(), source: 'mods-hub' })
+  }
+  return { clock, hub, clips, publish }
+}
+
+test('with mods-hub: says hello and buzzes on the hub\'s failed test.result, without reading the output', async ($, on) => {
+  const { clock, hub, clips, publish } = hubbed(on, 'all good, nothing parseable here', [
+    { topic: 'test.result', data: { runner: 'jest', outcome: 'failed', passed: 8, failed: 2 } },
+  ])
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['test.result', 'error.repeated'] }])
+
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  publish('npm test')
+  expect(clips).toEqual([])
+
+  await clock.advance(SETTLE_MS)
+  expect(clips).toEqual([{ asset: BUZZ_ASSET }])
+})
+
+test('with mods-hub: a passing test.result outranks output that looks like failures', async ($, on) => {
+  const { clock, clips, publish } = hubbed(on, 'Tests: 1 failed (expected, snapshot), 9 passed', [
+    { topic: 'test.result', data: { runner: 'jest', outcome: 'passed', passed: 10, failed: 0 } },
+  ])
+
+  await $.tool.call({ tool: 'Bash', command: 'npx jest' })
+  publish('npx jest')
+  await clock.advance(SETTLE_MS)
+  expect(clips).toEqual([])
+})
+
+test('with mods-hub but no test.result for the call: the output is read as without it', async ($, on) => {
+  const { clock, clips } = hubbed(on, 'Tests: 2 failed, 8 passed, 10 total')
+
+  await $.tool.call({ tool: 'Bash', command: 'npx jest || true' })
+  await clock.advance(SETTLE_MS)
+
+  expect(clips).toHaveLength(1)
+})
+
+test('with mods-hub: a test.result of another run (test-watch, an earlier call) is not this call\'s verdict', async ($, on) => {
+  const { clock, hub, clips } = hubbed(on, 'Tests: 10 passed, 10 total')
+  hub.events.push({ topic: 'test.result', data: { runner: 'jest', outcome: 'failed', passed: 1, failed: 9, command: 'npx jest' }, at: 999_000, source: 'mods-hub' })
+  hub.events.push({ topic: 'test.result', data: { runner: 'vitest', outcome: 'failed', passed: 1, failed: 9, command: 'vitest run src/a.test.ts' }, at: 1_000_500, source: 'test-watch' })
+
+  await $.tool.call({ tool: 'Bash', command: 'npx jest' })
+  await clock.advance(SETTLE_MS)
+
+  expect(clips).toEqual([])
+})
+
+test('with mods-hub: a command that keeps failing (error.repeated) buzzes once even inside the cooldown', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const hub = fakeHub(on)
+  const clips: unknown[] = []
+  on('tool.call', () => ({ result: { stdout: '', stderr: 'boom', interrupted: false }, isError: true as const, text: 'Exit code 1' }))
+  on('audio.play', (_$, e) => {
+    clips.push(e.clip)
+    return { value: undefined }
+  })
+
+  await $.tool.call({ tool: 'Bash', command: 'make deploy' })
+  await clock.advance(SETTLE_MS)
+  expect(clips).toHaveLength(1)
+
+  await $.tool.call({ tool: 'Bash', command: 'make deploy' })
+  await clock.advance(SETTLE_MS)
+  expect(clips).toHaveLength(1) // inside the 10 s cooldown
+
+  await $.tool.call({ tool: 'Bash', command: 'make deploy' })
+  hub.events.push({ topic: 'error.repeated', data: { signature: 'make deploy', count: 3, tool: 'Bash', command: 'make deploy' }, at: clock.now(), source: 'mods-hub' })
+  await clock.advance(SETTLE_MS)
+  expect(clips).toHaveLength(2)
+
+  await $.tool.call({ tool: 'Bash', command: 'make deploy' })
+  await clock.advance(SETTLE_MS)
+  expect(clips).toHaveLength(2) // the same event does not buzz twice
+})
+
+test('with mods-hub, onlyTests still ignores failing commands that are not test runs', { options: { onlyTests: true } }, async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  fakeHub(on)
+  const clips: unknown[] = []
+  on('tool.call', () => ({ result: { stdout: '', stderr: 'no', interrupted: false }, isError: true as const, text: 'Exit code 2' }))
+  on('audio.play', (_$, e) => {
+    clips.push(e.clip)
+    return { value: undefined }
+  })
+
+  await $.tool.call({ tool: 'Bash', command: 'ls /nope' })
+  await clock.advance(SETTLE_MS)
+
+  expect(clips).toEqual([])
 })

@@ -2,6 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { HINTS, formatMs, hasRunTests, isTestCommand, parseTimings, runnerOf, slowest } from './durations'
 import type { Runner, Timing } from './durations'
+import { isTestCommand as isTestCommandAnywhere } from './shared/test-runners'
 
 type Settings = { top: number; thresholdMs: number; isStatusOn: boolean }
 type LastRun = { at: number; command: string; runner?: Runner; level: Timing['level']; hasTimings: boolean; items: Timing[] }
@@ -12,6 +13,8 @@ const LISTED = 10
 const TOAST_MS = 10_000
 const MAX_NAME_LENGTH = 70
 const MINUTE_MS = 60_000
+/** mods-hub publishes `test.result` from a timer just after the tool returns; wait for it. */
+const HUB_SETTLE_MS = 250
 
 const numberOr = (value: unknown, fallback: number): number => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
 
@@ -40,8 +43,51 @@ const readLastRun = (value: unknown): LastRun | undefined => {
   return typeof run.at === 'number' && typeof run.command === 'string' && Array.isArray(run.items) ? (run as LastRun) : undefined
 }
 
-/** Reads one finished test command's output, keeps what it found for `/slow-tests`, and says what is slow. */
-const inspect = async ($: EngineInterface, hinted: Set<Runner>, settings: Settings, command: string, output: string): Promise<void> => {
+/** The hub's `test.result` for the run that started at `since` (not another run's), when mods-hub saw it: its total time. */
+const hubRunTime = async ($: EngineInterface, command: string, since: number): Promise<{ durationMs: number | undefined } | undefined> => {
+  try {
+    const event = await $.mods.latest({ topic: 'test.result' })
+    const data: unknown = event?.data
+    if (event === null || event.at < since || typeof data !== 'object' || data === null) return undefined
+    const { command: ran, durationMs } = data as { command?: unknown; durationMs?: unknown }
+    // The hub keeps the first 200 characters of the command; a run it did not see (test-watch's own) names another one.
+    if (typeof ran !== 'string' || !command.startsWith(ran)) return undefined
+    return { durationMs: typeof durationMs === 'number' && Number.isFinite(durationMs) ? durationMs : undefined }
+  } catch {
+    return undefined
+  }
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+const ownVersion = async ($: EngineInterface): Promise<string> => {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+const greetHub = async ($: EngineInterface): Promise<void> => {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: [], consumes: ['test.result'] })
+}
+
+/** The list of slow tests: a hub notification (title, rows as its body) when mods-hub is installed, the multi-line toast otherwise. */
+const announce = async ($: EngineInterface, heading: string, lines: string[]): Promise<void> => {
+  try {
+    await $.mods.notify({ level: 'info', title: heading, body: lines.join('\n'), topic: 'test.result' })
+  } catch {
+    $.ui.toast([heading, ...lines].join('\n'), { timeoutMs: TOAST_MS })
+  }
+}
+
+/**
+ * Reads one finished test command's output, keeps what it found for `/slow-tests`, and says what is slow.
+ * `runMs` is the run's total time when mods-hub knew it.
+ */
+const inspect = async ($: EngineInterface, hinted: Set<Runner>, settings: Settings, command: string, output: string, runMs?: number): Promise<void> => {
   try {
     const timings = parseTimings(output)
     if (timings.length === 0 && !hasRunTests(output)) return
@@ -55,7 +101,7 @@ const inspect = async ($: EngineInterface, hinted: Set<Runner>, settings: Settin
       const hint = runner === undefined || hinted.has(runner) ? undefined : HINTS[runner]
       if (runner !== undefined && hint !== undefined) {
         hinted.add(runner)
-        $.ui.toast(`no per-test times in that output: ${hint}`)
+        await hubNotify($, { level: 'info', title: `no per-test times in that output: ${hint}`, topic: 'test.result' })
       }
       return
     }
@@ -66,11 +112,21 @@ const inspect = async ($: EngineInterface, hinted: Set<Runner>, settings: Settin
     }
     if (slowestOne !== undefined) {
       const shown = items.slice(0, settings.top)
-      $.ui.toast([`slowest ${level === 'test' ? 'tests' : 'files'} in that run:`, ...rows(shown)].join('\n'), { timeoutMs: TOAST_MS })
+      const took = runMs === undefined ? '' : ` (${formatMs(Math.round(runMs))} in all)`
+      await announce($, `slowest ${level === 'test' ? 'tests' : 'files'} in that run${took}:`, rows(shown))
     }
   } catch {
     // Timing is a nicety: a test run is never worth an error in the session.
   }
+}
+
+/** What the hook saw of one test command, for the hub path. */
+type Call = { command: string; output: string; since: number }
+
+/** The output is read the same with the hub; the hub adds the run's total time. */
+const inspectWithHub = async ($: EngineInterface, hinted: Set<Runner>, settings: Settings, call: Call): Promise<void> => {
+  const hub = await hubRunTime($, call.command, call.since)
+  await inspect($, hinted, settings, call.command, call.output, hub?.durationMs)
 }
 
 const describeLastRun = (run: LastRun | undefined, now: number, thresholdMs: number): string => {
@@ -97,13 +153,24 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'slow-tests', description: "Lists the slowest tests of the last test run." })
+    await greetHub($)
     return next(e)
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const since = await $.clock.now()
     const ran = await next(e)
-    if (ran.deny === undefined && e.run_in_background !== true && isTestCommand(e.command)) {
-      await inspect($, hinted, settings, e.command, ran.text ?? '')
+    if (ran.deny !== undefined || e.run_in_background === true) return ran
+
+    const command = e.command
+    const output = ran.text ?? ''
+    if (!isTestCommand(command) && !isTestCommandAnywhere(command)) return ran
+
+    if ((await hubMode($)) === undefined) {
+      await inspect($, hinted, settings, command, output)
+    } else {
+      // With the hub, the run is also known by its `test.result`, which brings the total time the output may not print.
+      $.clock.after(HUB_SETTLE_MS, () => void inspectWithHub($, hinted, settings, { command, output, since }))
     }
     return ran
   })
@@ -113,3 +180,63 @@ export const register: Register = (on, options) => {
     return { text: describeLastRun(run, await $.clock.now(), settings.thresholdMs) }
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts
