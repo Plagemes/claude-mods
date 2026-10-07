@@ -1,167 +1,132 @@
 {
-  "repository": "plagemes/claude-mods",
-  "marketplace": "claude-mods",
-  "categories": [
-    {
-      "id": "core",
-      "title": "Core",
-      "tagline": "The mod store and essentials.",
-      "count": 1
-    },
-    {
-      "id": "security",
-      "title": "Security & Guardrails",
-      "tagline": "Stop dangerous actions before they happen.",
-      "count": 10
-    },
-    {
-      "id": "git",
-      "title": "Git & Versioning",
-      "tagline": "Branches, commits and PRs without friction.",
-      "count": 10
-    },
-    {
-      "id": "cost",
-      "title": "Cost, Tokens & Context",
-      "tagline": "Know what every turn costs and keep context lean.",
-      "count": 10
-    },
-    {
-      "id": "productivity",
-      "title": "Productivity",
-      "tagline": "Shortcuts, panes and timers for a faster flow.",
-      "count": 10
-    },
-    {
-      "id": "quality",
-      "title": "Code Quality & Tests",
-      "tagline": "Formatting, linting and tests on autopilot.",
-      "count": 10
-    },
-    {
-      "id": "observability",
-      "title": "Panes & Dashboards",
-      "tagline": "See what Claude is doing, live.",
-      "count": 10
-    },
-    {
-      "id": "prompting",
-      "title": "Prompt & System Prompt",
-      "tagline": "Shape how Claude thinks and answers.",
-      "count": 10
-    },
-    {
-      "id": "notifications",
-      "title": "Notifications & Audio",
-      "tagline": "Know when it is done, wherever you are.",
-      "count": 10
-    },
-    {
-      "id": "memory",
-      "title": "Memory & Knowledge",
-      "tagline": "Remember decisions, notes and context across sessions.",
-      "count": 10
-    },
-    {
-      "id": "team",
-      "title": "Team & Docs",
-      "tagline": "Changelogs, standups, reviews and handoffs.",
-      "count": 10
-    }
-  ],
-  "mods": [
+  "name": "claude-mods",
+  "owner": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "metadata": {
+    "description": "A curated collection of Claude Code mods: guardrails, git, cost, productivity, quality, dashboards and more.",
+    "version": "1.0.0"
+  },
+  "plugins": [
     {
       "name": "mod-store",
-      "category": "core",
-      "tier": "complex",
+      "source": "./mods/mod-store",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "core",
       "keywords": [
         "claude-mods",
         "core",
         "store",
         "marketplace"
       ],
-      "commands": [
-        "/mods"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#mod-store"
     },
     {
       "name": "secret-shield",
-      "category": "security",
-      "tier": "simple",
+      "source": "./mods/secret-shield",
       "description": "Blocks edits and writes that would commit API keys, tokens or private keys.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
         "secrets",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#secret-shield"
     },
     {
       "name": "env-guard",
-      "category": "security",
-      "tier": "simple",
+      "source": "./mods/env-guard",
       "description": "Protects .env files, SSH keys and credential stores from being read or modified.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
         "secrets",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#env-guard"
     },
     {
       "name": "rm-rf-guard",
-      "category": "security",
-      "tier": "simple",
+      "source": "./mods/rm-rf-guard",
       "description": "Blocks catastrophic shell commands like rm -rf /, mkfs, dd to disks and chmod -R 777.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
         "shell",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#rm-rf-guard"
     },
     {
       "name": "force-push-guard",
-      "category": "security",
-      "tier": "simple",
+      "source": "./mods/force-push-guard",
       "description": "Forbids force-pushing to protected branches and suggests --force-with-lease.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
         "git",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#force-push-guard"
     },
     {
       "name": "prod-guard",
-      "category": "security",
-      "tier": "simple",
+      "source": "./mods/prod-guard",
       "description": "Stops production-affecting commands (terraform apply, kubectl on prod, DROP TABLE) unless explicitly allowed.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
         "infrastructure",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#prod-guard"
     },
     {
       "name": "redactor",
-      "category": "security",
-      "tier": "complex",
+      "source": "./mods/redactor",
       "description": "Masks secrets and personal data in tool results before the model ever reads them.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
@@ -169,44 +134,54 @@
         "redaction",
         "secrets"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#redactor"
     },
     {
       "name": "path-jail",
-      "category": "security",
-      "tier": "complex",
+      "source": "./mods/path-jail",
       "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
         "sandbox",
         "filesystem"
       ],
-      "commands": [
-        "/jail"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#path-jail"
     },
     {
       "name": "curl-pipe-guard",
-      "category": "security",
-      "tier": "simple",
+      "source": "./mods/curl-pipe-guard",
       "description": "Blocks piping downloaded scripts straight into a shell.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
         "shell",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#curl-pipe-guard"
     },
     {
       "name": "dependency-sentinel",
-      "category": "security",
-      "tier": "complex",
+      "source": "./mods/dependency-sentinel",
       "description": "Flags typosquatted or brand-new packages before npm, pip or cargo installs them.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
@@ -214,195 +189,234 @@
         "npm",
         "pip"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#dependency-sentinel"
     },
     {
       "name": "lockfile-guard",
-      "category": "security",
-      "tier": "simple",
+      "source": "./mods/lockfile-guard",
       "description": "Prevents hand-editing lockfiles; they must change through the package manager.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
       "keywords": [
         "claude-mods",
         "security",
         "dependencies",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#lockfile-guard"
     },
     {
       "name": "git-status-line",
-      "category": "git",
-      "tier": "simple",
+      "source": "./mods/git-status-line",
       "description": "Shows the current branch, ahead/behind and dirty file count in the status line.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "status-line",
         "branch"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#git-status-line"
     },
     {
       "name": "auto-checkpoint",
-      "category": "git",
-      "tier": "complex",
+      "source": "./mods/auto-checkpoint",
       "description": "Snapshots your work tree before every editing turn and lets you /rewind to any checkpoint.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "checkpoint",
         "undo"
       ],
-      "commands": [
-        "/checkpoints",
-        "/rollback"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#auto-checkpoint"
     },
     {
       "name": "commit-composer",
-      "category": "git",
-      "tier": "complex",
+      "source": "./mods/commit-composer",
       "description": "/commit writes a Conventional Commit message from your staged diff and commits it.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "commit",
         "conventional-commits"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#commit-composer"
     },
     {
       "name": "branch-namer",
-      "category": "git",
-      "tier": "simple",
+      "source": "./mods/branch-namer",
       "description": "/branch creates a well-named git branch from a short task description.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "branch",
         "command"
       ],
-      "commands": [
-        "/git-branch"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#branch-namer"
     },
     {
       "name": "main-branch-warn",
-      "category": "git",
-      "tier": "simple",
+      "source": "./mods/main-branch-warn",
       "description": "Warns you the moment Claude starts editing files directly on main or master.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "branch",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#main-branch-warn"
     },
     {
       "name": "diff-pane",
-      "category": "git",
-      "tier": "complex",
+      "source": "./mods/diff-pane",
       "description": "A live pane listing changed files with +/- line counts, updated after every edit.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "diff",
         "pane"
       ],
-      "commands": [
-        "/changes"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#diff-pane"
     },
     {
       "name": "pr-describer",
-      "category": "git",
-      "tier": "complex",
+      "source": "./mods/pr-describer",
       "description": "/pr-desc drafts a pull request title and description from your branch diff.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "pull-request",
         "github"
       ],
-      "commands": [
-        "/pr-desc"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#pr-describer"
     },
     {
       "name": "conflict-helper",
-      "category": "git",
-      "tier": "complex",
+      "source": "./mods/conflict-helper",
       "description": "Detects merge-conflict markers and walks you through resolving each one.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "merge",
         "conflicts"
       ],
-      "commands": [
-        "/conflicts"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#conflict-helper"
     },
     {
       "name": "co-author-stamp",
-      "category": "git",
-      "tier": "simple",
+      "source": "./mods/co-author-stamp",
       "description": "Adds configurable Co-authored-by trailers to commits Claude makes.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "commit",
         "attribution"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#co-author-stamp"
     },
     {
       "name": "gitignore-guard",
-      "category": "git",
-      "tier": "simple",
+      "source": "./mods/gitignore-guard",
       "description": "Warns before node_modules, build output, OS junk or huge files get staged.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "git",
       "keywords": [
         "claude-mods",
         "git",
         "gitignore",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#gitignore-guard"
     },
     {
       "name": "cost-meter",
-      "category": "cost",
-      "tier": "simple",
+      "source": "./mods/cost-meter",
       "description": "Live session cost estimate in the status line, from real token usage.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
         "tokens",
         "status-line"
       ],
-      "commands": [
-        "/cost-reset"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#cost-meter"
     },
     {
       "name": "token-budget",
-      "category": "cost",
-      "tier": "complex",
+      "source": "./mods/token-budget",
       "description": "Set a token or dollar budget per session; get warned at 80% and stopped at 100%.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
@@ -410,16 +424,18 @@
         "tokens",
         "guard"
       ],
-      "commands": [
-        "/budget"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#token-budget"
     },
     {
       "name": "context-gauge",
-      "category": "cost",
-      "tier": "simple",
+      "source": "./mods/context-gauge",
       "description": "A slim band above the prompt showing how full the context window is.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
@@ -427,16 +443,18 @@
         "context",
         "status"
       ],
-      "commands": [
-        "/context-gauge"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#context-gauge"
     },
     {
       "name": "cache-hit-meter",
-      "category": "cost",
-      "tier": "simple",
+      "source": "./mods/cache-hit-meter",
       "description": "Shows what share of input tokens came from the prompt cache.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
@@ -444,14 +462,18 @@
         "tokens",
         "status"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#cache-hit-meter"
     },
     {
       "name": "turn-timer",
-      "category": "cost",
-      "tier": "simple",
+      "source": "./mods/turn-timer",
       "description": "Times every turn and tells you when one runs long.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
@@ -459,14 +481,18 @@
         "status",
         "toast"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#turn-timer"
     },
     {
       "name": "big-read-guard",
-      "category": "cost",
-      "tier": "simple",
+      "source": "./mods/big-read-guard",
       "description": "Stops full reads of huge files and nudges toward offset/limit or grep.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
@@ -474,60 +500,72 @@
         "read",
         "tokens"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#big-read-guard"
     },
     {
       "name": "output-trimmer",
-      "category": "cost",
-      "tier": "complex",
+      "source": "./mods/output-trimmer",
       "description": "Trims huge command outputs to head, tail and error lines before they flood the context.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
         "context",
         "bash"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#output-trimmer"
     },
     {
       "name": "daily-spend",
-      "category": "cost",
-      "tier": "complex",
+      "source": "./mods/daily-spend",
       "description": "Tracks spend per day and week across sessions with a /spend report.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
         "pane",
         "report"
       ],
-      "commands": [
-        "/spend"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#daily-spend"
     },
     {
       "name": "model-advisor",
-      "category": "cost",
-      "tier": "complex",
+      "source": "./mods/model-advisor",
       "description": "Suggests a cheaper model when your prompt is simple, and a stronger one when it is hard.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
         "model",
         "hint"
       ],
-      "commands": [
-        "/model-advisor"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#model-advisor"
     },
     {
       "name": "compact-coach",
-      "category": "cost",
-      "tier": "simple",
+      "source": "./mods/compact-coach",
       "description": "Suggests /compact at natural breakpoints, before the context gets tight.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
       "keywords": [
         "claude-mods",
         "cost",
@@ -535,14 +573,18 @@
         "compact",
         "toast"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#compact-coach"
     },
     {
       "name": "quote-selection",
-      "category": "productivity",
-      "tier": "simple",
+      "source": "./mods/quote-selection",
       "description": "/quote pastes your mouse selection into the prompt as a Markdown quote.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -550,17 +592,18 @@
         "selection",
         "prompt"
       ],
-      "commands": [
-        "/quote",
-        "/quote-code"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#quote-selection"
     },
     {
       "name": "prompt-snippets",
-      "category": "productivity",
-      "tier": "simple",
+      "source": "./mods/prompt-snippets",
       "description": "Type :review:, :tests: or your own shortcodes and they expand into full prompts.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -568,67 +611,72 @@
         "shortcodes",
         "prompt"
       ],
-      "commands": [
-        "/snippets",
-        "/snippet-add",
-        "/snippet-remove"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#prompt-snippets"
     },
     {
       "name": "todo-pane",
-      "category": "productivity",
-      "tier": "complex",
+      "source": "./mods/todo-pane",
       "description": "A live pane of Claude's current task list with progress.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
         "pane",
         "todos"
       ],
-      "commands": [
-        "/todos"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#todo-pane"
     },
     {
       "name": "focus-timer",
-      "category": "productivity",
-      "tier": "complex",
+      "source": "./mods/focus-timer",
       "description": "A Pomodoro timer in the status line with focus and break cycles.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
         "timer",
         "status-line"
       ],
-      "commands": [
-        "/pomodoro"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#focus-timer"
     },
     {
       "name": "scratchpad",
-      "category": "productivity",
-      "tier": "complex",
+      "source": "./mods/scratchpad",
       "description": "A persistent per-project notes pane you can type into without leaving Claude Code.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
         "notes",
         "pane"
       ],
-      "commands": [
-        "/notes",
-        "/note"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#scratchpad"
     },
     {
       "name": "recent-files",
-      "category": "productivity",
-      "tier": "simple",
+      "source": "./mods/recent-files",
       "description": "/recent lists the files read and edited in this session, newest first.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -636,16 +684,18 @@
         "session",
         "history"
       ],
-      "commands": [
-        "/recent"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#recent-files"
     },
     {
       "name": "copy-last",
-      "category": "productivity",
-      "tier": "simple",
+      "source": "./mods/copy-last",
       "description": "/copy-last copies Claude's last answer (or its last code block) to the clipboard.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -653,33 +703,36 @@
         "copy",
         "answer"
       ],
-      "commands": [
-        "/copy-last",
-        "/copy-code"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#copy-last"
     },
     {
       "name": "prompt-history",
-      "category": "productivity",
-      "tier": "complex",
+      "source": "./mods/prompt-history",
       "description": "/history searches every prompt you have sent across sessions and reuses one.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
         "history",
         "pane"
       ],
-      "commands": [
-        "/history"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#prompt-history"
     },
     {
       "name": "quick-commands",
-      "category": "productivity",
-      "tier": "simple",
+      "source": "./mods/quick-commands",
       "description": "Short aliases like /t, /l and /b that run your test, lint and build commands.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -687,19 +740,18 @@
         "test",
         "lint"
       ],
-      "commands": [
-        "/t",
-        "/l",
-        "/b",
-        "/tc"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#quick-commands"
     },
     {
       "name": "idle-nudge",
-      "category": "productivity",
-      "tier": "simple",
+      "source": "./mods/idle-nudge",
       "description": "Reminds you about uncommitted changes after a stretch of inactivity.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -707,70 +759,90 @@
         "reminder",
         "toast"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#idle-nudge"
     },
     {
       "name": "auto-format",
-      "category": "quality",
-      "tier": "complex",
+      "source": "./mods/auto-format",
       "description": "Formats every file Claude edits with the right formatter for its language.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
         "formatter",
         "prettier"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#auto-format"
     },
     {
       "name": "lint-on-save",
-      "category": "quality",
-      "tier": "complex",
+      "source": "./mods/lint-on-save",
       "description": "Runs the linter on each edited file and hands the errors straight back to Claude.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
         "linter",
         "eslint"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#lint-on-save"
     },
     {
       "name": "test-watch",
-      "category": "quality",
-      "tier": "complex",
+      "source": "./mods/test-watch",
       "description": "Runs the tests related to what changed and shows pass/fail in the status line.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
         "tests",
         "watch"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#test-watch"
     },
     {
       "name": "typecheck-gate",
-      "category": "quality",
-      "tier": "complex",
+      "source": "./mods/typecheck-gate",
       "description": "Type-checks the project at the end of every editing turn so errors never slip by.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
         "typescript",
         "typecheck"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#typecheck-gate"
     },
     {
       "name": "no-skip-tests",
-      "category": "quality",
-      "tier": "simple",
+      "source": "./mods/no-skip-tests",
       "description": "Blocks Claude from silencing tests with .skip, .only, xit or skip markers.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
@@ -778,14 +850,18 @@
         "tests",
         "skip"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#no-skip-tests"
     },
     {
       "name": "todo-tracker",
-      "category": "quality",
-      "tier": "simple",
+      "source": "./mods/todo-tracker",
       "description": "Notices every TODO, FIXME and HACK Claude adds and lists them at turn end.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
@@ -793,803 +869,954 @@
         "fixme",
         "turn"
       ],
-      "commands": [
-        "/todos-added"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#todo-tracker"
     },
     {
       "name": "debug-catcher",
-      "category": "quality",
-      "tier": "simple",
+      "source": "./mods/debug-catcher",
       "description": "Warns when console.log, print, debugger or dbg! statements are left in code.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
         "debugging",
         "cleanup"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#debug-catcher"
     },
     {
       "name": "no-any",
-      "category": "quality",
-      "tier": "simple",
+      "source": "./mods/no-any",
       "description": "Flags new any types, @ts-ignore and eslint-disable comments as Claude writes them.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
         "typescript",
         "types"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#no-any"
     },
     {
       "name": "file-size-watch",
-      "category": "quality",
-      "tier": "simple",
+      "source": "./mods/file-size-watch",
       "description": "Warns when an edited file grows past a size that hurts readability.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
         "readability",
         "refactoring"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#file-size-watch"
     },
     {
       "name": "test-first",
-      "category": "quality",
-      "tier": "complex",
+      "source": "./mods/test-first",
       "description": "A TDD mode: no production code changes until a test has been written or changed.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "quality",
       "keywords": [
         "claude-mods",
         "quality",
         "tdd",
         "guard"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#test-first"
     },
     {
       "name": "tool-timeline",
-      "category": "observability",
-      "tier": "complex",
+      "source": "./mods/tool-timeline",
       "description": "A timeline pane of every tool call with duration, status and input summary.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "pane",
         "tools"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#tool-timeline"
     },
     {
       "name": "files-touched",
-      "category": "observability",
-      "tier": "complex",
+      "source": "./mods/files-touched",
       "description": "A pane of every file read, edited or created in the session, with counts.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "pane",
         "files"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#files-touched"
     },
     {
       "name": "session-stats",
-      "category": "observability",
-      "tier": "complex",
+      "source": "./mods/session-stats",
       "description": "/stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "dashboard",
         "tokens"
       ],
-      "commands": [
-        "/stats",
-        "/session-stats"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#session-stats"
     },
     {
       "name": "subagent-monitor",
-      "category": "observability",
-      "tier": "complex",
+      "source": "./mods/subagent-monitor",
       "description": "Watch running subagents live: type, status, duration and last activity.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "subagents",
         "pane"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#subagent-monitor"
     },
     {
       "name": "error-feed",
-      "category": "observability",
-      "tier": "complex",
+      "source": "./mods/error-feed",
       "description": "Collects every failed command and tool error in one pane.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "errors",
         "pane"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#error-feed"
     },
     {
       "name": "activity-heatmap",
-      "category": "observability",
-      "tier": "complex",
+      "source": "./mods/activity-heatmap",
       "description": "A heat map of when you use Claude Code, by hour and weekday.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "heatmap",
         "statistics"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#activity-heatmap"
     },
     {
       "name": "bash-history",
-      "category": "observability",
-      "tier": "simple",
+      "source": "./mods/bash-history",
       "description": "/bash-history lists recent shell commands Claude ran, with exit status and duration.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "shell",
         "history"
       ],
-      "commands": [
-        "/bash-history"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#bash-history"
     },
     {
       "name": "web-trail",
-      "category": "observability",
-      "tier": "simple",
+      "source": "./mods/web-trail",
       "description": "/sources lists every page Claude fetched or searched this session.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "web",
         "sources"
       ],
-      "commands": [
-        "/sources"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#web-trail"
     },
     {
       "name": "permission-log",
-      "category": "observability",
-      "tier": "simple",
+      "source": "./mods/permission-log",
       "description": "Keeps a log of every tool call that was denied, and why.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "permissions",
         "audit"
       ],
-      "commands": [
-        "/denied"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#permission-log"
     },
     {
       "name": "token-sparkline",
-      "category": "observability",
-      "tier": "complex",
+      "source": "./mods/token-sparkline",
       "description": "A sparkline of tokens per turn right above the prompt.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
       "keywords": [
         "claude-mods",
         "observability",
         "tokens",
         "sparkline"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#token-sparkline"
     },
     {
       "name": "house-style",
-      "category": "prompting",
-      "tier": "complex",
+      "source": "./mods/house-style",
       "description": "Injects your team's style guide (STYLE.md) into the system prompt automatically.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "style-guide",
         "system-prompt"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#house-style"
     },
     {
       "name": "language-lock",
-      "category": "prompting",
-      "tier": "simple",
+      "source": "./mods/language-lock",
       "description": "Makes Claude always answer in your language while keeping code in English.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "language",
         "i18n"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#language-lock"
     },
     {
       "name": "concise-mode",
-      "category": "prompting",
-      "tier": "simple",
+      "source": "./mods/concise-mode",
       "description": "/concise toggles short, to-the-point answers.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "brevity",
         "style"
       ],
-      "commands": [
-        "/concise"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#concise-mode"
     },
     {
       "name": "prompt-enhancer",
-      "category": "prompting",
-      "tier": "complex",
+      "source": "./mods/prompt-enhancer",
       "description": "/enhance rewrites your draft prompt into a precise, well-scoped request.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "rewrite",
         "pane"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#prompt-enhancer"
     },
     {
       "name": "ticket-linker",
-      "category": "prompting",
-      "tier": "simple",
+      "source": "./mods/ticket-linker",
       "description": "Turns ticket references like ABC-123 or #42 into links and context for Claude.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "jira",
         "github"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#ticket-linker"
     },
     {
       "name": "date-context",
-      "category": "prompting",
-      "tier": "simple",
+      "source": "./mods/date-context",
       "description": "Gives Claude the current date, time zone, branch and OS on every prompt.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "context",
         "date"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#date-context"
     },
     {
       "name": "persona-switch",
-      "category": "prompting",
-      "tier": "complex",
+      "source": "./mods/persona-switch",
       "description": "/persona switches Claude between reviewer, architect, teacher and other roles.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "persona",
         "system-prompt"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#persona-switch"
     },
     {
       "name": "explain-level",
-      "category": "prompting",
-      "tier": "simple",
+      "source": "./mods/explain-level",
       "description": "/eli5, /normal and /expert set how deep Claude's explanations go.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "explanations",
         "learning"
       ],
-      "commands": [
-        "/eli5",
-        "/normal",
-        "/expert"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#explain-level"
     },
     {
       "name": "stack-detector",
-      "category": "prompting",
-      "tier": "complex",
+      "source": "./mods/stack-detector",
       "description": "Detects your stack and gives Claude the right conventions for it.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "conventions",
         "frameworks"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#stack-detector"
     },
     {
       "name": "prompt-lint",
-      "category": "prompting",
-      "tier": "simple",
+      "source": "./mods/prompt-lint",
       "description": "Gently flags vague prompts like 'fix it' and suggests what to add.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "prompting",
       "keywords": [
         "claude-mods",
         "prompting",
         "lint",
         "tips"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#prompt-lint"
     },
     {
       "name": "done-chime",
-      "category": "notifications",
-      "tier": "simple",
+      "source": "./mods/done-chime",
       "description": "Plays a chime when a long turn finishes.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "audio",
         "chime"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#done-chime"
     },
     {
       "name": "speak-summary",
-      "category": "notifications",
-      "tier": "complex",
+      "source": "./mods/speak-summary",
       "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "audio",
         "text-to-speech"
       ],
-      "commands": [
-        "/speak"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#speak-summary"
     },
     {
       "name": "permission-ping",
-      "category": "notifications",
-      "tier": "simple",
+      "source": "./mods/permission-ping",
       "description": "Pings you with a sound and toast when Claude is waiting on your approval.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "permissions",
         "sound"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#permission-ping"
     },
     {
       "name": "error-buzz",
-      "category": "notifications",
-      "tier": "simple",
+      "source": "./mods/error-buzz",
       "description": "A short buzz when a command or test run fails.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "sound",
         "tests"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#error-buzz"
     },
     {
       "name": "webhook-notify",
-      "category": "notifications",
-      "tier": "complex",
+      "source": "./mods/webhook-notify",
       "description": "Posts to Slack, Discord, Teams or ntfy when a long task finishes.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "webhook",
         "slack"
       ],
-      "commands": [
-        "/notify-test"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#webhook-notify"
     },
     {
       "name": "desktop-notify",
-      "category": "notifications",
-      "tier": "simple",
+      "source": "./mods/desktop-notify",
       "description": "Native desktop notifications when Claude finishes or needs you.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "desktop",
         "toast"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#desktop-notify"
     },
     {
       "name": "long-run-alert",
-      "category": "notifications",
-      "tier": "simple",
+      "source": "./mods/long-run-alert",
       "description": "Alerts you when a single command has been running too long.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "bash",
         "timer"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#long-run-alert"
     },
     {
       "name": "ci-watch",
-      "category": "notifications",
-      "tier": "complex",
+      "source": "./mods/ci-watch",
       "description": "/ci-watch follows your GitHub Actions run and tells you the moment it passes or fails.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "github-actions",
         "ci"
       ],
-      "commands": [
-        "/ci-watch"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#ci-watch"
     },
     {
       "name": "break-reminder",
-      "category": "notifications",
-      "tier": "simple",
+      "source": "./mods/break-reminder",
       "description": "Reminds you to stand up and stretch every 50 minutes of active work.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "wellbeing",
         "timer"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#break-reminder"
     },
     {
       "name": "celebrate",
-      "category": "notifications",
-      "tier": "simple",
+      "source": "./mods/celebrate",
       "description": "Celebrates when failing tests go green again.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
       "keywords": [
         "claude-mods",
         "notifications",
         "tests",
         "sound"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#celebrate"
     },
     {
       "name": "decision-log",
-      "category": "memory",
-      "tier": "complex",
+      "source": "./mods/decision-log",
       "description": "/decide records an Architecture Decision Record in docs/decisions.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "adr",
         "documentation"
       ],
-      "commands": [
-        "/decide",
-        "/decisions"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#decision-log"
     },
     {
       "name": "session-journal",
-      "category": "memory",
-      "tier": "complex",
+      "source": "./mods/session-journal",
       "description": "Writes a dated journal entry of what was done when the session ends.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "journal",
         "worklog"
       ],
-      "commands": [
-        "/journal"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#session-journal"
     },
     {
       "name": "glossary",
-      "category": "memory",
-      "tier": "complex",
+      "source": "./mods/glossary",
       "description": "Teaches Claude your project's vocabulary and injects definitions when you use the terms.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "glossary",
         "context"
       ],
-      "commands": [
-        "/define",
-        "/glossary"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#glossary"
     },
     {
       "name": "bookmark",
-      "category": "memory",
-      "tier": "simple",
+      "source": "./mods/bookmark",
       "description": "/bookmark saves the last answer; /bookmarks lists and reuses them.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "bookmarks",
         "notes"
       ],
-      "commands": [
-        "/bookmark",
-        "/bookmarks",
-        "/bookmark-insert",
-        "/bookmark-delete"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#bookmark"
     },
     {
       "name": "resume-brief",
-      "category": "memory",
-      "tier": "complex",
+      "source": "./mods/resume-brief",
       "description": "Shows what you were working on last time when a new session starts.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "continuity",
         "band"
       ],
-      "commands": [
-        "/resume-brief"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#resume-brief"
     },
     {
       "name": "lessons-learned",
-      "category": "memory",
-      "tier": "complex",
+      "source": "./mods/lessons-learned",
       "description": "When Claude fixes a mistake, offers to save the lesson to CLAUDE.md.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "claude-md",
         "debugging"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#lessons-learned"
     },
     {
       "name": "codebase-map",
-      "category": "memory",
-      "tier": "complex",
+      "source": "./mods/codebase-map",
       "description": "/map builds a compact map of your repository and gives it to Claude.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "context",
         "repository-map"
       ],
-      "commands": [
-        "/map"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#codebase-map"
     },
     {
       "name": "snippet-vault",
-      "category": "memory",
-      "tier": "simple",
+      "source": "./mods/snippet-vault",
       "description": "Save and reuse code snippets across projects with /save-snippet and /snippet.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "snippets",
         "code"
       ],
-      "commands": [
-        "/save-snippet",
-        "/snippet",
-        "/snippets",
-        "/delete-snippet"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#snippet-vault"
     },
     {
       "name": "link-vault",
-      "category": "memory",
-      "tier": "simple",
+      "source": "./mods/link-vault",
       "description": "Collects every URL from the conversation into one list.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "links",
         "urls"
       ],
-      "commands": [
-        "/links",
-        "/links-copy"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#link-vault"
     },
     {
       "name": "recall",
-      "category": "memory",
-      "tier": "complex",
+      "source": "./mods/recall",
       "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
       "keywords": [
         "claude-mods",
         "memory",
         "search",
         "notes"
       ],
-      "commands": [
-        "/remember",
-        "/recall"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#recall"
     },
     {
       "name": "changelog-keeper",
-      "category": "team",
-      "tier": "complex",
+      "source": "./mods/changelog-keeper",
       "description": "Keeps CHANGELOG.md's Unreleased section up to date as you commit.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "changelog",
         "conventional-commits"
       ],
-      "commands": [
-        "/changelog"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#changelog-keeper"
     },
     {
       "name": "readme-sync",
-      "category": "team",
-      "tier": "complex",
+      "source": "./mods/readme-sync",
       "description": "Warns when public APIs, CLI flags or env vars change but the docs do not.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "docs",
         "readme"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#readme-sync"
     },
     {
       "name": "standup",
-      "category": "team",
-      "tier": "complex",
+      "source": "./mods/standup",
       "description": "/standup summarises what you did yesterday, from git history, ready to paste.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "standup",
         "git"
       ],
-      "commands": [
-        "/standup"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#standup"
     },
     {
       "name": "review-agent",
-      "category": "team",
-      "tier": "complex",
+      "source": "./mods/review-agent",
       "description": "Adds a dedicated code-reviewer subagent and a /review command.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "code-review",
         "subagent"
       ],
-      "commands": [
-        "/review"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#review-agent"
     },
     {
       "name": "license-header",
-      "category": "team",
-      "tier": "simple",
+      "source": "./mods/license-header",
       "description": "Adds your license header to every new source file Claude creates.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "license",
         "spdx"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#license-header"
     },
     {
       "name": "issue-drafter",
-      "category": "team",
-      "tier": "complex",
+      "source": "./mods/issue-drafter",
       "description": "/issue turns the current conversation into a well-structured GitHub issue.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "github",
         "issues"
       ],
-      "commands": [
-        "/issue"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#issue-drafter"
     },
     {
       "name": "handoff",
-      "category": "team",
-      "tier": "complex",
+      "source": "./mods/handoff",
       "description": "/handoff writes a handoff note so a teammate can pick up exactly where you left off.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "handoff",
         "notes"
       ],
-      "commands": [
-        "/handoff"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#handoff"
     },
     {
       "name": "i18n-guard",
-      "category": "team",
-      "tier": "simple",
+      "source": "./mods/i18n-guard",
       "description": "Flags hard-coded user-facing strings in UI components.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "i18n",
         "lint"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#i18n-guard"
     },
     {
       "name": "migration-guard",
-      "category": "team",
-      "tier": "simple",
+      "source": "./mods/migration-guard",
       "description": "Prevents editing database migrations that already exist; write a new one instead.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
@@ -1597,23 +1824,25 @@
         "migrations",
         "guardrail"
       ],
-      "commands": []
+      "homepage": "https://plagemes.github.io/claude-mods/#migration-guard"
     },
     {
       "name": "codeowners-hint",
-      "category": "team",
-      "tier": "simple",
+      "source": "./mods/codeowners-hint",
       "description": "Shows who owns a file (from CODEOWNERS) as Claude edits it.",
       "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
       "keywords": [
         "claude-mods",
         "team",
         "codeowners",
         "ownership"
       ],
-      "commands": [
-        "/owners"
-      ]
+      "homepage": "https://plagemes.github.io/claude-mods/#codeowners-hint"
     }
   ]
 }

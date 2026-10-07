@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Mods: the mod store for Claude Code</title>
+  <meta name="description" content="101 open-source mods for Claude Code: guardrails, live panes, status lines, slash commands and sounds. Browse, install and update them from a store that lives inside your terminal.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0e0d0b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://plagemes.github.io/claude-mods/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Claude Mods">
+  <meta property="og:title" content="Claude Mods: make Claude Code yours, one hook at a time">
+  <meta property="og:description" content="101 open-source mods for Claude Code. Guardrails, live panes, status lines, slash commands and sounds, installed from one in-terminal store.">
+  <meta property="og:url" content="https://plagemes.github.io/claude-mods/">
+  <meta property="og:image" content="https://plagemes.github.io/claude-mods/assets/og.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="Claude Mods: a grid of 101 mod tiles, some lit in amber, beside the headline Make Claude Code yours.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Claude Mods: make Claude Code yours, one hook at a time">
+  <meta name="twitter:description" content="101 open-source mods for Claude Code, installed from one in-terminal store.">
+  <meta name="twitter:image" content="https://plagemes.github.io/claude-mods/assets/og.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400..600&family=Martian+Mono:wdth,wght@87.5..100,400..500&family=Newsreader:ital,opsz,wght@0,6..72,400..500;1,6..72,400..500&display=swap">
+  <link rel="preload" href="data/mods.json" as="fetch" crossorigin>
+  <link rel="stylesheet" href="assets/site.css">
+  <script>
+    (function () {
+      var root = document.documentElement
+      root.classList.add('js')
+      try {
+        var saved = localStorage.getItem('claude-mods:theme')
+        if (saved === 'light' || saved === 'dark') root.dataset.theme = saved
+      } catch (e) {}
+      try {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) root.classList.add('reduced-motion')
+      } catch (e) {}
+    })()
+  </script>
+  <script type="module" src="assets/js/main.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" class="sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-core" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="3.5" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="3.5" y="16" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="16" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="16" width="4.5" height="4.5" rx="1.2" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-security" viewBox="0 0 24 24"><path d="M12 3.2 19 6v5.2c0 4.4-2.9 8.1-7 9.6-4.1-1.5-7-5.2-7-9.6V6l7-2.8Z"/><path d="m9.2 12.2 2 2 3.8-4" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6.5" cy="5.5" r="2"/><circle cx="6.5" cy="18.5" r="2"/><path d="M6.5 7.5v9"/><path d="M17.5 9.5c0 4.5-6 3.5-10 7.2"/><circle cx="17.5" cy="7.5" r="2" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-cost" viewBox="0 0 24 24"><path d="M3.8 16.5a8.2 8.2 0 1 1 16.4 0"/><path d="M6.6 16.5h.01M12 8.6v.01M17.4 16.5h.01M8.1 11h.01M15.9 11h.01"/><path d="m12 16.5 3.6-4.4" style="stroke:var(--icon-lit)"/><circle cx="12" cy="16.5" r="1.4" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-productivity" viewBox="0 0 24 24"><path d="m5 6.5 5.5 5.5L5 17.5"/><path d="m12.5 6.5 5.5 5.5-5.5 5.5" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-quality" viewBox="0 0 24 24"><path d="M7.5 4C5.5 4 5.5 5 5.5 7v2c0 1.6-.8 3-2 3 1.2 0 2 1.4 2 3v2c0 2 0 3 2 3"/><path d="M16.5 4c2 0 2 1 2 3v2c0 1.6.8 3 2 3-1.2 0-2 1.4-2 3v2c0 2 0 3-2 3"/><path d="m9.3 12.2 1.9 1.9 3.6-3.9" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-observability" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.2"/><path d="M9.5 4.5v15M5.5 8.5h1.8M5.5 11.5h1.8M5.5 14.5h1.8"/><path d="m11.8 14.5 2-3.2 2 2.2 1.6-3 1.4 1.8" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-prompting" viewBox="0 0 24 24"><path d="M4 6.2c0-1.2 1-2.2 2.2-2.2h11.6c1.2 0 2.2 1 2.2 2.2v8.6c0 1.2-1 2.2-2.2 2.2H10l-4.5 3.5V17H6.2C5 17 4 16 4 14.8V6.2Z"/><path d="M8 8.6h5.2M8 12h3.2"/><path d="M15.6 7.8v5" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-notifications" viewBox="0 0 24 24"><path d="M6.2 16.2v-5a5.8 5.8 0 0 1 9.4-4.6"/><path d="M17.8 11.4v4.8l1.6 2H4.6l1.6-2"/><path d="M10 20.2a2.1 2.1 0 0 0 4 0"/><circle cx="18" cy="6.4" r="2.4" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-memory" viewBox="0 0 24 24"><path d="M6.8 3.5h10.4c1.1 0 2 .9 2 2v13c0 1.1-.9 2-2 2H6.8c-1.1 0-2-.9-2-2v-13c0-1.1.9-2 2-2Z"/><path d="M8.5 11.5h4.5M8.5 14.8h6.5"/><path d="M12.8 3.5v5.2l1.9-1.4 1.9 1.4V3.5" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8.2" r="3.2"/><path d="M3.2 19.5c0-3.4 2.6-5.5 5.8-5.5s5.8 2.1 5.8 5.5"/><circle cx="16.8" cy="9" r="2.5" style="stroke:var(--icon-lit)"/><path d="M16.2 14.2c2.9 0 4.8 1.9 4.8 5" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2"/><path d="M15.5 5.6V5.2c0-1-.8-1.7-1.7-1.7H6.2c-1 0-1.7.8-1.7 1.7v7.6c0 1 .8 1.7 1.7 1.7h.4"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13.5M13 6.5l5.5 5.5-5.5 5.5"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M8 16 16.5 7.5M9.5 7.5h7v7"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1Z"/></symbol>
+      <symbol id="i-github" viewBox="0 0 24 24"><path stroke="none" fill="currentColor" d="M12 2.6a9.6 9.6 0 0 0-3 18.7c.5.1.7-.2.7-.5v-1.7c-2.7.6-3.2-1.2-3.2-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8 0-.6.3-1.1.6-1.3-2.1-.2-4.4-1.1-4.4-4.7 0-1 .4-1.9 1-2.6-.1-.2-.4-1.2.1-2.6 0 0 .8-.3 2.6 1a9 9 0 0 1 4.8 0c1.8-1.3 2.6-1 2.6-1 .5 1.4.2 2.4.1 2.6.6.7 1 1.6 1 2.6 0 3.7-2.3 4.5-4.4 4.7.3.3.7.9.7 1.8v2.7c0 .3.2.6.7.5A9.6 9.6 0 0 0 12 2.6Z"/></symbol>
+    </defs>
+  </svg>
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header" id="top">
+    <div class="wrap site-header__inner">
+      <a class="lockup" href="./" aria-label="Claude Mods home">
+        <svg class="lockup__mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-core"/></svg>
+        <span class="lockup__word">Claude <em>Mods</em></span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#store">Store</a>
+        <a href="#install">Install</a>
+        <a href="#how">How it works</a>
+        <a href="#build">Build a mod</a>
+      </nav>
+      <div class="site-header__actions">
+        <a class="icon-btn" href="https://github.com/plagemes/claude-mods" aria-label="Claude Mods on GitHub">
+          <svg class="icon" aria-hidden="true"><use href="#i-github"/></svg>
+        </a>
+        <button class="icon-btn theme-toggle" type="button" aria-label="Switch to light theme" data-theme-toggle>
+          <svg class="icon icon--sun" aria-hidden="true"><use href="#i-sun"/></svg>
+          <svg class="icon icon--moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero__backdrop" aria-hidden="true">
+        <div class="hero__glow"></div>
+        <video class="hero__video" muted loop playsinline preload="none" data-hero-video tabindex="-1"></video>
+      </div>
+      <div class="wrap hero__inner">
+        <div class="hero__copy">
+          <p class="kicker"><span class="kicker__dot" aria-hidden="true"></span><span data-count>101</span> open-source mods for Claude Code</p>
+          <h1 class="display hero__title" id="hero-title"><span class="nowrap">Make Claude Code</span> <em>yours</em>, one&nbsp;hook at&nbsp;a&nbsp;time.</h1>
+          <p class="lede">Guardrails, live panes, status lines, slash commands and sounds. Browse them, install them and keep them current from a store that lives right inside your terminal.</p>
+          <div class="hero__actions">
+            <a class="btn btn--primary" href="#install">Install the mod store <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            <a class="btn btn--ghost" href="#store"><span>Browse <span data-count>101</span> mods</span></a>
+          </div>
+          <div class="cmd cmd--hero">
+            <span class="cmd__prompt" aria-hidden="true">&gt;</span>
+            <code class="cmd__text">/plugin install mod-store --marketplace plagemes/claude-mods</code>
+            <button class="cmd__copy" type="button" data-copy="/plugin install mod-store --marketplace plagemes/claude-mods" aria-label="Copy the mod store install command">
+              <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
+              <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
+            </button>
+          </div>
+          <p class="hero__fine">Terminal and desktop Code tab &middot; Claude Code 2.1.292+ &middot; MIT</p>
+        </div>
+
+        <figure class="rack" aria-label="A rack of 101 mod tiles: the mod store on top and ten categories of ten mods below. Tiles light up as each mod does its job." data-rack>
+          <div class="rack__bar">
+            <span class="led" aria-hidden="true"></span>
+            <span class="rack__title">claude-mods</span>
+            <span class="rack__meta"><span data-count>101</span> mods &middot; <span data-cat-count>11</span> categories</span>
+          </div>
+          <button class="rack__store" type="button" data-open-mod="mod-store">
+            <svg class="icon" aria-hidden="true"><use href="#i-core"/></svg>
+            <span class="rack__store-name">mod-store</span>
+            <span class="rack__store-hint">the store for everything below</span>
+            <kbd>/mods</kbd>
+          </button>
+          <div class="rack__heads" aria-hidden="true" data-rack-heads></div>
+          <div class="rack__grid" aria-hidden="true" data-rack-grid></div>
+          <figcaption class="rack__status" aria-hidden="true">
+            <span class="rack__status-icon" data-status-icon><svg class="icon"><use href="#i-security"/></svg></span>
+            <span class="rack__status-name" data-status-name>secret-shield</span>
+            <span class="rack__status-msg" data-status-msg>denied Write &middot; config.ts holds an API key</span>
+          </figcaption>
+        </figure>
+      </div>
+
+      <div class="wrap">
+        <dl class="specs reveal">
+          <div><dt>Mods</dt><dd data-count>101</dd></div>
+          <div><dt>Categories</dt><dd data-cat-count>11</dd></div>
+          <div><dt>Config to start</dt><dd>0</dd></div>
+          <div><dt>Commands to install</dt><dd>2</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- Install -->
+    <section class="section install" id="install" aria-labelledby="install-title">
+      <div class="wrap install__grid">
+        <div class="install__copy">
+          <p class="kicker reveal">Install</p>
+          <h2 class="display h2 reveal" id="install-title">Two commands. <em>That&rsquo;s</em> the setup.</h2>
+          <p class="sub reveal">Install the store once, then add, update and remove every other mod from inside Claude Code.</p>
+
+          <ol class="steps">
+            <li class="step reveal">
+              <span class="step__num" aria-hidden="true">01</span>
+              <div class="step__body">
+                <h3 class="step__title">Install the mod store</h3>
+                <div class="cmd">
+                  <span class="cmd__prompt" aria-hidden="true">&gt;</span>
+                  <code class="cmd__text">/plugin install mod-store --marketplace plagemes/claude-mods</code>
+                  <button class="cmd__copy" type="button" data-copy="/plugin install mod-store --marketplace plagemes/claude-mods" aria-label="Copy step 1 command">
+                    <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
+                    <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
+                  </button>
+                </div>
+              </div>
+            </li>
+            <li class="step reveal">
+              <span class="step__num" aria-hidden="true">02</span>
+              <div class="step__body">
+                <h3 class="step__title">Open it</h3>
+                <div class="cmd">
+                  <span class="cmd__prompt" aria-hidden="true">&gt;</span>
+                  <code class="cmd__text">/mods</code>
+                  <button class="cmd__copy" type="button" data-copy="/mods" aria-label="Copy step 2 command">
+                    <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
+                    <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
+                  </button>
+                </div>
+                <p class="step__note">Search, filter by category, install, update and uninstall. Works offline from cache.</p>
+              </div>
+            </li>
+          </ol>
+
+          <div class="single reveal">
+            <h3 class="single__title">Just want one mod?</h3>
+            <div class="cmd">
+              <span class="cmd__prompt" aria-hidden="true">&gt;</span>
+              <code class="cmd__text">/plugin install <span class="cmd__slot" data-single-slot>&lt;mod&gt;</span> --marketplace plagemes/claude-mods</code>
+              <button class="cmd__copy" type="button" data-copy="/plugin install <mod> --marketplace plagemes/claude-mods" data-single-copy aria-label="Copy the single mod install command">
+                <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
+                <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
+              </button>
+            </div>
+            <div class="single__try" role="group" aria-label="Fill in a mod name">
+              <span>Try</span>
+              <button type="button" class="pill" data-single="secret-shield">secret-shield</button>
+              <button type="button" class="pill" data-single="cost-meter">cost-meter</button>
+              <button type="button" class="pill" data-single="auto-checkpoint">auto-checkpoint</button>
+              <button type="button" class="pill" data-single="done-chime">done-chime</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tui reveal" aria-label="Preview of the /mods store inside Claude Code" role="img" data-tui>
+          <div class="tui__chrome" aria-hidden="true">
+            <span class="tui__tab">claude &mdash; ~/acme-app</span>
+            <span class="tui__cmd">/mods</span>
+          </div>
+          <div class="tui__body" aria-hidden="true">
+            <div class="tui__head">
+              <span class="tui__brand"><svg class="icon"><use href="#i-core"/></svg> Claude Mods</span>
+              <span class="tui__dim"><span data-count>101</span> mods &middot; 4 installed &middot; 1 update</span>
+            </div>
+            <div class="tui__search"><span class="tui__dim">search</span> <span data-tui-query>guard</span><span class="caret"></span></div>
+            <div class="tui__tabs"><span>All</span><span class="is-active">Guardrails</span><span>Git</span><span>Cost</span><span>Panes</span><span class="tui__dim">+6</span></div>
+            <ul class="tui__list" data-tui-list>
+              <li data-row="0"><span class="tui__sel">&rsaquo;</span><span class="tui__name">secret-shield</span><span class="tui__state is-installed">installed</span></li>
+              <li data-row="1"><span class="tui__sel">&rsaquo;</span><span class="tui__name">env-guard</span><span class="tui__state">install</span></li>
+              <li data-row="2"><span class="tui__sel">&rsaquo;</span><span class="tui__name">rm-rf-guard</span><span class="tui__state is-update">update 1.1.0</span></li>
+              <li data-row="3"><span class="tui__sel">&rsaquo;</span><span class="tui__name">force-push-guard</span><span class="tui__state">install</span></li>
+              <li data-row="4"><span class="tui__sel">&rsaquo;</span><span class="tui__name">prod-guard</span><span class="tui__state">install</span></li>
+            </ul>
+            <div class="tui__detail">
+              <div class="tui__detail-name" data-tui-name>env-guard <span class="tui__dim">v1.0.0</span></div>
+              <p data-tui-desc>Protects .env files, SSH keys and credential stores from being read or modified.</p>
+              <div class="tui__buttons"><span class="tui__btn is-primary" data-tui-btn>Install</span><span class="tui__btn">Open README</span></div>
+            </div>
+            <div class="tui__toast" data-tui-toast><svg class="icon"><use href="#i-check"/></svg> env-guard installed &middot; run /reload-plugins</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section features" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="kicker reveal">Why mod</p>
+          <h2 class="display h2 reveal" id="features-title">Small hooks. <em>Serious</em> leverage.</h2>
+          <p class="sub reveal">Each mod does one thing well. Stack the ones you need, skip the rest. They stay out of the way until the moment they matter.</p>
+        </header>
+
+        <div class="bento">
+          <article class="feat feat--guard reveal">
+            <div class="feat__art" aria-hidden="true">
+              <div class="term">
+                <p class="t-prompt"><span class="t-acc">&gt;</span> clean up the build folders and push</p>
+                <p><span class="t-dot">&#9679;</span> Bash<span class="t-dim">(</span>rm -rf ~/ build<span class="t-dim">)</span></p>
+                <p class="t-deny t-indent">&#10005; <b>rm-rf-guard</b> blocked a catastrophic delete</p>
+                <p class="t-dim t-indent2">Safer: <span class="t-ok">rm -rf ./build</span></p>
+                <p><span class="t-dot is-ok">&#9679;</span> Bash<span class="t-dim">(</span>rm -rf ./build<span class="t-dim">)</span></p>
+                <p><span class="t-dot">&#9679;</span> Bash<span class="t-dim">(</span>git push --force origin main<span class="t-dim">)</span></p>
+                <p class="t-deny t-indent">&#10005; <b>force-push-guard</b> main is protected</p>
+                <p class="t-dim t-indent2">Safer: <span class="t-ok">--force-with-lease</span> on a branch</p>
+                <p><span class="t-dot">&#9679;</span> Write<span class="t-dim">(</span>src/config.ts<span class="t-dim">)</span></p>
+                <p class="t-deny t-indent">&#10005; <b>secret-shield</b> line 12 holds an API key</p>
+                <div class="armed">
+                  <p class="armed__label">Armed</p>
+                  <ul class="armed__list">
+                    <li class="is-hit">secret-shield</li><li>env-guard</li><li class="is-hit">rm-rf-guard</li><li class="is-hit">force-push-guard</li><li>prod-guard</li><li>redactor</li><li>path-jail</li><li>curl-pipe-guard</li><li>dependency-sentinel</li><li>lockfile-guard</li>
+                  </ul>
+                </div>
+                <p class="t-foot"><span>3 denied</span><span class="t-dim">&middot;</span><span class="t-ok">0 damage</span><span class="t-dim t-right">guardrails</span></p>
+              </div>
+            </div>
+            <div class="feat__text">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-security"/></svg> Guardrails that say no first</h3>
+              <p>Ten guards catch leaked secrets, force-pushes, production commands and <code>rm -rf</code> before they run, then explain the safer path.</p>
+            </div>
+          </article>
+
+          <article class="feat feat--cost reveal">
+            <div class="feat__art" aria-hidden="true">
+              <div class="statusline">
+                <span><b>$0.42</b> session</span>
+                <span class="meter"><i style="--v:.52"></i></span><span>ctx 52%</span>
+                <span class="t-dim">cache 71%</span>
+              </div>
+              <div class="budget"><span>Budget</span><span class="budget__bar"><i></i></span><span class="t-dim">$4.20 / $5</span></div>
+            </div>
+            <div class="feat__text">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-cost"/></svg> Know what every turn costs</h3>
+              <p>Live cost, context fill and cache hits in your status line. Set a budget and get stopped at 100%, not surprised by the invoice.</p>
+            </div>
+          </article>
+
+          <article class="feat feat--panes reveal">
+            <div class="feat__art" aria-hidden="true">
+              <div class="pane">
+                <div class="pane__head"><span>Tool timeline</span><span class="t-dim">12 calls</span></div>
+                <div class="pane__row"><span class="t-ok">&#10003;</span><span>Read</span><span class="t-dim">src/auth.ts</span><span class="pane__bar" style="--w:.22"></span><span class="t-dim">0.2s</span></div>
+                <div class="pane__row"><span class="t-ok">&#10003;</span><span>Edit</span><span class="t-dim">src/auth.ts</span><span class="pane__bar" style="--w:.4"></span><span class="t-dim">0.4s</span></div>
+                <div class="pane__row"><span class="t-ok">&#10003;</span><span>Bash</span><span class="t-dim">npm test</span><span class="pane__bar" style="--w:1"></span><span class="t-dim">6.1s</span></div>
+                <div class="pane__row is-live"><span class="spinner"></span><span>Task</span><span class="t-dim">review-agent</span><span class="pane__bar" style="--w:.6"></span><span class="t-dim">&hellip;</span></div>
+              </div>
+            </div>
+            <div class="feat__text">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-observability"/></svg> See what Claude is doing, live</h3>
+              <p>Tool timelines, touched files, subagents and errors in panes beside the conversation.</p>
+            </div>
+          </article>
+
+          <article class="feat feat--cmds reveal">
+            <div class="feat__art" aria-hidden="true">
+              <div class="slash" data-feature-commands>
+                <div class="slash__input"><span class="t-acc">&gt;</span> /c<span class="caret"></span></div>
+                <ul class="slash__menu">
+                  <li class="is-sel"><code>/commit</code><span>Conventional Commit from your staged diff</span><em>commit-composer</em></li>
+                  <li><code>/ci-watch</code><span>Follow the Actions run, hear when it ends</span><em>ci-watch</em></li>
+                  <li><code>/concise</code><span>Toggle short, to-the-point answers</span><em>concise-mode</em></li>
+                  <li><code>/copy-last</code><span>Copy the last answer or code block</span><em>copy-last</em></li>
+                </ul>
+              </div>
+            </div>
+            <div class="feat__text">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-productivity"/></svg> Slash commands for the chores</h3>
+              <p>Commit messages, PR descriptions, standups and checkpoints, each reduced to a keystroke.</p>
+            </div>
+          </article>
+
+          <article class="feat feat--notify reveal">
+            <div class="feat__art" aria-hidden="true">
+              <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <p class="toast-mock"><svg class="icon"><use href="#i-notifications"/></svg> Turn finished in 1m 48s</p>
+            </div>
+            <div class="feat__text">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-notifications"/></svg> Walk away. Get called back.</h3>
+              <p>A chime when a long turn ends, a ping when Claude needs approval, a webhook when CI goes green.</p>
+            </div>
+          </article>
+
+          <article class="feat feat--memory reveal">
+            <div class="feat__art" aria-hidden="true">
+              <div class="files">
+                <span>decisions/<b>0007-postgres.md</b></span>
+                <span>journal/<b>2026-10-06.md</b></span>
+                <span><b>CLAUDE.md</b> <b class="t-ok">+1 lesson</b></span>
+              </div>
+            </div>
+            <div class="feat__text">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-memory"/></svg> Context that outlives the session</h3>
+              <p>Decisions, journals, glossaries and lessons, saved as plain files you own and recalled when they matter.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Store -->
+    <section class="section store" id="store" aria-labelledby="store-title">
+      <div class="wrap">
+        <header class="section-head section-head--store">
+          <div>
+            <p class="kicker reveal">The store</p>
+            <h2 class="display h2 reveal" id="store-title">Every mod, <em>one search</em> away.</h2>
+          </div>
+          <p class="sub reveal">Press <kbd>/</kbd> to search. Copy an install command, or open a mod for the details.</p>
+        </header>
+
+        <div class="toolbar" role="search">
+          <label class="search">
+            <span class="visually-hidden">Search mods</span>
+            <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="search" placeholder="Search 101 mods, commands, keywords" autocomplete="off" spellcheck="false" data-search aria-describedby="store-status">
+            <kbd class="search__kbd" aria-hidden="true">/</kbd>
+          </label>
+          <div class="segmented" role="radiogroup" aria-label="Tier" data-tiers>
+            <button type="button" role="radio" aria-checked="true" data-tier="all">All</button>
+            <button type="button" role="radio" aria-checked="false" data-tier="simple"><span class="bars bars--1" aria-hidden="true"><i></i><i></i><i></i></span>Essential</button>
+            <button type="button" role="radio" aria-checked="false" data-tier="complex"><span class="bars bars--3" aria-hidden="true"><i></i><i></i><i></i></span>Advanced</button>
+          </div>
+        </div>
+
+        <div class="chips-row" role="group" aria-label="Categories" data-cats></div>
+
+        <div class="cat-banner" data-cat-banner hidden></div>
+
+        <p class="store__status" id="store-status" role="status" aria-live="polite" data-status>Loading the catalog&hellip;</p>
+
+        <div class="grid" data-grid aria-busy="true">
+          <div class="card card--skeleton" aria-hidden="true"></div>
+          <div class="card card--skeleton" aria-hidden="true"></div>
+          <div class="card card--skeleton" aria-hidden="true"></div>
+          <div class="card card--skeleton" aria-hidden="true"></div>
+          <div class="card card--skeleton" aria-hidden="true"></div>
+          <div class="card card--skeleton" aria-hidden="true"></div>
+        </div>
+
+        <div class="empty" data-empty hidden>
+          <p class="empty__title display">Nothing matches <em data-empty-q></em>.</p>
+          <p>Try a broader word, or <a href="https://github.com/plagemes/claude-mods/issues/new?template=mod_request.yml">request the mod you were looking for</a>.</p>
+        </div>
+
+        <noscript>
+          <p class="store__status">The interactive store needs JavaScript. The full catalog is also on <a href="https://github.com/plagemes/claude-mods#catalog">GitHub</a>.</p>
+        </noscript>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section how" id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="kicker reveal">Under the hood</p>
+          <h2 class="display h2 reveal" id="how-title">Events in. <em>Your rules</em> out.</h2>
+          <p class="sub reveal">A mod is a plugin of function hooks. Claude Code emits events: a tool call, a prompt, a finished turn, a frame to draw. Your hook sees each one and can let it pass, rewrite it, answer it, or draw something new.</p>
+        </header>
+
+        <div class="flow reveal" data-flow>
+          <svg class="flow__wires" aria-hidden="true" data-flow-wires></svg>
+          <div class="flow__col">
+            <h3 class="flow__label">Claude Code emits</h3>
+            <ul class="flow__list" data-flow-in>
+              <li><code>tool.call</code><span>Bash, Edit, Write, Read&hellip;</span></li>
+              <li><code>prompt.submit</code><span>what you just typed</span></li>
+              <li><code>turn.complete</code><span>the turn is done</span></li>
+              <li><code>ui.render</code><span>a frame to draw</span></li>
+              <li><code>session.start</code><span>a new session</span></li>
+            </ul>
+          </div>
+          <div class="flow__col flow__col--hook">
+            <h3 class="flow__label">Your mod hooks in</h3>
+            <div class="hookcard" data-flow-hook>
+              <code class="hookcard__sig">($, e, next) =&gt; &hellip;</code>
+              <ul>
+                <li><b>Guard</b> deny with a reason</li>
+                <li><b>Rewrite</b> <code>next({ ...e })</code></li>
+                <li><b>Observe</b> count, time, log</li>
+                <li><b>Render</b> draw into the UI</li>
+              </ul>
+            </div>
+          </div>
+          <div class="flow__col">
+            <h3 class="flow__label">You see</h3>
+            <ul class="flow__list flow__list--out" data-flow-out>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-security"/></svg>A denial with a safer path</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-cost"/></svg>A status line or band</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-observability"/></svg>A live pane</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-prompting"/></svg>A new slash command</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-notifications"/></svg>A toast or a sound</li>
+            </ul>
+          </div>
+        </div>
+        <p class="how__note reveal">Mods run in a sandbox with no DOM and no Node. Everything outside reaches them through <code>$</code>, the engine interface, so a mod can only do what its hooks ask for.</p>
+      </div>
+    </section>
+
+    <!-- Build -->
+    <section class="section build" id="build" aria-labelledby="build-title">
+      <div class="wrap build__grid">
+        <div class="build__copy">
+          <p class="kicker reveal">Build a mod</p>
+          <h2 class="display h2 reveal" id="build-title">Your idea is <em>one file</em> away.</h2>
+          <p class="sub reveal">If you can write a function, you can write a mod. Start from the example, load it live, and open a pull request when it feels right.</p>
+          <ol class="build__steps reveal">
+            <li><span>Create <code>mods/&lt;name&gt;/</code> with a <code>plugin.json</code> and a hooks module.</span></li>
+            <li><span>Load it live with <code>claude --plugin-dir mods/&lt;name&gt;</code>.</span></li>
+            <li><span>Check it with <code>claude plugin validate mods/&lt;name&gt;</code>.</span></li>
+            <li><span>Add it to <code>catalog.json</code>, run <code>node scripts/build.mjs</code>, open a PR.</span></li>
+          </ol>
+          <div class="build__actions reveal">
+            <a class="btn btn--primary" href="https://github.com/plagemes/claude-mods/blob/main/CONTRIBUTING.md">Read the contributing guide <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            <a class="btn btn--ghost" href="https://github.com/plagemes/claude-mods/issues/new?template=mod_request.yml">Request a mod</a>
+          </div>
+        </div>
+        <div class="editor reveal">
+          <div class="editor__tabs" aria-hidden="true">
+            <span class="is-active">hooks/register.ts</span><span>plugin.json</span>
+          </div>
+<pre class="editor__code" aria-label="Example mod source: a guard that blocks force-pushes to main"><code><span class="tk-k">import</span> <span class="tk-k">type</span> { Register } <span class="tk-k">from</span> <span class="tk-s">'claude-code'</span>
+
+<span class="tk-c">// Block force-pushes to main, explain the safer path.</span>
+<span class="tk-k">export const</span> <span class="tk-f">register</span>: Register = <span class="tk-v">on</span> =&gt; {
+  <span class="tk-f">on</span>(<span class="tk-s">'tool.call'</span>, { tool: <span class="tk-s">'Bash'</span> }, (<span class="tk-v">$</span>, <span class="tk-v">e</span>, <span class="tk-v">next</span>) =&gt;
+    <span class="tk-r">/git push .*--force\b.*\bmain\b/</span>.<span class="tk-f">test</span>(e.command)
+      ? { deny: <span class="tk-s">'Use --force-with-lease, never on main.'</span> }
+      : <span class="tk-f">next</span>(e),
+  )
+}</code></pre>
+          <div class="editor__foot" aria-hidden="true">
+            <span><span class="led led--ok"></span> plugin validate: 0 problems</span>
+            <span>TypeScript</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Closing CTA -->
+    <section class="outro" aria-labelledby="outro-title">
+      <div class="wrap outro__inner">
+        <div class="outro__tiles" aria-hidden="true" data-outro-tiles></div>
+        <h2 class="display outro__title reveal" id="outro-title">Make it <em>yours.</em></h2>
+        <p class="sub reveal">One install, <span data-count>101</span> mods, zero lock-in. Every mod is a folder of plain TypeScript you can read in a minute.</p>
+        <div class="cmd cmd--hero outro__cmd reveal">
+          <span class="cmd__prompt" aria-hidden="true">&gt;</span>
+          <code class="cmd__text">/plugin install mod-store --marketplace plagemes/claude-mods</code>
+          <button class="cmd__copy" type="button" data-copy="/plugin install mod-store --marketplace plagemes/claude-mods" aria-label="Copy the mod store install command">
+            <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
+            <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
+          </button>
+        </div>
+        <div class="hero__actions outro__actions reveal">
+          <a class="btn btn--primary" href="#store">Browse the store <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="btn btn--ghost" href="https://github.com/plagemes/claude-mods"><svg class="icon" aria-hidden="true"><use href="#i-github"/></svg><span>Star on GitHub</span></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="site-footer__top">
+        <div class="site-footer__brand">
+          <a class="lockup lockup--lg" href="#top" aria-label="Back to top">
+            <svg class="lockup__mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-core"/></svg>
+            <span class="lockup__word">Claude <em>Mods</em></span>
+          </a>
+          <p>A community collection of mods for Claude Code, made by <a href="https://github.com/plagemes">Plagemes</a> and contributors.</p>
+        </div>
+        <nav class="site-footer__nav" aria-label="Footer">
+          <div>
+            <h2>Store</h2>
+            <a href="#store">Browse mods</a>
+            <a href="#install">Install</a>
+            <a href="#how">How it works</a>
+          </div>
+          <div>
+            <h2>Project</h2>
+            <a href="https://github.com/plagemes/claude-mods">GitHub</a>
+            <a href="https://github.com/plagemes/claude-mods/blob/main/CONTRIBUTING.md">Contributing</a>
+            <a href="https://github.com/plagemes/claude-mods/issues/new?template=mod_request.yml">Request a mod</a>
+          </div>
+          <div>
+            <h2>Policies</h2>
+            <a href="https://github.com/plagemes/claude-mods/blob/main/LICENSE">MIT License</a>
+            <a href="https://github.com/plagemes/claude-mods/blob/main/SECURITY.md">Security</a>
+            <a href="https://github.com/plagemes/claude-mods/blob/main/CODE_OF_CONDUCT.md">Code of conduct</a>
+          </div>
+        </nav>
+      </div>
+      <div class="site-footer__fine"><p>Claude Mods is an independent community project and is not affiliated with or endorsed by Anthropic. Claude and Claude Code are trademarks of Anthropic, PBC.</p><p>MIT licensed &middot; &copy; 2026 Plagemes</p></div>
+    </div>
+  </footer>
+
+  <dialog class="sheet" data-sheet aria-labelledby="sheet-title">
+    <div class="sheet__inner" data-sheet-body tabindex="-1"></div>
+  </dialog>
+
+  <div class="toast" role="status" aria-live="polite" data-toast></div>
+</body>
+</html>
