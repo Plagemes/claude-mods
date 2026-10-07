@@ -32,7 +32,8 @@
 **1. Install the mod store**
 
 ```text
-/plugin install mod-store --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install mod-store@claude-mods
 ```
 
 **2. Open it**
@@ -46,7 +47,7 @@ Search, filter by category, then install, update or uninstall from a pane inside
 **Prefer one mod at a time?** Install any mod from the [catalog](#catalog) directly:
 
 ```text
-/plugin install <mod> --marketplace plagemes/claude-mods
+/plugin install <mod>@claude-mods
 ```
 
 > [!NOTE]

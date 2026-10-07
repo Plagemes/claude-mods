@@ -8,7 +8,8 @@ Registers a `review-agent:reviewer` subagent with a thorough review brief (corre
 
 ## Install
 ```
-/plugin install review-agent --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install review-agent@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ When your prompt mentions a Jira-style key (`ABC-123`) or a GitHub issue number 
 
 ## Install
 ```
-/plugin install ticket-linker --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install ticket-linker@claude-mods
 ```
 
 ## Usage

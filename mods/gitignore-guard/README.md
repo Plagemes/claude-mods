@@ -12,7 +12,8 @@ Stops the classic "git add -A staged all of node_modules" mistake before it happ
 
 ## Install
 ```
-/plugin install gitignore-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install gitignore-guard@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ Keeps a running record of every Bash command Claude runs in the session: the com
 
 ## Install
 ```
-/plugin install bash-history --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install bash-history@claude-mods
 ```
 
 ## Usage

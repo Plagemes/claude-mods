@@ -8,7 +8,8 @@ Claude sometimes leaves `// TODO` or `FIXME` comments behind instead of finishin
 
 ## Install
 ```
-/plugin install todo-tracker --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install todo-tracker@claude-mods
 ```
 
 ## Usage

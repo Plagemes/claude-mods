@@ -8,7 +8,8 @@ Sends a native desktop notification when a long turn finishes ("Finished in 1m 3
 
 ## Install
 ```
-/plugin install desktop-notify --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install desktop-notify@claude-mods
 ```
 
 ## Usage

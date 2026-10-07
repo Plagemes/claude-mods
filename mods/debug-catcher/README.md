@@ -8,7 +8,8 @@ After Claude edits or writes a source file, debug-catcher looks at the lines tha
 
 ## Install
 ```
-/plugin install debug-catcher --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install debug-catcher@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ After a push, type `/ci-watch` and keep working. It follows every workflow run f
 
 ## Install
 ```
-/plugin install ci-watch --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install ci-watch@claude-mods
 ```
 Needs the [GitHub CLI](https://cli.github.com) installed and logged in (`gh auth login`).
 

@@ -8,7 +8,8 @@ Prices every turn from the token usage the engine reports and adds it to a runni
 
 ## Install
 ```
-/plugin install daily-spend --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install daily-spend@claude-mods
 ```
 
 ## Usage

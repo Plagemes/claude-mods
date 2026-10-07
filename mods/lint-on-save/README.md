@@ -16,7 +16,8 @@ After every successful Edit or Write, lint-on-save runs your project's linter on
 
 ## Install
 ```
-/plugin install lint-on-save --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install lint-on-save@claude-mods
 ```
 
 ## Usage

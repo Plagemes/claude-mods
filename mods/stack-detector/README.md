@@ -8,7 +8,8 @@ When a session starts it reads the project's root files (`package.json`, `pyproj
 
 ## Install
 ```
-/plugin install stack-detector --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install stack-detector@claude-mods
 ```
 
 ## Usage

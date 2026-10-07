@@ -8,7 +8,8 @@ Every `Edit`, `Write`, `MultiEdit` and `NotebookEdit` call, and every Bash comma
 
 ## Install
 ```
-/plugin install path-jail --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install path-jail@claude-mods
 ```
 
 ## Usage

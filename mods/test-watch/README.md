@@ -17,7 +17,8 @@ An edited test file runs itself.
 
 ## Install
 ```
-/plugin install test-watch --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install test-watch@claude-mods
 ```
 
 ## Usage

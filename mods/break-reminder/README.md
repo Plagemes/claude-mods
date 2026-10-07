@@ -8,7 +8,8 @@ Counts the time you actually spend working with Claude and shows a friendly toas
 
 ## Install
 ```
-/plugin install break-reminder --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install break-reminder@claude-mods
 ```
 
 ## Usage

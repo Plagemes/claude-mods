@@ -8,7 +8,8 @@ Measures how long each turn takes, from your prompt to Claude's final answer, an
 
 ## Install
 ```
-/plugin install turn-timer --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install turn-timer@claude-mods
 ```
 
 ## Usage

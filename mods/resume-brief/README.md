@@ -8,7 +8,8 @@ Start Claude Code in a project and a band above the prompt reminds you where you
 
 ## Install
 ```
-/plugin install resume-brief --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install resume-brief@claude-mods
 ```
 
 ## Usage

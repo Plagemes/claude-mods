@@ -8,7 +8,8 @@ files-touched keeps a tally of every file Claude reads, edits or creates during 
 
 ## Install
 ```
-/plugin install files-touched --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install files-touched@claude-mods
 ```
 
 ## Usage

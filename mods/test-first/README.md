@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install test-first --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install test-first@claude-mods
 ```
 
 ## Usage

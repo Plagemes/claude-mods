@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install concise-mode --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install concise-mode@claude-mods
 ```
 
 ## Usage

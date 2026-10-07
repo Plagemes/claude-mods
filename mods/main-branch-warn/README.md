@@ -11,7 +11,8 @@ a toast the first time and a `⚠ editing on main` line under the prompt. In
 
 ## Install
 ```
-/plugin install main-branch-warn --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install main-branch-warn@claude-mods
 ```
 
 ## Usage

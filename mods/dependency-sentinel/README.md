@@ -8,7 +8,8 @@ Before a Bash install runs, every package it names is checked twice: offline aga
 
 ## Install
 ```
-/plugin install dependency-sentinel --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install dependency-sentinel@claude-mods
 ```
 
 ## Usage

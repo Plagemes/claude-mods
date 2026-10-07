@@ -8,7 +8,8 @@ Before the first edit of each turn (an `Edit`, `Write`, `NotebookEdit` or a Bash
 
 ## Install
 ```
-/plugin install auto-checkpoint --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install auto-checkpoint@claude-mods
 ```
 
 ## Usage

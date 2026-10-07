@@ -11,7 +11,8 @@ regenerates the file.
 
 ## Install
 ```
-/plugin install lockfile-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install lockfile-guard@claude-mods
 ```
 
 ## Usage

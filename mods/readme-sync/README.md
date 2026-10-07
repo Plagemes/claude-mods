@@ -8,7 +8,8 @@ While Claude works, every `Edit` and `Write` to a code file is compared before a
 
 ## Install
 ```
-/plugin install readme-sync --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install readme-sync@claude-mods
 ```
 
 ## Usage

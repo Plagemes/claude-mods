@@ -8,7 +8,8 @@ Watches every `Edit` and `Write` on TypeScript files (`.ts`, `.tsx`, `.mts`, `.c
 
 ## Install
 ```
-/plugin install no-any --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install no-any@claude-mods
 ```
 
 ## Usage

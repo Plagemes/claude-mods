@@ -8,7 +8,8 @@ Adds one short section to Claude's system prompt: always reply to you in the lan
 
 ## Install
 ```
-/plugin install language-lock --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install language-lock@claude-mods
 ```
 
 ## Usage

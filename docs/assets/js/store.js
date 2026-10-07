@@ -39,7 +39,7 @@ export function createStore(root, catalog, { media = {} } = {}) {
 
   function cardHtml(mod) {
     const tier = tierOf(mod.tier)
-    const cmd = installCommand(mod.name, repository)
+    const cmd = installCommand(mod.name)
     const name = escapeHtml(mod.name)
     const tierBadge = `<span class="tier"><span class="bars bars--${tier.bars}" aria-hidden="true"><i></i><i></i><i></i></span>${escapeHtml(tier.label)}</span>`
     const meta = `<p class="card__meta"><span>${escapeHtml(mod.categoryInfo.short)}</span>${mod.version ? `<span class="card__ver">v${escapeHtml(mod.version)}</span>` : ''}</p>`
@@ -365,7 +365,7 @@ export function createStore(root, catalog, { media = {} } = {}) {
 
   function sheetHtml(mod) {
     const tier = tierOf(mod.tier)
-    const cmd = installCommand(mod.name, repository)
+    const cmd = installCommand(mod.name)
     const keywords = mod.keywords.filter(k => k !== 'claude-mods' && k !== mod.category)
     const related = mods.filter(m => m.category === mod.category && m.name !== mod.name)
     const start = Math.max(0, related.findIndex(m => m.index > mod.index))

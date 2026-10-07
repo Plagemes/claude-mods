@@ -8,7 +8,8 @@ Every team has words that mean something specific: a "tenant", the "widget queue
 
 ## Install
 ```
-/plugin install glossary --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install glossary@claude-mods
 ```
 
 ## Usage

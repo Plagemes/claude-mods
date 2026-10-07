@@ -8,7 +8,8 @@ When a Bash command Claude runs fails, error-buzz plays a short low buzz so you 
 
 ## Install
 ```
-/plugin install error-buzz --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install error-buzz@claude-mods
 ```
 
 ## Usage

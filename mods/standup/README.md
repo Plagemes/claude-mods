@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install standup --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install standup@claude-mods
 ```
 
 ## Usage

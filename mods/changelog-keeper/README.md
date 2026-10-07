@@ -8,7 +8,8 @@ Each time Claude makes a git commit, the commit subject is read as a Conventiona
 
 ## Install
 ```
-/plugin install changelog-keeper --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install changelog-keeper@claude-mods
 ```
 
 ## Usage

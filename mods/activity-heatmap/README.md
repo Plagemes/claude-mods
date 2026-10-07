@@ -8,7 +8,8 @@ Counts every prompt you send, across all your sessions and projects, into a week
 
 ## Install
 ```
-/plugin install activity-heatmap --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install activity-heatmap@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ Write `:review:` anywhere in a prompt and it is replaced by a full, well-phrased
 
 ## Install
 ```
-/plugin install prompt-snippets --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install prompt-snippets@claude-mods
 ```
 
 ## Usage

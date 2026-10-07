@@ -8,7 +8,8 @@ Before a prompt goes to Claude, prompt-lint checks it for the usual signs of vag
 
 ## Install
 ```
-/plugin install prompt-lint --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install prompt-lint@claude-mods
 ```
 
 ## Usage

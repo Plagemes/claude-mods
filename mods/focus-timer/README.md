@@ -8,7 +8,8 @@ Runs focus rounds and breaks in the status line under the prompt (`🍅 18:42`, 
 
 ## Install
 ```
-/plugin install focus-timer --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install focus-timer@claude-mods
 ```
 
 ## Usage

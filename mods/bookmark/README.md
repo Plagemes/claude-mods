@@ -8,7 +8,8 @@ Keeps the answers worth remembering. `/bookmark` stores Claude's last answer (th
 
 ## Install
 ```
-/plugin install bookmark --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install bookmark@claude-mods
 ```
 
 ## Usage

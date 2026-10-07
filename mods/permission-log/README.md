@@ -8,7 +8,8 @@ Records each tool call that did not go ahead: refused by a guard plugin, denied 
 
 ## Install
 ```
-/plugin install permission-log --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install permission-log@claude-mods
 ```
 
 ## Usage

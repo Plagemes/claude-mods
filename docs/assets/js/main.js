@@ -67,7 +67,7 @@ function initSingleInstall() {
       const same = pill.getAttribute('aria-pressed') === 'true'
       pills.forEach(p => p.setAttribute('aria-pressed', String(!same && p === pill)))
       slot.textContent = same ? '<mod>' : name
-      copy.dataset.copy = `/plugin install ${same ? '<mod>' : name} --marketplace plagemes/claude-mods`
+      copy.dataset.copy = `/plugin install ${same ? '<mod>' : name}@claude-mods`
     })
   }
 }
