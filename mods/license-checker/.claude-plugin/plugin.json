@@ -1,0 +1,36 @@
+{
+  "name": "license-checker",
+  "version": "1.0.0",
+  "description": "Warns when a dependency with a copyleft license (GPL, AGPL) lands in a permissively licensed project.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#license-checker",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "compliance", "license", "dependencies"],
+  "userConfig": {
+    "projectLicense": {
+      "type": "string",
+      "title": "Project license",
+      "description": "SPDX name of your project's license (MIT, Apache-2.0, BSD-3-Clause ...). Leave empty to read it from package.json, pyproject.toml or a LICENSE file.",
+      "default": ""
+    },
+    "allowedPackages": {
+      "type": "string",
+      "title": "Allowed packages",
+      "description": "Comma-separated package names that are never flagged, for example a LGPL library you have already reviewed.",
+      "default": ""
+    },
+    "checkDev": {
+      "type": "boolean",
+      "title": "Check dev dependencies",
+      "description": "Also check packages installed as dev dependencies (-D, --dev). They are not shipped with your code, so this is off by default.",
+      "default": false
+    },
+    "timeoutMs": {
+      "type": "number",
+      "title": "Lookup timeout (ms)",
+      "description": "How long to wait for the npm registry or PyPI before giving up on a package.",
+      "default": 4000
+    }
+  }
+}

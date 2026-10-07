@@ -1,0 +1,25 @@
+{
+  "name": "edit-limit",
+  "version": "1.0.0",
+  "description": "Asks for confirmation when a single turn tries to modify more than N files.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#edit-limit",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "agents", "guard", "edits"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "max": {
+      "type": "number",
+      "title": "Files per turn",
+      "description": "How many different files one turn may modify before Claude has to stop and ask you.",
+      "default": 15
+    },
+    "allowWord": {
+      "type": "string",
+      "title": "Approval word",
+      "description": "When your latest prompt contains this word, the limit is lifted for that turn. Leave empty to rely on /edit-limit alone.",
+      "default": "EDITS-OK"
+    }
+  }
+}

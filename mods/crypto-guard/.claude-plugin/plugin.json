@@ -1,0 +1,19 @@
+{
+  "name": "crypto-guard",
+  "version": "1.0.0",
+  "description": "Flags weak cryptography: MD5 or SHA1 for passwords, Math.random for tokens, ECB mode, hard-coded IVs.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#crypto-guard",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "compliance", "security", "cryptography"],
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "warn lets the edit through and tells Claude what to fix; block refuses the edit until the weak cryptography is replaced.",
+      "options": ["warn", "block"],
+      "default": "warn"
+    }
+  }
+}
