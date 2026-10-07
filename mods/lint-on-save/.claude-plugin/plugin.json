@@ -1,0 +1,30 @@
+{
+  "name": "lint-on-save",
+  "version": "1.0.0",
+  "description": "Runs the linter on each edited file and hands the errors straight back to Claude.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#lint-on-save",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "quality", "linter", "eslint"],
+  "userConfig": {
+    "includeWarnings": {
+      "type": "boolean",
+      "title": "Include warnings",
+      "description": "Also hand Claude the linter's warnings (eslint severity 1, shellcheck notes), not just its errors.",
+      "default": false
+    },
+    "disabled": {
+      "type": "string",
+      "title": "Disabled linters",
+      "description": "Comma-separated linters never to run: eslint, ruff, golangci-lint, clippy, shellcheck.",
+      "default": ""
+    },
+    "timeoutSeconds": {
+      "type": "number",
+      "title": "Timeout (seconds)",
+      "description": "How long one linter run may take before it is stopped.",
+      "default": 60
+    }
+  }
+}

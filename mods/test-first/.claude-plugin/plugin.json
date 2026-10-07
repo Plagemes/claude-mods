@@ -1,0 +1,11 @@
+{
+  "name": "test-first",
+  "version": "1.0.0",
+  "description": "A TDD mode: no production code changes until a test has been written or changed.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#test-first",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "quality", "tdd", "guard"],
+  "types": "./types/index.d.ts"
+}

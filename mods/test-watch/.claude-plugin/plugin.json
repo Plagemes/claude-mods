@@ -1,0 +1,25 @@
+{
+  "name": "test-watch",
+  "version": "1.0.0",
+  "description": "Runs the tests related to what changed and shows pass/fail in the status line.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#test-watch",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "quality", "tests", "watch"],
+  "userConfig": {
+    "debounceSeconds": {
+      "type": "number",
+      "title": "Debounce (seconds)",
+      "description": "How long edits must settle before the related tests run.",
+      "default": 3
+    },
+    "timeoutSeconds": {
+      "type": "number",
+      "title": "Timeout (seconds)",
+      "description": "How long one test run may take before it is stopped.",
+      "default": 300
+    }
+  },
+  "types": "./types/index.d.ts"
+}
