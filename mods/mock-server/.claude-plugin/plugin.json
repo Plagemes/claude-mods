@@ -1,0 +1,26 @@
+{
+  "name": "mock-server",
+  "version": "1.0.0",
+  "description": "/mock starts a fake API server from your OpenAPI spec so you can build the frontend before the backend.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#mock-server",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "api", "openapi", "mock", "prism"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "port": {
+      "type": "number",
+      "title": "Port",
+      "description": "The port /mock listens on when you do not name one.",
+      "default": 4010
+    },
+    "engine": {
+      "type": "string",
+      "title": "Engine",
+      "description": "auto: Prism when the project has @stoplight/prism-cli installed, else the built-in mock (needs Node.js). prism: always Prism (via npx when not installed). builtin: always the built-in mock.",
+      "default": "auto",
+      "options": ["auto", "builtin", "prism"]
+    }
+  }
+}

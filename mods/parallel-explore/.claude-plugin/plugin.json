@@ -1,0 +1,31 @@
+{
+  "name": "parallel-explore",
+  "version": "1.0.0",
+  "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#parallel-explore",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "agents", "subagents", "explore", "parallel"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "planAngles": {
+      "type": "boolean",
+      "title": "Plan the angles",
+      "description": "Let a quick Haiku call split the question into three angles. Off: always implementation, usage & tests, config & docs.",
+      "default": true
+    },
+    "mergeModel": {
+      "type": "string",
+      "title": "Merge model",
+      "description": "The model that merges the three reports: inherit (the session's), an alias such as sonnet or haiku, or a full model id.",
+      "default": "inherit"
+    },
+    "timeoutMinutes": {
+      "type": "number",
+      "title": "Explorer time limit (minutes)",
+      "description": "How long to wait for the explorers before merging what came back (1-60).",
+      "default": 10
+    }
+  }
+}
