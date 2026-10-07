@@ -1,7 +1,7 @@
 # mod-store
 > An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.
 
-**Category:** Core · **Version:** 1.1.0
+**Category:** Core · **Version:** 1.1.1
 
 ## What it does
 `/mods` opens a store pane listing every mod of the collection, grouped by category, with what you already have installed and what has an update. Search as you type, filter by category (or by *Installed* / *Updates*), open a mod to read its README, then install, update or uninstall it with one key. The catalog is cached, so the store still opens offline, and a session start tells you once when a new update is out.
