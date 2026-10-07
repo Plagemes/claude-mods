@@ -1,0 +1,30 @@
+{
+  "name": "speak-summary",
+  "version": "1.0.0",
+  "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#speak-summary",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "notifications", "audio", "text-to-speech"],
+  "userConfig": {
+    "minDurationSec": {
+      "type": "number",
+      "title": "Minimum turn length (seconds)",
+      "description": "Only speak after turns that took at least this long.",
+      "default": 20
+    },
+    "voice": {
+      "type": "string",
+      "title": "Voice",
+      "description": "Exact name of a system voice (e.g. Samantha). Leave empty for the default voice.",
+      "default": ""
+    },
+    "model": {
+      "type": "string",
+      "title": "Summary model",
+      "description": "Model alias or id that writes the spoken one-liner.",
+      "default": "haiku"
+    }
+  }
+}

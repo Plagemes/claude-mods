@@ -1,0 +1,32 @@
+{
+  "name": "webhook-notify",
+  "version": "1.0.0",
+  "description": "Posts to Slack, Discord, Teams or ntfy when a long task finishes.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#webhook-notify",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "notifications", "webhook", "slack"],
+  "userConfig": {
+    "webhookUrl": {
+      "type": "string",
+      "title": "Webhook URL",
+      "description": "Incoming webhook (Slack, Discord, Teams workflow), an ntfy topic URL, or any URL that accepts a JSON POST.",
+      "sensitive": true,
+      "default": ""
+    },
+    "kind": {
+      "type": "string",
+      "title": "Payload format",
+      "description": "auto picks the format from the URL; or force slack, discord, teams, ntfy or generic JSON.",
+      "options": ["auto", "slack", "discord", "teams", "ntfy", "generic"],
+      "default": "auto"
+    },
+    "minDurationSec": {
+      "type": "number",
+      "title": "Minimum turn length (seconds)",
+      "description": "Only notify when a turn took at least this long.",
+      "default": 60
+    }
+  }
+}

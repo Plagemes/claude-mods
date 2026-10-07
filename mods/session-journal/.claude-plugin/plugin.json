@@ -1,0 +1,30 @@
+{
+  "name": "session-journal",
+  "version": "1.0.0",
+  "description": "Writes a dated journal entry of what was done when the session ends.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#session-journal",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "memory", "journal", "worklog"],
+  "userConfig": {
+    "directory": {
+      "type": "string",
+      "title": "Journal folder",
+      "description": "Where daily journal files are written, relative to the project root.",
+      "default": ".claude/journal"
+    },
+    "summarizeWhenIdle": {
+      "type": "boolean",
+      "title": "Keep an AI summary ready",
+      "description": "After you have been idle for 90 seconds, refresh a model-written summary so the entry written at exit has one.",
+      "default": true
+    },
+    "includeClear": {
+      "type": "boolean",
+      "title": "Journal on /clear",
+      "description": "Also write an entry when /clear ends a conversation.",
+      "default": false
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "lessons-learned",
+  "version": "1.0.0",
+  "description": "When Claude fixes a mistake, offers to save the lesson to CLAUDE.md.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#lessons-learned",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "memory", "claude-md", "debugging"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "model": {
+      "type": "string",
+      "title": "Lesson model",
+      "description": "Model alias or id that writes the one-line lesson.",
+      "default": "haiku"
+    },
+    "file": {
+      "type": "string",
+      "title": "Instructions file",
+      "description": "File the lessons are saved to, relative to the project root.",
+      "default": "CLAUDE.md"
+    }
+  }
+}

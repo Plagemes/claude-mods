@@ -1,0 +1,24 @@
+{
+  "name": "glossary",
+  "version": "1.0.0",
+  "description": "Teaches Claude your project's vocabulary and injects definitions when you use the terms.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#glossary",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "memory", "glossary", "context"],
+  "userConfig": {
+    "maxTermsPerPrompt": {
+      "type": "number",
+      "title": "Terms per prompt",
+      "description": "The most definitions added to one prompt.",
+      "default": 12
+    },
+    "repeatDefinitions": {
+      "type": "boolean",
+      "title": "Repeat definitions",
+      "description": "Add a term's definition every time it is used, not only the first time in a conversation.",
+      "default": false
+    }
+  }
+}

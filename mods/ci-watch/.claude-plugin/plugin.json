@@ -1,0 +1,30 @@
+{
+  "name": "ci-watch",
+  "version": "1.0.0",
+  "description": "/ci-watch follows your GitHub Actions run and tells you the moment it passes or fails.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#ci-watch",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "notifications", "github-actions", "ci"],
+  "userConfig": {
+    "pollSec": {
+      "type": "number",
+      "title": "Poll interval (seconds)",
+      "description": "How often to ask GitHub for the run's status (minimum 10).",
+      "default": 30
+    },
+    "autoFix": {
+      "type": "boolean",
+      "title": "Investigate failures",
+      "description": "When CI fails, ask Claude to read the failed logs and fix the cause.",
+      "default": false
+    },
+    "sound": {
+      "type": "boolean",
+      "title": "Play a sound",
+      "description": "Play a chime when the run passes and a low tone when it fails.",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "decision-log",
+  "version": "1.0.0",
+  "description": "/decide records an Architecture Decision Record in docs/decisions.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#decision-log",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "memory", "adr", "documentation"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "directory": {
+      "type": "string",
+      "title": "Decisions folder",
+      "description": "Where ADRs are written, relative to the project root.",
+      "default": "docs/decisions"
+    },
+    "status": {
+      "type": "string",
+      "title": "Initial status",
+      "description": "Status written into new ADRs.",
+      "options": ["Accepted", "Proposed"],
+      "default": "Accepted"
+    }
+  }
+}

@@ -1,0 +1,128 @@
+import { expect, mock, test } from 'claude-code/testing'
+import type { Engine, MockClock } from 'claude-code/testing'
+import type { On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
+
+const ROOT = '/home/me/shop'
+const CLAUDE_MD = `${ROOT}/CLAUDE.md`
+const USAGE = { input_tokens: 300, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+const LESSON = 'Initialize the price cache before rendering a cart in tests; `renderCart` reads it synchronously.'
+const TURN: TurnCompleteInput = { answer: 'Fixed: the cache was not initialized.', durationMs: 9_000, isAborted: false, turnId: 't1', reason: 'answer' }
+const BAND: RenderPropsOf['AbovePrompt'] = {
+  hasSurvey: false,
+  isWorking: false,
+  maxRows: 12,
+  bodyColumns: 100,
+  scroll: { offset: 0, bodyRows: 12 },
+  view: {},
+}
+
+type World = { files: Map<string, string>; asked: string[]; toasts: string[]; clock: MockClock; failing: Set<string> }
+
+/** A shell where the commands in `failing` exit non-zero, and a model answering `reply`. */
+function world(on: On, reply: string, files: Record<string, string> = {}): World {
+  const seen: World = { files: new Map(Object.entries(files)), asked: [], toasts: [], clock: mock.clock(on), failing: new Set() }
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  on('session.root', () => ({ value: ROOT }))
+  on('tool.call', ($, e) => {
+    if (e.tool === 'Bash' && seen.failing.has(e.command)) {
+      return { isError: true, result: 'Exit code 1', text: 'FAIL test/cart.test.ts\n  TypeError: Cannot read properties of undefined (reading "price")' }
+    }
+    return { result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }
+  })
+  on('model.complete', ($, e) => {
+    seen.asked.push(e.prompt)
+    return { value: { isAnswered: true, text: reply, usage: USAGE } }
+  })
+  on('fs.read', ($, e) => {
+    const text = seen.files.get(e.path)
+    return text === undefined ? { deny: 'ENOENT' } : { value: text }
+  })
+  on('fs.write', ($, e) => {
+    seen.files.set(e.path, e.text)
+    return { value: undefined }
+  })
+  on('ui.toast', ($, e) => {
+    seen.toasts.push(e.text)
+    return { value: undefined }
+  })
+  on('ui.render', ($, e) => $.ui.resolve(e).Text({ children: 'engine band' }))
+  return seen
+}
+
+/** A test fails, a file is edited, the test passes: a fix cycle. */
+async function fixCycle($: Engine, seen: World, failing = 'npm run test -- cart', passing = 'npm test'): Promise<void> {
+  seen.failing.add(failing)
+  await $.tool.call({ tool: 'Bash', command: failing })
+  seen.failing.delete(failing)
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/src/cart.ts`, old_string: 'a', new_string: 'b' })
+  await $.tool.call({ tool: 'Bash', command: passing })
+  await $.turn.complete(TURN)
+  await seen.clock.advance(0)
+}
+
+test('after a fail, edit, pass cycle it offers the lesson and saves it under Lessons learned', async ($, on) => {
+  const seen = world(on, `- ${LESSON}`, { [CLAUDE_MD]: '# Shop\n\n## Lessons learned\n\n- Use pnpm, not npm.\n\n## Style\n\nTabs.\n' })
+  await fixCycle($, seen)
+
+  expect(seen.asked[0]).toContain('Failed command: npm run test -- cart')
+  expect(seen.asked[0]).toContain('TypeError: Cannot read properties of undefined')
+  expect(seen.asked[0]).toContain('Files edited before it passed: cart.ts')
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const band = await $.ui.mount({ plugin: 'lessons-learned', surface, component: 'AbovePrompt', props: BAND })
+    expect((await band.find({ type: 'Text', text: /Lesson learned/ }))?.text).toContain('from fixing npm test')
+    expect((await band.find({ type: 'Text', text: /price cache/ }))?.text).toBe(LESSON)
+    expect((await band.find({ key: 'save' }))?.props.label).toBe('Save to CLAUDE.md')
+    await band.unmount()
+  }
+
+  const band = await $.ui.mount({ plugin: 'lessons-learned', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await band.press({ key: 'save' })
+  expect(seen.files.get(CLAUDE_MD)).toBe(`# Shop\n\n## Lessons learned\n\n- Use pnpm, not npm.\n- ${LESSON}\n\n## Style\n\nTabs.\n`)
+  expect(seen.toasts).toEqual(['📘 lessons-learned: saved to CLAUDE.md'])
+  expect(await band.find({ key: 'save' })).toBeUndefined()
+})
+
+test('creates CLAUDE.md with the section when there is none', async ($, on) => {
+  const seen = world(on, LESSON)
+  await fixCycle($, seen, 'cargo test', 'cargo test --all')
+
+  const band = await $.ui.mount({ plugin: 'lessons-learned', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  await band.press({ key: 'save' })
+  expect(seen.files.get(CLAUDE_MD)).toBe(`## Lessons learned\n\n- ${LESSON}\n`)
+})
+
+test('ignores flaky reruns, non-check commands and NONE replies', async ($, on) => {
+  const seen = world(on, 'NONE')
+
+  seen.failing.add('pytest -x')
+  await $.tool.call({ tool: 'Bash', command: 'pytest -x' })
+  seen.failing.delete('pytest -x')
+  await $.tool.call({ tool: 'Bash', command: 'pytest -x' })
+  seen.failing.add('ls missing')
+  await $.tool.call({ tool: 'Bash', command: 'ls missing' })
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/a.py`, old_string: 'a', new_string: 'b' })
+  await $.turn.complete(TURN)
+  await seen.clock.advance(0)
+  expect(seen.asked).toEqual([])
+
+  await fixCycle($, seen, 'go test ./...', 'go test ./...')
+  expect(seen.asked).toHaveLength(1)
+  const band = await $.ui.mount({ plugin: 'lessons-learned', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect((await band.find({ type: 'Text' }))?.text).toBe('engine band')
+})
+
+test('Dismiss drops the lesson and the same lesson is not offered twice', { options: { file: 'docs/AGENTS.md' } }, async ($, on) => {
+  const seen = world(on, LESSON)
+  await fixCycle($, seen)
+
+  const band = await $.ui.mount({ plugin: 'lessons-learned', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect((await band.find({ key: 'save' }))?.props.label).toBe('Save to docs/AGENTS.md')
+  await band.press({ key: 'dismiss' })
+  expect(await band.find({ key: 'save' })).toBeUndefined()
+
+  await fixCycle($, seen)
+  expect(seen.asked).toHaveLength(2)
+  expect(await band.find({ key: 'save' })).toBeUndefined()
+  expect(seen.files.size).toBe(0)
+})
