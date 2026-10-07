@@ -1,0 +1,25 @@
+{
+  "name": "daily-goal",
+  "version": "1.0.0",
+  "description": "/goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#daily-goal",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "ecosystem", "focus", "band"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "askAfterHour": {
+      "type": "number",
+      "title": "Ask after (hour)",
+      "description": "From this hour of the day (0-24, local time), the band asks whether you reached today's goal.",
+      "default": 18
+    },
+    "tellClaude": {
+      "type": "boolean",
+      "title": "Tell Claude",
+      "description": "Add today's open goal to the system prompt, so Claude keeps it in mind.",
+      "default": true
+    }
+  }
+}

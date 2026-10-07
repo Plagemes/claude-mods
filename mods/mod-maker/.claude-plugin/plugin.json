@@ -1,0 +1,31 @@
+{
+  "name": "mod-maker",
+  "version": "1.0.0",
+  "description": "/new-mod scaffolds a new Claude Code mod with manifest, hooks, test and README, ready to fill in.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#mod-maker",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "ecosystem", "scaffold", "authoring"],
+  "userConfig": {
+    "author": {
+      "type": "string",
+      "title": "Author",
+      "description": "Your name for the new mod's plugin.json. Empty uses git config user.name.",
+      "default": ""
+    },
+    "defaultKind": {
+      "type": "string",
+      "title": "Default kind",
+      "description": "The template /new-mod uses when no --kind is given.",
+      "options": ["guard", "status", "pane", "command"],
+      "default": "command"
+    },
+    "runTests": {
+      "type": "boolean",
+      "title": "Run the new mod's tests",
+      "description": "After validating the new mod, run claude plugin test on it and report the result.",
+      "default": true
+    }
+  }
+}
