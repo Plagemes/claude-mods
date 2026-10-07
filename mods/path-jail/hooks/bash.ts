@@ -19,7 +19,7 @@ type Redirect = { kind: 'redirect'; text: string; isWrite: boolean; isHeredoc: b
 type Token = Word | Op | Redirect
 
 const SEPARATORS = new Set(['&&', '||', ';', '|', '|&', '&', '\n', '(', ')', '{', '}'])
-const PREFIX_WORDS = new Set(['sudo', 'command', 'builtin', 'nohup', 'time', 'exec', 'nice', 'then', 'do', 'else', 'if', 'while', 'until', '!'])
+const PREFIX_WORDS = new Set(['command', 'builtin', 'nohup', 'time', 'exec', 'then', 'do', 'else', 'if', 'while', 'until', '!'])
 const SAFE_DEVICES = /^\/dev\/(?:null|zero|stdout|stderr|stdin|tty|fd\/\d+)$/
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 
@@ -217,6 +217,16 @@ const VALUED_OPTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
 }
 const NO_VALUED: ReadonlySet<string> = new Set()
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+/** Commands that run the command after their own options, and those options that take a value. */
+const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
+  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-r', '-t', '-T', '-U', '--user', '--group', '--host', '--prompt', '--chdir']),
+  doas: new Set(['-u', '-C']),
+  nice: new Set(['-n', '--adjustment']),
+  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata']),
+  stdbuf: new Set(['-i', '-o', '-e']),
+  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+}
 
 /** The paths one simple command (`argv`) writes, by what the command is; a nested `sh -c` script is read too. */
 const writesOf = (argv: readonly string[]): { path: string; via: string; cdChain?: readonly string[] }[] => {
@@ -276,9 +286,10 @@ const writesOf = (argv: readonly string[]): { path: string; via: string; cdChain
     }
     default: {
       if (!SHELLS.has(name)) return []
-      const script = args[args.indexOf('-c') + 1]
-      if (!args.includes('-c') || script === undefined) return []
-      return writeTargets(script)
+      // `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`.
+      const flag = args.findIndex(arg => SHELL_COMMAND_FLAG.test(arg))
+      const script = flag === -1 ? undefined : args[flag + 1]
+      return script === undefined ? [] : writeTargets(script)
     }
   }
 }
@@ -293,10 +304,21 @@ export const writeTargets = (command: string): WriteTarget[] => {
 
   const flush = (): void => {
     let start = 0
-    while (start < argv.length && (PREFIX_WORDS.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) start += 1
-    if (argv[start] === 'env') {
-      start += 1
-      while (start < argv.length && (ASSIGNMENT.test(argv[start] as string) || (argv[start] as string).startsWith('-'))) start += 1
+    for (let previous = -1; previous !== start; ) {
+      previous = start
+      while (start < argv.length && (PREFIX_WORDS.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) start += 1
+      if (argv[start] === 'env') {
+        start += 1
+        while (start < argv.length && (ASSIGNMENT.test(argv[start] as string) || (argv[start] as string).startsWith('-'))) start += 1
+      }
+      // `sudo -u root rm …`, `timeout 5 rm …`, `nice -n 5 rm …`: skip the wrapper's own options to reach the command.
+      const valued = WRAPPERS[argv[start] ?? '']
+      if (valued !== undefined) {
+        const wrapper = argv[start]
+        start += 1
+        while (start < argv.length && (argv[start] as string).startsWith('-')) start += valued.has(argv[start] as string) ? 2 : 1
+        if (wrapper === 'timeout' && start < argv.length) start += 1
+      }
     }
     const simple = argv.slice(start)
     if (simple[0] === 'cd' || simple[0] === 'pushd') {

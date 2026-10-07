@@ -28,7 +28,8 @@ const WRAPPERS = new Set(['sudo', 'command', 'exec', 'nohup', 'time', 'env', 'ni
 const SAFE_TARGET = /^(?:\/dev\/(?:null|stdout|stderr|tty)|&\d|&-)$/
 const REDIRECTION = /(?:^|[^<>&\d])\d?>>?\|?(?!&)\s*([^\s;&|<>()]+)/g
 const BOTH_REDIRECTION = /&>>?\s*([^\s;&|<>()]+)/g
-const INLINE_SCRIPT = /\b(?:node|python[\d.]*|ruby|perl|deno|bun|php)(?:\s+-{1,2}[\w-]+)*\s+(?:-e|-c|-p|-r|--eval|eval|-)(?=\s|$)/
+// `--?\w`: an option's dashes are read one way only, so a long run of options cannot backtrack exponentially.
+const INLINE_SCRIPT = /\b(?:node|python[\d.]*|ruby|perl|deno|bun|php)(?:\s+--?\w[\w-]*)*\s+(?:-e|-c|-p|-r|--eval|eval|-)(?=\s|$)/
 const SCRIPTED_WRITE =
   /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|write_text|write_bytes)\s*\(|\bopen\([^)]*,\s*['"](?:[wax]b?\+?|[rwa]\+b?)['"]/
 const FILE_TOOLS = new Set(['rm', 'mv', 'cp', 'touch', 'truncate', 'ln', 'patch', 'rmdir', 'unlink', 'shred'])

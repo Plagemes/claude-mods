@@ -116,7 +116,12 @@ export function checkComponent(source: string, path: string, options: { hintUnne
   return findings
 }
 
-/** The folder that holds `app/` or `src/app/` in a path, or undefined when the path is not in an App Router folder. */
-export function nextProjectDir(path: string): string | undefined {
-  return /^(.*?)[\\/](?:src[\\/])?app[\\/]/.exec(path)?.[1]
+/**
+ * Every folder that holds an `app/` or `src/app/` the path is in, deepest first: `/app/app/page.tsx` (a
+ * Docker WORKDIR named app) may be the project `/app` or the root. Empty when the path is in no App Router folder.
+ */
+export function nextProjectDirs(path: string): string[] {
+  const dirs: string[] = []
+  for (const match of path.matchAll(/[\\/](?:src[\\/])?app(?=[\\/])/g)) dirs.unshift(path.slice(0, match.index))
+  return [...new Set(dirs)]
 }

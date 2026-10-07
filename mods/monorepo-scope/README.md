@@ -17,7 +17,8 @@ In a monorepo, Claude often runs `pnpm test` at the root and waits for every pac
 
 ## Install
 ```
-/plugin install monorepo-scope --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install monorepo-scope@claude-mods
 ```
 
 ## Usage

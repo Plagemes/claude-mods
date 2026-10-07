@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install onboarding-tour --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install onboarding-tour@claude-mods
 ```
 
 ## Usage

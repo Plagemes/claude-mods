@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { parseTestRun, parseValidation } from '../hooks/cli'
-import { githubRepository, nameProblem, parseArgs, quote, scaffold } from '../hooks/templates'
+import { githubRepository, marketplaceName, nameProblem, parseArgs, quote, scaffold } from '../hooks/templates'
 import type { ModSpec } from '../hooks/templates'
 
 const SPEC: ModSpec = { name: 'tidy-bot', description: "Keeps Claude's \"tidy\" promises.", kind: 'command', isCollection: false }
@@ -54,7 +54,10 @@ test('descriptions are escaped in code and kept as written in the manifest and R
     keywords: ['claude-mods', 'command'],
   })
   expect(files['README.md']).toStartWith(`# tidy-bot\n> ${SPEC.description}\n`)
-  expect(files['README.md']).toContain('/plugin install tidy-bot --marketplace ada/mods')
+  expect(files['README.md']).toContain('/plugin marketplace add ada/mods\n/plugin install tidy-bot@mods\n')
+  expect(scaffold({ ...SPEC, repository: 'ada/mods', marketplace: 'ada-mods', isCollection: true })['README.md']).toContain('/plugin install tidy-bot@ada-mods')
+  expect(marketplaceName('{"name":"claude-mods","plugins":[]}')).toBe('claude-mods')
+  expect(marketplaceName('nope')).toBeUndefined()
   expect(scaffold(SPEC)['README.md']).toContain('claude --plugin-dir ./tidy-bot')
 })
 

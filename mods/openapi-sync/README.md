@@ -8,7 +8,8 @@ Every time Claude edits a file that defines HTTP routes, the routes before and a
 
 ## Install
 ```
-/plugin install openapi-sync --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install openapi-sync@claude-mods
 ```
 
 ## Usage

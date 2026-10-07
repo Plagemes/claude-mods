@@ -207,3 +207,11 @@ test('a guard that cannot read its state refuses rather than let the network thr
 
   expect((await bash($, 'git push')).deny).toBe('offline-mode: could not check whether offline mode is on, so this call was held back.')
 })
+
+test('bash -lc, command and doas do not hide a network call', () => {
+  expect(networkUse(`bash -lc 'curl https://example.com'`)).toBe('curl')
+  expect(networkUse(`sh -ec "git push origin main"`)).toBe('git push')
+  expect(networkUse('command curl https://example.com')).toBe('curl')
+  expect(networkUse('doas apt install ripgrep')).toBe('apt install')
+  expect(networkUse(`bash -lc 'npm run build'`)).toBeUndefined()
+})

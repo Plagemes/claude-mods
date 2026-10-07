@@ -8,7 +8,8 @@ Queue up tasks during the day with `/night-shift add <task>`, schedule them with
 
 ## Install
 ```
-/plugin install night-shift --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install night-shift@claude-mods
 ```
 
 ## Usage

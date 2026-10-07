@@ -8,7 +8,8 @@ After every edit that adds a log statement, pii-in-logs checks what the statemen
 
 ## Install
 ```
-/plugin install pii-in-logs --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install pii-in-logs@claude-mods
 ```
 
 ## Usage

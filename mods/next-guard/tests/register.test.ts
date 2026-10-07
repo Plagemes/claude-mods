@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
-import { checkComponent, clientFeatures, nextProjectDir } from '../hooks/component'
+import { checkComponent, clientFeatures, nextProjectDirs } from '../hooks/component'
 
 const NEXT_PACKAGE = JSON.stringify({ dependencies: { next: '15.0.0', react: '19.0.0' } })
 
@@ -128,10 +128,16 @@ test('a "use client" file that exports metadata, and a foreign import that may n
   expect(checkComponent(animated, '/app/a.tsx', options)).toEqual([])
 })
 
-test('nextProjectDir tells app/ and src/app/ from other folders', () => {
-  expect(nextProjectDir('/repo/app/page.tsx')).toBe('/repo')
-  expect(nextProjectDir('/repo/src/app/page.tsx')).toBe('/repo')
-  expect(nextProjectDir('/repo/apps/web/app/x/page.tsx')).toBe('/repo/apps/web')
-  expect(nextProjectDir('/repo/src/components/a.tsx')).toBeUndefined()
-  expect(nextProjectDir('/repo/myapp/page.tsx')).toBeUndefined()
+test('nextProjectDirs tells app/ and src/app/ from other folders', () => {
+  expect(nextProjectDirs('/repo/app/page.tsx')).toEqual(['/repo'])
+  expect(nextProjectDirs('/repo/src/app/page.tsx')).toEqual(['/repo'])
+  expect(nextProjectDirs('/repo/apps/web/app/x/page.tsx')).toEqual(['/repo/apps/web'])
+  expect(nextProjectDirs('/repo/src/components/a.tsx')).toEqual([])
+  expect(nextProjectDirs('/repo/myapp/page.tsx')).toEqual([])
+  expect(nextProjectDirs('/app/app/page.tsx')).toEqual(['/app', ''])
+})
+
+test('a project in a folder named app (a Docker WORKDIR /app) is still found', async ($, on) => {
+  project(on, { '/app/package.json': NEXT_PACKAGE, '/app/app/page.tsx': COUNTER })
+  expect((await $.tool.call({ tool: 'Write', file_path: '/app/app/page.tsx', content: COUNTER })).context?.[0]).toContain('useState')
 })

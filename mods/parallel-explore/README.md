@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install parallel-explore --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install parallel-explore@claude-mods
 ```
 
 ## Usage

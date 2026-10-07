@@ -225,6 +225,10 @@ export function diagnose(evidence: Evidence): DoctorFinding[] {
   }
   const enabled = evidence.installed.filter(plugin => plugin.isEnabled)
   const byName = new Map(enabled.map(plugin => [plugin.name, plugin]))
+  // One plugin installed for two scopes is listed twice under one id: tell their findings apart by scope.
+  const ids = evidence.installed.map(plugin => plugin.id)
+  const keyOf = (plugin: Installed): string =>
+    ids.indexOf(plugin.id) === ids.lastIndexOf(plugin.id) ? plugin.id : `${plugin.id}:${plugin.scope}`
 
   for (const plugin of evidence.installed) {
     const profile = evidence.profiles[plugin.id]
@@ -232,18 +236,18 @@ export function diagnose(evidence: Evidence): DoctorFinding[] {
     const update = latest === undefined ? [] : fix('update', plugin, `Update to ${latest}`)
     if (isChecked(profile) && profile.loadErrors.length > 0) {
       add({
-        key: `load:${plugin.id}`,
+        key: `load:${keyOf(plugin)}`,
         severity: plugin.isEnabled ? 'error' : 'warning',
         title: `${plugin.name} fails to load`,
         details: profile.loadErrors.slice(0, SHOWN_DETAILS),
         fixes: [...update, ...(plugin.isEnabled ? fix('disable', plugin, 'Disable') : [])],
       })
     } else if (profile !== undefined && !isChecked(profile)) {
-      add({ key: `unchecked:${plugin.id}`, severity: 'warning', title: `${plugin.name} could not be checked`, details: [profile.problem], fixes: update })
+      add({ key: `unchecked:${keyOf(plugin)}`, severity: 'warning', title: `${plugin.name} could not be checked`, details: [profile.problem], fixes: update })
     }
     if (latest !== undefined) {
       add({
-        key: `outdated:${plugin.id}`,
+        key: `outdated:${keyOf(plugin)}`,
         severity: 'warning',
         title: `${plugin.name} ${plugin.version} → ${latest} available`,
         details: [plugin.scope === 'managed' ? 'Managed by your organization: ask your admin to update it.' : `From ${plugin.marketplace}, installed for the ${plugin.scope} scope.`],
@@ -253,7 +257,7 @@ export function diagnose(evidence: Evidence): DoctorFinding[] {
     const catalog = evidence.catalogs[plugin.marketplace]
     if (plugin.marketplace === evidence.marketplace && catalog !== undefined && catalog[plugin.name] === undefined) {
       add({
-        key: `unlisted:${plugin.id}`,
+        key: `unlisted:${keyOf(plugin)}`,
         severity: 'info',
         title: `${plugin.name} is no longer in the ${plugin.marketplace} catalog`,
         details: ['It may have been renamed or retired: uninstall it from /plugin if you no longer need it.'],
@@ -261,11 +265,11 @@ export function diagnose(evidence: Evidence): DoctorFinding[] {
       })
     }
     if (!plugin.isEnabled) {
-      add({ key: `disabled:${plugin.id}`, severity: 'info', title: `${plugin.name} is disabled`, details: [], fixes: fix('enable', plugin, 'Enable') })
+      add({ key: `disabled:${keyOf(plugin)}`, severity: 'info', title: `${plugin.name} is disabled`, details: [], fixes: fix('enable', plugin, 'Enable') })
     }
     const hints = evidence.hints[plugin.name] ?? []
     if (plugin.isEnabled && hints.length > 0) {
-      add({ key: `runtime:${plugin.id}`, severity: 'warning', title: `${plugin.name} reported problems this session`, details: hints, fixes: update })
+      add({ key: `runtime:${keyOf(plugin)}`, severity: 'warning', title: `${plugin.name} reported problems this session`, details: hints, fixes: update })
     }
   }
 
@@ -274,10 +278,12 @@ export function diagnose(evidence: Evidence): DoctorFinding[] {
     const profile = evidence.profiles[plugin.id]
     if (!isChecked(profile)) continue
     for (const command of profile.commands) {
-      owners.set(command, [...(owners.get(command) ?? []), plugin])
+      const known = owners.get(command) ?? []
+      // The same plugin enabled for two scopes is one owner, not a clash with itself.
+      if (!known.some(owner => owner.name === plugin.name)) owners.set(command, [...known, plugin])
       if (evidence.builtins.includes(command)) {
         add({
-          key: `builtin:${plugin.id}:${command}`,
+          key: `builtin:${keyOf(plugin)}:${command}`,
           severity: 'warning',
           title: `${plugin.name} registers /${command}, a built-in command`,
           details: ['Claude Code refuses a plugin command with a built-in name, so this one never runs.'],
@@ -311,10 +317,10 @@ export function diagnose(evidence: Evidence): DoctorFinding[] {
   }
 
   const crowd = (key: string, limit: number, test: (profile: Profile) => boolean, what: string, advice: string): void => {
-    const names = enabled.filter(plugin => {
+    const names = [...new Set(enabled.filter(plugin => {
       const profile = evidence.profiles[plugin.id]
       return isChecked(profile) && test(profile)
-    }).map(plugin => plugin.name)
+    }).map(plugin => plugin.name))]
     if (names.length >= limit) add({ key, severity: 'info', title: `${plural(names.length, 'mod')} ${what}`, details: [names.join(', '), advice], fixes: [] })
   }
   crowd('crowd:status', CROWDED_STATUS, profile => profile.usesStatus, 'write to the status line', 'Each gets its own line: disable the ones you no longer read.')

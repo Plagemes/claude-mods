@@ -20,6 +20,6 @@ In `warn` mode you see a toast such as `no-any: as any added to user.ts`, and Cl
 | `mode` | `warn` or `block` | `warn` | `warn` lets the edit through and asks Claude to fix it; `block` refuses the edit. |
 
 ## How it works
-- Hooks `tool.call` for `Edit` and `Write` and compares the lines before and after (for `Write`, the file on disk against the new content), so existing `any`s that an edit merely leaves in place are not counted.
+- Hooks `tool.call` for `Edit` and `Write` and counts each kind of escape hatch before and after (for `Write`, the file on disk against the new content), so existing `any`s that an edit merely leaves in place, even on a line it changes, are not counted.
 - `any` patterns are matched against code only: string contents, `//` comments and block-comment lines are ignored, while the directive comments (`@ts-ignore`, `@ts-nocheck`, `eslint-disable`) are matched as written.
 - Limits: it is line-based pattern matching, not a type checker, so exotic spellings (`any` split across lines, `| any`) are missed. A guard that fails open lets the edit through.

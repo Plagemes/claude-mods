@@ -1,4 +1,4 @@
-import { baseName, type ShellCommand } from './shell'
+import { baseName, parseShell, type ShellCommand } from './shell'
 
 export type Risk = {
   what: string
@@ -77,12 +77,39 @@ function sqlRisk(raw: string): Risk | undefined {
   return hasUnscopedDelete ? { what: 'a DELETE FROM without WHERE' } : undefined
 }
 
-/** Everything on a command line that can change a production system. */
+const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh'])
+const SHELL_COMMAND_FLAG = /^-[a-z]*c[a-z]*$/i
+const MAX_SCRIPT_DEPTH = 3
+
+/** The commands, each followed by those its `bash -c '<script>'` or `eval '<script>'` runs. */
+export function withScripts(commands: readonly ShellCommand[], depth = 0): ShellCommand[] {
+  const all: ShellCommand[] = []
+  for (const command of commands) {
+    all.push(command)
+    if (depth >= MAX_SCRIPT_DEPTH) continue
+    const { words } = command
+    const evalAt = words.findIndex(word => baseName(word) === 'eval')
+    if (evalAt !== -1) all.push(...withScripts(parseShell(words.slice(evalAt + 1).join(' ')), depth + 1))
+    const shellAt = words.findIndex(word => SHELLS.has(baseName(word)))
+    for (let i = shellAt + 1; shellAt !== -1 && i < words.length; i++) {
+      const word = words[i] as string
+      const script = words[i + 1]
+      if (SHELL_COMMAND_FLAG.test(word) && script !== undefined) {
+        all.push(...withScripts(parseShell(script), depth + 1))
+        break
+      }
+      if (!word.startsWith('-')) break
+    }
+  }
+  return all
+}
+
+/** Everything on a command line that can change a production system, `bash -c` and `eval` scripts included. */
 export function findRisks(raw: string, commands: readonly ShellCommand[], isProd: (text: string) => boolean): Risk[] {
   const risks: Risk[] = []
   let usesSqlClient = false
 
-  for (const { words } of commands) {
+  for (const { words } of withScripts(commands)) {
     const index = words.findIndex(word => INTERESTING.has(baseName(word)))
     const tool = words[index] === undefined ? '' : baseName(words[index] as string)
     const args = words.slice(index + 1)

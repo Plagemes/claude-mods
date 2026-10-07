@@ -66,7 +66,8 @@ export const scopeCommand = (command: string, pkg: Package, manager: Manager, sc
   const rest = trimmed.slice(env.length)
   const hasScript = (script: string) => scoped.has(script) && pkg.scripts.includes(script)
 
-  const turbo = /^((?:npx|pnpm(?:\s+exec)?|yarn|bunx)\s+)?turbo\s+(?:run\s+)?((?:[\w:-]+\s*)+?)(\s+-.*)?$/.exec(rest)
+  // Task words are split by required whitespace, so a failing match cannot backtrack through every split of a word.
+  const turbo = /^((?:npx|pnpm(?:\s+exec)?|yarn|bunx)\s+)?turbo\s+(?:run\s+)?([\w:-]+(?:\s+[\w:-]+)*?)(\s+-.*)?$/.exec(rest)
   if (turbo !== null) {
     const tasks = (turbo[2] ?? '').trim().split(/\s+/)
     if (!tasks.some(task => scoped.has(task))) return undefined

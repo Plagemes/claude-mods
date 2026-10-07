@@ -193,3 +193,21 @@ test('diagnoses load errors, updates, disabled mods, command clashes, known pair
   expect(healthy[0]?.fixes).toEqual([])
   expect(diagnose({ ...evidence, installed: [] })[0]?.title).toBe('No plugins are installed')
 })
+
+test('one plugin installed for two scopes is not a clash with itself, and its findings keep distinct keys', () => {
+  const user = plugin('mod-store', { scope: 'user' })
+  const project = plugin('mod-store', { scope: 'project' })
+  const profile: Profile = { loadErrors: [], commands: ['mods'], usesStatus: true, usesBand: false, composes: false }
+  const found = diagnose({
+    installed: [user, project],
+    profiles: { [user.id]: profile },
+    catalogs: { 'claude-mods': { 'mod-store': '1.1.0' } },
+    marketplace: 'claude-mods',
+    builtins: [],
+    hints: {},
+  })
+  expect(found.some(finding => finding.key.startsWith('clash:'))).toBe(false)
+  const keys = found.map(finding => finding.key)
+  expect([...keys].sort()).toEqual(['outdated:mod-store@claude-mods:project', 'outdated:mod-store@claude-mods:user'])
+  expect(new Set(keys).size).toBe(keys.length)
+})

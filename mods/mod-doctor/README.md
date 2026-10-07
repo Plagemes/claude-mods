@@ -16,7 +16,8 @@ When the session runs with `--debug`, it also finds hooks this session skipped.
 
 ## Install
 ```
-/plugin install mod-doctor --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install mod-doctor@claude-mods
 ```
 
 ## Usage

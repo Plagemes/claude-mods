@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install pair-mode --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install pair-mode@claude-mods
 ```
 
 ## Usage

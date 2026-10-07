@@ -8,7 +8,8 @@ In a Next.js App Router project (a `package.json` that lists `next`), every time
 
 ## Install
 ```
-/plugin install next-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install next-guard@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install outdated-deps --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install outdated-deps@claude-mods
 ```
 
 ## Usage

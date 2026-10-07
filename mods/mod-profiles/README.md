@@ -8,7 +8,8 @@ Save which of your installed plugins are on as a named profile, then switch back
 
 ## Install
 ```
-/plugin install mod-profiles --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install mod-profiles@claude-mods
 ```
 
 ## Usage

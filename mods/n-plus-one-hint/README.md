@@ -8,7 +8,8 @@ After Claude edits or writes a file, n-plus-one-hint looks for database queries 
 
 ## Install
 ```
-/plugin install n-plus-one-hint --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install n-plus-one-hint@claude-mods
 ```
 
 ## Usage

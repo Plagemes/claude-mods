@@ -96,13 +96,20 @@ const compose = async ($: EngineInterface, settings: Settings): Promise<void> =>
     await setDraft($, { phase: 'error', error: context })
     return
   }
-  const reply = await $.model.complete({
-    model: settings.model,
-    system: systemPrompt(context.template),
-    prompt: userPrompt(context),
-    maxTokens: MAX_TOKENS,
-    timeoutMs: MODEL_TIMEOUT_MS,
-  })
+  let reply: Awaited<ReturnType<EngineInterface['model']['complete']>>
+  try {
+    reply = await $.model.complete({
+      model: settings.model,
+      system: systemPrompt(context.template),
+      prompt: userPrompt(context),
+      maxTokens: MAX_TOKENS,
+      timeoutMs: MODEL_TIMEOUT_MS,
+    })
+  } catch (error) {
+    // A refused call (an unknown model, no account) must not leave the pane stuck "writing" with no buttons.
+    await setDraft($, { phase: 'error', error: `no description: ${error instanceof Error ? error.message : String(error)}.` })
+    return
+  }
   if (!reply.isAnswered) {
     const why = reply.reason === 'api-error' ? `the API answered ${reply.status ?? 'nothing'} (${reply.error})` : reply.reason
     await setDraft($, { phase: 'error', error: `no description: ${why}.` })

@@ -8,7 +8,8 @@ When a session starts, node-version-check runs `node --version` and compares it 
 
 ## Install
 ```
-/plugin install node-version-check --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install node-version-check@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install mod-maker --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install mod-maker@claude-mods
 ```
 
 ## Usage

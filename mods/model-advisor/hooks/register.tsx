@@ -84,6 +84,15 @@ async function advise($: EngineInterface, text: string, settings: Settings): Pro
   if (isFresh && settings.display !== 'band') $.ui.toast(`${NAME}: ${headline(shown)}`)
 }
 
+/** `advise`, its failure logged rather than thrown: a suggestion is never worth an error. */
+async function adviseQuietly($: EngineInterface, text: string, settings: Settings): Promise<void> {
+  try {
+    await advise($, text, settings)
+  } catch (error) {
+    $.ui.log(`${NAME}: no suggestion for this prompt: ${String(error)}`, { to: 'debug' })
+  }
+}
+
 /** Puts `/model <alias>` in the prompt box for the person to send, and clears the hint. */
 async function typeSwitch($: EngineInterface, model: string): Promise<void> {
   const filled = await $.prompt.fill({ text: `/model ${model}` })
@@ -126,11 +135,9 @@ export const register: Register = (on, options: PluginOptions) => {
     const entered = await next(e)
 
     if (entered.drop === undefined && PERSON_ORIGINS.has(e.origin.kind)) {
-      try {
-        await advise($, entered.text, settings)
-      } catch (error) {
-        $.ui.log(`${NAME}: no suggestion for this prompt: ${String(error)}`, { to: 'debug' })
-      }
+      // The turn starts once this hook returns: the classifier model's call (up to 10 s) runs after it, the local rules at once.
+      if (settings.useModel) $.clock.after(0, () => void adviseQuietly($, entered.text, settings))
+      else await adviseQuietly($, entered.text, settings)
     }
 
     return entered

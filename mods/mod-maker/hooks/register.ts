@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import { claudeBinary, parseTestRun, parseValidation } from './cli'
-import { KINDS, githubRepository, isKind, moduleFile, parseArgs, scaffold } from './templates'
+import { KINDS, githubRepository, isKind, marketplaceName, moduleFile, parseArgs, scaffold } from './templates'
 import type { Kind, ModSpec } from './templates'
 
 type Dollar = EngineInterface
@@ -34,6 +34,15 @@ async function isDirectory($: Dollar, path: string): Promise<boolean> {
     return (await $.fs.stat(path)).kind === 'dir'
   } catch {
     return false
+  }
+}
+
+/** The collection's marketplace name, from its `.claude-plugin/marketplace.json`. */
+async function collectionMarketplace($: Dollar, cwd: string): Promise<string | undefined> {
+  try {
+    return marketplaceName(await $.fs.read(`${cwd}/.claude-plugin/marketplace.json`))
+  } catch {
+    return undefined
   }
 }
 
@@ -119,9 +128,10 @@ async function newMod($: Dollar, settings: Settings, args: string): Promise<stri
     if (clash !== undefined) return `✗ ${clash}`
   }
 
-  const [gitAuthor, remote] = await Promise.all([
+  const [gitAuthor, remote, marketplace] = await Promise.all([
     settings.author === '' ? gitLine($, cwd, ['config', 'user.name']) : Promise.resolve(undefined),
     gitLine($, cwd, ['remote', 'get-url', 'origin']),
+    isCollection ? collectionMarketplace($, cwd) : Promise.resolve(undefined),
   ])
   const author = settings.author === '' ? gitAuthor : settings.author
   const repository = remote === undefined ? undefined : githubRepository(remote)
@@ -132,6 +142,7 @@ async function newMod($: Dollar, settings: Settings, args: string): Promise<stri
     isCollection,
     ...(author === undefined ? {} : { author }),
     ...(repository === undefined ? {} : { repository }),
+    ...(marketplace === undefined ? {} : { marketplace }),
   }
 
   const written: string[] = []

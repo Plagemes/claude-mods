@@ -8,7 +8,8 @@ Before a shell command runs, no-upload checks whether it sends data to an outsid
 
 ## Install
 ```
-/plugin install no-upload --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install no-upload@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ When a Bash command that only fetches things (an install, `git fetch`/`pull`/`cl
 
 ## Install
 ```
-/plugin install net-retry --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install net-retry@claude-mods
 ```
 
 ## Usage

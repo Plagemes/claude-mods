@@ -201,3 +201,10 @@ test('parses actions, numstat totals and cuts long diffs at a file boundary', ()
   expect(cut).toEqual({ text: DIFF, isCut: true })
   expect(cutDiff(DIFF).isCut).toBe(false)
 })
+
+test('a long run of interpreter options is read at once, without exponential backtracking', () => {
+  const started = Date.now()
+  expect(writesFiles(`node ${'--trace-warnings '.repeat(30)}server.js`)).toBeUndefined()
+  expect(Date.now() - started).toBeLessThan(200)
+  expect(writesFiles(`node --no-warnings -e "require('fs').writeFileSync('a', 'b')"`)).toBe('a script that writes files')
+})

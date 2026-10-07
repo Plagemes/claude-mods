@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { checkComponent, nextProjectDir } from './component'
+import { checkComponent, nextProjectDirs } from './component'
 import type { Finding } from './component'
 
 const WRITE_TOOLS = /^(?:Edit|MultiEdit|Write)$/
@@ -29,9 +29,11 @@ async function isNextProject($: EngineInterface, dir: string, known: Known): Pro
 }
 
 async function check($: EngineInterface, file: string, hintUnneeded: boolean, known: Known): Promise<Finding[]> {
-  const dir = nextProjectDir(file)
-  if (dir === undefined || !APP_FILE.test(file) || !(await isNextProject($, dir === '' ? '/' : dir, known))) return []
-  return checkComponent(await $.fs.read(file), file, { hintUnneeded })
+  if (!APP_FILE.test(file)) return []
+  for (const dir of nextProjectDirs(file)) {
+    if (await isNextProject($, dir === '' ? '/' : dir, known)) return checkComponent(await $.fs.read(file), file, { hintUnneeded })
+  }
+  return []
 }
 
 const describe = ({ kind, line, message }: Finding): string =>

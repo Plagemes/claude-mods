@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install profile-run --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install profile-run@claude-mods
 ```
 
 ## Usage

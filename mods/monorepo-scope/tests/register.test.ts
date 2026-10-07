@@ -152,3 +152,11 @@ test('rewrites each runner its own way', () => {
   expect(pnpmGlobs("packages:\n  - 'apps/*' # apps\n  - packages/**\n  - '!**/test/**'\nonlyBuiltDependencies:\n  - esbuild\n")).toEqual(['apps/*', 'packages/**'])
   expect(packageJsonGlobs({ workspaces: ['a/*', '!a/skip'] })).toEqual(['a/*'])
 })
+
+test('a turbo command that does not parse is rejected at once, not after exponential backtracking', () => {
+  const pkg: Package = { name: '@app/web', dir: 'apps/web', scripts: ['test'], project: 'web' }
+  const started = Date.now()
+  expect(scopeCommand(`turbo run ${'a'.repeat(40)}.`, pkg, 'pnpm', new Set(['test']))).toBeUndefined()
+  expect(Date.now() - started).toBeLessThan(100)
+  expect(scopeCommand('turbo run test lint --force', pkg, 'pnpm', new Set(['test']))).toEqual({ command: 'turbo run test lint --force --filter=@app/web', task: 'test lint' })
+})

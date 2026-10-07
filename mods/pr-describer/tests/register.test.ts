@@ -23,6 +23,7 @@ type World = {
   prompts: { system: string; prompt: string }[]
   copies: { text: string; surface: string | undefined }[]
   fills: { text: string; mode?: string }[]
+  modelDeny?: string
 }
 
 const world = (on: On, overrides: Partial<World> = {}): World => {
@@ -51,6 +52,7 @@ const world = (on: On, overrides: Partial<World> = {}): World => {
   })
   on('model.complete', ($, e) => {
     state.prompts.push({ system: e.system ?? '', prompt: e.prompt })
+    if (state.modelDeny !== undefined) return { deny: state.modelDeny }
     return { value: { isAnswered: true, text: REPLY, usage: USAGE } }
   })
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -131,4 +133,14 @@ test('reads the title and body back from the answer, with or without the marker'
   expect(parseDescription('TITLE: Fix login.\n---\n## Summary\nx')).toEqual({ title: 'Fix login', body: '## Summary\nx' })
   expect(parseDescription('```markdown\n**Title:** Add docs\n\nBody here\n```')).toEqual({ title: 'Add docs', body: 'Body here' })
   expect(parseDescription('# Rework the cache\n\n## Summary\ny')).toEqual({ title: 'Rework the cache', body: '## Summary\ny' })
+})
+
+test('a refused model call ends in an error the pane shows, with Regenerate and Close, not a stuck "writing"', async ($, on) => {
+  world(on, { modelDeny: 'unknown model "sonet"' })
+  expect((await runPrDesc($)).text).toContain('no description: ')
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ key: 'error' }))?.text).toContain('unknown model')
+  expect(await ui.find({ key: 'regenerate' })).toBeDefined()
+  expect(await ui.find({ key: 'close' })).toBeDefined()
+  await ui.unmount()
 })

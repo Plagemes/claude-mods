@@ -8,7 +8,8 @@ Before Claude runs a Bash command that starts a dev server (`npm run dev`, `vite
 
 ## Install
 ```
-/plugin install port-check --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install port-check@claude-mods
 ```
 
 ## Usage

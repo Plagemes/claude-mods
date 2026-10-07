@@ -56,6 +56,14 @@ export const splitWords = (command: string): string[] | undefined => {
   return words.length === 0 ? undefined : words
 }
 
+/**
+ * A value as NODE_OPTIONS reads it: split on spaces, so a path with one is put in double quotes, inside which
+ * Node reads a backslash as an escape (`C:\\Users` stays whole). Unquoted, `/Users/me/My Project` would profile
+ * into `/Users/me/My`.
+ */
+export const nodeOptionValue = (value: string): string =>
+  /[\s"]/.test(value) ? `"${value.replace(/["\\]/g, match => `\\${match}`)}"` : value
+
 const programOf = (word: string): string => word.slice(Math.max(word.lastIndexOf('/'), word.lastIndexOf('\\')) + 1)
 
 /**
@@ -72,7 +80,8 @@ export const planProfile = (command: string, dir: string, stamp: string, python:
 
   if (program === 'node' || program === 'node.exe') return { profiler: 'node', argv: [first, ...cpuProf, ...rest], env: {} }
   if (JS_TOOLS.test(program)) {
-    return { profiler: 'node', argv: words, env: { NODE_OPTIONS: [nodeOptions, ...cpuProf].filter(part => part !== '').join(' ') } }
+    const nodeCpuProf = ['--cpu-prof', `--cpu-prof-dir=${nodeOptionValue(dir)}`]
+    return { profiler: 'node', argv: words, env: { NODE_OPTIONS: [nodeOptions, ...nodeCpuProf].filter(part => part !== '').join(' ') } }
   }
   if (PYTHON.test(program)) {
     if (rest[0] === '-c') return { profiler: 'none', message: 'cProfile cannot profile python -c; put the code in a file or a module.' }

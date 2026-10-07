@@ -8,6 +8,7 @@ import {
   optimisePrompt,
   parsePprofTop,
   parsePstatsDump,
+  nodeOptionValue,
   planProfile,
   pprofDuration,
   sortFunctions,
@@ -109,4 +110,15 @@ test('the optimise prompt names the three hottest functions of the program itsel
   expect(prompt).toContain('2. buildStrings at slow.js:2: 15 ms self (8.4%), 8.4% total')
   expect(prompt).toContain('3. main at slow.js:4: 13 ms self (7.0%), 91.8% total')
   expect(formatMs(1534)).toBe('1.53 s')
+})
+
+test('a project path with spaces is quoted in NODE_OPTIONS, so the profiles land in the project', () => {
+  const plan = planProfile('npm run build', '/Users/me/My Project/.claude/profiles', 'p1', 'python3')
+  expect(plan).toEqual({
+    profiler: 'node',
+    argv: ['npm', 'run', 'build'],
+    env: { NODE_OPTIONS: '--cpu-prof --cpu-prof-dir="/Users/me/My Project/.claude/profiles"' },
+  })
+  expect(nodeOptionValue('C:\\Users\\me\\My Project')).toBe('"C:\\\\Users\\\\me\\\\My Project"')
+  expect(nodeOptionValue('C:\\Users\\me\\proj')).toBe('C:\\Users\\me\\proj')
 })

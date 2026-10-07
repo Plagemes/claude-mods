@@ -8,7 +8,7 @@ const NETWORK_PROGRAMS = new Set([
   'bunx', 'pnpx', 'uvx',
 ])
 const FETCHERS = new Set(['curl', 'wget', 'http', 'https', 'httpie', 'xh', 'xhs'])
-const WRAPPERS = new Set(['sudo', 'env', 'time', 'nohup', 'nice', 'exec', 'timeout', 'stdbuf', 'xargs'])
+const WRAPPERS = new Set(['sudo', 'doas', 'command', 'builtin', 'env', 'time', 'nohup', 'nice', 'exec', 'timeout', 'stdbuf', 'xargs'])
 const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-n', '-I', '-L', '-P'])
 const OFFLINE_FLAGS = new Set(['--offline', '--no-index', '--local'])
 const INFO_FLAGS = new Set(['--version', '-V', '--help', '-h'])
@@ -128,6 +128,8 @@ const programOf = (words: readonly string[]): { name: string; args: string[] } |
     } else if (WRAPPERS.has(basename(word))) {
       const wrapper = basename(word)
       index += 1
+      // `command -v curl` only looks the program up.
+      if (wrapper === 'command' && /^-[a-zA-Z]*[vV]/.test(words[index] ?? '')) return undefined
       while (words[index]?.startsWith('-') === true) index += WRAPPER_OPTIONS_WITH_VALUE.has(words[index] ?? '') && wrapper === 'sudo' ? 2 : 1
       if (wrapper === 'timeout') index += 1
     } else break
@@ -198,7 +200,8 @@ export const networkUse = (command: string, depth = 0): string | undefined => {
     // `bash -c "..."` and `eval ...` run a command line of their own.
     const program = programOf(words)
     if (depth < MAX_NESTING && program !== undefined) {
-      const flagAt = program.args.indexOf('-c')
+      // `-c`, alone or grouped with other short options (`bash -lc`, `sh -ec`).
+      const flagAt = program.args.findIndex(arg => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(arg))
       const isShell = /^(?:ba|z|da|k)?sh$/.test(program.name) && flagAt >= 0
       const script = isShell ? program.args[flagAt + 1] : program.name === 'eval' ? program.args.join(' ') : undefined
       const inner = script === undefined ? undefined : networkUse(script, depth + 1)

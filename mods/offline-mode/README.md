@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install offline-mode --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install offline-mode@claude-mods
 ```
 
 ## Usage

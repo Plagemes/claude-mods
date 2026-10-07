@@ -33,6 +33,8 @@ export const register: Register = (on, options) => {
 
   on('prompt.submit', ($, e, next) => {
     if (isPerson(e.origin)) isAllowed = allowWord !== '' && e.text.includes(allowWord)
+    // A turn nobody typed (a notification, a schedule, a peer) starts without the approval of an earlier prompt.
+    else if (e.turnId === undefined) isAllowed = false
     return next(e)
   })
 

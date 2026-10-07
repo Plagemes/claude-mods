@@ -11,6 +11,8 @@ export type ModSpec = {
   author?: string
   /** `owner/repo` on GitHub, when the folder is a clone of one. */
   repository?: string
+  /** The collection's marketplace name (`.claude-plugin/marketplace.json`), when it has one. */
+  marketplace?: string
   /** True inside a collection (a repository with a `mods/` folder). */
   isCollection: boolean
 }
@@ -81,6 +83,16 @@ export function parseArgs(args: string, defaultKind: Kind): Parsed {
 export function githubRepository(remote: string): string | undefined {
   const match = /github\.com[:/]+([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(remote.trim())
   return match ? `${match[1]}/${match[2]}` : undefined
+}
+
+/** The `name` of a `.claude-plugin/marketplace.json`, or undefined when the text is not one. */
+export function marketplaceName(text: string): string | undefined {
+  try {
+    const name: unknown = (JSON.parse(text) as { name?: unknown } | null)?.name
+    return typeof name === 'string' && /^[\w.-]+$/.test(name) ? name : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export const pascalCase = (name: string): string =>
@@ -412,8 +424,10 @@ const HOW: Record<Kind, string> = {
 }
 
 function readme(spec: ModSpec): string {
+  // `claude plugin install` has no --marketplace option: add the marketplace, then install `<mod>@<marketplace>`.
+  const marketplace = spec.marketplace ?? spec.repository?.split('/')[1]
   const install = spec.repository !== undefined && spec.isCollection
-    ? `/plugin install ${spec.name} --marketplace ${spec.repository}`
+    ? `/plugin marketplace add ${spec.repository}\n/plugin install ${spec.name}@${marketplace}`
     : `claude --plugin-dir ${spec.isCollection ? `mods/${spec.name}` : `./${spec.name}`}`
   const configuration = spec.kind === 'status'
     ? '| Key | Type | Default | Description |\n| --- | --- | --- | --- |\n| `label` | string | `tool calls` | The word shown after the count. |'

@@ -15,6 +15,7 @@ type WorldOptions = {
   validation?: string
   testOutput?: string
   failWrite?: string
+  marketplace?: string
 }
 
 /** Stands for the disk, git and the claude CLI beneath the plugin. */
@@ -37,6 +38,11 @@ function world(on: On, options: WorldOptions = {}) {
     dirs.has(e.path) ? { value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false } } : { deny: `ENOENT: ${e.path}` },
   )
   on('fs.exists', ($, e) => ({ value: existing.has(e.path) || dirs.has(e.path) }))
+  on('fs.read', ($, e) =>
+    options.marketplace !== undefined && e.path === `${cwd}/.claude-plugin/marketplace.json`
+      ? { value: options.marketplace }
+      : { deny: `ENOENT: ${e.path}` },
+  )
   on('fs.write', ($, e) => {
     if (options.failWrite !== undefined && e.path.endsWith(options.failWrite)) return { deny: 'EACCES: permission denied' }
     written.set(e.path, e.text)
@@ -79,7 +85,8 @@ test('in a collection it writes mods/<name>, then validates and tests the new mo
     author: { name: 'Ada Lovelace' },
     repository: 'https://github.com/ada/claude-mods',
   })
-  expect(w.written.get(`${dir}/README.md`)).toContain('/plugin install file-pane --marketplace ada/claude-mods')
+  expect(w.written.get(`${dir}/README.md`)).toContain('/plugin marketplace add ada/claude-mods\n/plugin install file-pane@claude-mods\n')
+  expect(w.written.get(`${dir}/README.md`)).not.toContain('--marketplace')
   expect(w.ran).toEqual([
     'git config user.name',
     'git remote get-url origin',
@@ -153,4 +160,13 @@ test('a validation failure is shown with its errors and skips the tests', async 
   const result = await newMod($, 'shaky --kind status')
   expect(result.text).toContain('✗ claude plugin validate: failed\n  name: required\n  does not parse\nNext:')
   expect(w.ran.some(line => line.startsWith('claude plugin test'))).toBe(false)
+})
+
+test('the README install line names the collection marketplace, never a --marketplace flag', async ($, on) => {
+  const w = world(on, { remote: 'https://github.com/ada/tools.git', marketplace: '{"name":"ada-mods","plugins":[]}' })
+  await $.session.start({ cwd: w.cwd, surface: 'terminal', isInteractive: true })
+  await newMod($, 'tidy-bot --kind command')
+  const readme = w.written.get(`${w.cwd}/mods/tidy-bot/README.md`) ?? ''
+  expect(readme).toContain('/plugin marketplace add ada/tools\n/plugin install tidy-bot@ada-mods\n')
+  expect(readme).not.toContain('--marketplace')
 })

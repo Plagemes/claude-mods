@@ -37,8 +37,11 @@ const ALWAYS_CHECKED = /\.rs$/
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
 const DEFAULT_ALLOW_WORD = 'SKIP-OK'
 
-const isTestFile = (path: string): boolean =>
-  ALWAYS_CHECKED.test(path) || TEST_FILE_NAMES.some(pattern => pattern.test(path))
+/** Windows paths are matched with forward slashes, so `tests\\` folders count too. */
+const isTestFile = (path: string): boolean => {
+  const slashed = path.replace(/\\/g, '/')
+  return ALWAYS_CHECKED.test(slashed) || TEST_FILE_NAMES.some(pattern => pattern.test(slashed))
+}
 
 const countMarkers = (marker: RegExp, text: string): number => (text.match(marker) ?? []).length
 
