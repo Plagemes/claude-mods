@@ -14,7 +14,7 @@ export type Tag = {
 
 const MAX_BRACE_SCAN = 4000
 const TAG_START = /<(\/?)([A-Za-z][\w.:-]*)/y
-const ATTR_NAME = /[^\s=>/{"']+/y
+const ATTR_NAME = /[^\s=>/{"'<]+/y
 const UNQUOTED_VALUE = /[^\s>]+/y
 
 /** Index just after the `}` that closes the `{` at `start` (strings, templates and comments respected); -1 when it never closes. */
@@ -71,6 +71,8 @@ const readAttributes = (text: string, position: number): Opening | undefined => 
       else attrs.push({ name: inner, value: undefined })
       index = end
     } else {
+      // A bare `<` where an attribute should be means this was no tag (a comparison, a stray bracket).
+      if (char === '<') return undefined
       ATTR_NAME.lastIndex = index
       const name = ATTR_NAME.exec(text)?.[0]
       if (name === undefined) {
@@ -152,8 +154,13 @@ const FIX = {
   'input-label': 'connect a <label> (htmlFor/for, or wrap it) or add aria-label',
 } as const
 
-/** `:alt`, `v-bind:alt`, `bind:alt`, `[alt]` and `alt` all say the same thing. */
-const plainName = (name: string): string => name.replace(/^(?:v-bind:|bind:|:|\[)/, '').replace(/\]$/, '').toLowerCase()
+/** `:alt`, `v-bind:alt`, `bind:alt`, `[alt]`, `[attr.alt]` and `alt` all say the same thing. */
+const plainName = (name: string): string =>
+  name
+    .replace(/^(?:v-bind:|bind:|:|\[)/, '')
+    .replace(/\]$/, '')
+    .replace(/^attr\./i, '')
+    .toLowerCase()
 
 const find = (tag: Tag, wanted: (name: string) => boolean): Attr | undefined => tag.attrs.find(attr => wanted(plainName(attr.name)))
 const has = (tag: Tag, ...names: string[]): boolean => find(tag, name => names.includes(name)) !== undefined
@@ -205,10 +212,20 @@ const hasNameInside = (text: string, tags: readonly Tag[], index: number, closer
   return content.replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}|<!--[\s\S]*?-->|&nbsp;|&#160;/g, '').trim() !== ''
 }
 
-const lineOf = (text: string, offset: number): number => {
-  let line = 1
-  for (let index = text.indexOf('\n'); index >= 0 && index < offset; index = text.indexOf('\n', index + 1)) line += 1
-  return line
+/** Line numbers by offset: the newline offsets once, then a binary search per lookup. */
+const lineFinder = (text: string): ((offset: number) => number) => {
+  const newlines: number[] = []
+  for (let index = text.indexOf('\n'); index >= 0; index = text.indexOf('\n', index + 1)) newlines.push(index)
+  return offset => {
+    let low = 0
+    let high = newlines.length
+    while (low < high) {
+      const middle = (low + high) >> 1
+      if ((newlines[middle] ?? Infinity) < offset) low = middle + 1
+      else high = middle
+    }
+    return low + 1
+  }
 }
 
 const andList = (items: readonly string[]): string => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`)
@@ -247,6 +264,7 @@ export const findIssues = (text: string): Issue[] => {
   const tags = scanTags(text)
   const labels = labelsOf(tags)
   const isDialog = DIALOG_CONTEXT.test(text)
+  const lineOf = lineFinder(text)
   const issues: Issue[] = []
 
   tags.forEach((tag, index) => {
@@ -255,7 +273,7 @@ export const findIssues = (text: string): Issue[] => {
     const closer = name === 'button' || name === 'a' ? closerOf(tags, index) : -1
     const end = closer < 0 ? tag.end : (tags[closer]?.end ?? tag.end)
     const add = (rule: Rule, message: string): void => {
-      issues.push({ rule, line: lineOf(text, tag.start), message, signature: `${rule}|${collapse(text.slice(tag.start, end))}` })
+      issues.push({ rule, line: lineOf(tag.start), message, signature: `${rule}|${collapse(text.slice(tag.start, end))}` })
     }
     const isUnnamed = closer >= 0 && !isNamedBy(tag, NAMES) && !hasNameInside(text, tags, index, closer)
 
@@ -267,7 +285,9 @@ export const findIssues = (text: string): Issue[] => {
       if ((name === 'input' || name === 'textarea' || name === 'select') && !isLabelled(tag, labels)) add('input-label', `<${name}> has no label: ${FIX['input-label']}`)
       if (NON_INTERACTIVE.has(name) && tag.attrs.some(attr => CLICK.test(attr.name))) {
         const role = valueOf(tag, 'role')
-        const isDecorative = role === 'presentation' || role === 'none' || valueOf(tag, 'aria-hidden') === 'true'
+        const hidden = find(tag, other => other === 'aria-hidden')
+        const isHidden = hidden !== undefined && (hidden.value === undefined || literalOf(hidden) === 'true' || /^\{\s*true\s*\}$/.test(hidden.value))
+        const isDecorative = role === 'presentation' || role === 'none' || isHidden
         const missing = [
           ...(has(tag, 'role') ? [] : ['role']),
           ...(has(tag, 'tabindex') ? [] : ['tabIndex']),

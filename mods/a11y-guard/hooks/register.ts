@@ -7,7 +7,7 @@ const UI_FILE = /\.(?:jsx|tsx|vue|svelte|html?|astro)$/i
 const MAX_FILE_BYTES = 400_000
 const MAX_LISTED = 8
 
-const basename = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
+const basename = (path: string): string => path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1)
 
 /** The file as it is on disk now; empty when it is missing, too big or unreadable. */
 async function readCurrent($: EngineInterface, path: string): Promise<string> {
@@ -43,6 +43,8 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: ['Edit', 'Write'] }, async ($, e, next) => {
     if (!UI_FILE.test(e.file_path) || e._host !== undefined) return next(e)
     const { before, after } = await changeOf($, e)
+    // A file this big is generated or vendored: scanning it would stall the edit for no useful answer.
+    if (after.length > MAX_FILE_BYTES) return next(e)
     const issues = newIssues(before, after)
     if (issues.length === 0) return next(e)
 

@@ -182,3 +182,29 @@ test('the same element is the same issue wherever it moves, and a second copy co
   expect(newIssues(a, moved)).toHaveLength(0)
   expect(newIssues(a, `${a}\n<img src="a.png" />`)).toHaveLength(1)
 })
+
+test('regression: Angular [attr.aria-label] names an element, and aria-hidden={true} or bare aria-hidden is decorative', () => {
+  expect(rulesIn('<button [attr.aria-label]="label" (click)="close()"><svg></svg></button>')).toEqual([])
+  expect(rulesIn('<a [attr.aria-label]="label" href="/"><svg></svg></a>')).toEqual([])
+  expect(rulesIn('<input [attr.aria-label]="label" />')).toEqual([])
+  expect(rulesIn('<span onClick={close} aria-hidden={true}>x</span>')).toEqual([])
+  expect(rulesIn('<span onClick={close} aria-hidden>x</span>')).toEqual([])
+  expect(rulesIn('<span onClick={close} aria-hidden={false}>x</span>')).toEqual(['click-handler'])
+})
+
+test('regression: big or bracket-heavy sources scan in linear time, line numbers stay right', () => {
+  const images = '<img src="x">\n'.repeat(15_000)
+  const started = Date.now()
+  const issues = findIssues(images)
+  expect(issues).toHaveLength(15_000)
+  expect(issues.at(-1)?.line).toBe(15_000)
+  expect(findIssues('<a '.repeat(70_000))).toHaveLength(0)
+  expect(Date.now() - started).toBeLessThan(3_000)
+})
+
+test('regression: a Write too big to scan goes through untouched', async ($, on) => {
+  const { reached } = world(on)
+  const result = await write($, '/app/huge.html', '<img src="x">\n'.repeat(40_000))
+  expect(reached).toEqual(['/app/huge.html'])
+  expect(result.context).toBeUndefined()
+})
