@@ -1,0 +1,30 @@
+{
+  "name": "bundle-size-watch",
+  "version": "1.0.0",
+  "description": "Compares bundle size after each build and warns when it grows.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#bundle-size-watch",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "frontend", "bundle", "performance", "build"],
+  "userConfig": {
+    "growthPercent": {
+      "type": "number",
+      "title": "Warn above growth (%)",
+      "description": "A toast appears when a build is bigger than the previous one by more than this many percent.",
+      "default": 5
+    },
+    "outputDirs": {
+      "type": "string",
+      "title": "Output folders",
+      "description": "Comma-separated build output folders, relative to the project. The one a build just wrote to is measured.",
+      "default": "dist,build,.next/static,out,.output/public"
+    },
+    "gzip": {
+      "type": "boolean",
+      "title": "Estimate gzip size",
+      "description": "Also gzip the ten largest JS/CSS/HTML files to estimate what users download.",
+      "default": true
+    }
+  }
+}
