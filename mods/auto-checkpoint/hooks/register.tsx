@@ -184,7 +184,7 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'checkpoints' }, async $ => {
     const repo = await refreshView($)
-    if (repo === undefined) return { text: `${PLUGIN}: not in a git repository, so there are no checkpoints.` }
+    if (repo === undefined) return { text: 'Not in a git repository, so there are no checkpoints.' }
     await update($, view, (current: View) => ({ ...current, confirming: null, notice: null }))
     await $.ui.open({ id: PANE, title: 'Checkpoints' })
     return { text: 'Checkpoints pane opened.' }
@@ -193,11 +193,11 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'rollback' }, async ($, e) => {
     const n = Number(e.args.trim().replace(/^#/, ''))
     const repo = await refreshView($)
-    if (repo === undefined) return { text: `${PLUGIN}: not in a git repository.` }
+    if (repo === undefined) return { text: 'Not in a git repository.' }
     const { items } = await read($, view)
     if (!Number.isInteger(n) || !items.some(entry => entry.n === n)) {
       const known = items.map(entry => `#${entry.n}`).join(', ') || 'none yet'
-      return { text: `${PLUGIN}: usage /rollback <n>. Checkpoints: ${known}.` }
+      return { text: `Usage /rollback <n>. Checkpoints: ${known}.` }
     }
     await update($, view, (current: View) => ({ ...current, confirming: n, notice: null }))
     await $.ui.open({ id: PANE, title: 'Checkpoints', focus: true })

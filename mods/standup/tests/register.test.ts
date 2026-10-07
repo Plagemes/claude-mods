@@ -108,7 +108,7 @@ test('on a Monday it looks back to Friday; a days argument wins and is validated
   await $.command.run(run('7'))
   expect(state.gitCalls.filter(args => args[0] === 'log').at(-1)).toContain('--since=7 days ago midnight')
   const bad = await $.command.run(run('soon'))
-  expect(bad.text).toContain('days must be a whole number')
+  expect(bad.text).toContain('Days must be a whole number')
 })
 
 test('no commits, journal or open changes: no model call, a clear message', async ($, on) => {
@@ -131,5 +131,5 @@ test('a model failure still gives a standup listed from git', async ($, on) => {
 test('outside a git repository it says so', async ($, on) => {
   world(on, { repo: false })
   const ran = await $.command.run(run())
-  expect(ran.text).toBe('standup: not inside a git repository.')
+  expect(ran.text).toBe('Not inside a git repository.')
 })

@@ -149,7 +149,7 @@ export const register: Register = (on, options: PluginOptions) => {
     try {
       return { text: await why($, session, e.args) }
     } catch (error) {
-      return { text: `why-log failed: ${messageOf(error)}` }
+      return { text: `Failed: ${messageOf(error)}` }
     }
   })
 }

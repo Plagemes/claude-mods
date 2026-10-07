@@ -34,7 +34,7 @@ test('in warn mode lets the edit through, tells Claude and toasts', async ($, on
 
   expect(seen.reached).toBe(1)
   expect(result.context?.[0]).toContain('added as any')
-  expect(seen.toasts[0]).toContain('no-any: as any added to user.ts')
+  expect(seen.toasts[0]).toContain('Added as any to user.ts')
 })
 
 test('in block mode refuses the edit before it runs', { options: { mode: 'block' } }, async ($, on) => {

@@ -48,8 +48,8 @@ const textsOf = (notes: unknown): string[] => (notes as { text: string }[]).map(
 test('/note keeps notes per project root, newest first, and /notes opens the pane with the keyboard', async ($, on) => {
   const engine = answerEngine(on)
 
-  expect((await $.command.run(run('note', 'check the retry budget'))).text).toBe('scratchpad: noted. 1 note for alpha.')
-  expect((await $.command.run(run('note', 'ask Sam about the schema'))).text).toBe('scratchpad: noted. 2 notes for alpha.')
+  expect((await $.command.run(run('note', 'check the retry budget'))).text).toBe('Noted. 1 note for alpha.')
+  expect((await $.command.run(run('note', 'ask Sam about the schema'))).text).toBe('Noted. 2 notes for alpha.')
   engine.root = '/work/beta'
   await $.command.run(run('note', 'beta only'))
 
@@ -57,7 +57,7 @@ test('/note keeps notes per project root, newest first, and /notes opens the pan
   expect(textsOf(engine.store.get('notes:/work/beta'))).toEqual(['beta only'])
 
   engine.root = '/work/alpha'
-  expect((await $.command.run(run('notes'))).text).toBe('scratchpad: 2 notes for alpha.')
+  expect((await $.command.run(run('notes'))).text).toBe('2 notes for alpha.')
   expect(engine.opened).toEqual([{ id: 'scratchpad', title: 'Notes', focus: true }])
 
   for (const surface of ['terminal', 'desktop'] as const) {

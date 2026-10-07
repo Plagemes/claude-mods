@@ -56,7 +56,7 @@ const describeOwners = async ($: EngineInterface, state: State, args: string): P
   const root = await repoRoot($)
   const absolute = isAbsolutePath(target) ? target : `${await $.session.cwd()}/${target}`
   const path = relativeTo(root, absolute)
-  if (path === undefined) return { text: `codeowners-hint: ${target} is outside the repository.` }
+  if (path === undefined) return { text: `${target} is outside the repository.` }
 
   const isDirectory = await $.fs.stat(absolute).then(
     stat => stat.kind === 'dir',
@@ -64,7 +64,7 @@ const describeOwners = async ($: EngineInterface, state: State, args: string): P
   )
   const found = await lookup($, state, root, isDirectory ? `${path}/` : path)
   if (found === undefined) {
-    return { text: 'codeowners-hint: no CODEOWNERS file found (looked in .github/, the repository root and docs/).' }
+    return { text: 'No CODEOWNERS file found (looked in .github/, the repository root and docs/).' }
   }
 
   const { location, rule } = found

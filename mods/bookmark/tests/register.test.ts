@@ -63,7 +63,7 @@ test('skips answers that are only tool calls and says so when there is nothing t
   expect(state.filled[0]?.text).toBe('Real answer')
 
   state.messages = [ask('hello')]
-  expect((await run($, 'bookmark')).text).toContain('nothing to save yet')
+  expect((await run($, 'bookmark')).text).toContain('Nothing to save yet')
 })
 
 test('/bookmark-insert fills the prompt at the cursor and reports unknown numbers', async ($, on) => {
@@ -74,7 +74,7 @@ test('/bookmark-insert fills the prompt at the cursor and reports unknown number
   expect(inserted.text).toBe('📌 bookmark #1 is in your prompt.')
   expect(state.filled).toEqual([{ text: 'Use a mutex around the cache.', mode: 'insert' }])
 
-  expect((await run($, 'bookmark-insert', '9')).text).toContain('no bookmark #9')
+  expect((await run($, 'bookmark-insert', '9')).text).toContain('No bookmark #9')
   expect((await run($, 'bookmark-insert', 'abc')).text).toContain('usage:')
 })
 

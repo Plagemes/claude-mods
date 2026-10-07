@@ -93,7 +93,7 @@ test('/map lists files with git, saves the map and injects it into the system pr
   const state = world(on, FILES)
   const ran = await $.command.run(run())
 
-  expect(ran.text).toContain('mapped 7 files in 5 dirs (git ls-files)')
+  expect(ran.text).toContain('Mapped 7 files in 5 dirs (git ls-files)')
   expect(state.runs[0]).toEqual(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'])
   const saved = state.writes.get(`${ROOT}/.claude/codebase-map.md`)
   expect(saved).toContain('# Codebase map: shop')
@@ -122,7 +122,7 @@ test('/map walks the folder when git is unavailable, skipping ignored dirs', asy
   }))
 
   const ran = await $.command.run(run())
-  expect(ran.text).toContain('mapped 3 files in 1 dirs (folder walk)')
+  expect(ran.text).toContain('Mapped 3 files in 1 dirs (folder walk)')
   const saved = state.writes.get(`${ROOT}/.claude/codebase-map.md`) ?? ''
   expect(saved).toContain('main.py  · entry point')
   expect(saved).not.toContain('node_modules')
@@ -158,8 +158,8 @@ test('/map show reuses the saved map without rebuilding', async ($, on) => {
   const state = world(on, FILES)
   await $.command.run(run())
   const shown = await $.command.run(run('show'))
-  expect(shown.text).toContain('showing the saved map')
+  expect(shown.text).toContain('Showing the saved map')
   expect(state.runs.length).toBe(1)
   const odd = await $.command.run(run('everything'))
-  expect(odd.text).toContain('unknown argument')
+  expect(odd.text).toContain('Unknown argument')
 })

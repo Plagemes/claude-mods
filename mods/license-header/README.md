@@ -13,7 +13,7 @@ When Claude creates a new source file with the Write tool, license-header puts y
 ```
 
 ## Usage
-Nothing to run. After Claude writes `src/add.ts` you get a `license-header: added to add.ts` toast and the file starts with:
+Nothing to run. After Claude writes `src/add.ts` you get a `License header added to add.ts` toast and the file starts with:
 
 ```
 // Copyright (c) 2026 Acme Inc.

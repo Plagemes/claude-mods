@@ -105,7 +105,7 @@ test('adds nothing when it recognises nothing', async ($, on) => {
   project(on, { 'README.md': '# notes' })
   await start($)
   expect(await conventions($)).toBeUndefined()
-  expect((await stack($, 'rescan')).text).toContain('nothing recognised')
+  expect((await stack($, 'rescan')).text).toContain('Nothing recognised')
 })
 
 test('regression: with bun the test script runs with `bun run test`, since `bun test` is Bun\'s own runner', async ($, on) => {

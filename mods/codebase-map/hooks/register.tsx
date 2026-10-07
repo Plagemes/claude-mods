@@ -5,7 +5,6 @@ import type { CodebaseMapSaved } from '../types'
 import { bodyOf, buildMap, parseMeta } from './map'
 import type { MapSource } from './map'
 
-const NAME = 'codebase-map'
 const PANE = 'codebase-map'
 const MAP_FILE = '.claude/codebase-map.md'
 const SECTION_ID = 'codebase-map:map'
@@ -34,6 +33,9 @@ const clamp = (value: unknown, low: number, high: number, fallback: number): num
 }
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+
+/** An outcome's error is a lowercase clause; as a toast or command answer it starts a sentence. */
+const asSentence = (clause: string): string => clause.charAt(0).toUpperCase() + clause.slice(1)
 
 const baseName = (path: string): string => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'repository'
 
@@ -159,22 +161,22 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'map' }, async ($, e) => {
     const mode = e.args.trim().toLowerCase()
     if (mode !== '' && mode !== 'show') {
-      return { text: `${NAME}: unknown argument "${mode}". Use /map to rebuild the map or /map show to view it.` }
+      return { text: `Unknown argument "${mode}". Use /map to rebuild the map or /map show to view it.` }
     }
     const saved = await read($, mapAtom)
     if (mode === 'show' && saved !== null) {
       await openPane($)
-      return { text: `${NAME}: showing the saved map, ${describeMap(saved)}.` }
+      return { text: `Showing the saved map, ${describeMap(saved)}.` }
     }
     await openPane($)
     const outcome = await refresh($, settings)
-    if ('error' in outcome) return { text: `${NAME}: ${outcome.error}` }
+    if ('error' in outcome) return { text: asSentence(outcome.error) }
     const cut = outcome.map.isTruncated ? ` Cut to fit ${settings.maxChars} characters (raise maxChars for more).` : ''
     const where = settings.autoInject
       ? 'Claude reads it on every request.'
       : 'Claude has it for this conversation (autoInject is off).'
     return {
-      text: `${NAME}: mapped ${describeMap(outcome.map)} → ${MAP_FILE}. ${where}${cut}`,
+      text: `Mapped ${describeMap(outcome.map)} → ${MAP_FILE}. ${where}${cut}`,
       ...(settings.autoInject ? {} : { context: [sectionText(outcome.map)] }),
     }
   })
@@ -197,11 +199,11 @@ export const register: Register = (on, options) => {
     const copy = async (surface: typeof e.surface) => {
       if (map === null) return
       const copied = await $.ui.copy({ text: bodyOf(map.markdown), surface })
-      $.ui.toast(copied.isCopied ? `${NAME}: map copied` : `${NAME}: could not copy (${copied.reason})`)
+      $.ui.toast(copied.isCopied ? 'Map copied' : `Could not copy (${copied.reason})`)
     }
     const rebuild = async () => {
       const outcome = await refresh($, settings)
-      $.ui.toast('error' in outcome ? `${NAME}: ${outcome.error}` : `${NAME}: ${describeMap(outcome.map)}`)
+      $.ui.toast('error' in outcome ? asSentence(outcome.error) : describeMap(outcome.map))
     }
 
     return (

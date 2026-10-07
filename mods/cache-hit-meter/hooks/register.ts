@@ -44,7 +44,7 @@ export const register: Register = (on, options) => {
       const sessionPercent = percentOf(session.read, session.total)
       if (!session.hasWarned && session.turns >= afterTurns && sessionPercent < warnBelow) {
         await update($, stats, previous => ({ ...previous, hasWarned: true }))
-        $.ui.toast(`cache-hit-meter: only ${sessionPercent}% of input came from the prompt cache (${session.turns} turns)`)
+        $.ui.toast(`Only ${sessionPercent}% of input came from the prompt cache (${session.turns} turns)`)
       }
     }
 

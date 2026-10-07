@@ -72,7 +72,7 @@ test('lists commands with their outcome and duration, newest last', async ($, on
   const text = await history($)
   const rows = text.split('\n').slice(2)
 
-  expect(text).toContain('last 3 of 3 shell commands')
+  expect(text).toContain('Last 3 of 3 shell commands')
   expect(rows).toHaveLength(3)
   expect(rows[0]).toMatch(/^\d\d:\d\d:\d\d {2}ok\s+400ms\s+git status$/)
   expect(rows[1]).toMatch(/FAILED\s+12\.5s\s+npm test$/)
@@ -89,7 +89,7 @@ test('shows the last 30 by default, honours a count and flattens multi-line comm
   expect(defaultRows.at(-1)).toContain('cat <<EOF hello EOF')
 
   const two = await history($, '2')
-  expect(two).toContain('last 2 of 36 shell commands')
+  expect(two).toContain('Last 2 of 36 shell commands')
   expect(two.split('\n').slice(2)).toHaveLength(2)
 })
 

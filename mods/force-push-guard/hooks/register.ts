@@ -51,7 +51,7 @@ export const register: Register = (on, options) => {
     }
 
     if (edits.length === 0) return next(e)
-    $.ui.toast('force-push-guard: rewrote --force to --force-with-lease')
+    $.ui.toast('Rewrote --force to --force-with-lease')
     return next({ ...e, command: applyEdits(e.command, edits) })
   }).catch(($, e, next) => (next.called ? next(e) : { deny: 'force-push-guard: its check failed, so the command was blocked.' }))
 }

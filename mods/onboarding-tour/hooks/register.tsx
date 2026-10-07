@@ -167,7 +167,7 @@ export const register: Register = (on, options: PluginOptions) => {
     try {
       return { text: await runCommand($, session, settings, e.args) }
     } catch (error) {
-      return { text: `onboarding-tour failed: ${messageOf(error)}` }
+      return { text: `Failed: ${messageOf(error)}` }
     }
   })
 

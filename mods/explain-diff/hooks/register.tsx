@@ -183,7 +183,7 @@ export const register: Register = (on, options: PluginOptions) => {
     try {
       return { text: await runCommand($, settings, e.args) }
     } catch (error) {
-      return { text: `explain-diff failed: ${messageOf(error)}` }
+      return { text: `Failed: ${messageOf(error)}` }
     }
   })
 

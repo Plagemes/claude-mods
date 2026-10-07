@@ -36,7 +36,7 @@ test('turns a description into <type>/<slug> and switches to it with git', async
   const { calls } = engine(on)
   const result = await $.command.run({ ...TYPED, args: 'fix the login redirect loop' })
   expect(calls).toEqual([['git', 'switch', '-c', 'fix/login-redirect-loop']])
-  expect(result.text).toContain('created and switched to fix/login-redirect-loop')
+  expect(result.text).toContain('Created and switched to fix/login-redirect-loop')
 })
 
 test('infers the type from keywords and cleans the slug', async ($, on) => {
@@ -90,5 +90,5 @@ test('reports an existing branch and a missing repository in plain words', async
 
   git.stderr = 'fatal: not a git repository (or any of the parent directories): .git'
   const missing = await $.command.run({ ...TYPED, args: 'add x' })
-  expect(missing.text).toContain('not inside a git repository')
+  expect(missing.text).toContain('Not inside a git repository')
 })

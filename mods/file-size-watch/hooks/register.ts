@@ -39,7 +39,7 @@ export const register: Register = (on, options) => {
 
     if (!toasted.has(e.file_path)) {
       toasted.add(e.file_path)
-      $.ui.toast(`file-size-watch: ${e.file_path.split('/').pop()} is ${lines} lines. Consider splitting it.`)
+      $.ui.toast(`${e.file_path.split('/').pop()} is ${lines} lines. Consider splitting it.`)
     }
     const note =
       `file-size-watch: ${e.file_path} is now ${lines} lines (limit ${limit}) and this edit made it longer. ` +

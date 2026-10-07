@@ -45,7 +45,7 @@ test('toasts when a turn runs past the threshold, in minutes and seconds', async
   expect(spy.toasts).toHaveLength(0)
 
   await $.turn.complete(turn(125))
-  expect(spy.toasts).toEqual(['turn-timer: that turn took 2m 05s'])
+  expect(spy.toasts).toEqual(['That turn took 2m 05s'])
   expect(spy.statuses.at(-1)).toBe('last 2m 05s · avg 2m 03s')
 })
 

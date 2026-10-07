@@ -121,7 +121,7 @@ test('session start registers the read-only reviewer agent type', async ($, on) 
 test('/review spawns the reviewer on the diff and shows its findings with a fix button', async ($, on) => {
   const state = world(on)
   const started = await $.command.run(review())
-  expect(started.text).toContain('reviewing uncommitted changes (1 file changed')
+  expect(started.text).toContain('Reviewing uncommitted changes (1 file changed')
   expect(state.spawns[0]?.subagentType).toBe('review-agent:reviewer')
   expect(state.spawns[0]?.prompt).toContain('+const fee = amount * 0.1')
   expect(state.spawns[0]?.prompt).toContain('Diff command: `git diff HEAD`')
@@ -151,7 +151,7 @@ test('/review <base> diffs from the fork point; bad refs, clean trees and PR num
 
   await $.turn.complete({ ...COMPLETE, answer: REPORT })
   const unknown = await $.command.run(review('nope'))
-  expect(unknown.text).toContain('cannot find "nope"')
+  expect(unknown.text).toContain('Cannot find "nope"')
   const injected = await $.command.run(review('--output=/tmp/x'))
   expect(injected.text).toContain('is not a branch, tag or commit name')
   const pullRequest = await $.command.run(review('123'))
@@ -162,7 +162,7 @@ test('/review <base> diffs from the fork point; bad refs, clean trees and PR num
 test('a clean working tree has nothing to review', async ($, on) => {
   const state = world(on, { clean: true })
   const ran = await $.command.run(review())
-  expect(ran.text).toContain('nothing to review: no uncommitted changes')
+  expect(ran.text).toContain('Nothing to review: no uncommitted changes')
   expect(state.spawns).toHaveLength(0)
 })
 

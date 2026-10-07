@@ -45,7 +45,7 @@ export const register: Register = (on, options) => {
       $.ui.status(`last ${formatDuration(lastMs)} · avg ${formatDuration(totalMs / count)}`)
 
       if (thresholdMs > 0 && e.durationMs > thresholdMs) {
-        $.ui.toast(`turn-timer: that turn took ${formatDuration(e.durationMs)}`)
+        $.ui.toast(`That turn took ${formatDuration(e.durationMs)}`)
       }
     }
 

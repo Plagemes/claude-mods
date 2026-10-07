@@ -64,7 +64,7 @@ test('lists fetched pages and searches as a Markdown list in order', async ($, o
 
   const lines = (await sources($)).split('\n')
 
-  expect(lines[0]).toBe('**web-trail:** 2 pages fetched, 1 search this session')
+  expect(lines[0]).toBe('2 pages fetched, 1 search this session')
   expect(lines[2]).toMatch(/^- \*\*\d\d:\d\d:\d\d\*\* fetched <https:\/\/example\.com\/docs>$/)
   expect(lines[3]).toMatch(/^- \*\*\d\d:\d\d:\d\d\*\* searched `react 'use' hook`$/)
   expect(lines[4]).toMatch(/fetched <https:\/\/example\.com\/broken> \(failed\)$/)

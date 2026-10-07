@@ -95,11 +95,11 @@ test('/style shows what is injected, or that nothing is', async ($, on) => {
     })
 
   const none = await style()
-  expect(none.text).toContain('no style guide found')
+  expect(none.text).toContain('No style guide found')
   expect((await $.prompt.compose(facts)).sections.map(section => section.id)).toEqual(['intro'])
 
   files.set(`${ROOT}/.claude/style.md`, { text: STYLE, mtimeMs: 5 })
   const shown = await style()
-  expect(shown.text).toContain('injecting .claude/style.md into the system prompt')
+  expect(shown.text).toContain('Injecting .claude/style.md into the system prompt')
   expect(shown.text).toContain('Name React components in PascalCase.')
 })

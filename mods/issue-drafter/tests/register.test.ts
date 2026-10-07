@@ -84,7 +84,7 @@ test('arguments and the fork answer are read leniently', async () => {
 test('/issue bug drafts from the conversation and creates it with gh on every surface', async ($, on) => {
   const state = world(on)
   const ran = await $.command.run(issue('bug the rounding'))
-  expect(ran.text).toContain('drafted bug issue "Checkout total rounds half-cents down"')
+  expect(ran.text).toContain('Drafted bug issue "Checkout total rounds half-cents down"')
   expect(state.forks[0]).toContain('as a bug report')
   expect(state.forks[0]).toContain('Focus on: the rounding')
   expect(state.forks[0]).toContain('## Steps to reproduce')
@@ -117,7 +117,7 @@ test('labels from the settings ride along', { options: { labels: 'triage, from-c
 test('nothing to fork closes the pane and says why', async ($, on) => {
   const state = world(on, { fork: 'nothing' })
   const ran = await $.command.run(issue('feature'))
-  expect(ran.text).toBe('issue-drafter: nothing to draft yet: describe the problem or idea to Claude first.')
+  expect(ran.text).toBe('Nothing to draft yet: describe the problem or idea to Claude first.')
   expect(state.closed).toBe(1)
 })
 

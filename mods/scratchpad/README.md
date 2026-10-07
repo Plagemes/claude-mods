@@ -13,10 +13,10 @@ Keeps a list of notes for each project (by its root folder), across sessions. `/
 ```
 
 ## Usage
-- `/notes` opens the **Notes** pane with the keyboard in it (`scratchpad: 3 notes for my-app.`). Esc gives the keyboard back to the prompt.
+- `/notes` opens the **Notes** pane with the keyboard in it (`3 notes for my-app.`). Esc gives the keyboard back to the prompt.
 - Type in the field and press Enter to add; newest notes come first, each with its date and time.
 - **To prompt** inserts the note into your prompt draft (nothing is sent); **Delete** removes it.
-- `/note ask Sam about the schema` adds a note without opening the pane (`scratchpad: noted. 4 notes for my-app.`).
+- `/note ask Sam about the schema` adds a note without opening the pane (`Noted. 4 notes for my-app.`).
 - On the mobile app the list shows without the text field.
 
 ## Configuration

@@ -200,9 +200,9 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: COMMAND }, async ($, e) => {
     const found = e.args.trim().toLowerCase() === 'rescan' || detection === undefined ? await rescan($) : detection
-    if (found === undefined) return { text: 'stack-detector: the project root could not be read.' }
+    if (found === undefined) return { text: 'The project root could not be read.' }
     if (found.findings.length === 0) {
-      return { text: `stack-detector: nothing recognised in ${found.root}. Nothing is added to the system prompt.` }
+      return { text: `Nothing recognised in ${found.root}. Nothing is added to the system prompt.` }
     }
     const width = Math.max(...found.findings.map(finding => `${GUIDES[finding.id].name} (${finding.id})`.length))
     const rows = found.findings.map(finding => {
@@ -218,7 +218,7 @@ export const register: Register = (on, options) => {
         ? 'Every detected technology is skipped; nothing is injected.'
         : `Conventions for the ✓ rows are in the system prompt (${text.length.toLocaleString('en-US')} characters). /stack rescan scans again.`
     return {
-      text: [`stack-detector: ${found.findings.length} detected in ${found.root}`, ...rows, '', footer].join('\n'),
+      text: [`${found.findings.length} detected in ${found.root}`, ...rows, '', footer].join('\n'),
     }
   })
 }

@@ -199,7 +199,7 @@ const run = async (
 
   if (command === undefined) {
     return {
-      text: `quick-commands: no ${KINDS[kind].noun} command found. Set "${KINDS[kind].option}" in this mod's settings, or add a script or Makefile target.`,
+      text: `No ${KINDS[kind].noun} command found. Set "${KINDS[kind].option}" in this mod's settings, or add a script or Makefile target.`,
     }
   }
 

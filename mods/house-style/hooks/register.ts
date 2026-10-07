@@ -171,7 +171,7 @@ export const register: Register = (on, options) => {
     if (guide === null) {
       const looked = settings.files.map(file => (SECTIONED_FILE.test(file) ? `a style section in ${file}` : file))
       return {
-        text: `house-style: no style guide found under ${cache?.root ?? 'the project root'}; looked for ${looked.join(', ')}. Nothing is injected.`,
+        text: `No style guide found under ${cache?.root ?? 'the project root'}; looked for ${looked.join(', ')}. Nothing is injected.`,
       }
     }
     const injected = sectionText(guide)
@@ -180,7 +180,7 @@ export const register: Register = (on, options) => {
     const preview = lines.slice(0, PREVIEW_LINES)
     return {
       text: [
-        `house-style: injecting ${guide.isSection ? `the style sections of ${guide.file}` : guide.file} into the system prompt` +
+        `Injecting ${guide.isSection ? `the style sections of ${guide.file}` : guide.file} into the system prompt` +
           ` (${injected.length.toLocaleString('en-US')} characters, about ${Math.ceil(injected.length / CHARS_PER_TOKEN).toLocaleString('en-US')} tokens` +
           `${leftOut > 0 ? `; ${leftOut.toLocaleString('en-US')} characters over the limit left out` : ''}).`,
         '',

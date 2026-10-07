@@ -44,10 +44,10 @@ export const register: Register = on => {
 
   on('command.run', { command: 'sources' }, async $ => {
     const all = await read($, visits)
-    if (all.length === 0) return { text: 'web-trail: Claude has not fetched or searched anything yet.' }
+    if (all.length === 0) return { text: 'Claude has not fetched or searched anything yet.' }
 
     const pages = all.filter(visit => visit.kind === 'fetch').length
-    const heading = `**web-trail:** ${count(pages, 'page')} fetched, ${count(all.length - pages, 'search')} this session`
+    const heading = `${count(pages, 'page')} fetched, ${count(all.length - pages, 'search')} this session`
     return { text: [heading, '', ...all.map(bullet)].join('\n') }
   })
 }

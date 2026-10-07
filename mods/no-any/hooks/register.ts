@@ -85,7 +85,7 @@ export const register: Register = (on, options) => {
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError) return ran
 
-    $.ui.toast(`no-any: ${summary} added to ${e.file_path.split('/').pop()}`)
+    $.ui.toast(`Added ${summary} to ${e.file_path.split('/').pop()}`)
     const note =
       `no-any: this edit added ${summary} to ${e.file_path}. Replace it with a precise type, ` +
       `unknown plus a narrowing check, or fix the underlying type error. ` +

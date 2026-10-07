@@ -71,7 +71,7 @@ export const register: Register = (on, options) => {
     if (tip === undefined) return next(e)
 
     if (!isStrict) {
-      $.ui.toast(`prompt-lint: ${tip}`, { timeoutMs: TOAST_MS })
+      $.ui.toast(tip, { timeoutMs: TOAST_MS })
       return next(e)
     }
 

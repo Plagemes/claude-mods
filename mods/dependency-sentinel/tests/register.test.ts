@@ -51,7 +51,7 @@ test('holds back a typosquat that does not exist on the registry', async ($, on)
   expect(reason).toContain('lodahs looks like a typo of "lodash" (1 edit away)')
   expect(reason).toContain('lodahs does not exist on npm')
   expect(reason).toContain('DEPS-OK')
-  expect(toasts.at(-1)).toContain('held back lodahs')
+  expect(toasts.at(-1)).toContain('Held back lodahs')
 })
 
 test('lets popular packages through without asking any registry', async ($, on) => {
@@ -96,7 +96,7 @@ test('a registry that does not answer in time fails open with a toast', { option
   const pending = bash($, 'cargo add obscure-crate')
   await clock.advance(1000)
   expect(await pending).toBeUndefined()
-  expect(toasts.at(-1)).toContain('could not check obscure-crate on crates.io')
+  expect(toasts.at(-1)).toContain('Could not check obscure-crate on crates.io')
 })
 
 test('finds the packages of each installer and skips paths, URLs and flags', () => {

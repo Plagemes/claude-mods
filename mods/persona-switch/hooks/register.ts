@@ -136,7 +136,7 @@ const listing = (current: PersonaName | null): string => {
       `${name === current ? '●' : ' '} ${name.padEnd(width)}  ${persona.summary}${persona.isCustom ? ' (custom)' : ''}`,
   )
   return [
-    'persona-switch: personas',
+    'Personas',
     ...rows,
     '',
     current === null ? 'No persona is on. /persona <name> switches one on.' : `/persona ${OFF} switches ${current} off.`,
@@ -176,7 +176,7 @@ export const register: Register = (on, options) => {
       argumentHint: `<name>|${OFF}`,
     })
     await $.command.register({ name: LIST_COMMAND, description: 'List the personas /persona can switch to' })
-    if (customError !== undefined) $.ui.toast(`persona-switch: ${customError}`)
+    if (customError !== undefined) $.ui.toast(customError)
     try {
       const saved = await $.store.get(await storeKey($))
       const name = typeof saved === 'string' && saved in personas ? saved : null
@@ -209,20 +209,20 @@ export const register: Register = (on, options) => {
       return {
         text:
           persona === undefined
-            ? `persona-switch: no persona is on. Try /persona ${Object.keys(personas).join(', /persona ')}.`
-            : `persona-switch: ${persona.label} (${current}) is on. /persona ${OFF} switches it off.`,
+            ? `No persona is on. Try /persona ${Object.keys(personas).join(', /persona ')}.`
+            : `${persona.label} (${current}) is on. /persona ${OFF} switches it off.`,
       }
     }
     if (wanted === OFF) {
       await activate($, null)
-      return { text: 'persona-switch: persona off. Claude is back to its default way of working.' }
+      return { text: 'Persona off. Claude is back to its default way of working.' }
     }
     const persona = personas[wanted]
     if (persona === undefined) {
-      return { text: `persona-switch: no persona "${wanted}". Choose one of: ${Object.keys(personas).join(', ')}.` }
+      return { text: `No persona "${wanted}". Choose one of: ${Object.keys(personas).join(', ')}.` }
     }
     await activate($, wanted)
-    return { text: `persona-switch: ${persona.label} is on for this project. ${persona.summary}` }
+    return { text: `${persona.label} is on for this project. ${persona.summary}` }
   })
 
   on('command.run', { command: LIST_COMMAND }, async $ => ({ text: listing(await read($, active)) }))

@@ -129,7 +129,7 @@ test('says once that a formatter is missing and stops trying it', async ($, on) 
   await $.tool.call(edit('/repo/main.go'))
 
   expect(runs).toHaveLength(1)
-  expect(toasts).toEqual(['auto-format: gofmt is not installed, so main.go was left as written'])
+  expect(toasts).toEqual(['gofmt is not installed, so main.go was left as written'])
   expect(first.context).toBeUndefined()
 })
 

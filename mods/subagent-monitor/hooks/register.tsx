@@ -176,18 +176,18 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim().toLowerCase()
     if (arg === 'close') {
       await $.ui.close({ id: PANE })
-      return { text: 'subagent-monitor: pane closed.' }
+      return { text: 'Pane closed.' }
     }
     if (arg === 'clear') {
       await change($, rows => rows.filter(isLive))
-      return { text: 'subagent-monitor: cleared finished subagents.' }
+      return { text: 'Cleared finished subagents.' }
     }
     const opened = await $.ui.open({ id: PANE, title: 'Subagents' })
     startPolling($)
     return {
       text: opened.isPlaced
-        ? 'subagent-monitor: watching subagents live.'
-        : `subagent-monitor: the pane waits for room (${opened.reason}).`,
+        ? 'Watching subagents live.'
+        : `The pane waits for room (${opened.reason}).`,
     }
   })
 

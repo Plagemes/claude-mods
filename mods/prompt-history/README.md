@@ -13,7 +13,7 @@ Keeps every prompt you type, with when you sent it and from which project, acros
 ```
 
 ## Usage
-- `/history` opens the **History** pane with the keyboard in the search field (`prompt-history: 834 prompts kept.`).
+- `/history` opens the **History** pane with the keyboard in the search field (`834 prompts kept.`).
 - Type words: a prompt matches when it holds all of them, in any case (`fix flaky` finds "Fix the flaky queue test"). The newest 30 matches are listed with project and time.
 - **Use** replaces the prompt draft with that prompt and closes the pane; **This project** / **All projects** switches the scope.
 - `/history migration` opens the pane already searching for "migration"; `/history clear` forgets the whole history.

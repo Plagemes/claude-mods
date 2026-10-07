@@ -13,7 +13,7 @@ Watches every `Edit` and `Write` on TypeScript files (`.ts`, `.tsx`, `.mts`, `.c
 ```
 
 ## Usage
-In `warn` mode you see a toast such as `no-any: as any added to user.ts`, and Claude gets a note to fix it. In `block` mode Claude receives a refusal naming what was found and tries again with a better type. A line that really needs an escape hatch can carry `no-any: allow` plus the reason, and is then left alone.
+In `warn` mode you see a toast such as `Added as any to user.ts`, and Claude gets a note to fix it. In `block` mode Claude receives a refusal naming what was found and tries again with a better type. A line that really needs an escape hatch can carry `no-any: allow` plus the reason, and is then left alone.
 
 ## Configuration
 | Key | Type | Default | Description |

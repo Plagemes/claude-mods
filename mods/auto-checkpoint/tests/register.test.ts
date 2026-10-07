@@ -142,7 +142,7 @@ test('/rollback checks its argument and asks for confirmation in the pane', asyn
   fakeGit(on)
   await startTurn($, 't1', 'first')
   await edit($)
-  expect((await runCommand($, 'rollback', 'seven')).text).toBe('auto-checkpoint: usage /rollback <n>. Checkpoints: #1.')
+  expect((await runCommand($, 'rollback', 'seven')).text).toBe('Usage /rollback <n>. Checkpoints: #1.')
   expect((await runCommand($, 'rollback', '#1')).text).toBe('Confirm the rollback to #1 in the Checkpoints pane.')
 
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'checkpoints', props: PANE_PROPS })

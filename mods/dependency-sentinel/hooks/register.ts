@@ -147,7 +147,7 @@ const inspect = async ($: EngineInterface, request: PackageRequest, limits: Limi
   const registry = REGISTRY_LABEL[request.ecosystem]
   if (lookup.kind === 'unknown') {
     if (typo !== undefined) add(typo)
-    $.ui.toast(`${PLUGIN}: could not check ${request.name} on ${registry} (${lookup.why}); allowed`)
+    $.ui.toast(`Could not check ${request.name} on ${registry} (${lookup.why}); allowed`)
   } else if (lookup.kind === 'missing') {
     if (typo !== undefined) add(typo)
     add(`does not exist on ${registry}: a mistyped or hallucinated name, or a squat waiting to happen`)
@@ -208,11 +208,11 @@ export const register: Register = (on, options) => {
     if (findings.length === 0) return next(e)
 
     const names = [...new Set(findings.map(finding => finding.name))]
-    $.ui.toast(`${PLUGIN}: held back ${names.join(', ')}. Reply DEPS-OK to allow.`, { timeoutMs: 8000 })
+    $.ui.toast(`Held back ${names.join(', ')}. Reply DEPS-OK to allow.`, { timeoutMs: 8000 })
     return { deny: denial(e.command, findings) }
   }).catch(($, e, next) => {
     // Not a hard gate: a failed check lets the install through, and says so.
-    if (!next.called && next.error.kind !== 're-entry') $.ui.toast(`${PLUGIN}: check failed (${next.error.kind}); install allowed`)
+    if (!next.called && next.error.kind !== 're-entry') $.ui.toast(`Check failed (${next.error.kind}); install allowed`)
     return next(e)
   })
 }

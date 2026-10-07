@@ -105,12 +105,12 @@ test("logs the engine's deny verdict once per call, whichever hook sees it", asy
 
 test('says so when nothing was denied, and /denied clear empties the log and the status', async ($, on) => {
   const statuses = engine(on)
-  expect(await denied($)).toContain('no tool call has been denied')
+  expect(await denied($)).toContain('No tool call has been denied')
 
   await $.tool.call({ tool: 'Bash', command: 'rm x' })
   expect(statuses.at(-1)).toBe('⛔ 1 denied')
 
-  expect(await denied($, 'clear')).toContain('cleared')
+  expect(await denied($, 'clear')).toContain('Cleared')
   expect(statuses.at(-1)).toBeUndefined()
-  expect(await denied($)).toContain('no tool call has been denied')
+  expect(await denied($)).toContain('No tool call has been denied')
 })

@@ -4,7 +4,7 @@ import { nameBranch } from './slug'
 
 const GIT_TIMEOUT_MS = 10000
 const MAX_SOURCE_CHARS = 200
-const USAGE = 'branch-namer: /git-branch <what you are about to do>, e.g. /git-branch fix login redirect loop. With no description it uses your last prompt.'
+const USAGE = 'Usage: /git-branch <what you are about to do>, e.g. /git-branch fix login redirect loop. With no description it uses your last prompt.'
 
 function isFromPerson(origin: PromptOrigin): boolean {
   return ['composer', 'bridge', 'sdk', 'slack-ping'].includes(origin.kind) || (origin.kind === 'plugin' && origin.asUser === true)
@@ -25,12 +25,12 @@ async function lastUserPrompt($: EngineInterface): Promise<string | undefined> {
 async function switchToNewBranch($: EngineInterface, name: string): Promise<string> {
   try {
     const { exitCode, stderr } = await $.process.run(['git', 'switch', '-c', name], { timeoutMs: GIT_TIMEOUT_MS })
-    if (exitCode === 0) return `branch-namer: created and switched to ${name}`
-    if (/already exists/.test(stderr)) return `branch-namer: ${name} already exists. Make the description more specific, or git switch ${name}.`
-    if (/not a git repository/i.test(stderr)) return 'branch-namer: not inside a git repository.'
-    return `branch-namer: git could not create ${name}: ${stderr.trim().split('\n')[0] ?? 'unknown error'}`
+    if (exitCode === 0) return `Created and switched to ${name}`
+    if (/already exists/.test(stderr)) return `${name} already exists. Make the description more specific, or git switch ${name}.`
+    if (/not a git repository/i.test(stderr)) return 'Not inside a git repository.'
+    return `Git could not create ${name}: ${stderr.trim().split('\n')[0] ?? 'unknown error'}`
   } catch {
-    return 'branch-namer: could not run git.'
+    return 'Could not run git.'
   }
 }
 
@@ -60,6 +60,6 @@ export const register: Register = (on, options) => {
     if (branch === undefined) return { text: USAGE }
 
     const text = await switchToNewBranch($, branch.name)
-    return text.includes('created and switched') ? { text, context: [`The user ran /git-branch: the git branch is now ${branch.name}.`] } : { text }
+    return text.includes('Created and switched') ? { text, context: [`The user ran /git-branch: the git branch is now ${branch.name}.`] } : { text }
   })
 }

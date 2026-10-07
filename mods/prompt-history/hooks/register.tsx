@@ -80,7 +80,7 @@ async function reuse($: EngineInterface, text: string): Promise<void> {
   const filled = await $.prompt.fill({ text })
 
   if (filled.isFilled) await $.ui.close({ id: PANE })
-  else $.ui.toast(`${NAME}: the prompt box is not available right now`)
+  else $.ui.toast('The prompt box is not available right now')
 }
 
 export const register: Register = on => {
@@ -103,14 +103,14 @@ export const register: Register = on => {
       await $.store.delete(STORE_KEY)
       cache.entries = []
       await update($, view, shown => (shown === null ? null : { ...shown, results: [], matched: 0, total: 0 }))
-      return { text: `${NAME}: history cleared.` }
+      return { text: 'History cleared.' }
     }
 
     const shown = await show($, cache, query, 'all', await $.session.root())
     await $.ui.open({ id: PANE, title: 'History', focus: true })
 
     return {
-      text: query === '' ? `${NAME}: ${shown.total} prompts kept.` : `${NAME}: ${shown.matched} of ${shown.total} prompts match "${query}".`,
+      text: query === '' ? `${shown.total} prompts kept.` : `${shown.matched} of ${shown.total} prompts match "${query}".`,
     }
   })
 

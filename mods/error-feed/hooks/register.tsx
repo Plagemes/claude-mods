@@ -105,13 +105,13 @@ async function askToFix($: EngineInterface, id: string): Promise<void> {
   const failure = (await read($, errors)).find(one => one.id === id)
   if (failure === undefined) return
   await change($, list => list.map(one => (one.id === id ? { ...one, isSent: true } : one)))
-  $.ui.toast(`error-feed: asked Claude to fix the ${failure.tool} error`)
+  $.ui.toast(`Asked Claude to fix the ${failure.tool} error`)
   try {
     // Resolves once the prompt's turn starts: after the running turn, if one runs.
     await $.prompt.submit({ text: fixPrompt(failure), asUser: true })
   } catch (error) {
     await change($, list => list.map(one => (one.id === id ? { ...one, isSent: false } : one)))
-    $.ui.toast(`error-feed: could not send the prompt (${String(error)})`)
+    $.ui.toast(`Could not send the prompt (${String(error)})`)
   }
 }
 
@@ -156,17 +156,17 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim().toLowerCase()
     if (arg === 'clear') {
       await change($, () => [])
-      return { text: 'error-feed: cleared.' }
+      return { text: 'Cleared.' }
     }
     if (arg === 'close') {
       await $.ui.close({ id: PANE })
-      return { text: 'error-feed: pane closed.' }
+      return { text: 'Pane closed.' }
     }
     const count = (await read($, errors)).length
     const opened = await $.ui.open({ id: PANE, title: 'Errors' })
-    const summary = count === 0 ? 'no errors so far' : `${count} error${count === 1 ? '' : 's'} collected`
+    const summary = count === 0 ? 'No errors so far' : `${count} error${count === 1 ? '' : 's'} collected`
     return {
-      text: opened.isPlaced ? `error-feed: ${summary}.` : `error-feed: ${summary}; the pane waits for room (${opened.reason}).`,
+      text: opened.isPlaced ? `${summary}.` : `${summary}; the pane waits for room (${opened.reason}).`,
     }
   })
 

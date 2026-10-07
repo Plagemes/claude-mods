@@ -13,7 +13,7 @@ When Claude edits or writes a `.jsx`, `.tsx`, `.vue` or `.svelte` file, i18n-gua
 ```
 
 ## Usage
-- Warn (default): the edit goes through, you see `i18n-guard: 2 hard-coded strings in Button.tsx`, and Claude gets a note such as `Button.tsx now has hard-coded user-facing strings: title="Save the form", "Save changes". …` so it fixes them next.
+- Warn (default): the edit goes through, you see `2 hard-coded strings in Button.tsx`, and Claude gets a note such as `Button.tsx now has hard-coded user-facing strings: title="Save the form", "Save changes". …` so it fixes them next.
 - Block: the edit is denied with the same list and the instruction to use the project's i18n function (`t('key')`) and add the keys.
 
 Only strings the edit introduces are reported, never the ones already in the file. Test, story and fixture files are skipped.

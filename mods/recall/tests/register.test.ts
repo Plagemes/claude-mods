@@ -105,11 +105,11 @@ test('/remember saves memories the tool can find, per project or global', async 
     memories: [{ id: 'old', text: 'Staging deploys need the VPN on.', project: '/work/other', createdAt: 0 }],
   })
   const saved = await $.command.run(command('remember', 'Feature flags live in LaunchDarkly, not env vars'))
-  expect(saved.text).toContain('remembered: "Feature flags live in LaunchDarkly')
+  expect(saved.text).toContain('Remembered: "Feature flags live in LaunchDarkly')
   const shared = await $.command.run(command('remember', '-g Always answer in British English'))
   expect(shared.text).toContain('for every project')
   const again = await $.command.run(command('remember', 'Feature flags live in LaunchDarkly, not env vars'))
-  expect(again.text).toContain('already remembered')
+  expect(again.text).toContain('Already remembered')
   const usage = await $.command.run(command('remember', ''))
   expect(usage.text).toContain('2 memories here')
 

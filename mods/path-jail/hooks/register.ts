@@ -188,7 +188,7 @@ export const register: Register = (on, options) => {
     const own = [folders.plans, folders.memory, folders.projects === undefined ? undefined : `${folders.projects}${jail.sep}*${jail.sep}memory`]
       .filter((path): path is string => path !== undefined)
       .map(path => `  ◦ ${path} (Claude Code's plans and memory)`)
-    return { text: `path-jail: writes are allowed under\n${[...lines, ...own].join('\n')}` }
+    return { text: `Writes are allowed under\n${[...lines, ...own].join('\n')}` }
   })
 
   on('classic.DirectoryAdded', async ($, e, next) => {

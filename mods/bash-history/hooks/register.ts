@@ -58,10 +58,10 @@ export const register: Register = on => {
     const asked = Number.parseInt(e.args, 10)
     const count = Number.isFinite(asked) ? Math.min(Math.max(asked, 1), KEPT) : DEFAULT_SHOWN
     const all = await read($, entries)
-    if (all.length === 0) return { text: 'bash-history: Claude has not run any shell commands yet.' }
+    if (all.length === 0) return { text: 'Claude has not run any shell commands yet.' }
 
     const shown = all.slice(-count)
-    const heading = `bash-history: last ${shown.length} of ${all.length} shell commands (newest last)`
+    const heading = `Last ${shown.length} of ${all.length} shell commands (newest last)`
     return { text: [heading, '', ...shown.map(row)].join('\n') }
   })
 }

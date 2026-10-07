@@ -34,7 +34,7 @@ const lastAnswer = async ($: EngineInterface): Promise<string | undefined> => {
 
 const saveBookmark = async ($: EngineInterface, label: string): Promise<Reply> => {
   const answer = await lastAnswer($)
-  if (answer === undefined) return { text: 'bookmark: nothing to save yet, Claude has not answered.' }
+  if (answer === undefined) return { text: 'Nothing to save yet, Claude has not answered.' }
   try {
     const key = await bookKey($)
     const book = await loadBook($, key)
@@ -48,7 +48,7 @@ const saveBookmark = async ($: EngineInterface, label: string): Promise<Reply> =
     await $.store.set(key, { nextId: book.nextId + 1, items: [...book.items, bookmark].slice(-MAX_BOOKMARKS) })
     return { text: `📌 bookmark #${bookmark.id} saved: ${bookmark.label}` }
   } catch (error) {
-    return { text: `bookmark: could not save (${error instanceof Error ? error.message : String(error)}).` }
+    return { text: `Could not save (${error instanceof Error ? error.message : String(error)}).` }
   }
 }
 
@@ -70,10 +70,10 @@ const insertBookmark = async ($: EngineInterface, args: string): Promise<Reply> 
   const id = parseId(args)
   if (args.trim() === '' || !Number.isInteger(id)) return { text: 'usage: /bookmark-insert <n>' }
   const found = (await loadBook($, await bookKey($))).items.find(item => item.id === id)
-  if (found === undefined) return { text: `bookmark: no bookmark #${id} in this project. /bookmarks lists them.` }
+  if (found === undefined) return { text: `No bookmark #${id} in this project. /bookmarks lists them.` }
 
   const { isFilled } = await $.prompt.fill({ text: found.text, mode: 'insert' })
-  return { text: isFilled ? `📌 bookmark #${id} is in your prompt.` : 'bookmark: the prompt box cannot take text right now.' }
+  return { text: isFilled ? `📌 bookmark #${id} is in your prompt.` : 'The prompt box cannot take text right now.' }
 }
 
 const deleteBookmark = async ($: EngineInterface, args: string): Promise<Reply> => {
@@ -81,7 +81,7 @@ const deleteBookmark = async ($: EngineInterface, args: string): Promise<Reply> 
   if (args.trim() === '' || !Number.isInteger(id)) return { text: 'usage: /bookmark-delete <n>' }
   const key = await bookKey($)
   const book = await loadBook($, key)
-  if (!book.items.some(item => item.id === id)) return { text: `bookmark: no bookmark #${id} in this project.` }
+  if (!book.items.some(item => item.id === id)) return { text: `No bookmark #${id} in this project.` }
 
   await $.store.set(key, { ...book, items: book.items.filter(item => item.id !== id) })
   return { text: `📌 bookmark #${id} deleted.` }

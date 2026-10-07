@@ -55,7 +55,7 @@ export const register: Register = (on, options) => {
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError === true) return ran
 
-    $.ui.toast(`i18n-guard: ${found.length} hard-coded string${found.length === 1 ? '' : 's'} in ${file}`)
+    $.ui.toast(`${found.length} hard-coded string${found.length === 1 ? '' : 's'} in ${file}`)
     const note = `i18n-guard: ${file} now has hard-coded user-facing strings: ${listFindings(found)}. Move them into the translation files and render them with the project's i18n function (for example t('key')).`
     return { ...ran, context: [...(ran.context ?? []), note] }
   })

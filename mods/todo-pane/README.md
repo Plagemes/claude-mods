@@ -13,7 +13,7 @@ Follows Claude's task list as it changes, from the `TodoWrite` tool and from the
 ```
 
 ## Usage
-- `/todos` opens the pane at any width and prints `todo-pane: 3 of 8 done.`
+- `/todos` opens the pane at any width and prints `3 of 8 done.`
 - **Hide done** (`h`) leaves completed items out of a long list; **Show done** brings them back. **Close** closes the pane.
 - On a wide terminal (144 columns or more) the pane opens by itself when the session starts and docks beside the transcript in fullscreen; on a narrower one it stays closed until you run `/todos`.
 

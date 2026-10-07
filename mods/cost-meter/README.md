@@ -21,7 +21,7 @@ It does not include side requests the engine makes outside turns, and it is not 
 
 ## Usage
 - Status line: `$0.42 · 128k tok`, `<$0.01 · 120 tok`, `$20.00 · 2.0M tok`. The token count adds up input, output, cache reads and cache writes.
-- `/cost-reset` starts the meter over and tells you what it read before (`cost-meter: counters reset (they read $0.42 · 128k tok).`).
+- `/cost-reset` starts the meter over and tells you what it read before (`Counters reset (they read $0.42 · 128k tok).`).
 - The counters live for the session in this process: they survive a plugin reload, not a restart or `--resume`.
 
 ## Configuration

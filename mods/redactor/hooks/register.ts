@@ -72,7 +72,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     if (config.allowlistError !== undefined) {
-      $.ui.toast(`redactor: allowlist ignored, not a valid regex (${config.allowlistError})`)
+      $.ui.toast(`Allowlist ignored, not a valid regex (${config.allowlistError})`)
     }
     return next(e)
   })

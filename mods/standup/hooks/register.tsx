@@ -5,7 +5,6 @@ import type { StandupView } from '../types'
 import { defaultDays, fallbackSections, formatSections, parseLog, parseSections, sinceLabel } from './standup'
 import type { Commit, Style } from './standup'
 
-const NAME = 'standup'
 const PANE = 'standup'
 const GIT_TIMEOUT_MS = 15_000
 const MODEL_TIMEOUT_MS = 60_000
@@ -75,7 +74,7 @@ async function readJournal($: EngineInterface, root: string, since: string): Pro
 
 async function gather($: EngineInterface, settings: Settings, days: number, now: number): Promise<Activity | { error: string }> {
   const root = (await git($, ['rev-parse', '--show-toplevel']))?.trim()
-  if (root === undefined || root === '') return { error: 'not inside a git repository.' }
+  if (root === undefined || root === '') return { error: 'Not inside a git repository.' }
   const email = (await git($, ['config', 'user.email'], root))?.trim() ?? ''
   const author = email !== '' ? email : (await git($, ['config', 'user.name'], root))?.trim() ?? ''
   const log = await git(
@@ -123,7 +122,7 @@ async function generate($: EngineInterface, settings: Settings, days: number): P
   }
   await set({ status: 'working', text: '', detail: `Reading your git history since ${label}…`, days })
   const activity = await gather($, settings, days, now)
-  if ('error' in activity) return set({ status: 'error', text: `${NAME}: ${activity.error}`, detail: '', days })
+  if ('error' in activity) return set({ status: 'error', text: activity.error, detail: '', days })
   if (activity.commits.length === 0 && activity.journal === '' && activity.dirtyFiles === 0) {
     return set({
       status: 'empty',
@@ -171,13 +170,12 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim()
     const days = arg === '' ? defaultDays(await $.clock.now()) : Number(arg)
     if (!Number.isInteger(days) || days < 1 || days > MAX_DAYS) {
-      return { text: `${NAME}: days must be a whole number from 1 to ${MAX_DAYS}, e.g. /standup 3.` }
+      return { text: `Days must be a whole number from 1 to ${MAX_DAYS}, e.g. /standup 3.` }
     }
     await $.ui.open({ id: PANE, title: 'Standup', rows: 18 })
     const view = await generate($, settings, days)
-    if (view.status === 'error') return { text: view.text }
-    if (view.status === 'empty') return { text: `${NAME}: ${view.text}` }
-    return { text: `${NAME}: ${view.detail}. Copy it from the Standup pane.` }
+    if (view.status === 'error' || view.status === 'empty') return { text: view.text }
+    return { text: `${view.detail}. Copy it from the Standup pane.` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -186,7 +184,7 @@ export const register: Register = (on, options) => {
     if (view === null) return <Text dimColor>Run /standup to write one.</Text>
     const copy = async (surface: typeof e.surface) => {
       const copied = await $.ui.copy({ text: view.text, surface })
-      $.ui.toast(copied.isCopied ? `${NAME}: copied, ready to paste` : `${NAME}: could not copy (${copied.reason})`)
+      $.ui.toast(copied.isCopied ? 'Copied, ready to paste' : `Could not copy (${copied.reason})`)
     }
     const lines = view.text.split('\n')
 

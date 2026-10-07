@@ -83,7 +83,7 @@ test('copies a path and mentions a file in the prompt from its buttons', async (
   await ui.unmount()
 
   expect(copies).toEqual([{ text: '/repo/src/app.ts', surface: 'desktop' }])
-  expect(toasts).toEqual(['files-touched: copied src/app.ts'])
+  expect(toasts).toEqual(['Copied src/app.ts'])
   expect(fills).toEqual([{ text: '@src/new.ts ', mode: 'insert' }])
 })
 

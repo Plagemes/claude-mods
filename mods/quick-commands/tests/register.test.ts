@@ -99,7 +99,7 @@ test('says what to configure when no command can be found, and submits nothing',
   const { text } = await run($, 'l')
   await world.advance(1)
 
-  expect(text).toContain('no linter command found')
+  expect(text).toContain('No linter command found')
   expect(text).toContain('lintCommand')
   expect(world.submitted).toHaveLength(0)
 })

@@ -490,7 +490,7 @@ export const register: Register = (on, options) => {
     try {
       return { text: await runCommand($, session, settings, e.args) }
     } catch (error) {
-      return { text: `night-shift failed: ${messageOf(error)}` }
+      return { text: `Failed: ${messageOf(error)}` }
     }
   })
 

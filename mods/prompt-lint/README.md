@@ -15,7 +15,7 @@ Before a prompt goes to Claude, prompt-lint checks it for the usual signs of vag
 ## Usage
 Type as usual. A vague prompt raises a toast for a few seconds:
 ```
-prompt-lint: Say what to change and where: a file, a function or an error message.
+Say what to change and where: a file, a function or an error message.
 ```
 In strict mode the prompt is held back instead, with the tip and "Send it again unchanged to go ahead anyway." Sending the same text a second time goes through, so strict mode never traps you.
 

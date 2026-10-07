@@ -181,18 +181,18 @@ export const register: Register = (on, options) => {
       const answer = await $.ui
         .ask('Erase every prompt the heat map has counted?', [RESET_CONFIRM, 'Cancel'])
         .catch(() => undefined)
-      if (answer !== RESET_CONFIRM) return { text: 'activity-heatmap: nothing was erased.' }
+      if (answer !== RESET_CONFIRM) return { text: 'Nothing was erased.' }
       await $.store.delete(STORE_KEY)
       await update($, activity, emptyActivity)
-      return { text: 'activity-heatmap: history erased.' }
+      return { text: 'History erased.' }
     }
     const data = await load($)
     const { total, peakSlot } = summarize(data)
     const opened = await $.ui.open({ id: PANE, title: 'Activity' })
     const line =
       peakSlot === undefined
-        ? 'activity-heatmap: no prompts counted yet; the map fills in as you work.'
-        : `activity-heatmap: ${grouped(total)} prompts, busiest at ${DAY_SHORT[peakSlot.day]} ${hourLabel(peakSlot.hour)}.`
+        ? 'No prompts counted yet; the map fills in as you work.'
+        : `${grouped(total)} prompts, busiest at ${DAY_SHORT[peakSlot.day]} ${hourLabel(peakSlot.hour)}.`
     return { text: opened.isPlaced ? line : `${line} The pane waits for room (${opened.reason}).` }
   })
 

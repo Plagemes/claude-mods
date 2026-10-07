@@ -95,7 +95,7 @@ const PAST: Entry[] = [
 
 test('/history searches as you type, scopes to the project, and Use fills the prompt box', async ($, on) => {
   const { engine } = answerEngine(on, PAST)
-  expect((await $.command.run(history())).text).toBe('prompt-history: 3 prompts kept.')
+  expect((await $.command.run(history())).text).toBe('3 prompts kept.')
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
@@ -123,11 +123,11 @@ test('/history searches as you type, scopes to the project, and Use fills the pr
 test('/history <words> opens with the search filled in, and /history clear forgets everything', async ($, on) => {
   const { engine } = answerEngine(on, PAST)
 
-  expect((await $.command.run(history('migration'))).text).toBe('prompt-history: 1 of 3 prompts match "migration".')
+  expect((await $.command.run(history('migration'))).text).toBe('1 of 3 prompts match "migration".')
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await ui.find({ type: 'Input', key: 'search' }))?.props.value).toBe('migration')
 
-  expect((await $.command.run(history('clear'))).text).toBe('prompt-history: history cleared.')
+  expect((await $.command.run(history('clear'))).text).toBe('History cleared.')
   expect(engine.store.has('prompts')).toBe(false)
   expect(await ui.find({ type: 'Text', text: /Nothing kept yet/ })).toBeDefined()
   await ui.unmount()

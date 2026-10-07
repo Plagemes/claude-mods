@@ -59,7 +59,7 @@ test('/persona adds the persona to the system prompt, shows it and remembers it 
   expect(store.get(`active:${ROOT}`)).toBe('security-auditor')
 
   const off = await run($, 'persona', 'off')
-  expect(off.text).toContain('persona off')
+  expect(off.text).toContain('Persona off')
   expect(await personaSection($)).toBeUndefined()
   expect(statuses.at(-1)).toBeUndefined()
   expect(store.has(`active:${ROOT}`)).toBe(false)
@@ -90,7 +90,7 @@ test(
     }
     expect(listed.text).toContain('Idiomatic Rust, explained. (custom)')
 
-    expect((await run($, 'persona', 'pirate')).text).toContain('no persona "pirate"')
+    expect((await run($, 'persona', 'pirate')).text).toContain('No persona "pirate"')
     expect(await personaSection($)).toBeUndefined()
 
     await run($, 'persona', 'rust-mentor')

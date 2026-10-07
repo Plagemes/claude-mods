@@ -106,9 +106,9 @@ test('reset asks first and erases the history only when confirmed', async ($, on
       presentation: { isFullscreen: false, columns: 100 },
     })
 
-  expect((await reset()).text).toContain('nothing was erased')
+  expect((await reset()).text).toContain('Nothing was erased')
   expect(store.has('activity')).toBe(true)
   answer = 'Reset'
-  expect((await reset()).text).toContain('history erased')
+  expect((await reset()).text).toContain('History erased')
   expect(store.has('activity')).toBe(false)
 })

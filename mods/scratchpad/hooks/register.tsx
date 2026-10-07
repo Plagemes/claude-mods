@@ -3,7 +3,6 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { ScratchpadNote } from '../types'
 
-const NAME = 'scratchpad'
 const PANE = 'scratchpad'
 const KEY_PREFIX = 'notes:'
 const MAX_NOTES = 200
@@ -76,7 +75,7 @@ async function submitDraft($: EngineInterface, project: string, text: string): P
 
 async function sendToPrompt($: EngineInterface, text: string): Promise<void> {
   const filled = await $.prompt.fill({ text, mode: 'insert' })
-  if (!filled.isFilled) $.ui.toast(`${NAME}: the prompt box is not available right now`)
+  if (!filled.isFilled) $.ui.toast('The prompt box is not available right now')
 }
 
 async function openPane($: EngineInterface): Promise<string> {
@@ -84,7 +83,7 @@ async function openPane($: EngineInterface): Promise<string> {
   const notes = await loadBoard($, project)
   await $.ui.open({ id: PANE, title: 'Notes', focus: true })
 
-  return `${NAME}: ${countText(notes.length)} for ${projectName(project)}.`
+  return `${countText(notes.length)} for ${projectName(project)}.`
 }
 
 export const register: Register = on => {
@@ -103,7 +102,7 @@ export const register: Register = on => {
     const project = await $.session.root()
     const notes = (await addNote($, project, e.args)) ?? []
 
-    return { text: `${NAME}: noted. ${countText(notes.length)} for ${projectName(project)}.` }
+    return { text: `Noted. ${countText(notes.length)} for ${projectName(project)}.` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

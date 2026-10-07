@@ -83,7 +83,7 @@ export const register: Register = (on, options) => {
     const ran = await next({ ...e, content: withHeader(e.content, block) })
     if (ran.deny !== undefined || ran.isError === true) return ran
 
-    $.ui.toast(`license-header: added to ${e.file_path.split(/[\\/]/).at(-1)}`)
+    $.ui.toast(`License header added to ${e.file_path.split(/[\\/]/).at(-1)}`)
     return { ...ran, context: [...(ran.context ?? []), 'license-header: a license header was added at the top of the new file.'] }
   })
 }
