@@ -130,6 +130,17 @@
       }
     },
     {
+      "name": "mods-hub",
+      "category": "core",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.",
+      "spec": "See docs/ARCHITECTURE.md (the $.mods noun, event catalog, panel policy, notification routing) and docs/MOD_CONTRACT.md.",
+      "signals": {
+        "always": true
+      }
+    },
+    {
       "name": "secret-shield",
       "category": "security",
       "tier": "simple",
@@ -5016,6 +5027,253 @@
           "aggiornami",
           "away from desk",
           "report on whatsapp"
+        ]
+      }
+    },
+    {
+      "name": "autopilot",
+      "category": "agents",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "Give it a goal and success criteria; it plans, delegates, verifies and retries until the criteria pass or it needs you.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "autopilot",
+          "pilota automatico",
+          "until tests pass",
+          "finché",
+          "run unattended",
+          "goal"
+        ]
+      }
+    },
+    {
+      "name": "project-brain",
+      "category": "memory",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "remember",
+          "ricorda",
+          "memory",
+          "memoria",
+          "why did we",
+          "convention",
+          "convenzione",
+          "decision"
+        ]
+      }
+    },
+    {
+      "name": "context-optimizer",
+      "category": "cost",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "Keeps the context lean automatically: trims noise, picks the right moment to compact and shows the tokens it saved.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "context",
+          "contesto",
+          "compact",
+          "token",
+          "too long",
+          "context window"
+        ]
+      }
+    },
+    {
+      "name": "workflow-studio",
+      "category": "agents",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "Build, save and share reusable workflows — release, dependency update, security audit — and run them with one command.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "workflow",
+          "recipe",
+          "ricetta",
+          "automate",
+          "automatizza",
+          "pipeline",
+          "release process"
+        ]
+      }
+    },
+    {
+      "name": "mission-control",
+      "category": "observability",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "One dashboard for every Claude session on your machine: what each is doing, cost, blockers, with pause and priorities.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "sessions",
+          "sessioni",
+          "dashboard",
+          "all sessions",
+          "tutte le sessioni",
+          "what is running"
+        ]
+      }
+    },
+    {
+      "name": "session-sync",
+      "category": "agents",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "Coordinates sessions working on the same repo: file leases against conflicts, overlap warnings and hand-offs.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "conflict",
+          "conflitto",
+          "two sessions",
+          "due sessioni",
+          "parallel sessions",
+          "same repo"
+        ]
+      }
+    },
+    {
+      "name": "team-hub",
+      "category": "team",
+      "tier": "simple",
+      "since": "2.0.0",
+      "description": "A shared panel of team conventions, recommended mods, budgets and rules, synced through the repo.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "team",
+          "squadra",
+          "onboarding",
+          "conventions",
+          "shared rules",
+          "regole comuni"
+        ]
+      }
+    },
+    {
+      "name": "telegram-bridge",
+      "category": "notifications",
+      "tier": "simple",
+      "since": "2.0.0",
+      "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "telegram",
+          "notify me",
+          "avvisami",
+          "bot"
+        ]
+      }
+    },
+    {
+      "name": "slack-bridge",
+      "category": "notifications",
+      "tier": "simple",
+      "since": "2.0.0",
+      "description": "Posts progress and reports to Slack and takes questions and commands from a channel, through the mods-hub channel system.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "slack",
+          "notify team",
+          "canale slack"
+        ]
+      }
+    },
+    {
+      "name": "discord-bridge",
+      "category": "notifications",
+      "tier": "simple",
+      "since": "2.0.0",
+      "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "discord",
+          "server discord",
+          "notify team"
+        ]
+      }
+    },
+    {
+      "name": "calendar-sync",
+      "category": "productivity",
+      "tier": "simple",
+      "since": "2.0.0",
+      "description": "Reads your calendar (private iCal link) so notifications and questions respect meetings and time off, and suggests slots for long jobs.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "calendar",
+          "calendario",
+          "meeting",
+          "riunione",
+          "ferie",
+          "vacation"
+        ]
+      }
+    },
+    {
+      "name": "email-digest",
+      "category": "team",
+      "tier": "simple",
+      "since": "2.0.0",
+      "description": "Daily or weekly email summaries in plain language for clients and managers who don't live in chat.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "email",
+          "report",
+          "resoconto",
+          "weekly summary",
+          "cliente",
+          "manager"
+        ]
+      }
+    },
+    {
+      "name": "issue-pilot",
+      "category": "team",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "Picks up a GitHub, Jira or Linear issue, sizes it with smart-router, works it in a dedicated session and opens the PR.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "issue",
+          "ticket",
+          "jira",
+          "linear",
+          "github issue",
+          "work on issue"
+        ]
+      }
+    },
+    {
+      "name": "guardian",
+      "category": "security",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "One security policy for every guard mod — permissive, standard or strict — plus a project safety score.",
+      "spec": "See orchestrator prompt and docs/ARCHITECTURE.md.",
+      "signals": {
+        "intents": [
+          "security",
+          "sicurezza",
+          "policy",
+          "guard",
+          "safety score",
+          "strict mode"
         ]
       }
     }

@@ -1,0 +1,22 @@
+# Shared libraries: the sources are tested and every vendored copy in mods/ must match its source.
+name: shared
+on:
+  push:
+    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', '.github/workflows/shared.yml']
+  pull_request:
+    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', '.github/workflows/shared.yml']
+jobs:
+  shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - name: Vendored copies are in sync with shared/
+        run: node scripts/sync-shared.mjs --check
+      - name: Shared library tests
+        run: bun test shared/tests
+      - name: No function handed $ is redeclared
+        run: node scripts/lint-dollar.mjs
