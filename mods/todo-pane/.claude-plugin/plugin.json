@@ -1,0 +1,19 @@
+{
+  "name": "todo-pane",
+  "version": "1.0.0",
+  "description": "A live pane of Claude's current task list with progress.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#todo-pane",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "productivity", "pane", "todos"],
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open at start on wide terminals",
+      "description": "Open the pane when a session starts, if the terminal is wide enough for an unrequested pane (144 columns).",
+      "default": true
+    }
+  },
+  "types": "./types/index.d.ts"
+}

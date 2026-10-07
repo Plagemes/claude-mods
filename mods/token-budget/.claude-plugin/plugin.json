@@ -1,0 +1,31 @@
+{
+  "name": "token-budget",
+  "version": "1.0.0",
+  "description": "Set a token or dollar budget per session; get warned at 80% and stopped at 100%.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#token-budget",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "cost", "budget", "tokens", "guard"],
+  "userConfig": {
+    "budgetUsd": {
+      "type": "number",
+      "title": "Dollar budget per session",
+      "description": "Estimated spend (USD, API list prices) after which new prompts are paused. 0 turns the dollar limit off.",
+      "default": 10
+    },
+    "budgetTokens": {
+      "type": "number",
+      "title": "Token budget per session",
+      "description": "Input, output and cache-write tokens after which new prompts are paused. 0 turns the token limit off.",
+      "default": 0
+    },
+    "warnAt": {
+      "type": "number",
+      "title": "Warn at (%)",
+      "description": "Share of the budget at which a toast and a band above the prompt warn you.",
+      "default": 80
+    }
+  },
+  "types": "./types/index.d.ts"
+}

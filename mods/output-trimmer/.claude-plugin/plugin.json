@@ -1,0 +1,31 @@
+{
+  "name": "output-trimmer",
+  "version": "1.0.0",
+  "description": "Trims huge command outputs to head, tail and error lines before they flood the context.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#output-trimmer",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "cost", "context", "bash"],
+  "userConfig": {
+    "maxChars": {
+      "type": "number",
+      "title": "Trim outputs longer than (characters)",
+      "description": "A Bash output (stdout and stderr together) longer than this is trimmed before Claude reads it.",
+      "default": 12000
+    },
+    "headLines": {
+      "type": "number",
+      "title": "Lines kept from the start",
+      "description": "How many leading lines of a trimmed output are kept.",
+      "default": 60
+    },
+    "tailLines": {
+      "type": "number",
+      "title": "Lines kept from the end",
+      "description": "How many trailing lines of a trimmed output are kept.",
+      "default": 80
+    }
+  },
+  "types": "./types/index.d.ts"
+}
