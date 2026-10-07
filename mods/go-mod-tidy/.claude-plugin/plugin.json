@@ -1,0 +1,18 @@
+{
+  "name": "go-mod-tidy",
+  "version": "1.0.0",
+  "description": "Runs go mod tidy when Claude changes Go imports, so go.mod and go.sum stay in sync.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#go-mod-tidy",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "stacks", "go", "modules"],
+  "userConfig": {
+    "timeoutSeconds": {
+      "type": "number",
+      "title": "Timeout (seconds)",
+      "description": "How long go mod tidy may run before it is stopped.",
+      "default": 60
+    }
+  }
+}

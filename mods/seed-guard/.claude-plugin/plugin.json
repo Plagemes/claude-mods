@@ -1,0 +1,24 @@
+{
+  "name": "seed-guard",
+  "version": "1.0.0",
+  "description": "Blocks database seed, reset and drop commands unless DATABASE_URL points at your own machine.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#seed-guard",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "data", "database", "guard"],
+  "userConfig": {
+    "allowHosts": {
+      "type": "string",
+      "title": "Allowed hosts",
+      "description": "Comma-separated database hosts that count as your own machine, besides localhost, 127.0.0.1 and ::1 (docker-compose service names, * wildcards allowed).",
+      "default": "db,postgres,postgresql,mysql,mariadb,mongo,mongodb,redis,database"
+    },
+    "denyUnknown": {
+      "type": "boolean",
+      "title": "Deny unknown target",
+      "description": "Also block when no DATABASE_URL can be found at all (default: allow, since the tool then uses its own config).",
+      "default": false
+    }
+  }
+}
