@@ -6,9 +6,11 @@ The single source of truth for how Claude Mods looks, moves and speaks: on the s
 
 ## 1. Concept: the Rack
 
-**One store, a hundred and one tiles, and the ones you choose light up.**
+**One store, a shelf of tiles for every release, and the ones you choose light up.**
 
-Claude Mods is a set of small, precise instruments for Claude Code. The visual idea follows the shape of the catalog itself: **1 store + 10 categories x 10 mods**. We draw it as a rack: a grid of quiet tiles in warm ink, with the store tile on top. When a mod is installed or does its job, its tile lights in **Ember**. Everything else in the system, from the logo to the motion to the copy, comes back to this one picture of a dark rack with a few warm lights.
+Claude Mods is a set of small, precise instruments for Claude Code. The visual idea follows the shape of the catalog itself: **1 store + a column of tiles per category, racked in one shelf (bank) per release**. v1 was one shelf of 10 categories x 10 mods; v2 adds a second shelf of 10 new categories beside it, so the rack reads as 1 store + 20 x 10. We draw it as a rack: a grid of quiet tiles in warm ink, with the store tile on top. When a mod is installed or does its job, its tile lights in **Ember**. Everything else in the system, from the logo to the motion to the copy, comes back to this one picture of a dark rack with a few warm lights.
+
+A release never reshuffles the rack: it **adds a shelf**. Old tiles keep their place, new ones arrive as their own bank, labelled with the version that brought them. That is the whole v2 story in one picture, and it scales to v3 the same way.
 
 - **Personality:** a craftsman's catalogue crossed with a terminal. Editorial serif headlines, exact monospace detail, generous dark space.
 - **Feeling:** calm, warm, competent. A good tool on a good desk at night.
@@ -69,7 +71,7 @@ Dark first. Light mode is a warm paper, not an inverted dark. One accent family 
 | `--accent-text` | `#a84a1a` | Accent for small text (5.0:1). |
 | `--ok` / `--deny` / `--warn` | `#3e7a33` / `#b4382b` / `#93680e` | Terminal semantics. |
 
-**Rules.** Ember covers at most about 5% of any screen. Never put a gradient between two hues; glows go from Ember to transparent. No purple, no blue-violet gradients, no neon. Contrast meets WCAG AA for all text, including `--text-3`. Small accent text always uses `--accent-text`; `--accent` is for large type, marks and fills.
+**Rules.** Ember covers at most about 5% of any screen. Sticky surfaces (the site header once scrolled, the store toolbar once stuck) are **solid `--bg`**, never translucent: text must not read through them, and they carry a `view-transition-name` so filter morphs pass underneath them, not over them. Never put a gradient between two hues; glows go from Ember to transparent. No purple, no blue-violet gradients, no neon. Contrast meets WCAG AA for all text, including `--text-3`. Small accent text always uses `--accent-text`; `--accent` is for large type, marks and fills.
 
 ## 4. Typography
 
@@ -113,8 +115,19 @@ Scale (fluid): hero `clamp(2.6rem, 1.5rem + 4vw, 4.6rem)`, H2 `clamp(2.15rem, 1.
 | Notifications & Audio | Bell | The badge dot |
 | Memory & Knowledge | Notebook | The ribbon |
 | Team & Docs | Two people | The second person |
+| *v2 shelf* | | |
+| Languages & Frameworks | Three stacked layers | The top layer (your framework) |
+| DevOps & Cloud | Cloud | The deploy arrow |
+| Databases & Data | Cylinder | The middle ring (the row a query touches) |
+| Frontend & Accessibility | Eye | The pupil |
+| APIs & Network | Request and response arrows | The outgoing request |
+| Agents & Orchestration | One node over three (org chart) | The supervising node, a solid tile |
+| Learning & Onboarding | Mortarboard | The tassel |
+| Privacy & Compliance | Page with a folded corner | The seal |
+| Performance & Reliability | Stopwatch | The hand and hub |
+| Mod Ecosystem | 2x2 tiles, the fourth replaced by a plus | The plus (make your own) |
 
-Icons live as `<symbol>`s in `docs/index.html` (`#i-<category>`). Utility icons (copy, check, arrow, search, close, sun, moon, GitHub) follow the same grid and stroke but have no lit element.
+Icons live as `<symbol>`s in `docs/index.html` (`#i-<category>`). A new category needs a symbol with the same id before it ships; without one it falls back to the Slot. Draw new ones on the same grid and check them at 16px next to the existing set: no two icons may share a silhouette (the agents icon was redrawn from a hub-and-spokes graph because it read as the git branch). Utility icons (copy, check, arrow, search, close, sun, moon, GitHub) follow the same grid and stroke but have no lit element.
 
 ## 7. Components
 
@@ -122,8 +135,12 @@ Icons live as `<symbol>`s in `docs/index.html` (`#i-<category>`). Utility icons 
 - **Command block:** `code-bg`, hairline border, Ember `>` prompt, mono command, square copy button that turns into a green check for 1.8s. Long commands scroll inside the block with a fade at the right edge; the page never scrolls sideways.
 - **Tier badge:** three ascending bars. **Essential** (catalog `simple`) lights one bar; **Advanced** (catalog `complex`) lights all three. Mono, uppercase, 0.58rem.
 - **Mod card:** icon tile and tier badge on top, mono name, category and version, description, command chips in Ember-soft, then *Copy install* and a GitHub link. The whole card opens the detail sheet. On phones it collapses to a compact row.
-- **Category chips:** pill, icon, short name and a mono count of current matches. Selected is inverted (paper on ink).
-- **Rack:** the hero visual. A store bar, ten category icons, a 10x10 grid of tiles and a status line that narrates what a mod just did.
+- **Category chips:** pill, icon, short name and a mono count of current matches. Selected is inverted (paper on ink). Only categories with mods render. With 20+ categories they wrap to about three rows at 1440 (36px tall, 6px gaps); under 760px they become one sideways-scrolling row with an edge fade, and the selected chip scrolls itself into view.
+- **Rack:** the hero visual. A store bar, then one **bank** per release side by side in a single CSS grid (`repeat(n, 1fr) var(--seam) repeat(n, 1fr)`), so tiles are identical in size across banks. Each bank has a mono label (`v1 100 mods`, and for the newest `v2 100 new` with a lit tile), a row of category icons, and ten rows of tiles; a 1px seam separates banks. Tiles keep `border-radius: 22%` and a centred dot at 19% so they scale from 13px (phones) to 30px (tablet). Under 520px the icon row hides and the labels carry the banks. A status line narrates what a mod just did. Banks, labels, counts and the aria-label all come from the data.
+- **Release pill:** first thing in the hero. An Ember `NEW` tag, then the release in mono (`v2.0.0 · 100 new mods, 10 new categories`, the last clause dropped under 400px) and an arrow to `#new`. Hidden when nothing is new.
+- **New badge:** `● NEW` in mono 0.58rem caps, `--accent-text` on `--accent-soft` with an Ember hairline and a 5px lit tile. It sits in a card's meta line (after the version) so it shows on desktop cards and phone rows alike, and in the detail sheet's meta. One mark per card: no corner dots, no extra glow.
+- **New chip:** after *All*, before a hairline rule and the categories. A lit 8px tile, `New in v2` and a count. It toggles on top of the category filter (New + Agents = the new agent mods); category counts follow it and categories with no new mods dim. Pressed, it fills Ember (the only Ember-filled chip). The banner it raises uses the **shelves glyph**: two 2x3 micro-racks, the second lit.
+- **What's new section** (`#new`): kicker, an H2 with one italic word ("The rack, *doubled*."), then the new categories as **shelf tiles** (icon, count, serif title, tagline; 5 across on desktop, compact 2-up on phones) that jump to that category in the store, then **picks**: cards with a two-line terminal transcript of what you would see, the description, *Copy install* and the command. On phones the picks become a scroll-snap row that peeks the next card.
 - **Sheet:** the mod detail dialog. A centered card on desktop, a bottom sheet on phones.
 
 ## 8. Motion
@@ -139,7 +156,7 @@ Icons live as `<symbol>`s in `docs/index.html` (`#i-<category>`). Utility icons 
 | `--ease-out` | `cubic-bezier(.16,1,.3,1)` | Entrances. |
 
 - **Lighting:** a tile flashes Ember in 120ms, then settles to a soft "installed" glow over 900ms.
-- **Boot:** on load the rack lights in a wave from the store tile outward, 46ms per step.
+- **Boot:** on load the rack lights in a wave from the store tile outward, 46ms per step, across every bank at once (the wave is measured from the centre of the whole rack, seam included).
 - **Reveals:** 18px rise plus fade, staggered 70ms between siblings, once per element.
 - **Narration:** the status line types at about 120 characters per second, with a blinking block caret.
 - **Filtering:** View Transitions morph cards between filters where supported.
@@ -165,6 +182,7 @@ Precise, warm and a little dry. We sound like a senior engineer who likes their 
 - **No emoji.** Use the lit tile, an icon or a well-chosen word.
 - **Respect the reader's time.** One idea per sentence; headlines under eight words where possible.
 - **Be honest about scope.** Say what a mod does and does not do. Mods are community-made, and we say so.
+- **Numbers come from the data.** On the site every count, version and "new" flag is filled from `data/mods.json` (`data-count`, `data-cat-count`, `data-new-count`, `data-new-label`, `data-version`); the HTML holds only rough fallbacks such as "200+". "New" means the newest `since` in the data, so a partial build or a later release still reads true. Static surfaces that cannot be data-driven (meta tags, the OG image, the banners) round down: "200+ mods".
 
 | Instead of | Write |
 | --- | --- |
@@ -180,7 +198,7 @@ Precise, warm and a little dry. We sound like a senior engineer who likes their 
 - Use mono for anything a user could type.
 - Show the real thing: commands, file names, terminal output, actual mod names from `docs/data/mods.json`.
 - Let one element per view be lit or animated, and let the rest stay quiet.
-- Test both themes, 360px width and reduced motion before shipping.
+- Test both themes, 360px width and reduced motion before shipping, and once with a catalog where the newest release is only partly built.
 
 **Don't**
 - Use purple or blue gradients, glassmorphism stacks, 3D blobs or stock "AI" imagery.
@@ -195,8 +213,11 @@ Precise, warm and a little dry. We sound like a senior engineer who likes their 
 | --- | --- |
 | Tokens and components | `docs/assets/site.css` |
 | Icons (SVG symbols) | `docs/index.html` |
+| Release data (counts, "new", banks) | `docs/assets/js/data.js` (`normalise`) |
+| Rack | `docs/assets/js/rack.js` |
+| What's new section | `docs/assets/js/whatsnew.js` (picks and their transcripts live here) |
 | Favicon | `docs/assets/favicon.svg` |
-| Social preview (1280x640) | `docs/assets/og.png` |
+| Social preview (1280x640) | `docs/assets/og.png`, rendered from `docs/media/og-template.html` (serve `docs/`, it reads the icons from `../index.html`) |
 | README banners | `assets/banner-dark.svg`, `assets/banner-light.svg` |
 | README screenshots | `assets/store-dark.png`, `assets/store-light.png` |
 | Media slots and prompts | `docs/media/media.json`, `docs/media/PROMPTS.md` |

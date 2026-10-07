@@ -6,6 +6,7 @@ import { createRack } from './rack.js'
 import { createStore } from './store.js'
 import { initTui } from './tui.js'
 import { initCopyButtons, initHeader, initReveal, initSpotlight, initTheme, reducedMotion } from './ui.js'
+import { initWhatsNew } from './whatsnew.js'
 
 let catalog = null
 let store = null
@@ -37,11 +38,15 @@ mediaReady.then(media => {
 loadCatalog()
   .then(async data => {
     catalog = data
-    document.querySelectorAll('[data-count]').forEach(el => { el.textContent = String(data.mods.length) })
-    document.querySelectorAll('[data-cat-count]').forEach(el => { el.textContent = String(data.categories.length) })
+    fillCounts(data)
     rack.setCatalog(data)
     const media = await mediaReady
     store = createStore(document.querySelector('#store'), data, { media })
+    initWhatsNew(document.querySelector('[data-whatsnew]'), data, {
+      onOpen: name => store.open(name),
+      onCategory: id => store.showCategory(id),
+      onShowNew: () => store.showNew(),
+    })
   })
   .catch(error => {
     console.warn('Claude Mods: could not load the catalog.', error)
@@ -53,6 +58,30 @@ loadCatalog()
     }
     if (status) status.innerHTML = 'The catalog could not be loaded. Browse it on <a href="https://github.com/plagemes/claude-mods#catalog">GitHub</a> instead.'
   })
+
+// Every number on the page comes from the catalog; the HTML only holds rough fallbacks.
+function fillCounts(data) {
+  const { release } = data
+  const set = (selector, value) => document.querySelectorAll(selector).forEach(el => { el.textContent = String(value) })
+  set('[data-count]', data.mods.length)
+  set('[data-cat-count]', data.categories.length)
+  set('[data-new-count]', release.newCount)
+  document.querySelectorAll('.specs [data-new-count]').forEach(el => { el.parentElement.hidden = !release.newCount })
+  set('[data-new-label]', release.newLabel)
+  set('[data-version]', `v${release.version}`)
+  const tabs = document.querySelectorAll('.tui__tabs > span:not([data-tui-more])').length - 1
+  set('[data-tui-more]', `+${Math.max(0, data.categories.length - tabs)}`)
+  const pill = document.querySelector('[data-release]')
+  const pillText = document.querySelector('[data-release-text]')
+  if (pill && pillText) {
+    if (release.newCount) {
+      const cats = release.newCategories.length
+      pillText.innerHTML = `v${release.version}<span class="release__sep" aria-hidden="true"></span>${release.newCount} new mods<span class="release__more">${cats ? `, ${cats} new categories` : ''}</span>`
+    } else {
+      pill.hidden = true
+    }
+  }
+}
 
 // "Just want one mod?": fill the <mod> slot from the suggestion pills.
 function initSingleInstall() {

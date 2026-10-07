@@ -74,20 +74,31 @@ const siteData = {
     ({ name, category, tier, description, version, keywords, commands, since })),
 }
 
+// Each category is a heading (the README's jump index links to it) over a
+// collapsed table; Core stays open. GitHub needs the blank lines around the table.
+const release = catalog.version ?? '1.0.0'
 const readmeCatalog = [
   CATALOG_START,
   ...catalog.categories.flatMap(c => {
     const inCategory = mods.filter(m => m.category === c.id)
     if (inCategory.length === 0) return []
+    const count = `${inCategory.length} ${inCategory.length === 1 ? 'mod' : 'mods'}`
+    const isNew = inCategory.every(m => m.since === release) && release !== '1.0.0'
     return [
       '',
       `### ${c.title}`,
-      `<sub>${c.tagline}</sub>`,
+      `<sub>${c.tagline} &middot; ${count}${isNew ? ` &middot; new in v${release}` : ''}</sub>`,
+      '',
+      `<details${c.id === 'core' ? ' open' : ''}>`,
+      `<summary>Show the ${count}</summary>`,
+      '<br>',
       '',
       '| Mod | What it does | Commands |',
       '| --- | --- | --- |',
       ...inCategory.map(m =>
         `| [**${m.name}**](mods/${m.name}) | ${m.description} | ${m.commands.map(x => `\`${x}\``).join(' ') || '—'} |`),
+      '',
+      '</details>',
     ]
   }),
   '',

@@ -1,4 +1,5 @@
 {
+  "version": "2.0.0",
   "repository": "plagemes/claude-mods",
   "marketplace": "claude-mods",
   "categories": [
@@ -67,6 +68,66 @@
       "title": "Team & Docs",
       "tagline": "Changelogs, standups, reviews and handoffs.",
       "count": 10
+    },
+    {
+      "id": "stacks",
+      "title": "Languages & Frameworks",
+      "tagline": "Guardrails that know your stack.",
+      "count": 7
+    },
+    {
+      "id": "devops",
+      "title": "DevOps & Cloud",
+      "tagline": "Containers, CI, infra and deploys without surprises.",
+      "count": 10
+    },
+    {
+      "id": "data",
+      "title": "Databases & Data",
+      "tagline": "Safer queries, schemas and test data.",
+      "count": 9
+    },
+    {
+      "id": "frontend",
+      "title": "Frontend & Accessibility",
+      "tagline": "Pixels, bundles and a11y, checked as you go.",
+      "count": 7
+    },
+    {
+      "id": "api",
+      "title": "APIs & Network",
+      "tagline": "Talk to the web on your terms.",
+      "count": 4
+    },
+    {
+      "id": "agents",
+      "title": "Agents & Orchestration",
+      "tagline": "Scope, queue and supervise Claude's work.",
+      "count": 7
+    },
+    {
+      "id": "learning",
+      "title": "Learning & Onboarding",
+      "tagline": "Understand the code, not just ship it.",
+      "count": 10
+    },
+    {
+      "id": "compliance",
+      "title": "Privacy & Compliance",
+      "tagline": "Licenses, personal data and audit trails.",
+      "count": 5
+    },
+    {
+      "id": "performance",
+      "title": "Performance & Reliability",
+      "tagline": "Fast, stable and regression-free.",
+      "count": 6
+    },
+    {
+      "id": "ecosystem",
+      "title": "Mod Ecosystem",
+      "tagline": "Make, manage and personalise your mods.",
+      "count": 6
     }
   ],
   "mods": [
@@ -84,7 +145,8 @@
       ],
       "commands": [
         "/mods"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "secret-shield",
@@ -98,7 +160,8 @@
         "secrets",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "env-guard",
@@ -112,7 +175,8 @@
         "secrets",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "rm-rf-guard",
@@ -126,7 +190,8 @@
         "shell",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "force-push-guard",
@@ -140,7 +205,8 @@
         "git",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "prod-guard",
@@ -154,7 +220,8 @@
         "infrastructure",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "redactor",
@@ -169,7 +236,8 @@
         "redaction",
         "secrets"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "path-jail",
@@ -185,7 +253,8 @@
       ],
       "commands": [
         "/jail"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "curl-pipe-guard",
@@ -199,7 +268,8 @@
         "shell",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "dependency-sentinel",
@@ -214,7 +284,8 @@
         "npm",
         "pip"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "lockfile-guard",
@@ -228,7 +299,8 @@
         "dependencies",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "git-status-line",
@@ -242,7 +314,8 @@
         "status-line",
         "branch"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "auto-checkpoint",
@@ -259,7 +332,8 @@
       "commands": [
         "/checkpoints",
         "/rollback"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "commit-composer",
@@ -275,7 +349,8 @@
       ],
       "commands": [
         "/commit"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "branch-namer",
@@ -291,7 +366,8 @@
       ],
       "commands": [
         "/git-branch"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "main-branch-warn",
@@ -305,7 +381,8 @@
         "branch",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "diff-pane",
@@ -321,7 +398,8 @@
       ],
       "commands": [
         "/changes"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "pr-describer",
@@ -337,7 +415,8 @@
       ],
       "commands": [
         "/pr-desc"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "conflict-helper",
@@ -353,7 +432,8 @@
       ],
       "commands": [
         "/conflicts"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "co-author-stamp",
@@ -367,7 +447,8 @@
         "commit",
         "attribution"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "gitignore-guard",
@@ -381,7 +462,8 @@
         "gitignore",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "cost-meter",
@@ -397,7 +479,8 @@
       ],
       "commands": [
         "/cost-reset"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "token-budget",
@@ -414,7 +497,8 @@
       ],
       "commands": [
         "/budget"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "context-gauge",
@@ -431,7 +515,8 @@
       ],
       "commands": [
         "/context-gauge"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "cache-hit-meter",
@@ -446,7 +531,8 @@
         "tokens",
         "status"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "turn-timer",
@@ -461,7 +547,8 @@
         "status",
         "toast"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "big-read-guard",
@@ -476,7 +563,8 @@
         "read",
         "tokens"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "output-trimmer",
@@ -490,7 +578,8 @@
         "context",
         "bash"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "daily-spend",
@@ -506,7 +595,8 @@
       ],
       "commands": [
         "/spend"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "model-advisor",
@@ -522,7 +612,8 @@
       ],
       "commands": [
         "/model-advisor"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "compact-coach",
@@ -537,7 +628,8 @@
         "compact",
         "toast"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "quote-selection",
@@ -555,7 +647,8 @@
       "commands": [
         "/quote",
         "/quote-code"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "prompt-snippets",
@@ -574,7 +667,8 @@
         "/snippets",
         "/snippet-add",
         "/snippet-remove"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "todo-pane",
@@ -590,7 +684,8 @@
       ],
       "commands": [
         "/todos"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "focus-timer",
@@ -606,7 +701,8 @@
       ],
       "commands": [
         "/pomodoro"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "scratchpad",
@@ -623,7 +719,8 @@
       "commands": [
         "/notes",
         "/note"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "recent-files",
@@ -640,7 +737,8 @@
       ],
       "commands": [
         "/recent"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "copy-last",
@@ -658,7 +756,8 @@
       "commands": [
         "/copy-last",
         "/copy-code"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "prompt-history",
@@ -674,7 +773,8 @@
       ],
       "commands": [
         "/history"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "quick-commands",
@@ -694,7 +794,8 @@
         "/l",
         "/b",
         "/tc"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "idle-nudge",
@@ -709,7 +810,8 @@
         "reminder",
         "toast"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "auto-format",
@@ -723,7 +825,8 @@
         "formatter",
         "prettier"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "lint-on-save",
@@ -737,7 +840,8 @@
         "linter",
         "eslint"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "test-watch",
@@ -751,7 +855,8 @@
         "tests",
         "watch"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "typecheck-gate",
@@ -765,7 +870,8 @@
         "typescript",
         "typecheck"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "no-skip-tests",
@@ -780,7 +886,8 @@
         "tests",
         "skip"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "todo-tracker",
@@ -797,7 +904,8 @@
       ],
       "commands": [
         "/todos-added"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "debug-catcher",
@@ -811,7 +919,8 @@
         "debugging",
         "cleanup"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "no-any",
@@ -825,7 +934,8 @@
         "typescript",
         "types"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "file-size-watch",
@@ -839,7 +949,8 @@
         "readability",
         "refactoring"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "test-first",
@@ -853,7 +964,8 @@
         "tdd",
         "guard"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "tool-timeline",
@@ -867,7 +979,8 @@
         "pane",
         "tools"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "files-touched",
@@ -881,7 +994,8 @@
         "pane",
         "files"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "session-stats",
@@ -897,7 +1011,8 @@
       ],
       "commands": [
         "/session-stats"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "subagent-monitor",
@@ -911,7 +1026,8 @@
         "subagents",
         "pane"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "error-feed",
@@ -925,7 +1041,8 @@
         "errors",
         "pane"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "activity-heatmap",
@@ -939,7 +1056,8 @@
         "heatmap",
         "statistics"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "bash-history",
@@ -955,7 +1073,8 @@
       ],
       "commands": [
         "/bash-history"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "web-trail",
@@ -971,7 +1090,8 @@
       ],
       "commands": [
         "/sources"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "permission-log",
@@ -987,7 +1107,8 @@
       ],
       "commands": [
         "/denied"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "token-sparkline",
@@ -1001,7 +1122,8 @@
         "tokens",
         "sparkline"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "house-style",
@@ -1015,7 +1137,8 @@
         "style-guide",
         "system-prompt"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "language-lock",
@@ -1029,7 +1152,8 @@
         "language",
         "i18n"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "concise-mode",
@@ -1045,7 +1169,8 @@
       ],
       "commands": [
         "/concise"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "prompt-enhancer",
@@ -1059,7 +1184,8 @@
         "rewrite",
         "pane"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "ticket-linker",
@@ -1073,7 +1199,8 @@
         "jira",
         "github"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "date-context",
@@ -1087,7 +1214,8 @@
         "context",
         "date"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "persona-switch",
@@ -1101,7 +1229,8 @@
         "persona",
         "system-prompt"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "explain-level",
@@ -1119,7 +1248,8 @@
         "/eli5",
         "/normal",
         "/expert"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "stack-detector",
@@ -1133,7 +1263,8 @@
         "conventions",
         "frameworks"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "prompt-lint",
@@ -1147,7 +1278,8 @@
         "lint",
         "tips"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "done-chime",
@@ -1161,7 +1293,8 @@
         "audio",
         "chime"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "speak-summary",
@@ -1177,7 +1310,8 @@
       ],
       "commands": [
         "/speak"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "permission-ping",
@@ -1191,7 +1325,8 @@
         "permissions",
         "sound"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "error-buzz",
@@ -1205,7 +1340,8 @@
         "sound",
         "tests"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "webhook-notify",
@@ -1221,7 +1357,8 @@
       ],
       "commands": [
         "/notify-test"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "desktop-notify",
@@ -1235,7 +1372,8 @@
         "desktop",
         "toast"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "long-run-alert",
@@ -1249,7 +1387,8 @@
         "bash",
         "timer"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "ci-watch",
@@ -1265,7 +1404,8 @@
       ],
       "commands": [
         "/ci-watch"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "break-reminder",
@@ -1279,7 +1419,8 @@
         "wellbeing",
         "timer"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "celebrate",
@@ -1293,7 +1434,8 @@
         "tests",
         "sound"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "decision-log",
@@ -1310,7 +1452,8 @@
       "commands": [
         "/decide",
         "/decisions"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "session-journal",
@@ -1326,7 +1469,8 @@
       ],
       "commands": [
         "/journal"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "glossary",
@@ -1343,7 +1487,8 @@
       "commands": [
         "/define",
         "/glossary"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "bookmark",
@@ -1362,7 +1507,8 @@
         "/bookmarks",
         "/bookmark-insert",
         "/bookmark-delete"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "resume-brief",
@@ -1378,7 +1524,8 @@
       ],
       "commands": [
         "/resume-brief"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "lessons-learned",
@@ -1392,7 +1539,8 @@
         "claude-md",
         "debugging"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "codebase-map",
@@ -1408,7 +1556,8 @@
       ],
       "commands": [
         "/map"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "snippet-vault",
@@ -1427,7 +1576,8 @@
         "/snippet",
         "/snippets",
         "/delete-snippet"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "link-vault",
@@ -1444,7 +1594,8 @@
       "commands": [
         "/links",
         "/links-copy"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "recall",
@@ -1461,7 +1612,8 @@
       "commands": [
         "/remember",
         "/recall"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "changelog-keeper",
@@ -1477,7 +1629,8 @@
       ],
       "commands": [
         "/changelog"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "readme-sync",
@@ -1491,7 +1644,8 @@
         "docs",
         "readme"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "standup",
@@ -1507,7 +1661,8 @@
       ],
       "commands": [
         "/standup"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "review-agent",
@@ -1523,7 +1678,8 @@
       ],
       "commands": [
         "/review"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "license-header",
@@ -1537,7 +1693,8 @@
         "license",
         "spdx"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "issue-drafter",
@@ -1553,7 +1710,8 @@
       ],
       "commands": [
         "/issue"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "handoff",
@@ -1569,7 +1727,8 @@
       ],
       "commands": [
         "/handoff"
-      ]
+      ],
+      "since": "1.0.0"
     },
     {
       "name": "i18n-guard",
@@ -1583,7 +1742,8 @@
         "i18n",
         "lint"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "migration-guard",
@@ -1598,7 +1758,8 @@
         "migrations",
         "guardrail"
       ],
-      "commands": []
+      "commands": [],
+      "since": "1.0.0"
     },
     {
       "name": "codeowners-hint",
@@ -1614,7 +1775,1165 @@
       ],
       "commands": [
         "/owners"
-      ]
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "name": "react-doctor",
+      "category": "stacks",
+      "tier": "complex",
+      "description": "Catches React hook mistakes as Claude writes them: missing effect deps, setState in render, conditional hooks.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "react",
+        "hooks"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "next-guard",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Flags missing or needless \"use client\" and server-only imports leaking into client components in Next.js.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "nextjs",
+        "react"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "venv-guard",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Blocks pip install outside an active virtualenv so system Python stays clean.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "python",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "node-version-check",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Warns when your Node version doesn't match .nvmrc, .node-version or package.json engines.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "node",
+        "nvm"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "go-mod-tidy",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Runs go mod tidy when Claude changes Go imports, so go.mod and go.sum stay in sync.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "go",
+        "modules"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "strict-types",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Adds declare(strict_types=1) to new PHP files and from __future__ import annotations to new Python files.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "php",
+        "python"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "env-example-sync",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Keeps .env.example in sync with the environment variables your code actually reads.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "env",
+        "dotenv"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "docker-lint",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Flags Dockerfile smells: :latest tags, running as root, apt without cleanup, ADD instead of COPY.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "docker",
+        "lint"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "k8s-dry-run",
+      "category": "devops",
+      "tier": "complex",
+      "description": "Turns kubectl apply into a server-side dry run with a diff you approve first.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "kubernetes",
+        "kubectl"
+      ],
+      "commands": [
+        "/k8s-approve",
+        "/k8s-diff"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "terraform-plan-pane",
+      "category": "devops",
+      "tier": "complex",
+      "description": "Shows terraform plan as a clear pane of resources to create, change and destroy.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "terraform",
+        "opentofu"
+      ],
+      "commands": [
+        "/tfplan"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "ci-yaml-check",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Checks edited GitHub Actions workflows and warns about actions not pinned to a version.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "github-actions",
+        "ci"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "port-check",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Before a dev server starts, tells you if the port is already taken and by which process.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "ports",
+        "dev-server"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "dev-server-pane",
+      "category": "devops",
+      "tier": "complex",
+      "description": "Starts your dev server in the background and shows its errors in a live pane.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "dev-server",
+        "pane"
+      ],
+      "commands": [
+        "/dev"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "cloud-cost-warn",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Warns before commands that create expensive cloud resources like GPU instances or large databases.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "cloud",
+        "cost"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "log-tail",
+      "category": "devops",
+      "tier": "complex",
+      "description": "/tail follows a log file or container in a live pane, with an errors-only filter.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "logs",
+        "docker"
+      ],
+      "commands": [
+        "/tail"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "docker-prune-guard",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Blocks docker system prune -a --volumes and volume deletion that can wipe local databases.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "docker",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "deploy-checklist",
+      "category": "devops",
+      "tier": "complex",
+      "description": "Shows a pre-deploy checklist (tests, branch, changelog) and asks you to confirm before deploying.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "devops",
+        "deploy",
+        "guard"
+      ],
+      "commands": [
+        "/deploy-checklist"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "sql-safety",
+      "category": "data",
+      "tier": "simple",
+      "description": "Flags UPDATE and DELETE without WHERE in .sql files and in queries inside your code.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "sql",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "query-explain",
+      "category": "data",
+      "tier": "complex",
+      "description": "/explain-query runs EXPLAIN on your local database and explains the plan in plain words.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "database",
+        "performance"
+      ],
+      "commands": [
+        "/explain-query"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "seed-guard",
+      "category": "data",
+      "tier": "simple",
+      "description": "Blocks database seed, reset and drop commands unless DATABASE_URL points at your own machine.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "database",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "schema-pane",
+      "category": "data",
+      "tier": "complex",
+      "description": "A pane of your local database's tables and columns, ready to hand to Claude as context.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "database",
+        "schema"
+      ],
+      "commands": [
+        "/schema"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "n-plus-one-hint",
+      "category": "data",
+      "tier": "simple",
+      "description": "Spots database queries inside loops, the classic N+1 problem, as Claude writes them.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "orm",
+        "performance"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "migration-namer",
+      "category": "data",
+      "tier": "simple",
+      "description": "Gives new migrations consistent, descriptive, timestamped names.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "migrations",
+        "naming",
+        "guard"
+      ],
+      "commands": [
+        "/migration-name"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "query-result-cap",
+      "category": "data",
+      "tier": "simple",
+      "description": "Adds a LIMIT to ad-hoc SELECTs Claude runs in psql, mysql or sqlite so results don't flood the context.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "sql",
+        "tokens",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "backup-before-migrate",
+      "category": "data",
+      "tier": "complex",
+      "description": "Dumps your local database before every migration so a bad one is one command away from undo.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "database",
+        "backup"
+      ],
+      "commands": [
+        "/db-backups",
+        "/db-restore"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "csv-peek",
+      "category": "data",
+      "tier": "simple",
+      "description": "/peek shows a CSV or JSONL file's columns, sample rows and inferred types without reading the whole file.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "csv",
+        "jsonl",
+        "tokens"
+      ],
+      "commands": [
+        "/peek"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "a11y-guard",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Flags accessibility misses as Claude writes UI: images without alt, unlabeled buttons, clickable divs.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "accessibility",
+        "a11y",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "bundle-size-watch",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Compares bundle size after each build and warns when it grows.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "bundle",
+        "performance",
+        "build"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "css-token-guard",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Flags hard-coded hex colors and pixel values where your design tokens should be used.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "css",
+        "design-tokens",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "heavy-asset-warn",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Warns when large images, videos or fonts are added to the project.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "assets",
+        "performance",
+        "images"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "storybook-nudge",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Reminds you to add a story when Claude creates a new component without one.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "storybook",
+        "components",
+        "reminder"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "dark-mode-check",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Flags colors added without a dark-mode variant in projects that support a dark theme.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "dark-mode",
+        "tailwind",
+        "css"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "component-catalog",
+      "category": "frontend",
+      "tier": "complex",
+      "description": "/components lists your existing UI components so Claude reuses them instead of creating duplicates.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "components",
+        "react",
+        "reuse"
+      ],
+      "commands": [
+        "/components"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "http-client",
+      "category": "api",
+      "tier": "complex",
+      "description": "/http sends a request and shows the formatted response in a pane, like a tiny Postman in your terminal.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "http",
+        "rest",
+        "curl"
+      ],
+      "commands": [
+        "/http"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "openapi-sync",
+      "category": "api",
+      "tier": "complex",
+      "description": "Warns when your API routes change but openapi.yaml doesn't.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "openapi",
+        "swagger",
+        "docs"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "mock-server",
+      "category": "api",
+      "tier": "complex",
+      "description": "/mock starts a fake API server from your OpenAPI spec so you can build the frontend before the backend.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "openapi",
+        "mock",
+        "prism"
+      ],
+      "commands": [
+        "/mock"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "curl-to-code",
+      "category": "api",
+      "tier": "simple",
+      "description": "/curl2code turns a curl command into fetch, axios, Python requests or Go code.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "curl",
+        "codegen"
+      ],
+      "commands": [
+        "/curl2code"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "subagent-cap",
+      "category": "agents",
+      "tier": "simple",
+      "description": "Caps how many subagents can run at the same time.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "subagents",
+        "limit"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "task-queue",
+      "category": "agents",
+      "tier": "complex",
+      "description": "/queue lines up prompts that run one after another whenever Claude is free.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "queue",
+        "automation"
+      ],
+      "commands": [
+        "/queue"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "night-shift",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Runs your queued tasks at a scheduled time, like overnight, and leaves you a report.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "scheduler",
+        "automation"
+      ],
+      "commands": [
+        "/night-shift"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "loop-breaker",
+      "category": "agents",
+      "tier": "simple",
+      "description": "Stops Claude when it repeats the same failing command three times and suggests a different approach.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "loop",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "self-check",
+      "category": "agents",
+      "tier": "complex",
+      "description": "At the end of each editing turn, has the model double-check it actually did what you asked.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "verification",
+        "quality"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "edit-limit",
+      "category": "agents",
+      "tier": "simple",
+      "description": "Asks for confirmation when a single turn tries to modify more than N files.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "guard",
+        "edits"
+      ],
+      "commands": [
+        "/edit-limit"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "agent-presets",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Ready-made subagents for focused jobs: debugger, test writer, doc writer and migrator.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "subagents",
+        "presets"
+      ],
+      "commands": [
+        "/presets"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "explain-diff",
+      "category": "learning",
+      "tier": "complex",
+      "description": "/explain-diff explains in plain words what changed in the last turn and why.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "diff",
+        "code-review"
+      ],
+      "commands": [
+        "/explain-diff"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "quiz-me",
+      "category": "learning",
+      "tier": "complex",
+      "description": "/quiz asks you questions about the code Claude just wrote, to check you really understand it.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "quiz",
+        "understanding"
+      ],
+      "commands": [
+        "/quiz"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "learning-mode",
+      "category": "learning",
+      "tier": "simple",
+      "description": "Claude explains the why behind each change and leaves small TODOs for you to complete yourself.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "teaching",
+        "todo"
+      ],
+      "commands": [
+        "/learning"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "onboarding-tour",
+      "category": "learning",
+      "tier": "complex",
+      "description": "/tour walks a newcomer through the repository step by step.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "onboarding",
+        "codebase"
+      ],
+      "commands": [
+        "/tour"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "command-coach",
+      "category": "learning",
+      "tier": "simple",
+      "description": "Suggests Claude Code commands and mods that fit the way you work.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "coach",
+        "tips"
+      ],
+      "commands": [
+        "/coach"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "shortcut-tips",
+      "category": "learning",
+      "tier": "simple",
+      "description": "One tip a day about Claude Code shortcuts and features you might not know.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "tips",
+        "shortcuts"
+      ],
+      "commands": [
+        "/tip"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "why-log",
+      "category": "learning",
+      "tier": "complex",
+      "description": "Records why each file was changed; /why shows the reasoning behind any file's edits.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "history",
+        "rationale"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "cheatsheet",
+      "category": "learning",
+      "tier": "simple",
+      "description": "/cheat shows a quick reference for git, docker, regex, tmux and more, offline.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "cheatsheet",
+        "reference"
+      ],
+      "commands": [
+        "/cheat"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "pair-mode",
+      "category": "learning",
+      "tier": "complex",
+      "description": "Claude proposes, you type: edits become diffs you apply yourself, for deliberate practice.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "pair-programming",
+        "practice"
+      ],
+      "commands": [
+        "/pair"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "skill-tracker",
+      "category": "learning",
+      "tier": "simple",
+      "description": "Tracks which languages and tools you've worked with each week.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "learning",
+        "stats",
+        "languages"
+      ],
+      "commands": [
+        "/my-skills"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "license-checker",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Warns when a dependency with a copyleft license (GPL, AGPL) lands in a permissively licensed project.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "license",
+        "dependencies"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "sbom",
+      "category": "compliance",
+      "tier": "complex",
+      "description": "/sbom generates a software bill of materials with every dependency and its license.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "sbom",
+        "licenses"
+      ],
+      "commands": [
+        "/sbom"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "audit-trail",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Writes every action Claude takes to an append-only JSONL audit log.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "audit",
+        "log"
+      ],
+      "commands": [
+        "/audit"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "vuln-scan",
+      "category": "compliance",
+      "tier": "complex",
+      "description": "After installs, runs npm audit or pip-audit and shows any vulnerabilities in a pane.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "security",
+        "dependencies"
+      ],
+      "commands": [
+        "/vulns"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "copyright-guard",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Flags pasted code that carries someone else's license or copyright header.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "license",
+        "copyright"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "slow-test-flag",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Points out your slowest tests after each test run.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "tests",
+        "timing"
+      ],
+      "commands": [
+        "/slow-tests"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "leak-hint",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Flags event listeners, intervals and subscriptions created without cleanup.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "memory-leak",
+        "react"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "net-retry",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Automatically retries commands that failed because of a temporary network error.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "network",
+        "retry"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "disk-guard",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Warns when the disk is nearly full before builds, installs and docker pulls.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "disk",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "regression-guard",
+      "category": "performance",
+      "tier": "complex",
+      "description": "Remembers which tests passed at the start of the session and warns if any of them now fail.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "tests",
+        "regressions"
+      ],
+      "commands": [
+        "/baseline"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "watch-mode-guard",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Blocks watch-mode and never-ending commands run in the foreground, where they'd hang the turn.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "guard",
+        "watch-mode"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "mod-maker",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "/new-mod scaffolds a new Claude Code mod with manifest, hooks, test and README, ready to fill in.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "scaffold",
+        "authoring"
+      ],
+      "commands": [
+        "/new-mod"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "mod-doctor",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "/mod-doctor checks your installed mods for outdated versions, conflicts and load errors.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "diagnostics",
+        "plugins"
+      ],
+      "commands": [
+        "/mod-doctor"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "mod-profiles",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "Switch between sets of mods — work, personal, demo — with one command.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "profiles",
+        "plugins"
+      ],
+      "commands": [
+        "/profile-mods"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "settings-sync",
+      "category": "ecosystem",
+      "tier": "simple",
+      "description": "Exports and imports your mods' configuration so you can move it between machines.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "settings",
+        "backup"
+      ],
+      "commands": [
+        "/mods-export",
+        "/mods-import"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "quiet-mode",
+      "category": "ecosystem",
+      "tier": "simple",
+      "description": "/quiet silences toasts and sounds from every mod while you focus.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "focus",
+        "notifications"
+      ],
+      "commands": [
+        "/quiet"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "achievements",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "Unlock achievements as you work: first commit, 100 green test runs, a week-long streak and more.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "gamification",
+        "streaks"
+      ],
+      "commands": [
+        "/achievements"
+      ],
+      "since": "2.0.0"
     }
   ]
 }

@@ -79,6 +79,16 @@ A wide, low-angle macro photograph of a rack of small square matte ceramic tiles
 | `notifications` | `A small, smooth bell turned from dark metal, resting on a matte surface on the right side of the frame. Its rim catches a warm ember edge light, and a faint ring of warm haze spreads around it as if it has just chimed.` |
 | `memory` | `A closed hardcover notebook in matte charcoal on the right side of the frame, seen at a low three-quarter angle. A single ribbon bookmark trails out of the pages and glows a warm ember amber.` |
 | `team` | `Two matte ceramic tiles standing side by side, almost touching, on the right side of the frame. One glows ember from within; the other reflects its warm light on the facing edge. Quiet, collaborative.` |
+| `stacks` | `Three thin slabs of dark slate stacked with small gaps between them on the right side of the frame, seen at a low angle. Only the top slab glows ember along its edges, lighting the slabs beneath from above.` |
+| `devops` | `A small, smooth cloud-shaped form carved from matte charcoal ceramic, resting on a dark surface on the right side of the frame. A single thin vertical line of ember light rises from its center like a deploy going up.` |
+| `data` | `A short stack of three dark anodized aluminum discs, like a database cylinder, on the right side of the frame. The seam between the middle discs glows as a thin ember ring; the rest stays dark.` |
+| `frontend` | `A round lens of dark smoked glass held upright in a matte black ring on the right side of the frame. At its center a single ember point of light, like a pupil, with a soft warm halo in the glass.` |
+| `api` | `Two slim dark metal rods laid in parallel on a matte surface on the right side of the frame, offset like an exchange. A small bead of ember light travels along the upper rod, brightest at its tip.` |
+| `agents` | `One small matte ceramic tile raised on a short stem above three identical tiles in a row, on the right side of the frame. Only the raised tile glows ember, casting warm light down onto the three below.` |
+| `learning` | `A folded square of thick dark card on the right side of the frame, seen low, with a single silk tassel hanging from one corner. The tassel glows a warm ember amber; everything else falls into shadow.` |
+| `compliance` | `A sheet of heavy charcoal paper with a deckled edge on the right side of the frame. Pressed into its lower corner, a round wax seal that glows ember from within, as if still warm.` |
+| `performance` | `A minimalist stopwatch with a matte black case and no markings, seen at a slight angle on the right side of the frame. Its single hand glows ember amber and points to one o'clock.` |
+| `ecosystem` | `Three small matte charcoal ceramic tiles in an L shape on the right side of the frame, with the fourth corner empty. In the empty slot a thin plus sign of ember light floats just above the surface.` |
 
 ### 3. Open Graph plate: `og-plate.webp`
 

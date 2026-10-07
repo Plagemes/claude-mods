@@ -1,49 +1,92 @@
 <!doctype html><html><head><meta charset="utf-8">
 <meta name="robots" content="noindex">
 <title>OG template</title>
-<!-- Source of docs/assets/og.png. Render at 1280x640 (see docs/media/PROMPTS.md). Optional: ?plate=og-plate.webp puts a generated background plate behind the type. -->
+<!-- Source of docs/assets/og.png. Serve docs/ over HTTP and render this page at 1280x640 (see docs/media/PROMPTS.md).
+     Category icons are read from ../index.html. Optional: ?plate=og-plate.webp puts a generated background plate behind the type. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400..600&family=Martian+Mono:wdth,wght@87.5..100,400..500&family=Newsreader:ital,opsz,wght@0,6..72,400..500;1,6..72,400..500&display=swap">
 <style>
 *{box-sizing:border-box}html,body{margin:0}
 body{width:1280px;height:640px;overflow:hidden;background:#0e0d0b;color:#eee7db;font-family:'Host Grotesk';position:relative}
-.glow{position:absolute;inset:0;background:radial-gradient(560px 420px at 82% 58%,rgba(238,138,79,.24),transparent 70%),radial-gradient(420px 300px at 6% 0%,rgba(255,194,122,.06),transparent 70%)}
+.glow{position:absolute;inset:0;background:radial-gradient(600px 440px at 78% 52%,rgba(238,138,79,.22),transparent 70%),radial-gradient(420px 300px at 6% 0%,rgba(255,194,122,.06),transparent 70%)}
 .dots{position:absolute;inset:0;background-image:radial-gradient(rgba(240,232,218,.13) 1px,transparent 1.3px);background-size:22px 22px;-webkit-mask-image:radial-gradient(70% 70% at 75% 50%,#000 10%,transparent 75%)}
 .grain{position:absolute;inset:0;opacity:.06;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 1.6 -.35'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
-.copy{position:absolute;left:72px;top:70px;width:640px}
-.kicker{display:flex;align-items:center;gap:12px;font:400 14px/1 'Martian Mono';letter-spacing:.16em;text-transform:uppercase;color:#aba496}
-.kicker i{width:10px;height:10px;border-radius:3px;background:#ee8a4f;box-shadow:0 0 14px rgba(238,138,79,.6)}
-h1{margin:30px 0 0;font:400 86px/.98 'Newsreader';letter-spacing:-.025em}
+.copy{position:absolute;left:72px;top:76px;width:640px}
+.pill{display:inline-flex;align-items:center;gap:14px;height:40px;padding:0 18px 0 5px;border-radius:999px;border:1px solid rgba(238,138,79,.42);background:linear-gradient(90deg,rgba(238,138,79,.12),transparent 85%),#171613;font:400 15px/1 'Martian Mono';font-stretch:87.5%;color:#aba496}
+.pill b{display:inline-grid;place-items:center;height:30px;padding:0 12px;border-radius:999px;background:#ee8a4f;color:#1b0f06;font:500 12px/1 'Martian Mono';letter-spacing:.14em}
+.pill i{font-style:normal;color:#878073;margin:0 -4px}
+h1{margin:36px 0 0;font:400 76px/.98 'Newsreader';letter-spacing:-.025em}
 h1 em{font-style:italic;color:#ee8a4f;letter-spacing:-.03em}
 .foot{position:absolute;left:72px;bottom:62px;display:flex;align-items:center;gap:14px}
 .mark{width:44px;height:44px;border-radius:12px;background:#1e1c19;box-shadow:inset 0 0 0 1px rgba(240,232,218,.16);display:grid;place-items:center}
 .word{font:500 32px/1 'Newsreader';letter-spacing:-.015em}.word em{font-style:italic;color:#ee8a4f}
 .url{margin-left:18px;padding-left:18px;border-left:1px solid rgba(240,232,218,.16);font:400 15px/1 'Martian Mono';font-stretch:87.5%;color:#878073}
-.rack{position:absolute;right:72px;top:64px;width:420px;height:640px;border-radius:24px;border:1px solid rgba(240,232,218,.16);background:linear-gradient(180deg,#191815,#121110);box-shadow:0 40px 90px -30px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.04);padding:20px}
+.rack{position:absolute;right:64px;top:86px;width:484px;border-radius:24px;border:1px solid rgba(240,232,218,.16);background:linear-gradient(180deg,#191815,#121110);box-shadow:0 40px 90px -30px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.04);padding:18px 20px 20px}
 .rack:before{content:'';position:absolute;left:18%;right:18%;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,194,122,.6),transparent)}
-.store{display:flex;align-items:center;gap:10px;height:46px;padding:0 8px 0 14px;border-radius:12px;border:1px solid rgba(238,138,79,.42);background:linear-gradient(90deg,rgba(238,138,79,.12),transparent 70%),#1e1c19;font:500 14px/1 'Martian Mono';font-stretch:87.5%;box-shadow:0 10px 30px -14px rgba(238,138,79,.6)}
+.bar{display:flex;align-items:center;gap:10px;padding:0 2px 14px;font:400 12px/1 'Martian Mono';font-stretch:87.5%;color:#878073}
+.bar .led{width:7px;height:7px;border-radius:50%;background:#ee8a4f;box-shadow:0 0 0 3px rgba(238,138,79,.12),0 0 10px rgba(238,138,79,.55)}
+.bar b{font-weight:400;color:#aba496}.bar span:last-child{margin-left:auto}
+.store{display:flex;align-items:center;gap:10px;height:44px;padding:0 7px 0 14px;border-radius:12px;border:1px solid rgba(238,138,79,.42);background:linear-gradient(90deg,rgba(238,138,79,.12),transparent 70%),#1e1c19;font:500 14px/1 'Martian Mono';font-stretch:87.5%;box-shadow:0 10px 30px -14px rgba(238,138,79,.6)}
 .store span{flex:1;font:400 13px 'Host Grotesk';color:#878073}
 .store kbd{font:400 12px/1 'Martian Mono';color:#f19a64;border:1px solid rgba(238,138,79,.42);border-radius:7px;padding:8px 10px;background:#0a0908}
-.grid{display:grid;grid-template-columns:repeat(10,1fr);gap:7px;margin-top:16px}
-.grid i{aspect-ratio:1;border-radius:7px;background:#1e1c19;box-shadow:inset 0 0 0 1px rgba(240,232,218,.08);position:relative}
-.grid i:after{content:'';position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px;border-radius:50%;background:rgba(240,232,218,.2)}
-.grid i.on{background:#2a1f17;box-shadow:inset 0 0 0 1px rgba(238,138,79,.4)}
-.grid i.on:after{background:#ee8a4f;box-shadow:0 0 6px rgba(238,138,79,.6)}
-.grid i.hot{background:#ee8a4f;box-shadow:0 0 0 3px rgba(238,138,79,.22),0 0 24px 2px rgba(238,138,79,.55);transform:scale(1.06)}
-.grid i.hot:after{background:#fff4e6;box-shadow:0 0 8px #fff4e6}
-.plate{position:absolute;inset:0;background:center/cover no-repeat;opacity:.9}.plate:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#0e0d0b 38%,rgba(14,13,11,.55) 62%,rgba(14,13,11,.2))}.plate:empty:not([style]){display:none}
-.fade{position:absolute;left:0;right:0;bottom:0;height:200px;background:linear-gradient(180deg,transparent,#0e0d0b 92%)}
+.deck{display:grid;grid-template-columns:repeat(10,1fr) 10px repeat(10,1fr);gap:5px;margin-top:16px}
+.lab{grid-row:1;display:flex;align-items:center;gap:7px;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid rgba(240,232,218,.08);font:400 10px/1 'Martian Mono';letter-spacing:.1em;text-transform:uppercase;color:#878073}
+.lab b{font-weight:500;letter-spacing:.02em;text-transform:none;color:#aba496}
+.lab.new b{color:#f19a64}.lab.new:before{content:'';width:6px;height:6px;border-radius:2px;background:#ee8a4f;box-shadow:0 0 8px rgba(238,138,79,.6)}
+.seam{grid-row:1/-1;justify-self:center;width:1px;background:linear-gradient(180deg,transparent,rgba(240,232,218,.14) 8%,rgba(240,232,218,.14) 92%,transparent)}
+.head{grid-row:2;display:grid;place-items:center;padding:2px 0 5px;color:#878073}
+.head svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;--icon-lit:#ee8a4f}
+.head.on{color:#eee7db}
+.c{aspect-ratio:1;border-radius:22%;background:#1a1916;box-shadow:inset 0 0 0 1px rgba(240,232,218,.08);position:relative}
+.c:after{content:'';position:absolute;left:50%;top:50%;width:20%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:rgba(240,232,218,.24)}
+.c.on{background:#231b15;box-shadow:inset 0 0 0 1px rgba(238,138,79,.32)}
+.c.on:after{background:#ee8a4f;box-shadow:0 0 6px rgba(238,138,79,.6)}
+.c.hot{background:#ee8a4f;box-shadow:0 0 0 3px rgba(238,138,79,.22),0 0 22px 2px rgba(238,138,79,.55);transform:scale(1.06);z-index:1}
+.c.hot:after{background:#fff4e6;box-shadow:0 0 8px #fff4e6}
+.status{display:flex;align-items:center;gap:10px;height:40px;margin-top:16px;padding:0 12px;border-radius:10px;background:#0a0908;border:1px solid rgba(240,232,218,.08);font:400 12px/1 'Martian Mono';font-stretch:87.5%;white-space:nowrap}
+.status b{font-weight:400;color:#f19a64}.status span{color:#aba496}
+.status span:after{content:'';display:inline-block;width:6px;height:12px;margin-left:3px;vertical-align:-2px;background:#ee8a4f;opacity:.8}
+.plate{position:absolute;inset:0;background:center/cover no-repeat;opacity:.9}.plate:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#0e0d0b 38%,rgba(14,13,11,.55) 62%,rgba(14,13,11,.2))}
 </style></head><body>
 <div class="plate" id="plate"></div><div class="glow"></div><div class="dots"></div>
-<div class="rack"><div class="store"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#878073" stroke-width="1.6"><rect x="3.5" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="3.5" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="3.5" y="16" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="16" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="16" width="4.5" height="4.5" rx="1.2" fill="#ee8a4f" stroke="#ee8a4f"/></svg>mod-store<span>101 mods</span><kbd>/mods</kbd></div><div class="grid" id="g"></div></div>
-<div class="fade"></div>
-<div class="copy"><div class="kicker"><i></i>101 open-source mods for Claude Code</div>
+<svg width="0" height="0" style="position:absolute"><defs id="sprite"></defs></svg>
+<div class="rack">
+  <div class="bar"><i class="led"></i><b>claude-mods</b> v2.0.0<span>200+ mods &middot; 20 categories + core</span></div>
+  <div class="store"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#878073" stroke-width="1.6"><rect x="3.5" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="3.5" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="3.5" y="16" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="16" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="16" width="4.5" height="4.5" rx="1.2" fill="#ee8a4f" stroke="#ee8a4f"/></svg>mod-store<span>the store for everything below</span><kbd>/mods</kbd></div>
+  <div class="deck" id="deck"></div>
+  <div class="status"><b>scope-lock</b><span>src/billing.ts is outside /scope</span></div>
+</div>
+<div class="copy"><div class="pill"><b>NEW</b>v2<i>&middot;</i>a second shelf of mods</div>
 <h1>Make Claude Code <em>yours</em>, one&nbsp;hook at&nbsp;a&nbsp;time.</h1></div>
 <div class="foot"><div class="mark"><svg width="26" height="26" viewBox="0 0 24 24"><g fill="#eee7db" fill-opacity=".28"><rect x="3.5" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="3.5" width="4.5" height="4.5" rx="1.2"/><rect x="3.5" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="16" y="9.75" width="4.5" height="4.5" rx="1.2"/><rect x="3.5" y="16" width="4.5" height="4.5" rx="1.2"/><rect x="9.75" y="16" width="4.5" height="4.5" rx="1.2"/></g><rect x="16" y="16" width="4.5" height="4.5" rx="1.2" fill="#ee8a4f"/></svg></div><div class="word">Claude <em>Mods</em></div><div class="url">plagemes.github.io/claude-mods</div></div>
 <div class="grain"></div>
 <script>
-const plate=new URLSearchParams(location.search).get("plate");if(plate){const el=document.getElementById("plate");el.style.backgroundImage=`url("${plate}")`}else{document.getElementById("plate").remove()}
+const plate = new URLSearchParams(location.search).get('plate')
+if (plate) document.getElementById('plate').style.backgroundImage = `url("${plate}")`
+else document.getElementById('plate').remove()
 
-let s=11;const r=()=>((s=(s*16807)%2147483647)/2147483647);const g=document.getElementById('g');
-for(let i=0;i<100;i++){const e=document.createElement('i');const v=r();if([13,46,71].includes(i))e.className='hot';else if(v<.32)e.className='on';g.append(e)}
+// Two shelves: v1 (10 categories) and v2 (10 new ones), ten tiles each. Deterministic pattern.
+const V1 = ['security', 'git', 'cost', 'productivity', 'quality', 'observability', 'prompting', 'notifications', 'memory', 'team']
+const V2 = ['stacks', 'devops', 'data', 'frontend', 'api', 'agents', 'learning', 'compliance', 'performance', 'ecosystem']
+const HOT = new Set(['2:3', '6:14', '8:17'])
+let s = 11
+const r = () => ((s = (s * 16807) % 2147483647) / 2147483647)
+const deck = document.getElementById('deck')
+const el = (cls, col, row, html = '') => { const e = document.createElement('div'); e.className = cls; e.style.gridColumn = col; e.style.gridRow = row; e.innerHTML = html; deck.append(e); return e }
+el('lab', '1 / span 10', '1', '<b>v1</b>100 mods')
+el('seam', '11', '1 / -1')
+el('lab new', '12 / span 10', '1', '<b>v2</b>100 new')
+;[...V1, null, ...V2].forEach((id, i) => {
+  if (!id) return
+  el(`head${id === 'agents' ? ' on' : ''}`, String(i + 1), '2', `<svg viewBox="0 0 24 24"><use href="#i-${id}"/></svg>`)
+  const c = i > 10 ? i - 1 : i
+  for (let row = 0; row < 10; row++) {
+    const key = `${row}:${c}`
+    el(`c${HOT.has(key) ? ' hot' : r() < 0.32 ? ' on' : ''}`, String(i + 1), String(row + 3))
+  }
+})
+fetch('../index.html').then(res => res.text()).then(html => {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  document.getElementById('sprite').innerHTML = [...doc.querySelectorAll('symbol')].map(sym => sym.outerHTML).join('')
+}).catch(() => {})
 </script>
 </body></html>
