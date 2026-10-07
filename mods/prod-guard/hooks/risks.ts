@@ -1,6 +1,8 @@
-import { baseName, parseShell, type ShellCommand } from './shell'
+import { baseName, embeddedShellScripts, simpleCommands, type ShellCommand } from './shared/shell'
 
 export type Risk = {
+  /** Names the case, for mods-hub's risk.blocked: `kube-write`, `iac-apply`, `sql-drop`, ... */
+  rule: string
   what: string
   /** True when the command does not name a kube context, so the current one decides. */
   needsKubeContext?: boolean
@@ -58,67 +60,56 @@ function kubeRisk(tool: string, args: readonly string[], isProd: (text: string) 
   const everyValue = tool === 'helm' ? args.filter(arg => !arg.startsWith('-')) : []
   const named = [...contexts, ...namespaces, ...everyValue].find(isProd)
   const what = `${tool} ${verb}`
-  if (named !== undefined) return { what: `${what} against "${named}"` }
-  return contexts.length === 0 ? { what: `${what} on the current kube context`, needsKubeContext: true } : undefined
+  if (named !== undefined) return { rule: `${tool}-write`, what: `${what} against "${named}"` }
+  return contexts.length === 0 ? { rule: `${tool}-write`, what: `${what} on the current kube context`, needsKubeContext: true } : undefined
 }
 
 function awsRisk(args: readonly string[]): Risk | undefined {
   const verb = args.find(arg => /^(?:delete|terminate)-/.test(arg))
-  if (verb !== undefined) return { what: `aws ... ${verb}` }
+  if (verb !== undefined) return { rule: 'aws-delete', what: `aws ... ${verb}` }
   const [service, action] = subcommands(args)
   const isBucketRemoval = service === 's3' && (action === 'rb' || (action === 'rm' && args.includes('--recursive')))
-  return isBucketRemoval ? { what: `aws s3 ${action}` } : undefined
+  return isBucketRemoval ? { rule: 'aws-s3-remove', what: `aws s3 ${action}` } : undefined
 }
 
 function sqlRisk(raw: string): Risk | undefined {
-  if (DROP_STATEMENT.test(raw)) return { what: 'a DROP TABLE/DATABASE/SCHEMA statement' }
-  if (TRUNCATE_STATEMENT.test(raw)) return { what: 'a TRUNCATE statement' }
+  if (DROP_STATEMENT.test(raw)) return { rule: 'sql-drop', what: 'a DROP TABLE/DATABASE/SCHEMA statement' }
+  if (TRUNCATE_STATEMENT.test(raw)) return { rule: 'sql-truncate', what: 'a TRUNCATE statement' }
   const hasUnscopedDelete = [...raw.matchAll(DELETE_STATEMENT)].some(([statement]) => !/\bWHERE\b/i.test(statement))
-  return hasUnscopedDelete ? { what: 'a DELETE FROM without WHERE' } : undefined
+  return hasUnscopedDelete ? { rule: 'sql-delete', what: 'a DELETE FROM without WHERE' } : undefined
 }
 
-const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh'])
-const SHELL_COMMAND_FLAG = /^-[a-z]*c[a-z]*$/i
 const MAX_SCRIPT_DEPTH = 3
 
-/** The commands, each followed by those its `bash -c '<script>'` or `eval '<script>'` runs. */
-export function withScripts(commands: readonly ShellCommand[], depth = 0): ShellCommand[] {
+/**
+ * Every simple command of a line. The shared shell reader opens `bash -c '…'`, `eval '…'`, `$(…)` and heredocs
+ * fed to a shell; scripts handed to a shell further along (`docker exec ops sh -c '…'`) are opened here.
+ */
+export function allCommands(raw: string, depth = 0): ShellCommand[] {
   const all: ShellCommand[] = []
-  for (const command of commands) {
+  for (const command of simpleCommands(raw)) {
     all.push(command)
-    if (depth >= MAX_SCRIPT_DEPTH) continue
-    const { words } = command
-    const evalAt = words.findIndex(word => baseName(word) === 'eval')
-    if (evalAt !== -1) all.push(...withScripts(parseShell(words.slice(evalAt + 1).join(' ')), depth + 1))
-    const shellAt = words.findIndex(word => SHELLS.has(baseName(word)))
-    for (let i = shellAt + 1; shellAt !== -1 && i < words.length; i++) {
-      const word = words[i] as string
-      const script = words[i + 1]
-      if (SHELL_COMMAND_FLAG.test(word) && script !== undefined) {
-        all.push(...withScripts(parseShell(script), depth + 1))
-        break
-      }
-      if (!word.startsWith('-')) break
-    }
+    if (depth < MAX_SCRIPT_DEPTH) for (const script of embeddedShellScripts(command.argv)) all.push(...allCommands(script, depth + 1))
   }
   return all
 }
 
 /** Everything on a command line that can change a production system, `bash -c` and `eval` scripts included. */
-export function findRisks(raw: string, commands: readonly ShellCommand[], isProd: (text: string) => boolean): Risk[] {
+export function findRisks(raw: string, isProd: (text: string) => boolean): Risk[] {
   const risks: Risk[] = []
   let usesSqlClient = false
 
-  for (const { words } of withScripts(commands)) {
-    const index = words.findIndex(word => INTERESTING.has(baseName(word)))
-    const tool = words[index] === undefined ? '' : baseName(words[index] as string)
-    const args = words.slice(index + 1)
+  for (const { argv } of allCommands(raw)) {
+    // Wrappers the shared reader does not peel (`docker run … kubectl`, `aws-vault exec … -- terraform`) still count.
+    const index = argv.findIndex(word => INTERESTING.has(baseName(word)))
+    const tool = argv[index] === undefined ? '' : baseName(argv[index] as string)
+    const args = argv.slice(index + 1)
     if (index === -1) continue
 
     if (IAC_TOOLS.has(tool) && subcommands(args).slice(0, 3).some(arg => arg === 'apply' || arg === 'destroy')) {
-      risks.push({ what: `${tool} ${subcommands(args).find(arg => arg === 'apply' || arg === 'destroy')}` })
+      risks.push({ rule: 'iac-apply', what: `${tool} ${subcommands(args).find(arg => arg === 'apply' || arg === 'destroy')}` })
     } else if (tool === 'pulumi' && ['up', 'destroy'].includes(subcommands(args)[0] ?? '')) {
-      risks.push({ what: `pulumi ${subcommands(args)[0]}` })
+      risks.push({ rule: 'iac-apply', what: `pulumi ${subcommands(args)[0]}` })
     } else if (tool === 'kubectl' || tool === 'helm') {
       const risk = kubeRisk(tool, args, isProd)
       if (risk) risks.push(risk)

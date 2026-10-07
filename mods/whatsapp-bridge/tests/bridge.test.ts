@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DIR, GROUP, OWNER, OWNER_CHAT, arrive, configured, lead, pass, react, sends, start, wa, world } from './fake'
+import { DIR, GROUP, OWNER, OWNER_CHAT, PHONE_NOTE, arrive, configured, lead, pass, react, sends, start, wa, world } from './fake'
 
 test('setup: pairing flow from QR to pairing code, then a test message creates the project group', async ($, on) => {
   const seen = world(on, { status: 'qr_ready', files: { [`${DIR}/config.json`]: JSON.stringify({ apiKey: 'owa_k1_scopedoperatorkey0000000000' }) } })
@@ -39,8 +39,10 @@ test('the leader routes an owner message to this session as their words, and rel
   arrive(seen, { chatId: GROUP, author: OWNER_CHAT, body: 'run the linter and fix what it finds' })
   await pass(seen, 12_000)
   expect(seen.submitted).toEqual([{ text: 'run the linter and fix what it finds', asUser: true }])
+  // The phone note travels in the prompt itself: the bridge's own prompt.submit hook never sees its own submit.
+  expect(seen.prompts).toEqual([`run the linter and fix what it finds${PHONE_NOTE}`])
 
-  await $.turn.start({ text: 'run the linter and fix what it finds', turnId: 't1' })
+  await $.turn.start({ text: `run the linter and fix what it finds${PHONE_NOTE}`, turnId: 't1' })
   await $.turn.complete({ answer: 'Fixed 3 lint errors.', durationMs: 20_000, isAborted: false, turnId: 't1', reason: 'answer' })
   expect(sends(seen).at(-1)).toMatchObject({ chatId: GROUP })
   expect(sends(seen).at(-1)?.text).toContain('Fixed 3 lint errors.')

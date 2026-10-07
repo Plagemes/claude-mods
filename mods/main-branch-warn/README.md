@@ -29,4 +29,5 @@ a toast the first time and a `⚠ editing on main` line under the prompt. In
 ## How it works
 - One `tool.call` hook on the edit tools runs `git symbolic-ref --short -q HEAD` (3 s timeout) in the nearest existing folder of the file, so it judges the repository the file belongs to, not just the session's working directory.
 - The status line is re-evaluated on each edit, the toast is shown once per session; in block mode a failing check denies the edit, in warn mode it is skipped.
+- With [mods-hub](../mods-hub) installed, the one-time warning goes through the hub's notifications (`warning`, so it reaches your phone channel while you are away) instead of a toast, and in block mode every refused edit is also published as `risk.blocked` (rule `edit-on-main`, severity `low`, the path). Without the hub nothing changes.
 - Limits: it only looks when Claude edits through those tools, not at edits made by `Bash` (`sed -i`, `tee`) or at what you do in another terminal.

@@ -35,6 +35,32 @@ let autofixRounds = 0
 let pendingNote: string | undefined
 let isChecking = false
 
+// ── mods-hub: type check results on the bus, errors as notices ──────────────────────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+const ownVersion = async ($: EngineInterface): Promise<string> => {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+const greetHub = async ($: EngineInterface): Promise<void> => {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['typecheck.result'], consumes: [] })
+}
+
+/** A finished check on the hub's bus as `typecheck.result` (autopilot reads it); nothing when no checker could run. */
+const publishCheck = async ($: EngineInterface, results: readonly CheckResult[], root: string): Promise<void> => {
+  if (!results.some(result => 'findings' in result)) return
+  const findings = findingsOf(results)
+  const files = [...new Set(findings.map(finding => relativeTo(root, finding.file)))]
+  await hubPublish($, { topic: 'typecheck.result', data: { tool: checkersOf(results), errors: findings.length, files } })
+}
+
 export const register: Register = (on, options) => {
   const settings: Settings = {
     mode: options.mode === 'autofix' ? 'autofix' : 'notify',
@@ -46,6 +72,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: COMMAND, description: 'Type-check the files edited this session now (tsc, pyright or mypy)' })
+    await greetHub($)
     return next(e)
   })
 
@@ -93,6 +120,7 @@ export const register: Register = (on, options) => {
     const results = await runJobs($, jobs, settings)
     const findings = findingsOf(results)
     showVerdict($, results)
+    await publishCheck($, results, root)
     if (findings.length === 0) return { text: `✓ No type errors (${checkersOf(results)}).` }
     return {
       text: [
@@ -114,6 +142,8 @@ const gate = async ($: EngineInterface, files: readonly string[], settings: Sett
     if (jobs.length === 0) return
     const results = await runJobs($, jobs, settings)
     showVerdict($, results)
+    const root = await $.session.cwd().catch(() => '/')
+    await publishCheck($, results, root)
 
     const findings = findingsOf(results)
     pendingNote = undefined
@@ -122,24 +152,26 @@ const gate = async ($: EngineInterface, files: readonly string[], settings: Sett
       return
     }
 
-    const root = await $.session.cwd().catch(() => '/')
     const list = listFindings(findings, MAX_LISTED, file => relativeTo(root, file)).join('\n')
     const what = `${checkersOf(results)} reports ${countOf(findings)} after your last turn`
 
     if (settings.mode === 'autofix' && autofixRounds < settings.maxRounds) {
       autofixRounds += 1
-      $.ui.toast(`${countOf(findings)}, asking Claude to fix them (round ${autofixRounds} of ${settings.maxRounds})`)
+      await hubNotify($, { level: 'info', title: `${countOf(findings)}, asking Claude to fix them (round ${autofixRounds} of ${settings.maxRounds})`, topic: 'typecheck.result' })
       await $.prompt
         .submit({ text: `typecheck-gate: ${what}. Fix them, then type-check again to confirm:\n${list}` })
         .catch(() => $.ui.toast('Could not ask Claude to fix the type errors'))
       return
     }
 
-    $.ui.toast(
-      settings.mode === 'autofix'
-        ? `${countOf(findings)} still stand after ${settings.maxRounds} fix rounds; over to you`
-        : `${countOf(findings)} (${checkersOf(results)})`,
-    )
+    await hubNotify($, {
+      level: 'error',
+      title:
+        settings.mode === 'autofix'
+          ? `${countOf(findings)} still stand after ${settings.maxRounds} fix rounds; over to you`
+          : `${countOf(findings)} (${checkersOf(results)})`,
+      topic: 'typecheck.result',
+    })
     pendingNote = `typecheck-gate: ${what}. Fix them before moving on, unless the user says otherwise:\n${list}`
   } catch {
     $.ui.status('✗ typecheck: the check could not run')
@@ -292,3 +324,100 @@ const editedFile = (e: ToolCallInput, ran: ToolCallResult): string | undefined =
   const path = 'file_path' in e ? e.file_path : undefined
   return typeof path === 'string' && path !== '' ? path : undefined
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

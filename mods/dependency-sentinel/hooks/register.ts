@@ -4,6 +4,7 @@ import { packageRequests } from './parse'
 import type { PackageRequest } from './parse'
 import { POPULAR, nearestPopular } from './popular'
 import type { Ecosystem } from './popular'
+import { redactSummary } from './shared/secrets'
 
 /** What a registry says of a package; `unknown` when it could not be asked (fail open). */
 type Lookup =
@@ -23,6 +24,8 @@ const ESTABLISHED_DAYS = 365
 const ESTABLISHED_VERSIONS = 5
 const APPROVED_KEY = 'approved'
 const MAX_APPROVED = 500
+/** How long the held-back toast stays when there is no hub. */
+const HELD_TOAST_MS = 8000
 const USER_AGENT = 'dependency-sentinel (https://github.com/plagemes/claude-mods)'
 const TIMED_OUT = Symbol('timed out')
 const HUMAN_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
@@ -149,7 +152,7 @@ const inspect = async ($: EngineInterface, request: PackageRequest, limits: Limi
   const registry = REGISTRY_LABEL[request.ecosystem]
   if (lookup.kind === 'unknown') {
     if (typo !== undefined) add(typo)
-    $.ui.toast(`Could not check ${request.name} on ${registry} (${lookup.why}); allowed`)
+    await hubNotify($, { level: 'info', title: `Could not check ${request.name} on ${registry} (${lookup.why}); allowed` })
   } else if (lookup.kind === 'missing') {
     if (typo !== undefined) add(typo)
     add(`does not exist on ${registry}: a mistyped or hallucinated name, or a squat waiting to happen`)
@@ -181,6 +184,28 @@ const rememberApproved = async ($: EngineInterface, requests: readonly PackageRe
   if (added.length > 0) await $.store.set(APPROVED_KEY, [...approved, ...added].slice(-MAX_APPROVED))
 }
 
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['risk.blocked'], consumes: [] })
+}
+
+/** Tells mods-hub (when installed) what was held back, the command masked and cut short. The deny never waits on it. */
+async function reportBlock($: EngineInterface, findings: readonly Finding[], command: string): Promise<void> {
+  const reasons = findings.map(finding => `${finding.name} ${finding.reason}`).join('; ')
+  await hubPublish($, { topic: 'risk.blocked', data: { guard: PLUGIN, tool: 'Bash', reason: `suspicious-package: ${reasons}`, severity: 'medium', command: redactSummary(command) } })
+}
+
 export const register: Register = (on, options) => {
   const limits: Limits = {
     minAgeDays: numberOption(options.minAgeDays, 30),
@@ -194,6 +219,11 @@ export const register: Register = (on, options) => {
     if (isPerson(e.origin)) isOverridden = OVERRIDE.test(e.text)
     // A turn nobody typed (a notification, a schedule, a peer) starts without the approval of an earlier prompt.
     else if (e.turnId === undefined) isOverridden = false
+    return next(e)
+  })
+
+  on('session.start', async ($, e, next) => {
+    await greetHub($)
     return next(e)
   })
 
@@ -212,7 +242,9 @@ export const register: Register = (on, options) => {
     if (findings.length === 0) return next(e)
 
     const names = [...new Set(findings.map(finding => finding.name))]
-    $.ui.toast(`Held back ${names.join(', ')}. Reply DEPS-OK to allow.`, { timeoutMs: 8000 })
+    await reportBlock($, findings, e.command)
+    // A question for the person (it obeys the hub's Interaction mode); a toast when there is no hub.
+    await hubNotify($, { level: 'warning', kind: 'question', title: `Held back ${names.join(', ')}. Reply DEPS-OK to allow.`, topic: 'risk.blocked' }, { timeoutMs: HELD_TOAST_MS })
     return { deny: denial(e.command, findings) }
   }).catch(($, e, next) => {
     // Not a hard gate: a failed check lets the install through, and says so.
@@ -220,3 +252,100 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

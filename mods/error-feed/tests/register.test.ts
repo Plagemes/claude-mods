@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'error-feed'
 const PANE = 'error-feed'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -89,4 +91,45 @@ test('"Ask Claude to fix" submits the failure as a prompt, and Clear all empties
   await ui.press({ key: 'clear' })
   expect(await ui.find({ type: 'Text', text: /No failed commands/ })).toBeDefined()
   expect(statuses.at(-1)).toBeUndefined()
+})
+
+test('with mods-hub: failures are published as tool.failed, repeats are flagged, and /errors opens the Errors tab', async ($, on) => {
+  mock.clock(on, { now: 1_700_000_000_000 })
+  const hub = fakeHub(on)
+  const opened: string[] = []
+  on('ui.status', () => ({ value: undefined }))
+  on('ui.open', ($, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('state.get', { plugin: 'mods-hub', key: 'latest', id: 'error.repeated' }, () => ({
+    value: { value: { id: 'e1', topic: 'error.repeated', source: 'mods-hub', at: 1, session: 's1', scope: 'session', data: { signature: 'npm run', count: 3, tool: 'Bash', command: 'npm run tset' } }, version: 1 },
+  }))
+  on('tool.call', ($, e) => (e.tool === 'Bash' ? { isError: true, result: NPM_FAILURE, text: NPM_FAILURE } : { result: 'ok' }))
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['tool.failed'], consumes: ['error.repeated'] }])
+  expect(hub.tabs).toEqual([{ id: 'errors', title: 'Errors', order: 210, command: 'errors' }])
+
+  await $.tool.call({ tool: 'Bash', command: 'npm run tset' })
+  expect(hub.published).toEqual([{ topic: 'tool.failed', data: { tool: 'Bash', summary: 'npm ERR! Missing script: "tset"', command: 'npm run tset' } }])
+
+  const ran = await $.command.run({ command: 'errors', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+  expect(ran.text).toBe('1 error collected: the Errors tab of the Claude Mods panel.')
+  expect(hub.shown).toEqual(['errors'])
+  expect(opened).toEqual([])
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: 'claude-mods', props: { ...paneProps, title: 'Claude Mods' } })
+    expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+    const text = (await ui.find({ type: 'Box' }))?.text
+    expect(text).toContain('npm run tset')
+    expect(text).toContain('↻ 3× in a row')
+    expect(await ui.find({ key: 'close' })).toBeUndefined()
+    expect(await ui.find({ key: 'clear' })).toBeDefined()
+    await ui.unmount()
+  }
 })

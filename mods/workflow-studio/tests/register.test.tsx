@@ -246,6 +246,7 @@ const hub: Plugin = {
         channelStatus: async () => ({ channels: [] }),
         deliver: async () => ({ isDelivered: false }),
         drain: async () => [],
+        stop: async input => ({ id: 'c1', action: input.action ?? 'stop', scope: input.scope ?? 'session', reason: input.reason, by: input.by ?? '', session: '', source: '', at: 0 }),
         hello: async () => ({ installed: INSTALLED }),
         installed: async () => INSTALLED,
         share: async input => ({ key: input.name, owner: '', value: input.value, at: 0 }),

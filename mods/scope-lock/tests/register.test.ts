@@ -3,6 +3,7 @@ import type { On, PromptOrigin } from 'claude-code'
 
 import { writeTargets } from '../hooks/bash'
 import { globToRegExp, isInScope, resolvePath } from '../hooks/glob'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/app'
 const COMPOSE = { model: 'claude', promptModel: 'claude', surfaces: ['terminal'] as const, tools: [], outputStyle: null, traits: [] }
@@ -136,4 +137,37 @@ test('read-only git stash subcommands pass; git -C and bash -lc writes are still
   expect(paths('git -C app rm old.ts')).toEqual(['app/old.ts'])
   expect(paths('git -c core.quotepath=off rm old.ts')).toEqual(['old.ts'])
   expect(paths('bash -lc "rm -rf build"')).toEqual(['build'])
+})
+
+test('the shared shell reader: eval, su -c, xargs, heredocs and here-strings fed to a shell, with their own cds', () => {
+  const paths = (command: string) => writeTargets(command).map(target => target.path)
+  expect(paths(`eval "rm src/a.ts"`)).toEqual(['src/a.ts'])
+  expect(paths(`su -c 'touch b.ts' me`)).toEqual(['b.ts'])
+  expect(paths('ls | xargs -0 rm -f c.ts')).toEqual(['c.ts'])
+  expect(paths('sh <<< "rm d.ts"')).toEqual(['d.ts'])
+  expect(writeTargets('bash <<EOF\ncd lib\ntouch e.ts\nEOF')).toEqual([{ path: 'e.ts', via: 'touch', cdChain: ['lib'] }])
+  expect(writeTargets('cd src && bash -c "cd auth && rm f.ts"')).toEqual([{ path: 'f.ts', via: 'rm', cdChain: ['src', 'auth'] }])
+  expect(paths("cat <<'EOF' > notes.md\nrm g.ts\nEOF")).toEqual(['notes.md'])
+  expect(paths(`echo '$(rm /etc/h)' > notes.txt`)).toEqual(['notes.txt'])
+})
+
+test('with mods-hub: the scope is shared as a fact and each deny is published as risk.blocked', async ($, on) => {
+  const state = world(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect(hub.facts.get('scope')).toEqual([])
+  await $.command.run(scope('src/auth/**'))
+  expect(hub.facts.get('scope')).toEqual(['src/auth/**'])
+  expect(denial(await $.tool.call({ tool: 'Bash', command: 'echo x > src/config.ts' }))).toContain('outside the scope')
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: `${ROOT}/src/auth/ok.ts`, content: 'x' }))).toBeUndefined()
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: { guard: 'scope-lock', tool: 'Bash', reason: 'outside-scope: > outside src/auth/**', severity: 'medium', path: 'src/config.ts', command: 'echo x > src/config.ts' },
+    },
+  ])
+  await $.command.run(scope('off'))
+  expect(hub.facts.get('scope')).toEqual([])
+  expect(state.ran).toEqual([`${ROOT}/src/auth/ok.ts`])
 })

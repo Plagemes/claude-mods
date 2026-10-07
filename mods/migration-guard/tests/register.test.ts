@@ -1,6 +1,8 @@
 import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const SESSION_STARTED_AT = 1_000_000
 const OLD = SESSION_STARTED_AT - 5_000
 const NEW = SESSION_STARTED_AT + 5_000
@@ -26,6 +28,7 @@ const engine = (on: On, files: Record<string, File>) => {
   })
   on('session.usage', () => ({ value: { startedAt: SESSION_STARTED_AT, context: {}, rateLimits: [] } as never }))
   on('session.root', () => ({ value: '/repo' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('tool.call', (_$, e) => {
     reached.push(`${String(e.tool)} ${'file_path' in e ? e.file_path : ''}`)
     return { result: 'ok', text: 'ok' }
@@ -134,4 +137,34 @@ test('fails closed for migration paths when the check itself breaks', async ($, 
   expect(guarded.deny).toContain('could not verify /repo/db/migrate/001.rb')
   expect(unrelated.deny).toBeUndefined()
   expect(reached).toEqual(['Edit'])
+})
+
+test('with mods-hub: says hello and publishes each protected migration as risk.blocked', async ($, on) => {
+  const path = '/repo/db/migrate/20240101_add_users.rb'
+  const { reached } = engine(on, { [path]: { mtimeMs: NEW, isTracked: true } })
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['risk.blocked'], consumes: [] }])
+
+  expect((await $.tool.call(edit(path))).deny).toContain('existing migration')
+  expect(reached).toHaveLength(0)
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: {
+        guard: 'migration-guard',
+        tool: 'Edit',
+        reason: 'db/migrate/20240101_add_users.rb is an existing migration (tracked in git). Editing it would rewrite history that may already be applied. Leave it as it is and create a new migration with the change instead.',
+        severity: 'medium',
+        path,
+      },
+    },
+  ])
+})
+
+test('without mods-hub the denial is unchanged', async ($, on) => {
+  const path = '/repo/db/migrate/20240101_add_users.rb'
+  engine(on, { [path]: { mtimeMs: NEW, isTracked: true } })
+  expect((await $.tool.call(edit(path))).deny).toContain('migration-guard: db/migrate/20240101_add_users.rb is an existing migration')
 })

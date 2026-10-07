@@ -16,10 +16,12 @@ export const parseArgs = (args: string): { kind?: IssueKind; focus: string } => 
   return kind === undefined ? { focus: args.trim() } : { kind, focus: rest.join(' ') }
 }
 
-export const draftPrompt = (kind: IssueKind | undefined, focus: string): string =>
+/** `failures`: failures other mods reported this session (CI runs, a command failing again and again), offered as context. */
+export const draftPrompt = (kind: IssueKind | undefined, focus: string, failures: readonly string[] = []): string =>
   [
     `Draft a GitHub issue from this conversation${kind === undefined ? '' : kind === 'bug' ? ' as a bug report' : ' as a feature request'}.`,
     ...(focus === '' ? [] : [`Focus on: ${focus}`]),
+    ...(failures.length === 0 ? [] : ['Failures reported in this session (use them where they are what the issue is about; ignore them otherwise):', ...failures.map(failure => `- ${failure}`)]),
     'Write it for a teammate who has not seen the conversation: concrete and self-contained, never mentioning',
     '"this conversation", the assistant or Claude. Use the real file paths, commands, error messages and versions',
     'that came up. Never invent details: write TODO where something is unknown.',

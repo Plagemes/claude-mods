@@ -118,6 +118,14 @@ const PERSON_ORIGINS: ReadonlySet<string> = new Set(['composer', 'bridge', 'sdk'
 const PHONE_CONTEXT =
   'This prompt was sent by the user from WhatsApp (whatsapp-bridge). Your final reply is relayed to their phone: ' +
   'end with a short plain-text summary of what you did or found.'
+/**
+ * A phone prompt carries PHONE_CONTEXT in its own text: a plugin's `prompt.submit` hook never sees the prompts that
+ * plugin submits itself (checked live with `claude -p --plugin-dir`, docs/ARCHITECTURE.md section 2), so it cannot
+ * attach the note as context on the way down.
+ */
+const PHONE_NOTE = `\n\n(${PHONE_CONTEXT})`
+const phonePrompt = (text: string): string => `${text}${PHONE_NOTE}`
+const withoutPhoneNote = (text: string): string => (text.endsWith(PHONE_NOTE) ? text.slice(0, -PHONE_NOTE.length) : text)
 
 const EMPTY_CONNECTION: WaConnection = { phase: 'unconfigured', detail: '', phone: '', qr: '', pairingCode: '', mode: 'unknown', checkedAt: 0, isLeader: false }
 
@@ -215,7 +223,6 @@ type Runtime = {
   lateAnswers: string[]
   phoneQueue: { text: string; chatId: string; messageId: string }[]
   phoneTurn: { chatId: string; messageId: string } | undefined
-  tagged: string[]
   isSubmitting: boolean
   toolErrors: number
   testsOk: boolean | undefined
@@ -293,7 +300,6 @@ const newRuntime = (settings: Settings): Runtime => ({
   lateAnswers: [],
   phoneQueue: [],
   phoneTurn: undefined,
-  tagged: [],
   isSubmitting: false,
   toolErrors: 0,
   testsOk: undefined,
@@ -1209,6 +1215,8 @@ async function handleGlobalCommand(
       for (const session of live) {
         await deliver($, rt, session.id, { key: `row:${row.id}:${session.id}`, at: now, kind: 'owner', chatId: row.chatId, messageId: row.waMessageId, author: row.author ?? row.from, text: 'stop' })
       }
+      // With mods-hub: control.stop for every session, so what runs on its own (autopilot, queues) stops too.
+      await hubStop($, { action: 'stop', scope: 'all', reason: 'STOP ALL from WhatsApp', by: 'owner via whatsapp' })
       await reply(`⏹ Stopping ${plural(live.length, 'session')}.`)
       return true
     }
@@ -1337,6 +1345,8 @@ async function handleOwner($: EngineInterface, rt: Runtime, entry: InboxEntry): 
   }
   switch (command.kind) {
     case 'stop':
+      // With mods-hub: control.stop for this session, so what runs on its own here (autopilot, queues) stops too.
+      await hubStop($, { action: 'stop', scope: 'session', reason: 'STOP from WhatsApp', by: 'owner via whatsapp' })
       if (rt.state === 'working' && rt.turnId !== undefined) {
         const turnId = rt.turnId
         await $.turn.abort({ turnId }).catch(() => undefined)
@@ -1476,9 +1486,8 @@ async function drainPhoneQueue($: EngineInterface, rt: Runtime): Promise<void> {
       await waSendText($, rt, { chatId: item.chatId, quotedId: item.messageId, kind: 'reply', text: `✅ /${name} ran${ran.text !== undefined && ran.text !== '' ? `:\n${oneLine(ran.text, 600)}` : '.'}` })
       return
     }
-    rt.tagged.push(item.text)
     rt.phoneTurn = { chatId: item.chatId, messageId: item.messageId }
-    const submitted = await $.prompt.submit({ text: item.text, asUser: true })
+    const submitted = await $.prompt.submit({ text: phonePrompt(item.text), asUser: true })
     if (submitted.drop !== undefined) {
       rt.phoneTurn = undefined
       await waSendText($, rt, { chatId: item.chatId, quotedId: item.messageId, kind: 'reply', text: `❌ Not run: ${oneLine(submitted.drop, 200)}` })
@@ -1917,7 +1926,8 @@ async function remotePermission(
 
 // ── Turns, tools and automatic updates ───────────────────────────────────────────────────────────
 
-async function onTurnStart($: EngineInterface, rt: Runtime, turnId: string, text: string): Promise<void> {
+async function onTurnStart($: EngineInterface, rt: Runtime, turnId: string, prompt: string): Promise<void> {
+  const text = withoutPhoneNote(prompt)
   rt.state = 'working'
   rt.turnId = turnId
   rt.turnStartedAt = await $.clock.now()
@@ -2838,14 +2848,8 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (PERSON_ORIGINS.has(e.origin.kind)) {
-      rt.lastActiveAt = await $.clock.now()
-      return next(e)
-    }
-    const index = e.origin.kind === 'plugin' ? rt.tagged.indexOf(e.text) : -1
-    if (index < 0) return next(e)
-    rt.tagged.splice(index, 1)
-    return next({ ...e, context: [...(e.context ?? []), PHONE_CONTEXT] })
+    if (PERSON_ORIGINS.has(e.origin.kind)) rt.lastActiveAt = await $.clock.now()
+    return next(e)
   })
 
   on('turn.start', async ($, e, next) => {
@@ -2933,7 +2937,7 @@ export const register: Register = (on, options) => {
   })
 }
 
-// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -2948,12 +2952,17 @@ async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish
   }
 }
 
-/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
-async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
   try {
     await $.mods.notify(input)
   } catch {
-    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
   }
 }
 
@@ -2983,6 +2992,38 @@ async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
     return (await $.mods.showTab({ id })).isPlaced
   } catch {
     return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
   }
 }
 

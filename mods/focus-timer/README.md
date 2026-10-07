@@ -30,3 +30,8 @@ Runs focus rounds and breaks in the status line under the prompt (`🍅 18:42`, 
 - The timer (phase, end time, round) lives in `$.state` and in `$.store`; `$.clock.every(1000)` redraws `$.ui.status` and ends the phase when its time is up.
 - `session.start` picks a stored timer back up (one that ran out within the last two minutes still rings; an older one is dropped). After a plugin reload the countdown resumes on the next command or prompt.
 - The bell is `assets/bell.wav` through `$.audio.play`, which Claude Code plays on macOS; elsewhere only the toast shows.
+- With [mods-hub](../mods-hub) installed:
+  - a focus round publishes `focus.started` and `focus.ended` (minutes, whether it ran to the end), which calendar-sync and break-reminder read;
+  - it turns the hub's **Silent** on for the round's minutes in every session (unless Silent was already on), so other mods' toasts and sounds wait for the break, and turns it off when the round ends or is stopped;
+  - the end-of-phase toasts become hub notices: in the terminal while you are here, and on your channels too while the hub says you are away.
+  Without the hub nothing changes.

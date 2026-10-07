@@ -35,3 +35,8 @@ Initialize the price cache before rendering a cart in tests; renderCart reads it
 - Wraps `tool.call`: a Bash call matching a known check (`npm/pnpm/yarn/bun test|build|lint|typecheck`, jest, vitest, pytest, tsc, eslint, ruff, mypy, `cargo test|build|check|clippy`, `go test|build|vet`, `make/gradle/mvn/dotnet ... test|build`, ...) that errors is remembered with its output's tail; Edit/Write/MultiEdit/NotebookEdit calls are attached to it; a later pass of the same check (`npm run test -- x` and `npm test` count as one) completes the cycle.
 - On `turn.complete` (main loop, answered), one `$.model.complete` call (low effort, 20 s timeout) gets the failing command, error tail, edited files and Claude's answer, and may answer `NONE`. The lesson waits in `$.state`, drawn by an `AbovePrompt` hook on terminal and desktop.
 - Saving reads and rewrites the file through `$.fs`; a lesson already present is not added twice. Detection relies on the Bash tool reporting a non-zero exit as an error.
+- With [mods-hub](../mods-hub) installed:
+  - test runs other mods report as `test.result` (test-watch running the tests of what Claude edits, quick-commands) count as checks too, so a red run, edits and a green run teach a lesson even when Claude never ran the tests itself;
+  - a check the hub reported as `error.repeated` (the same command failing three times) is flagged to the model as not a one-off;
+  - a saved lesson is published as `lesson.learned` for every session (project-brain and recall keep it), and while you are away the waiting lesson also reaches your channels as a question.
+  Without the hub nothing changes.

@@ -31,3 +31,5 @@ Rates every prompt you send as light, standard or heavy from its words and lengt
 - A `prompt.submit` hook lets the prompt enter first (`next(e)`), then rates it, so the turn never waits on it; with `useModel` on it calls `$.model.complete` (10 s timeout) and falls back to the local rules when that fails.
 - The current model comes from `$.session.model()`; the hint lives in `$.state` and a `ui.render` hook on `AbovePrompt` draws it.
 - The rules are keyword heuristics: they read the prompt alone, not the conversation behind it, so treat the hint as a nudge.
+- The model family is read with the price table every Claude Mod shares (`shared/prices.ts`).
+- With [mods-hub](../mods-hub) installed, the suggested aliases follow smart-router's policy (the fact `smart-router.policy`: its light, standard and deep models), so the session and its subagents follow one profile (Saver, Fast, Max…), and a model of the family already running is never suggested. Each new suggestion is published as `x.model-advisor.suggested` (tier, model, reason), and the toast (`display: toast|both`) goes through the hub as a terminal-only notice. Without the hub nothing changes.

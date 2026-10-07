@@ -1,3 +1,5 @@
+import { isTestCommand as isSharedTestCommand, summarizeRun } from './shared/test-runners'
+
 /** Test files by name or folder, across the common ecosystems. */
 const TEST_FILE = new RegExp(
   [
@@ -47,9 +49,13 @@ export const isProductionCode = (path: string): boolean => {
   return dot > 0 && CODE_EXTENSIONS.has(base.slice(dot + 1).toLowerCase()) && !isTestFile(path)
 }
 
-export const isTestCommand = (command: string): boolean => command.split(COMMAND_PARTS).some(part => TEST_COMMAND.test(part.trim()))
+/** A test run: this mod's runners, or the ones every Claude Mod knows (`shared/test-runners.ts`: `just test`, `npm run test:unit`...). */
+export const isTestCommand = (command: string): boolean =>
+  command.split(COMMAND_PARTS).some(part => TEST_COMMAND.test(part.trim())) || isSharedTestCommand(command)
 
-export const looksFailed = (output: string): boolean => FAILED_OUTPUT.test(output)
+/** Output that says tests failed: "N failed" lines, or a runner's summary with failures (the shared detector). */
+export const looksFailed = (output: string, command = ''): boolean =>
+  FAILED_OUTPUT.test(output) || summarizeRun(command, output, false).outcome === 'failed'
 
 /** The command as the band shows it: its first line, at most `max` characters. */
 export const shortCommand = (command: string, max = 40): string => {

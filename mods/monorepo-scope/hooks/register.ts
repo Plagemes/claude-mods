@@ -1,5 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
+import { simpleCommands } from './shared/shell'
 import { everywhere, findPackage, packageJsonGlobs, packageOf, pnpmGlobs, scopeCommand } from './workspace'
 import type { Manager, Package } from './workspace'
 
@@ -18,7 +19,7 @@ type Workspace = { root: string; manager: Manager; packages: Package[] }
 type Settings = { isRewriting: boolean; scripts: Set<string> }
 
 /** What this load of the mod holds: the workspace (undefined until scanned), the current package, and the mode. */
-type Host = { workspace: Workspace | null | undefined; current: Package | undefined; isPinned: boolean; isOff: boolean }
+type Host = { workspace: Workspace | null | undefined; current: Package | undefined; isPinned: boolean; isOff: boolean; isHubbed: boolean }
 
 const parseJson = (text: string | undefined): Record<string, unknown> | undefined => {
   if (text === undefined) return undefined
@@ -120,8 +121,38 @@ async function workspaceOf($: EngineInterface, host: Host): Promise<Workspace | 
   return host.workspace
 }
 
-function showStatus($: EngineInterface, host: Host): void {
+async function showStatus($: EngineInterface, host: Host): Promise<void> {
   $.ui.status(host.isOff || host.current === undefined ? undefined : `📦 ${label(host.current)}${host.isPinned ? ' (pinned)' : ''}`)
+  if (host.isHubbed) await shareScope($, host)
+}
+
+/** The fact `monorepo-scope.package` on the hub's blackboard: which package test, lint and build are scoped to (null when scoping is off or none is known yet). */
+async function shareScope($: EngineInterface, host: Host): Promise<void> {
+  const pkg = host.isOff ? undefined : host.current
+  try {
+    await $.mods.share({
+      name: 'package',
+      value: pkg === undefined ? null : { name: label(pkg), dir: pkg.dir, isPinned: host.isPinned, manager: host.workspace?.manager ?? null },
+    })
+  } catch {
+    // No hub: the status line is all there is.
+  }
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello (this mod shares the fact `monorepo-scope.package`). */
+async function greetHub($: EngineInterface, host: Host): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  host.isHubbed = await hubHello($, { version: await ownVersion($), publishes: [], consumes: [] })
 }
 
 /** Follows the package of a file Claude edited, unless one is pinned. */
@@ -132,7 +163,7 @@ async function follow($: EngineInterface, host: Host, file: string): Promise<voi
   const pkg = packageOf(workspace.packages, relative(workspace.root, file))
   if (pkg === undefined || pkg.dir === host.current?.dir) return
   host.current = pkg
-  showStatus($, host)
+  await showStatus($, host)
 }
 
 function describe(workspace: Workspace, host: Host): string {
@@ -158,10 +189,11 @@ export const register: Register = (on, options) => {
     .map(script => script.trim())
     .filter(Boolean)
   const settings: Settings = { isRewriting: options.autoScope !== false, scripts: new Set(scripts.length > 0 ? scripts : DEFAULT_SCRIPTS.split(',')) }
-  const host: Host = { workspace: undefined, current: undefined, isPinned: false, isOff: false }
+  const host: Host = { workspace: undefined, current: undefined, isPinned: false, isOff: false, isHubbed: false }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'scope-pkg', description: 'Show or set the monorepo package test/lint/build are scoped to', argumentHint: '[package | auto | off]' })
+    await greetHub($, host)
     return next(e)
   })
 
@@ -172,13 +204,13 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim()
     if (arg === 'off') {
       host.isOff = true
-      showStatus($, host)
+      await showStatus($, host)
       return { text: 'Scoping is off for this session. /scope-pkg auto turns it back on.' }
     }
     if (arg === 'auto') {
       host.isOff = false
       host.isPinned = false
-      showStatus($, host)
+      await showStatus($, host)
       return { text: 'Following the package of the files Claude edits.' }
     }
     if (arg !== '') {
@@ -187,7 +219,7 @@ export const register: Register = (on, options) => {
       host.current = pkg
       host.isPinned = true
       host.isOff = false
-      showStatus($, host)
+      await showStatus($, host)
       return { text: `Pinned to ${label(pkg)} (${pkg.dir}).` }
     }
     return { text: describe(workspace, host) }
@@ -206,6 +238,8 @@ export const register: Register = (on, options) => {
     const workspace = await workspaceOf($, host).catch(() => null)
     const cwd = await $.session.cwd().catch(() => '')
     if (workspace === null || cwd.replace(/\/$/, '') !== workspace.root) return next(e)
+    // One simple command only: the shell reader sees a pipe, `&&`, a substitution or a nested script that the pattern check cannot rule out.
+    if (simpleCommands(e.command).length !== 1) return next(e)
     const scoped = scopeCommand(e.command, pkg, workspace.manager, settings.scripts)
     if (scoped === undefined) return next(e)
 
@@ -224,3 +258,100 @@ export const register: Register = (on, options) => {
     return ran.deny !== undefined ? ran : { ...ran, context: [...(ran.context ?? []), note] }
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

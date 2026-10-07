@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { chunkMarkdown, search } from '../hooks/search'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/app'
 const NOTES: Record<string, string> = {
@@ -169,4 +170,30 @@ test('the /recall pane searches, lists memories and forgets them on terminal and
   await ui.press({ key: 'forget:a' })
   expect(await ui.find({ type: 'Text', text: 'Memories (1)' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Prefer small PRs' })).toBeUndefined()
+})
+
+test('with mods-hub: decisions and lessons other mods published are searched, their files included', async ($, on) => {
+  project(on)
+  const hub = fakeHub(on)
+  hub.events.push(
+    // Already a note recall reads: searched once, from its file.
+    { topic: 'decision.recorded', source: 'decision-log', at: 1, data: { title: 'Use Postgres', path: 'docs/decisions/0001-database.md' } },
+    // A lesson saved to a file recall does not know: searched as published.
+    { topic: 'lesson.learned', source: 'lessons-learned', at: 2, data: { lesson: 'Run the kubernetes manifests through kubeconform first.', context: 'fixing make lint', path: 'docs/AGENTS.md' } },
+  )
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('tool.register', ($, e) => ({ value: { tool: `mcp__recall__${e.name}` } }) as never)
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['decision.recorded', 'lesson.learned'] }])
+
+  const found = String((await $.tool.call(searchTool('kubernetes manifests'))).result)
+  expect(found).toContain('hub · lesson')
+  expect(found).toContain('kubeconform')
+  expect(found).toContain('searched 3 files, 0 memories and 1 hub event')
+
+  const postgres = String((await $.tool.call(searchTool('postgres migrations'))).result)
+  expect(postgres).toContain('1. docs/decisions/0001-database.md › Decision (line 7)')
+  expect(postgres).not.toContain('hub · decision')
 })

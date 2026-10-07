@@ -10,6 +10,8 @@ const ADR_FILE = /^(\d{4})-.+\.md$/
 const SLUG_CHARS = 50
 const LISTED_MAX = 100
 const PANE_ROWS = 30
+/** How much of the Decision section goes into a `decision.recorded` event. */
+const SUMMARY_CHARS = 300
 
 const draftAtom = atom({ plugin: 'decision-log', key: 'draft' } as const, null)
 
@@ -80,6 +82,43 @@ function failureOf(reply: ModelForkResult): string {
   if (reply.reason === 'api-error') return `The model request failed (${reply.status ?? 'no response'}, ${reply.error}).`
   if (reply.reason === 'aborted') return 'Drafting was interrupted.'
   return 'The model returned an empty draft.'
+}
+
+/** The Decision section's first paragraph, for the hub's `decision.recorded`; undefined when the draft has none. */
+function summaryOf(body: string): string | undefined {
+  const section = /^## Decision\s*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m.exec(body)?.[1]?.trim()
+  const paragraph = section?.split(/\n\s*\n/)[0]?.replace(/\s+/g, ' ').trim()
+  if (paragraph === undefined || paragraph === '' || paragraph === 'TBD') return undefined
+  return paragraph.length > SUMMARY_CHARS ? `${paragraph.slice(0, SUMMARY_CHARS - 1)}…` : paragraph
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['decision.recorded'], consumes: [] })
+}
+
+/**
+ * A saved ADR on the hub's bus, for every session (project-brain, recall, session-journal, handoff, team-hub
+ * pick it up). Nothing happens without the hub.
+ */
+async function publishDecision($: EngineInterface, draft: Draft, path: string, status: string): Promise<void> {
+  const summary = summaryOf(draft.body)
+  await hubPublish($, {
+    topic: 'decision.recorded',
+    data: { title: draft.title, path, status, ...(summary === undefined ? {} : { summary }) },
+    scope: 'global',
+  })
 }
 
 async function folderOf($: EngineInterface, settings: Settings): Promise<string> {
@@ -160,6 +199,7 @@ async function saveDraft($: EngineInterface, settings: Settings): Promise<void> 
   }
   await update($, draftAtom, (current): Draft | null => (current?.id === draft.id ? { ...current, number, phase: 'saved', path } : current))
   $.ui.toast(`✅ ${MOD}: saved ${path}`)
+  await publishDecision($, draft, path, settings.status)
 }
 
 async function closeDraft($: EngineInterface): Promise<void> {
@@ -210,6 +250,7 @@ export const register: Register = (on, options) => {
       argumentHint: '<title>',
     })
     await $.command.register({ name: 'decisions', description: 'List the Architecture Decision Records of this project' })
+    await greetHub($)
 
     return next(e)
   })
@@ -289,3 +330,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'mod-store'
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 12, 0, 0)
@@ -469,4 +471,38 @@ test('a repository setting that is not owner/repo is reported instead of fetched
   expect(w.fetched).toEqual([])
   const ui = await $.ui.mount({ ...pane(), surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /is not owner\/repo/ })).toBeDefined()
+})
+
+test('with mods-hub: says hello and publishes mod.installed for every install and update, with the version', async ($, on) => {
+  const w = world(on, { marketplaces: [], installed: { 'secret-shield': { version: '1.0.0', scope: 'user', enabled: true } } })
+  const hub = fakeHub(on, {}, w.clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: false })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['mod.installed'], consumes: [] }])
+
+  await mods($, 'install cost-meter')
+  await mods($, 'update secret-shield')
+  await mods($, 'install-all')
+  expect(hub.published).toEqual([
+    { topic: 'mod.installed', data: { name: 'cost-meter', version: '1.1.0' } },
+    { topic: 'mod.installed', data: { name: 'secret-shield', version: '1.2.0' } },
+    { topic: 'mod.installed', data: { name: 'mod-store', version: '1.0.0' } },
+    { topic: 'mod.installed', data: { name: 'rm-rf-guard', version: '1.0.0' } },
+    { topic: 'mod.installed', data: { name: 'git-status-line', version: '2.0.0' } },
+    { topic: 'mod.installed', data: { name: 'branch-namer', version: '1.0.0' } },
+  ])
+})
+
+test('with mods-hub: a failed install and an uninstall publish nothing', async ($, on) => {
+  const w = world(on, { installed: { 'cost-meter': { version: '1.1.0', scope: 'user', enabled: true } } })
+  const hub = fakeHub(on, {}, w.clock)
+  await mods($, 'uninstall cost-meter')
+  await mods($, 'install not-a-mod')
+  expect(hub.published).toEqual([])
+})
+
+test('without mods-hub installing works exactly as before', async ($, on) => {
+  const w = world(on, { marketplaces: [] })
+  expect((await mods($, 'install cost-meter')).text).toBe('✓ Installed cost-meter 1.1.0. Run /reload-plugins to activate it.')
+  expect(w.installed.has('cost-meter')).toBe(true)
 })

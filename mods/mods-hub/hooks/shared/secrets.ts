@@ -1,4 +1,4 @@
-// @vendored shared/secrets.ts sha256:36ba152d10d5 by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
+// @vendored shared/secrets.ts sha256:5e0c8ccef22b by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
 /**
  * shared/secrets.ts — one set of secret and personal-data patterns (redactor, secret-shield, pii-in-logs,
  * whatsapp-bridge, mods-hub before anything leaves for a channel).
@@ -27,6 +27,11 @@ export type RedactOptions = {
   enabled?: ReadonlySet<SecretCategory>
   /** Values matching this are left alone. */
   allowlist?: RegExp
+  /**
+   * Treat documented example keys (`AKIA…EXAMPLE`) as keys too. Off by default (a guard should not refuse a doc
+   * that quotes AWS's example); a redactor that masks everything key-shaped turns it on.
+   */
+  isExampleMasked?: boolean
 }
 
 export type Redaction = { text: string; counts: Record<string, number> }
@@ -38,6 +43,8 @@ type Rule = {
   /** Capture group holding the value; the rest of the match is kept (default: the whole match). */
   group?: number
   isValid?: (value: string) => boolean
+  /** A documented example value (`…EXAMPLE`) is not a finding unless `isExampleMasked`. */
+  hasExamples?: boolean
 }
 
 export const ALL_CATEGORIES: readonly SecretCategory[] = ['secrets', 'emails', 'phones', 'ibans', 'cards', 'privateIps']
@@ -135,7 +142,7 @@ const RULES: readonly Rule[] = [
     category: 'secrets',
     pattern: /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|$)/g,
   },
-  { kind: 'aws-key', category: 'secrets', pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, isValid: notExample },
+  { kind: 'aws-key', category: 'secrets', pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, hasExamples: true },
   { kind: 'github-token', category: 'secrets', pattern: /\bgh[pousr]_[A-Za-z0-9]{36,255}\b|\bgithub_pat_[A-Za-z0-9_]{22,255}\b/g },
   { kind: 'anthropic-key', category: 'secrets', pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}/g },
   // Real keys always mix in digits; `sk-button-hover-variant-large` is a class name.
@@ -175,22 +182,26 @@ export const preview = (value: string): string => (value.length <= 4 ? '…' : `
 
 const isOn = (rule: Rule, options: RedactOptions): boolean => options.enabled === undefined || options.enabled.has(rule.category)
 
+/** Whether `value`, matched by `rule`, counts: valid, not allowlisted, not a documented example (unless asked). */
+const counts = (rule: Rule, value: string, options: RedactOptions): boolean =>
+  (rule.isValid === undefined || rule.isValid(value)) &&
+  options.allowlist?.test(value) !== true &&
+  (rule.hasExamples !== true || options.isExampleMasked === true || notExample(value))
+
 /** Masks every enabled kind in `text`; `counts` says how many of each were masked. */
 export function redactText(text: string, options: RedactOptions = {}): Redaction {
-  const counts: Record<string, number> = {}
+  const tally: Record<string, number> = {}
   let result = text
   for (const rule of RULES) {
     if (!isOn(rule, options)) continue
     result = result.replace(rule.pattern, (match: string, ...groups: unknown[]) => {
       const value = rule.group === undefined ? match : groups[rule.group - 1]
-      if (typeof value !== 'string' || value === '') return match
-      if (rule.isValid !== undefined && !rule.isValid(value)) return match
-      if (options.allowlist?.test(value) === true) return match
-      counts[rule.kind] = (counts[rule.kind] ?? 0) + 1
+      if (typeof value !== 'string' || value === '' || !counts(rule, value, options)) return match
+      tally[rule.kind] = (tally[rule.kind] ?? 0) + 1
       return rule.group === undefined ? mask(rule.kind) : match.slice(0, match.length - value.length) + mask(rule.kind)
     })
   }
-  return { text: result, counts }
+  return { text: result, counts: tally }
 }
 
 /** Every enabled finding in `text`, in order of position (a value found by two rules is reported once). */
@@ -213,9 +224,7 @@ export function findSecrets(text: string, options: RedactOptions = {}): SecretFi
     if (!isOn(rule, options)) continue
     for (const match of text.matchAll(rule.pattern)) {
       const value = rule.group === undefined ? match[0] : match[rule.group]
-      if (value === undefined || value === '') continue
-      if (rule.isValid !== undefined && !rule.isValid(value)) continue
-      if (options.allowlist?.test(value) === true) continue
+      if (value === undefined || value === '' || !counts(rule, value, options)) continue
       const index = (match.index ?? 0) + (rule.group === undefined ? 0 : match[0].length - value.length)
       if (taken.some(([start, end]) => index < end && index + value.length > start)) continue
       taken.push([index, index + value.length])
@@ -227,3 +236,13 @@ export function findSecrets(text: string, options: RedactOptions = {}): SecretFi
 
 /** Whether `text` holds anything of the `secrets` category (keys, tokens, private keys). */
 export const hasSecret = (text: string): boolean => findSecrets(text, { enabled: new Set(['secrets']) }).length > 0
+
+/**
+ * A one-line, masked summary of a command or a path, for logs and the mods-hub bus (`risk.blocked`): every
+ * enabled kind masked first (so a multi-line private key is still found), then whitespace folded, then cut to
+ * `max` characters.
+ */
+export function redactSummary(text: string, max = 200, options: RedactOptions = {}): string {
+  const line = redactText(text, options).text.replace(/\s+/g, ' ').trim()
+  return line.length <= max ? line : `${line.slice(0, max - 1)}…`
+}

@@ -21,7 +21,7 @@
 /quiet status     how long is left
 ```
 
-With [mods-hub](../mods-hub) installed, `/quiet` is an alias of the hub's **Silent** mode: the same words switch Silent on and off for every session at once, other mods' toasts and sounds wait in the Claude Mods panel's Recent list instead of being dropped, `critical` notifications still get through, and the status line follows Silent however it was set (`/hub silent`, the panel, another session). `/quiet on` asks the hub for the longest period, a day, since the hub takes Silent in minutes.
+With [mods-hub](../mods-hub) installed, `/quiet` is an alias of the hub's **Silent** mode: the same words switch Silent on and off for every session at once, other mods' toasts and sounds wait in the Claude Mods panel's Recent list instead of being dropped, `critical` notifications still get through, and the status line follows Silent however it was set (`/hub silent`, the panel, another session). `/quiet on` asks the hub for a Silent with no end, until `/quiet` (or `/hub silent off`) switches it off.
 
 ## Configuration
 No configuration needed.

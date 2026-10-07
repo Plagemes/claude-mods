@@ -34,3 +34,4 @@ The status line reads like this:
 - `session.start` and every `Bash`, `Edit`, `Write` or `NotebookEdit` call schedule a refresh with `$.clock.after`; a newer call replaces the pending one, so a burst of tool calls costs a single `git --no-optional-locks status --porcelain=v2 --branch` (5 s timeout, no index lock taken).
 - The line is only rewritten when its text changes. A failed or non-git `status` clears it.
 - Limits: it refreshes after Claude's tool calls, not when you change the repository from another terminal; the next tool call picks it up.
+- With [mods-hub](../mods-hub) installed it also reads `git.commit` and `git.push` from the bus: a commit or push made by another mod (commit-composer runs git itself, so none of Claude's tool calls show it) refreshes the line at the end of the turn instead of waiting for the next tool call. It shares the current branch, ahead/behind and dirty count as the fact `git-status-line.branch`. Without the hub nothing changes.

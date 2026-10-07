@@ -1,6 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { On, TurnCompleteInput } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'token-sparkline'
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -94,4 +96,42 @@ test('Hide removes the band and remembers it; /sparkline brings it back', async 
     expect(saved.get('isHidden')).toBe(false)
     await ui.unmount()
   }
+})
+
+const START = { cwd: '/w', surface: 'terminal', isInteractive: true } as const
+
+test('with mods-hub: says hello and puts the last turn\'s cost (from cost.update) beside the tokens', async ($, on) => {
+  engineBand(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('store.get', () => ({ value: undefined }))
+  on('command.register', () => ({ value: { command: 'sparkline' } }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  let event: { value: unknown; version: number } = { value: null, version: 1 }
+  on('state.get', { plugin: 'mods-hub', key: 'latest', id: 'cost.update' }, () => ({ value: event }))
+
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['cost.update'] }])
+  await $.turn.complete(turn(3000, 200))
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: bandProps })
+    expect((await ui.find({ type: 'Box', key: 'token-sparkline' }))?.text).not.toContain('$')
+    await ui.unmount()
+  }
+
+  event = { value: { id: 'e1', topic: 'cost.update', data: { turnUsd: 0.4231, sessionUsd: 2, model: 'm', tokens: 3200, isEstimate: false }, source: 'mods-hub', at: 1, session: 's', scope: 'session' }, version: 2 }
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: bandProps })
+    expect((await ui.find({ type: 'Box', key: 'token-sparkline' }))?.text).toContain('max 3.2k · $0.42')
+    await ui.unmount()
+  }
+})
+
+test('without mods-hub the band shows tokens only', async ($, on) => {
+  engineBand(on)
+  await $.turn.complete(turn(3000, 200))
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps })
+  expect((await ui.find({ type: 'Box', key: 'token-sparkline' }))?.text).not.toContain('$')
+  await ui.unmount()
 })

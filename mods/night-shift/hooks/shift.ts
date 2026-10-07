@@ -10,13 +10,14 @@ export type ShiftCommand =
   | { kind: 'clear' }
   | { kind: 'at'; hour: number; minute: number }
   | { kind: 'now' }
+  | { kind: 'away' }
   | { kind: 'off' }
   | { kind: 'report' }
   | { kind: 'usage'; why: string }
 
 export const EMPTY_VIEW: ShiftView = { tasks: [], at: null, run: null, last: null }
 
-export const USAGE = '/night-shift add <task> · at <HH:MM> · now · off · list · remove <n> · clear · report'
+export const USAGE = '/night-shift add <task> · at <HH:MM> · away · now · off · list · remove <n> · clear · report'
 
 const SUMMARY_CHARS = 600
 const LABEL_CHARS = 72
@@ -48,6 +49,7 @@ export function parseShiftArgs(args: string): ShiftCommand {
   if (rest.length === 0 && (word === 'list' || word === 'ls')) return { kind: 'list' }
   if (rest.length === 0 && word === 'clear') return { kind: 'clear' }
   if (rest.length === 0 && word === 'now') return { kind: 'now' }
+  if (rest.length === 0 && word === 'away') return { kind: 'away' }
   if (rest.length === 0 && (word === 'off' || word === 'cancel' || word === 'stop')) return { kind: 'off' }
   if (rest.length === 0 && word === 'report') return { kind: 'report' }
   if (word === 'remove' || word === 'rm') {
@@ -190,6 +192,7 @@ export function statusText(view: ShiftView, now: number): string | undefined {
     return `🌙 night shift ${position}/${view.run.tasks.length}${since}`
   }
   if (view.at !== null && view.tasks.length > 0) return `🌙 night shift at ${clockOf(view.at)} · ${view.tasks.length} task${view.tasks.length === 1 ? '' : 's'}`
+  if (view.isOnAway === true && view.tasks.length > 0) return `🌙 night shift when you are away · ${view.tasks.length} task${view.tasks.length === 1 ? '' : 's'}`
   if (view.last !== null && !view.last.isSeen) return '🌙 night-shift report ready'
   return undefined
 }
@@ -201,7 +204,9 @@ export function listText(view: ShiftView, now: number): string {
       ? `🌙 Running: task ${Math.min(view.run.tasks.length, view.run.results.length + 1)} of ${view.run.tasks.length}`
       : view.at !== null
         ? `🌙 Starts at ${clockOf(view.at)} (in ${span(view.at - now)})`
-        : '🌙 Not scheduled: /night-shift at 02:00, or /night-shift now'
+        : view.isOnAway === true
+          ? '🌙 Starts as soon as you are away (mods-hub)'
+          : '🌙 Not scheduled: /night-shift at 02:00, or /night-shift now'
   if (view.tasks.length === 0) return `${head}\nNo tasks queued for the next shift. Add one with /night-shift add <task>.`
   return [head, ...view.tasks.map((task: ShiftTask, index) => `${index + 1}. ${oneLine(task.text)}`)].join('\n')
 }

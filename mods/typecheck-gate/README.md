@@ -42,3 +42,4 @@ When a turn of Claude's edited TypeScript or Python files, typecheck-gate runs y
   - Python files are checked only when the project configures pyright or mypy.
   - Edits made through Bash don't trigger a check.
   - If a check is still running when the next turn ends, those edits are checked after the following turn.
+- With [mods-hub](../mods-hub) installed, every check is published as `typecheck.result` (checker, error count, files), which autopilot reads, and the toasts become hub notices: the errors (and "over to you" after the last autofix round) at `error`, so they reach your channels while you are away; "asking Claude to fix them" at `info`. Without the hub nothing changes.

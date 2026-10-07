@@ -2,6 +2,8 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const BAND = {
   plugin: 'test-first',
   component: 'AbovePrompt',
@@ -145,4 +147,32 @@ test('regression: the TDD band keeps the bands beneath it on screen', async ($, 
     expect(await ui.find({ type: 'Text', text: 'engine band' })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('with mods-hub: a red run test-watch reported opens the code, and a locked edit is published as risk.blocked', async ($, on) => {
+  const { reached } = engine(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: ['test.result'] }])
+  // A red run from before TDD mode was turned on says nothing about this cycle.
+  hub.events.push({ topic: 'test.result', source: 'test-watch', at: 1, data: { runner: 'vitest', outcome: 'failed', passed: 0, failed: 1 } })
+  await tdd($, 'on')
+  await newTurn($, 't1')
+
+  const locked = await edit($, '/repo/src/cart.ts')
+  expect(locked.deny).toContain('stays locked')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'test-first', tool: 'Edit', reason: 'TDD mode: production code locked until a test is written', severity: 'low', path: 'src/cart.ts' } },
+  ])
+
+  // The hub's own report of a Bash run is not taken twice; test-watch's run of the edited test is.
+  hub.events.push({ topic: 'test.result', source: 'mods-hub', at: 2, data: { runner: 'vitest', outcome: 'passed', passed: 3, failed: 0 } })
+  hub.events.push({ topic: 'test.result', source: 'test-watch', at: 3, data: { runner: 'vitest', outcome: 'failed', passed: 2, failed: 1, command: 'vitest run src/cart.test.ts' } })
+  const opened = await edit($, '/repo/src/cart.ts')
+  expect(opened.deny).toBeUndefined()
+  expect(reached).toContain('/repo/src/cart.ts')
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await band.find({ type: 'Text', text: /make the failing test pass/ }))?.text).toContain('vitest run src/cart.test.ts ✗')
+  await band.unmount()
 })

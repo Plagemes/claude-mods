@@ -31,7 +31,8 @@ message, or by adding "file.io" to the allowed hosts in this mod's settings.
 | `allowWord` | string | `UPLOAD-OK` | When your latest prompt contains this word, uploads are allowed for that prompt. Empty = only `allowHosts`. |
 
 ## How it works
-- A `tool.call` guard on `Bash` splits the command line the way a shell would (quotes, `&&`, pipes, `$(...)`, `bash -c '...'`, `sudo`/`env`/`timeout`/`xargs` prefixes; comments and here-document bodies are skipped, so a script written with `cat <<EOF` is not mistaken for a command). Each simple command is then read for what it sends where.
+- A `tool.call` guard on `Bash` splits the command line with the shared claude-mods shell reader (quotes, `&&`, pipes, redirections, `$(...)`, `bash -c '...'`, `su -c`, `eval`, heredocs fed to a shell, `sudo`/`env`/`timeout`/`xargs`/`setsid` prefixes; comments and here-document bodies are skipped, so a script written with `cat <<EOF` is not mistaken for a command). Each simple command is then read for what it sends where.
 - curl: `-T`, `-F name=@file`, `-d @file`, `--data-binary @file`, `--data-urlencode name@file`, `--json @file` and `@-` (stdin) count as file uploads to any outside host; an inline `-d` counts only for paste and sharing sites. wget: `--post-file`, `--body-file`. scp and rsync: a remote destination.
 - It fails closed: if the check itself fails on a command that mentions an uploader, the command is blocked.
+- With [mods-hub](../mods-hub) installed, every refusal is also published as `risk.blocked` (rule `upload`, where the data would go, severity `medium`, the command with secrets masked). Without the hub nothing changes.
 - Limits: it reads the command, not what a script does. A program that uploads on its own (`python upload.py`, `aws s3 cp`, `rclone`, `git push`, `npm publish`, `docker push`) is not seen, and neither is data inlined with `-d "$(cat file)"` to an ordinary host. It is a guard against careless sharing, not a sandbox.

@@ -2,7 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { leadingDirectory, migrationKind, rotate } from '../hooks/backup'
+import { inlineDatabaseUrl, leadingDirectory, migrationKind, rotate } from '../hooks/backup'
+import { fakeHub } from './hub'
 
 const NOW = Date.UTC(2026, 9, 7, 15, 4, 5)
 const DIR = '/work/app/.claude/db-backups'
@@ -200,4 +201,41 @@ test('regression: a migration inside bash -lc or sh -ec is recognised', () => {
   expect(migrationKind(`bash -lc "npx prisma migrate deploy"`, undefined)).toBe('prisma migrate')
   expect(migrationKind(`docker compose exec web sh -ec 'python manage.py migrate'`, undefined)).toBe('django migrate')
   expect(migrationKind(`git commit -m "run prisma migrate deploy"`, undefined)).toBeUndefined()
+})
+
+test('with mods-hub: a saved backup is published, and a migration without one is a warning notice', async ($, on) => {
+  const state = world(on, PG_ENV)
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.backup-before-migrate.saved'], consumes: [] }])
+  await bash($, 'npx prisma migrate dev --name add_users')
+  expect(state.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'info', title: '💾 Backed up postgres · app @ localhost:5432 (2.0 kB) before prisma migrate' }])
+  expect(hub.published).toEqual([
+    {
+      topic: 'x.backup-before-migrate.saved',
+      data: {
+        file: '.claude/db-backups/2026-10-07T15-04-05-app.sql.gz',
+        label: 'postgres · app @ localhost:5432',
+        kind: 'postgres',
+        bytes: 2048,
+        migration: 'prisma migrate',
+        command: 'npx prisma migrate dev --name add_users',
+      },
+      scope: 'global',
+    },
+  ])
+
+  await bash($, 'DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy')
+  expect(hub.notified.at(-1)?.level).toBe('warning')
+  expect(hub.notified.at(-1)?.title).toContain('No backup before prisma migrate')
+  expect(hub.published).toHaveLength(1)
+})
+
+test('reads the DATABASE_URL a command sets through env or export too', () => {
+  expect(inlineDatabaseUrl('env DATABASE_URL=postgres://localhost/a npx prisma migrate deploy')).toBe('postgres://localhost/a')
+  expect(inlineDatabaseUrl("export DATABASE_URL='postgres://localhost/b'; npx prisma migrate deploy")).toBe('postgres://localhost/b')
 })

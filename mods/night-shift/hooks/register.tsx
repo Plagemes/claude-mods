@@ -48,6 +48,9 @@ const UNATTENDED_NOTE =
   'changed, how you verified it, and what is left for a human.)'
 /** How soon the first task goes once a shift starts, after the command or press that started it has answered. */
 const FIRST_TASK_DELAY_MS = 500
+/** How a task ended, as a `task.finished` event says it. */
+const TASK_OUTCOME: Record<ShiftOutcome, 'ok' | 'failed' | 'cancelled'> = { done: 'ok', interrupted: 'cancelled', failed: 'failed', 'timed-out': 'failed' }
+const TITLE_CHARS = 80
 const OUTCOME_COLORS: Record<ShiftOutcome, string> = { done: 'success', interrupted: 'warning', failed: 'error', 'timed-out': 'warning' }
 
 const viewAtom = atom({ plugin: 'night-shift', key: 'view' } as const, EMPTY_VIEW)
@@ -72,6 +75,8 @@ type Session = {
   ticker: Timer | undefined
   /** The status line last shown, so the minute tick only redraws it when it changed. */
   status: string | undefined
+  /** How far mods-hub's `control.*` events were read. */
+  controlSeenAt: number
 }
 
 function readSettings(options: PluginOptions): Settings {
@@ -129,6 +134,7 @@ async function restore($: EngineInterface, session: Session): Promise<void> {
   const view: ShiftView = {
     tasks: Array.isArray(stored?.tasks) ? stored.tasks.filter(task => typeof task?.text === 'string').slice(0, MAX_QUEUED) : [],
     at: typeof stored?.at === 'number' ? stored.at : null,
+    isOnAway: stored?.isOnAway === true,
     run: stored?.run !== null && typeof stored?.run === 'object' && Array.isArray(stored.run.tasks) ? stored.run : null,
     last: stored?.last !== null && typeof stored?.last === 'object' ? stored.last : null,
   }
@@ -164,15 +170,71 @@ async function snapshot($: EngineInterface, session: Session, base: string): Pro
   return numstat.ok ? snapshotOf(numstat.out, others.ok ? others.out : '') : new Map()
 }
 
+// ── mods-hub: tasks on the bus, a shift that starts when you leave, stop/pause from anywhere ────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface, session: Session): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  session.controlSeenAt = await $.clock.now()
+  await hubHello($, { version: await ownVersion($), publishes: ['task.started', 'task.finished'], consumes: ['session.away', 'control.stop', 'control.pause'] })
+}
+
+/** A task of the shift on the hub's bus (autopilot, workflow-studio, mission-control); nothing without the hub. */
+async function publishTask($: EngineInterface, task: { id: string; text: string }, outcome?: ShiftOutcome): Promise<void> {
+  const title = oneLine(task.text, TITLE_CHARS)
+  if (outcome === undefined) await hubPublish($, { topic: 'task.started', data: { id: task.id, title } })
+  else await hubPublish($, { topic: 'task.finished', data: { id: task.id, title, outcome: TASK_OUTCOME[outcome] } })
+}
+
+/**
+ * A stop or pause raised through mods-hub (a STOP from your phone, mission-control): a running shift ends after
+ * the task it is on, and a scheduled one is called off; the tasks stay queued. Read on the minute tick.
+ */
+async function obeyControl($: EngineInterface, session: Session): Promise<void> {
+  let events
+  try {
+    events = await $.mods.recent({ prefix: 'control.', since: session.controlSeenAt })
+  } catch {
+    return
+  }
+  for (const event of events) {
+    session.controlSeenAt = Math.max(session.controlSeenAt, event.at)
+    if (event.topic !== 'control.stop' && event.topic !== 'control.pause') continue
+    const by = String((event.data as { by?: unknown }).by ?? event.source)
+    const why = `${event.topic === 'control.stop' ? 'stopped' : 'paused'} by ${by}`
+    await commit($, session, view =>
+      view.run !== null
+        ? { ...view, run: { ...view.run, stopReason: view.run.stopReason || why } }
+        : { ...view, at: null, isOnAway: false },
+    )
+  }
+}
+
+/** Whether mods-hub says you are away (no activity in any session, or you said so); false without it. */
+async function isAway($: EngineInterface): Promise<boolean> {
+  return (await hubMode($))?.presence === 'away'
+}
+
 /** Leaves a report that says why the shift did not run; the tasks stay queued. */
 async function noShift($: EngineInterface, session: Session, reason: string): Promise<string> {
   const now = await $.clock.now()
   await commit($, session, view => ({
     ...view,
     at: null,
+    isOnAway: false,
     last: { path: '', startedAt: now, endedAt: now, done: 0, total: view.tasks.length, reason, results: [], isSeen: false },
   }))
-  $.ui.toast(`🌙 night shift did not start: ${reason}`)
+  await hubNotify($, { level: 'error', title: `🌙 night shift did not start: ${reason}`, topic: 'task.started' })
   return `Did not start: ${reason}.`
 }
 
@@ -213,10 +275,10 @@ async function startShift($: EngineInterface, session: Session, settings: Settin
     stopReason: '',
   }
   const taken = new Set(tasks.map(task => task.id))
-  await commit($, session, latest => ({ ...latest, at: null, run, tasks: latest.tasks.filter(task => !taken.has(task.id)) }))
+  await commit($, session, latest => ({ ...latest, at: null, isOnAway: false, run, tasks: latest.tasks.filter(task => !taken.has(task.id)) }))
   session.failuresInRow = 0
   await writeReport($, session, run, { endedAt: now, reason: '', overall: '', isFinal: false })
-  $.ui.toast(`🌙 night shift started: ${plural(tasks.length, 'task')} · report in ${run.reportPath}`)
+  await hubNotify($, { level: 'info', title: `🌙 night shift started: ${plural(tasks.length, 'task')} · report in ${run.reportPath}`, topic: 'task.started' })
   later($, session, settings, FIRST_TASK_DELAY_MS)
   return `Started: ${plural(tasks.length, 'task')}. The report goes to ${run.reportPath}.`
 }
@@ -246,6 +308,7 @@ async function nextTask($: EngineInterface, session: Session, settings: Settings
   session.isSubmitting = true
   try {
     const sent = await $.prompt.submit({ text: `${task.text}\n\n${UNATTENDED_NOTE}`, asUser: true })
+    if (sent.drop === undefined) await publishTask($, task)
     if (sent.drop !== undefined) await recordResult($, session, settings, 'failed', 0, `A hook refused the task: ${sent.drop}`)
   } catch (error) {
     await recordResult($, session, settings, 'failed', 0, `The task could not be submitted: ${messageOf(error)}`)
@@ -276,6 +339,7 @@ async function recordResult($: EngineInterface, session: Session, settings: Sett
     files: await filesOfTask($, session, run.base),
     summary,
   }
+  await publishTask($, current, outcome)
   session.failuresInRow = outcome === 'done' ? 0 : session.failuresInRow + 1
   const stopReason =
     run.stopReason ||
@@ -325,7 +389,12 @@ async function endShift($: EngineInterface, session: Session, reason: string): P
   }
   const notRun = run.tasks.slice(run.results.length)
   await commit($, session, view => ({ ...view, run: null, last: report, tasks: [...notRun, ...view.tasks].slice(0, MAX_QUEUED) }))
-  $.ui.toast(`🌙 night shift over: ${report.done}/${report.total} done · ${report.path}`)
+  // The morning news, on your channels too while you are away: success when every task got done.
+  await hubNotify($, {
+    level: report.done === report.total ? 'success' : 'error',
+    title: `🌙 night shift over: ${report.done}/${report.total} done · ${report.path}`,
+    topic: 'task.finished',
+  })
 }
 
 function ensureTicker($: EngineInterface, session: Session, settings: Settings): void {
@@ -336,6 +405,7 @@ function ensureTicker($: EngineInterface, session: Session, settings: Settings):
 /** Every minute: start a due shift, stop a task that ran too long, retry a task that waited for Claude to be free. */
 async function tick($: EngineInterface, session: Session, settings: Settings): Promise<void> {
   const now = await $.clock.now()
+  await obeyControl($, session)
   const view = await read($, viewAtom)
   showStatus($, session, view, now)
   if (view.run !== null) {
@@ -353,6 +423,10 @@ async function tick($: EngineInterface, session: Session, settings: Settings): P
     }
     return
   }
+  if (view.isOnAway === true && view.tasks.length > 0 && !isBusy(session) && (await isAway($))) {
+    await startShift($, session, settings)
+    return
+  }
   if (view.at === null || now < view.at || isBusy(session)) return
   if (now - view.at > MISSED_GRACE_MS) {
     await noShift($, session, `it missed its ${clockOf(view.at)} start (the session was closed or busy)`)
@@ -364,7 +438,7 @@ async function tick($: EngineInterface, session: Session, settings: Settings): P
 async function schedule($: EngineInterface, session: Session, hour: number, minute: number): Promise<string> {
   const now = await $.clock.now()
   const at = nextOccurrence(now, hour, minute)
-  const view = await commit($, session, latest => ({ ...latest, at }))
+  const view = await commit($, session, latest => ({ ...latest, at, isOnAway: false }))
   const tasks = view.tasks.length === 0 ? ' Add tasks with /night-shift add <task>.' : ` ${plural(view.tasks.length, 'task')} queued.`
   return `Scheduled for ${clockOf(at)} (in ${span(at - now)}).${tasks} Keep this session open; it needs a clean git tree.`
 }
@@ -381,11 +455,25 @@ async function runNow($: EngineInterface, session: Session, settings: Settings):
   return startShift($, session, settings)
 }
 
+/** `/night-shift away`: start the next shift as soon as mods-hub says you are away; it needs the hub to know. */
+async function whenAway($: EngineInterface, session: Session): Promise<string> {
+  if ((await hubMode($)) === undefined) {
+    return 'Starting when you are away needs mods-hub, which knows when you leave. Use /night-shift at <HH:MM> instead.'
+  }
+  const view = await commit($, session, latest => ({ ...latest, at: null, isOnAway: true }))
+  const tasks = view.tasks.length === 0 ? ' Add tasks with /night-shift add <task>.' : ` ${plural(view.tasks.length, 'task')} queued.`
+  return `The shift starts once you are away (no activity for a while, or /hub away).${tasks} Keep this session open; it needs a clean git tree.`
+}
+
 async function stop($: EngineInterface, session: Session): Promise<string> {
   const view = await read($, viewAtom)
   if (view.run !== null) {
     await commit($, session, latest => (latest.run === null ? latest : { ...latest, run: { ...latest.run, stopReason: latest.run.stopReason || 'you stopped it' } }))
     return 'The shift stops after the current task; the rest stay queued.'
+  }
+  if (view.isOnAway === true) {
+    await commit($, session, latest => ({ ...latest, isOnAway: false }))
+    return `Cancelled the shift that would start when you are away; ${plural(view.tasks.length, 'task')} stay queued.`
   }
   if (view.at === null) return 'Nothing is scheduled.'
   await commit($, session, latest => ({ ...latest, at: null }))
@@ -431,6 +519,8 @@ async function runCommand($: EngineInterface, session: Session, settings: Settin
       return schedule($, session, command.hour, command.minute)
     case 'now':
       return runNow($, session, settings)
+    case 'away':
+      return whenAway($, session)
     case 'off':
       return stop($, session)
     case 'report': {
@@ -467,6 +557,7 @@ export const register: Register = (on, options) => {
     pending: undefined,
     ticker: undefined,
     status: undefined,
+    controlSeenAt: 0,
   }
 
   on('session.start', async ($, e, next) => {
@@ -482,6 +573,7 @@ export const register: Register = (on, options) => {
       $.ui.log(`night-shift: could not load: ${messageOf(error)}`, { to: 'debug' })
     }
     ensureTicker($, session, settings)
+    await greetHub($, session)
     return next(e)
   })
 
@@ -566,7 +658,9 @@ export const register: Register = (on, options) => {
         ? `Running task ${Math.min(run.tasks.length, run.results.length + 1)} of ${run.tasks.length}${run.stopReason ? ` · stopping: ${run.stopReason}` : ''}`
         : view.at !== null
           ? `Starts at ${clockOf(view.at)} · in ${span(view.at - now)}`
-          : 'Not scheduled'
+          : view.isOnAway === true
+            ? 'Starts as soon as you are away'
+            : 'Not scheduled'
     const resultRow = (result: ShiftResult) => (
       <Box key={`result:${result.id}`} flexDirection="row" gap={1}>
         <Text color={OUTCOME_COLORS[result.outcome]}>{glyphOf(result.outcome)}</Text>
@@ -656,3 +750,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

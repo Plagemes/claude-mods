@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptComposeInput, RenderPropsOf } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'daily-goal'
 const SURFACES = ['terminal', 'desktop'] as const
 const ROOT = '/home/me/shop'
@@ -190,4 +192,19 @@ test('the engine band is not drawn under a Box with a size prop while the evenin
     expect(sizedAbove(await band.drawn())).toEqual([])
     await band.unmount()
   }
+})
+
+test('with mods-hub: says hello, and reaching the goal is a success notice through the hub, not a toast', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on, {}, w.clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
+
+  await goal($, 'Ship the login fix')
+  const band = await mount($)
+  await band.press({ key: 'done' })
+  expect(hub.notified).toEqual([{ level: 'success', title: '🎉 Goal reached: Ship the login fix' }])
+  expect(w.toasts).toEqual([])
+  expect(entries(w.store)).toMatchObject([{ status: 'done' }])
 })

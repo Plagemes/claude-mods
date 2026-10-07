@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { CommandRunInput, FsEntry, ModelForkResult, On, RenderPropsOf } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const ROOT = '/home/me/shop'
 const FOLDER = `${ROOT}/docs/decisions`
 const USAGE = { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 900, cache_creation_input_tokens: 0 }
@@ -140,4 +142,29 @@ test('/decisions says so when the folder does not exist', { options: { directory
   world(on, { isAnswered: false, reason: 'empty-reply', usage: USAGE })
 
   expect((await $.command.run(typed('decisions'))).text).toContain('no decisions in adr yet')
+})
+
+test('with mods-hub: a saved ADR is published as decision.recorded for every session', async ($, on) => {
+  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 7, 12) })
+  const seen = world(on, { isAnswered: true, text: ADR_BODY, usage: USAGE })
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['decision.recorded'], consumes: [] }])
+
+  await decide($, 'Use Postgres for events')
+  await clock.advance(0)
+  const ui = await $.ui.mount({ plugin: 'decision-log', surface: 'terminal', component: 'Pane', requestId: 'decision-log', props: PANE })
+  await ui.press({ key: 'save' })
+  await ui.unmount()
+
+  expect(seen.toasts).toEqual(['✅ decision-log: saved docs/decisions/0001-use-postgres-for-events.md'])
+  expect(hub.published).toEqual([
+    {
+      topic: 'decision.recorded',
+      data: { title: 'Use Postgres for events', path: 'docs/decisions/0001-use-postgres-for-events.md', status: 'Accepted', summary: 'Use Postgres.' },
+      scope: 'global',
+    },
+  ])
 })

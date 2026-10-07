@@ -136,4 +136,8 @@ test('regression: installs behind bash -lc and wrappers with options are found',
   expect(installsIn('env -u PROXY nice -n 5 pnpm add zod')).toEqual([{ manager: 'pnpm', dir: '' }])
   expect(installsIn('git commit -m "npm install && pip install x"')).toEqual([])
   expect(installsIn('bash ./setup.sh')).toEqual([])
+  // The shared shell reader: a cd inside a nested script does not leak out of it, and a script starts where its parent was.
+  expect(installsIn("bash -c 'cd web && npm ci' && pnpm install")).toEqual([{ manager: 'npm', dir: 'web' }, { manager: 'pnpm', dir: '' }])
+  expect(installsIn('cd api && bash -c "pip install x"')).toEqual([{ manager: 'pip', dir: 'api' }])
+  expect(installsIn('npm install $(cat pkgs) | tee log')).toEqual([{ manager: 'npm', dir: '' }])
 })

@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { findPii, isScannedFile, maskLine } from '../hooks/scan'
+import { fakeHub } from './hub'
 
 /** The engine beneath the plugin: files on disk, tool calls recorded, toasts recorded. */
 const engine = (on: On, files: Record<string, string> = {}) => {
@@ -198,4 +199,35 @@ test('maskLine blanks strings and cuts comments', () => {
 test('isScannedFile: code files only, tests excluded', () => {
   for (const path of ['/r/a.ts', '/r/a.tsx', '/r/a.py', '/r/a.go', '/r/A.java', '/r/a.rs', '/r/a.sh', '/r/Main.kt', '/r/a.ipynb']) expect(isScannedFile(path), path).toBe(true)
   for (const path of ['/r/a.md', '/r/a.json', '/r/a.test.ts', '/r/a.spec.js', '/r/test/a.py', '/r/tests/a.py', '/r/a_test.go', '/r/UserTest.java']) expect(isScannedFile(path), path).toBe(false)
+})
+
+test('a key or token written into the log call itself is found by the shared secret rules', () => {
+  const token = 'ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8'
+  expect(reasons(`console.log("calling with ${token}")`)).toEqual([['a hard-coded github-token']])
+  expect(reasons('console.log("token count", tokenCount)')).toEqual([])
+})
+
+test('with mods-hub in warn mode: secret.detected and lint.result are published and the note goes through the hub', async ($, on) => {
+  const seen = engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['secret.detected', 'lint.result', 'risk.blocked'], consumes: [] }])
+  await edit($, '/repo/src/login.ts', 'console.log("login", email, password)')
+  expect(hub.published).toEqual([
+    { topic: 'secret.detected', data: { kind: 'log-statement', where: 'edit', action: 'warned', path: '/repo/src/login.ts' } },
+    { topic: 'lint.result', data: { tool: 'pii-in-logs', errors: 0, warnings: 1, files: ['/repo/src/login.ts'] } },
+  ])
+  expect(hub.notified).toEqual([{ level: 'warning', title: '1 log statement in login.ts may print personal data or secrets', topic: 'secret.detected' }])
+  expect(seen.toasts).toEqual([])
+})
+
+test('with mods-hub in block mode: the refusal is published as secret.detected and risk.blocked', { options: { mode: 'block' } }, async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  expect((await edit($, '/repo/src/login.ts', 'console.log("login", email, password)')).deny).toContain('pii-in-logs: blocked')
+  expect(hub.published).toEqual([
+    { topic: 'secret.detected', data: { kind: 'log-statement', where: 'edit', action: 'blocked', path: '/repo/src/login.ts' } },
+    { topic: 'risk.blocked', data: { guard: 'pii-in-logs', tool: 'Edit', reason: 'pii-log: log statements would print email, password', severity: 'medium', path: '/repo/src/login.ts' } },
+  ])
 })

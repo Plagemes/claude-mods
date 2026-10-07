@@ -10,13 +10,26 @@ export type Personal = {
   config: ReadonlyMap<string, string | number | boolean>
   /** The hub's notification routes; undefined without a hub. */
   routes: Partial<Record<TeamLevel, TeamRoute>> | undefined
-  /** The guard level guardian reports (fact `guardian.policy`), undefined when it does not say. */
-  guardLevel: TeamGuardLevel | undefined
+  /** The guard level guardian reports (fact `guardian.policy`, see guardLevelOfPolicy), undefined when it does not say. */
+  guardLevel: PersonalGuardLevel | undefined
   isGuardianInstalled: boolean
 }
 
 const ROUTE_STRENGTH: Record<TeamRoute, number> = { off: 0, terminal: 1, away: 2, always: 3 }
-const GUARD_STRENGTH: Record<TeamGuardLevel, number> = { off: 0, standard: 1, strict: 2 }
+/** A level guardian can run at that a team file cannot ask for: `permissive`, weaker than standard. */
+export type PersonalGuardLevel = TeamGuardLevel | 'permissive'
+const GUARD_STRENGTH: Record<PersonalGuardLevel, number> = { off: 0, permissive: 0.5, standard: 1, strict: 2 }
+
+/**
+ * The level in guardian's fact `guardian.policy` (`{ level, base, fallback, project, guards }`, shared by guardian):
+ * `permissive`, `standard` or `strict`, or `custom` built on `base`, which is the level that counts.
+ */
+export function guardLevelOfPolicy(fact: unknown): PersonalGuardLevel | undefined {
+  if (fact === null || typeof fact !== 'object') return undefined
+  const { level, base } = fact as { level?: unknown; base?: unknown }
+  const effective = level === 'custom' ? base : level
+  return effective === 'permissive' || effective === 'standard' || effective === 'strict' ? effective : undefined
+}
 
 /** The `/config` row each team budget limits: a limit of 0 there means "no limit". */
 export const BUDGET_ROWS = {

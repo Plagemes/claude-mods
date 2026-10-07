@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptOrigin } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const BAND = {
   plugin: 'model-advisor',
   component: 'AbovePrompt',
@@ -137,4 +139,28 @@ test('Type /model fills the prompt, the same hint then rests a few prompts, Mute
   await $.prompt.submit(typed('reformat this file'))
   expect(await ui.find({ type: 'Button', key: 'use' })).toBeDefined()
   await ui.unmount()
+})
+
+test('with mods-hub: suggests the models of smart-router\'s policy, never the one running, and publishes each suggestion', { options: { display: 'toast' } }, async ($, on) => {
+  const engine = answerEngine(on, 'claude-opus-5-5')
+  const hub = fakeHub(on)
+  // The router runs its Max profile: light work goes to sonnet there.
+  on('mods.read', ($, e) => ({
+    value: e.key === 'smart-router.policy' ? { key: e.key, owner: 'smart-router', at: 0, value: { profile: 'max', models: { light: 'sonnet', standard: 'opus', deep: 'opus' } } } : null,
+  }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.model-advisor.suggested'], consumes: ['smart-router.policy'] }])
+
+  await $.prompt.submit(typed('rename getUser to fetchUser in api.ts'))
+  expect(hub.notified).toEqual([{ level: 'info', title: 'Simple task (a rename): /model sonnet would do', audience: 'terminal' }])
+  expect(engine.toasts).toEqual([])
+  expect(hub.published).toEqual([{ topic: 'x.model-advisor.suggested', data: { tier: 'light', model: 'sonnet', reason: 'a rename' } }])
+
+  // Already on sonnet: the policy's light model is the one running, so there is nothing to suggest.
+  engine.model = 'claude-sonnet-5-5'
+  await $.prompt.submit(typed('fix the typo in the README'))
+  expect(hub.published).toHaveLength(1)
 })

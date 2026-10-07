@@ -23,6 +23,8 @@ export type AgentRow = {
   lastActivityAt?: number
   toolCount: number
   tokens?: number
+  /** The tier smart-router routed it to (`light`, `standard`, `deep`), from mods-hub's `agent.routed`. */
+  tier?: string
 }
 
 declare module 'claude-code' {

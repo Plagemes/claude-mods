@@ -27,3 +27,7 @@
 - `command.run` resolves the base and merge base with `$.process.run(['git', ...])`, reads the template with `$.fs.read`, and calls `$.model.complete`; the draft lives in session state and the pane redraws from it.
 - Templates are looked up at `.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `docs/` and the repository root.
 - Limits: the diff sent to the model is cut at 24,000 characters and the log at 60 commits, so very large branches are described from the stat and commit messages; copying needs a clipboard on the surface you press from.
+- With [mods-hub](../mods-hub) installed:
+  - a `git.commit` on the same branch after the draft was written (from commit-composer) shows **New commit since this draft … Regenerate to include it** in the pane;
+  - when Claude then opens the pull request (`gh pr create`, `glab mr create`), its link is published as `pr.opened` (link, drafted title, branch) for every session, so team-hub can post it.
+  Without the hub nothing changes.

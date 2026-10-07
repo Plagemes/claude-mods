@@ -31,6 +31,15 @@ const RUNNER = new RegExp(
 )
 /** A package script or make target named test. */
 const TEST_SCRIPT = new RegExp(LAUNCHED + String.raw`(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?::\S+)?|(?:make|just|task)\s+test)(?![\w./-])`)
+/**
+ * A test tool whose output this module does not count (its runner stays undefined): tox, nox, ctest, dotnet test,
+ * swift test, mix test, python -m unittest, and Maven / Gradle (wrappers too) with a `test` goal or task
+ * (`mvn -q clean test`, `./gradlew :app:test`), never a flag that only names one (`-DskipTests`).
+ */
+const TEST_TOOL = new RegExp(
+  LAUNCHED +
+    String.raw`(?:tox|nox|ctest|unittest|(?:dotnet|swift|mix)\s+test|(?:mvnw?|gradlew?)(?:\s+\S+)*?\s+(?:\S*:)?test)(?![\w./-])`,
+)
 const SEGMENTS = /&&|\|\||[;|&\n(){}]/
 
 const RUNNER_OF: Record<string, TestRunner> = {
@@ -52,9 +61,9 @@ export function runnerOfCommand(command: string): TestRunner | undefined {
   return undefined
 }
 
-/** Whether a shell command runs tests at all (a runner, or a package script named test), rather than only naming one. */
+/** Whether a shell command runs tests at all (a runner, a test tool, or a package script named test), rather than only naming one. */
 export const isTestCommand = (command: string): boolean =>
-  runnerOfCommand(command) !== undefined || command.split(SEGMENTS).some(segment => TEST_SCRIPT.test(segment))
+  runnerOfCommand(command) !== undefined || command.split(SEGMENTS).some(segment => TEST_SCRIPT.test(segment) || TEST_TOOL.test(segment))
 
 /** The runner whose summary the output carries. */
 export function runnerOfOutput(output: string): TestRunner | undefined {

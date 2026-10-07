@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { ModelCompleteResult, On, SessionMessage } from 'claude-code'
 
 import { lastTurn, parseVerdict, reviewPrompt, reviewerFor } from '../hooks/review'
+import { fakeHub } from './hub'
 
 const USAGE = { input_tokens: 1200, output_tokens: 300, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const MESSAGES: SessionMessage[] = [
@@ -150,4 +151,28 @@ test('nothing to review before Claude has answered', async ($, on) => {
   const ran = await $.command.run(command())
   expect(ran.text).toBe('Nothing to review yet: Claude has not answered in this conversation.')
   expect(state.asked).toHaveLength(0)
+})
+
+const START = { cwd: '/app', surface: 'terminal', isInteractive: true } as const
+
+test('with mods-hub: says hello; each second opinion is published as agent.finished and announced through the hub', async ($, on) => {
+  let replies = 0
+  const { state, clock } = world(on, () => (++replies === 1 ? { isAnswered: true, text: VERDICT, usage: USAGE } : { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: USAGE }))
+  const hub = fakeHub(on, {}, clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['agent.finished'], consumes: [] }])
+
+  await $.command.run(command())
+  await clock.settle()
+  expect(hub.published).toEqual([{ topic: 'agent.finished', data: { agentType: 'second-opinion', outcome: 'ok', durationMs: 0 } }])
+  expect(hub.notified).toEqual([{ level: 'success', title: 'Second opinion from sonnet: partly agrees · 2 concerns (1 high)' }])
+
+  await $.command.run(command())
+  await clock.settle()
+  expect(hub.published.at(-1)).toEqual({ topic: 'agent.finished', data: { agentType: 'second-opinion', outcome: 'failed', durationMs: 0 } })
+  expect(hub.notified.at(-1)).toEqual({ level: 'warning', title: 'Second opinion failed: the API answered 529 (overloaded)' })
+  expect(state.toasts).toEqual([])
 })

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, Timer } from 'claude-code'
+import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput, Timer } from 'claude-code'
 
 import type { DevServerLine as Line, DevServerRun as Run, DevServerStatus as Status } from '../types'
 import { NESTED_PATHS, VENV_PYTHONS, detectCommand, shortCommand } from './detect'
@@ -8,6 +8,12 @@ import { findUrl, kindOf, lastErrorBlock, splitLines } from './output'
 
 const PANE = 'dev-server'
 const PANE_TITLE = 'Dev server'
+/** The hub's shared panel, and this mod's tab in it (order 300: the last of the dashboards). The own pane stays for a full-size view. */
+const HUB_PANE = 'claude-mods'
+const TAB = { id: 'devserver', title: PANE_TITLE, order: 300, command: 'dev' } as const
+/** At most one `build.result` for new errors per this long: a server that logs errors in a loop must not flood the bus. */
+const REPORT_GAP_MS = 5_000
+const COMMAND_CHARS = 200
 const MAX_LINES = 500
 const MAX_LINE_CHARS = 2_000
 const MAX_PARTIAL_CHARS = 64_000
@@ -54,10 +60,14 @@ type Child = {
   isStopping: boolean
   flush: Timer | undefined
   done: Promise<void>
+  /** What was told to the hub's bus: whether the server came up, how many errors were reported, and when last. */
+  isReady: boolean
+  reportedErrors: number
+  lastReportAt: number
 }
 
 /** What this load of the mod holds: the running server, the latest one started, what the model was last told. */
-type Host = { child: Child | undefined; latest: Child | undefined; configured: string; status: string | undefined; told: string }
+type Host = { child: Child | undefined; latest: Child | undefined; configured: string; status: string | undefined; told: string; isHubbed: boolean }
 
 const reasonOf = (error: unknown): string => {
   const text = String(error instanceof Error ? error.message : error)
@@ -123,6 +133,25 @@ async function publish($: EngineInterface, host: Host, child: Child): Promise<vo
   await update($, linesAtom, () => snapshot(child))
   const run = await update($, runAtom, (latest: Run) => ({ ...latest, url: child.url ?? latest.url, errors: child.errors }))
   if (host.child === child && run.command !== null) setStatus($, host, runningStatus(child, run.command))
+  if (host.child === child && run.command !== null) await reportBuild($, host, child, run.command)
+}
+
+/**
+ * Tells mods-hub's bus (`build.result`) how the dev server stands: up (a URL appeared and no error so far), failing
+ * (more errors than the last report, at most one report per few seconds), or dead. Nothing without the hub.
+ */
+async function reportBuild($: EngineInterface, host: Host, child: Child, command: string): Promise<void> {
+  if (!host.isHubbed) return
+  const tool = shortCommand(command)
+  const now = await $.clock.now()
+  if (child.errors > child.reportedErrors && now - child.lastReportAt >= REPORT_GAP_MS) {
+    child.reportedErrors = child.errors
+    child.lastReportAt = now
+    await hubPublish($, { topic: 'build.result', data: { tool, outcome: 'failed', command: command.slice(0, COMMAND_CHARS), errors: child.errors } })
+  } else if (!child.isReady && child.url !== null && child.errors === 0) {
+    child.isReady = true
+    await hubPublish($, { topic: 'build.result', data: { tool, outcome: 'passed', command: command.slice(0, COMMAND_CHARS) } })
+  }
 }
 
 function scheduleFlush($: EngineInterface, host: Host, child: Child): void {
@@ -165,7 +194,11 @@ async function finish($: EngineInterface, host: Host, child: Child, ended: Proce
   }
   const what = status === 'failed' ? 'could not start' : code !== null ? `exited (${code})` : 'was killed'
   setStatus($, host, `✗ dev ${what} · /dev`)
-  $.ui.toast(`${shortCommand(run.command ?? 'dev server')} ${what}. /dev shows its output.`)
+  if (host.isHubbed && run.command !== null) {
+    await hubPublish($, { topic: 'build.result', data: { tool: shortCommand(run.command), outcome: 'error', command: run.command.slice(0, COMMAND_CHARS), errors: child.errors } })
+  }
+  // An error notice through the hub (your phone channel while you are away); a toast without it.
+  await hubNotify($, { level: 'error', title: `${shortCommand(run.command ?? 'dev server')} ${what}. /dev shows its output.` })
 }
 
 /** Reads the server's output until it ends: the loop is the child's life. */
@@ -223,6 +256,9 @@ async function start($: EngineInterface, host: Host, chosen: Detected, cwd: stri
     isStopping: false,
     flush: undefined,
     done: Promise.resolve(),
+    isReady: false,
+    reportedErrors: 0,
+    lastReportAt: Number.NEGATIVE_INFINITY,
   }
   host.child = child
   host.latest = child
@@ -243,9 +279,27 @@ async function chooseCommand($: EngineInterface, host: Host, cwd: string): Promi
   return detectCommand(project)
 }
 
+/** `/dev` shows the output: in the Dev server tab of the hub's panel when the hub is installed, in this mod's own pane otherwise. */
 async function openPane($: EngineInterface): Promise<void> {
-  await $.ui.open({ id: PANE, title: PANE_TITLE })
-  await $.ui.scroll({ in: PANE, to: 'end' }).catch(() => undefined)
+  const isTab = await hubShowTab($, TAB.id)
+  if (!isTab) await $.ui.open({ id: PANE, title: PANE_TITLE })
+  await $.ui.scroll({ in: isTab ? HUB_PANE : PANE, to: 'end' }).catch(() => undefined)
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello (this mod publishes `build.result`) and the Dev server tab in its panel. */
+async function greetHub($: EngineInterface, host: Host): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  host.isHubbed = await hubHello($, { version: await ownVersion($), publishes: ['build.result'], consumes: [] }, TAB)
 }
 
 /** Starts the last command again (or the detected one), in the folder it ran in. */
@@ -282,7 +336,7 @@ function noteFor(host: Host, run: Run): string | undefined {
 }
 
 export const register: Register = (on, options) => {
-  const host: Host = { child: undefined, latest: undefined, configured: String(options.command ?? '').trim(), status: undefined, told: '' }
+  const host: Host = { child: undefined, latest: undefined, configured: String(options.command ?? '').trim(), status: undefined, told: '', isHubbed: false }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -290,6 +344,7 @@ export const register: Register = (on, options) => {
       description: 'Start the dev server in the background with a live pane (/dev stop, /dev restart)',
       argumentHint: '[command | stop | restart]',
     })
+    await greetHub($, host)
     // A fresh load of the mod: whatever the previous load started ended with it.
     const run = await read($, runAtom)
     if (run.status === 'running' && host.child === undefined) {
@@ -336,71 +391,188 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Link, Text } = $.ui.resolve(e)
-    const run = await read($, runAtom)
-    const lines = await read($, linesAtom)
-    const close = <Button key="close" label="Close" role="dismiss" onPress={() => void $.ui.close({ id: PANE })} />
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawDevServer($, e, host, false))
 
-    if (run.status === 'idle') {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text bold>No dev server yet</Text>
-          <Text dimColor>/dev starts the project's dev command (package.json dev/start script, manage.py runserver, Rails, Phoenix, Laravel); /dev &lt;command&gt; runs your own.</Text>
-          {close}
-        </Box>
-      )
-    }
-
-    const look = STATUS_LOOK[run.status]
-    const isRunning = run.status === 'running'
-    const label = run.status === 'exited' && run.exitCode !== null ? `${look.label} (${run.exitCode})` : look.label
-    const block = lastErrorBlock(lines)
-    const shown = visibleLines(lines)
+  // The Dev server tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
+  on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
+    if (!(await hubTabIs($, TAB.id))) return next(e)
+    const { Box } = $.ui.resolve(e)
 
     return (
       <Box flexDirection="column">
-        <Box key="header" flexDirection="row" flexWrap="wrap" columnGap={1}>
-          <Text bold color={look.color}>
-            {look.glyph} {label}
-          </Text>
-          <Text bold wrap="truncate-end">
-            {run.command ?? ''}
-          </Text>
-          {run.url !== null &&
-            (e.surface === 'terminal' ? <Link href={run.url} label={hostOf(run.url) ?? run.url} /> : <Text color="suggestion">{run.url}</Text>)}
-          {run.errors > 0 && <Text color="error">{plural(run.errors, 'error')}</Text>}
-        </Box>
-        <Box key="meta">
-          <Text dimColor wrap="truncate-end">
-            {[run.note, run.source === null ? null : `from ${run.source}`, run.cwd].filter(part => part !== null).join(' · ')}
-          </Text>
-        </Box>
-        <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
-          {isRunning ? (
-            <Button key="stop" label="Stop" hotkey="s" onPress={() => void stop($, host)} />
-          ) : (
-            <Button key="start" label="Start" hotkey="s" variant="primary" onPress={() => void restart($, host)} />
-          )}
-          {isRunning && <Button key="restart" label="Restart" hotkey="r" onPress={() => void restart($, host)} />}
-          {block !== undefined && (
-            <Button key="fix" label="Ask Claude to fix" hotkey="f" variant={isRunning ? 'primary' : undefined} onPress={() => void askToFix($, run, block)} />
-          )}
-          {close}
-        </Box>
-        <Box key="output" flexDirection="column" marginTop={1}>
-          {lines.length > shown.length && <Text dimColor>{`(${lines.length - shown.length} older lines not drawn)`}</Text>}
-          {shown.length === 0 ? (
-            <Text dimColor>{isRunning ? 'Waiting for output…' : 'No output.'}</Text>
-          ) : (
-            shown.map(line => (
-              <Text color={LINE_COLOR[line.kind]} wrap={line.kind === 'error' ? 'wrap' : 'truncate-end'}>
-                {line.text === '' ? ' ' : line.text}
-              </Text>
-            ))
-          )}
-        </Box>
+        {await next(e)}
+        {await drawDevServer($, e, host, true)}
       </Box>
     )
   })
 }
+
+/** The dev server view: this mod's own pane, or its Dev server tab in the hub's panel (`isTab`: no Close, a button to pop it out into its own pane). */
+async function drawDevServer($: EngineInterface, e: RenderInput<'Pane'>, host: Host, isTab: boolean): Promise<RenderElement> {
+  const { Box, Button, Link, Text } = $.ui.resolve(e)
+  const run = await read($, runAtom)
+  const lines = await read($, linesAtom)
+  const close = isTab ? (
+    <Button key="pane" label="Open as pane" onPress={() => void $.ui.open({ id: PANE, title: PANE_TITLE })} />
+  ) : (
+    <Button key="close" label="Close" role="dismiss" onPress={() => void $.ui.close({ id: PANE })} />
+  )
+
+  if (run.status === 'idle') {
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold>No dev server yet</Text>
+        <Text dimColor>/dev starts the project's dev command (package.json dev/start script, manage.py runserver, Rails, Phoenix, Laravel); /dev &lt;command&gt; runs your own.</Text>
+        {close}
+      </Box>
+    )
+  }
+
+  const look = STATUS_LOOK[run.status]
+  const isRunning = run.status === 'running'
+  const label = run.status === 'exited' && run.exitCode !== null ? `${look.label} (${run.exitCode})` : look.label
+  const block = lastErrorBlock(lines)
+  const shown = visibleLines(lines)
+
+  return (
+    <Box flexDirection="column">
+      <Box key="header" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        <Text bold color={look.color}>
+          {look.glyph} {label}
+        </Text>
+        <Text bold wrap="truncate-end">
+          {run.command ?? ''}
+        </Text>
+        {run.url !== null &&
+          (e.surface === 'terminal' ? <Link href={run.url} label={hostOf(run.url) ?? run.url} /> : <Text color="suggestion">{run.url}</Text>)}
+        {run.errors > 0 && <Text color="error">{plural(run.errors, 'error')}</Text>}
+      </Box>
+      <Box key="meta">
+        <Text dimColor wrap="truncate-end">
+          {[run.note, run.source === null ? null : `from ${run.source}`, run.cwd].filter(part => part !== null).join(' · ')}
+        </Text>
+      </Box>
+      <Box key="actions" flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
+        {isRunning ? (
+          <Button key="stop" label="Stop" hotkey="s" onPress={() => void stop($, host)} />
+        ) : (
+          <Button key="start" label="Start" hotkey="s" variant="primary" onPress={() => void restart($, host)} />
+        )}
+        {isRunning && <Button key="restart" label="Restart" hotkey="r" onPress={() => void restart($, host)} />}
+        {block !== undefined && (
+          <Button key="fix" label="Ask Claude to fix" hotkey="f" variant={isRunning ? 'primary' : undefined} onPress={() => void askToFix($, run, block)} />
+        )}
+        {close}
+      </Box>
+      <Box key="output" flexDirection="column" marginTop={1}>
+        {lines.length > shown.length && <Text dimColor>{`(${lines.length - shown.length} older lines not drawn)`}</Text>}
+        {shown.length === 0 ? (
+          <Text dimColor>{isRunning ? 'Waiting for output…' : 'No output.'}</Text>
+        ) : (
+          shown.map(line => (
+            <Text color={LINE_COLOR[line.kind]} wrap={line.kind === 'error' ? 'wrap' : 'truncate-end'}>
+              {line.text === '' ? ' ' : line.text}
+            </Text>
+          ))
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

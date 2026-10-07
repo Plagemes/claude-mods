@@ -35,3 +35,5 @@ No configuration needed.
   - Refactoring under green tests still needs a test touched first in that turn, or `/tdd off`.
   - The mode lasts for the session only.
   - The guard fails open: if it errors, the edit goes through.
+- Test commands and failed runs are also recognised by the detector every Claude Mod shares (`shared/test-runners.ts`: `just test`, `npm run test:unit`, a runner's summary with failures).
+- With [mods-hub](../mods-hub) installed, test runs other mods report as `test.result` count too: when test-watch runs the tests of a test file Claude just edited and they fail, the cycle turns red and the code opens, exactly as for a Bash run (runs from before `/tdd on` are ignored). Each locked edit is published as `risk.blocked` (severity low) for guardian and audit-trail. Without the hub nothing changes.

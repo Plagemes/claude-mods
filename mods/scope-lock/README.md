@@ -28,4 +28,6 @@
 ## How it works
 - `command.run` keeps the globs in `$.state` (this session only) and sets `$.ui.status`; `prompt.compose` adds a `scope-lock:scope` section while a scope is set.
 - A `tool.call` guard (with a `.catch` that refuses) resolves each target lexically against the project root, following `cd` earlier on the same command line; a glob in a shell target is checked by the folder it expands in. Subagents are held to the same scope.
-- Limits: shell parsing is best effort. Writes hidden in interpreters (`python -c`, `node -e`), scripts, `xargs`, package managers or build tools are not seen, and paths are compared as written (symlinks are not resolved; pair it with path-jail for that).
+- Bash commands are read with the shared claude-mods shell reader (`shared/shell`): wrappers (`sudo`, `env`, `timeout`, `xargs`) are peeled, and the scripts of `bash -c`, `su -c`, `eval`, `$(…)` and heredocs or here-strings fed to a shell are read with their own `cd`s.
+- With [mods-hub](../mods-hub) installed, the scope is shared on the hub's blackboard as `scope-lock.scope` (an empty list when off), and every deny is also published as `risk.blocked` (rule `outside-scope` or `unverifiable-write`, severity `medium`, the path and command with secrets masked). Without the hub nothing changes.
+- Limits: shell parsing is best effort. Writes hidden in interpreters (`python -c`, `node -e`), scripts, package managers or build tools are not seen, and paths are compared as written (symlinks are not resolved; pair it with path-jail for that).

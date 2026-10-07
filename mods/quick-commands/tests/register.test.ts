@@ -2,6 +2,9 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { checkCountsOf, toolOf } from '../hooks/results'
+import { fakeHub } from './hub'
+
 const run = ($: Engine, command: string, args = '') =>
   $.command.run({
     command,
@@ -111,4 +114,70 @@ test('reads Go projects from go.mod', async ($, on) => {
   await world.advance(1)
 
   expect(world.submitted.map(text => /`(.*)`/.exec(text)?.[1])).toEqual(['go test ./...', 'go vet ./...', 'go build ./...'])
+})
+
+test('reads errors and warnings from linters, type checkers and compilers', () => {
+  expect(checkCountsOf('/src/a.ts\n  1:1  error  x\n\n✖ 5 problems (3 errors, 2 warnings)\n', true)).toEqual({ errors: 3, warnings: 2 })
+  expect(checkCountsOf('src/a.py:1:1: F401 unused\nFound 4 errors.\n', true)).toEqual({ errors: 4, warnings: 0 })
+  expect(checkCountsOf("src/a.ts(1,7): error TS2322: Type 'x'.\nsrc/b.ts(2,1): error TS2304: Cannot find.\n", true)).toEqual({ errors: 2, warnings: 0 })
+  expect(checkCountsOf('warning: unused variable\nerror[E0308]: mismatched types\nerror: could not compile `app`\n', true)).toEqual({ errors: 1, warnings: 1 })
+  expect(checkCountsOf('Segmentation fault\n', true)).toEqual({ errors: 1, warnings: 0 })
+  expect(checkCountsOf('All good\n', false)).toEqual({ errors: 0, warnings: 0 })
+  expect(toolOf('CI=1 npm run lint')).toBe('npm')
+  expect(toolOf('./scripts/check.sh --all')).toBe('check.sh')
+})
+
+test('with mods-hub: the result of the command it asked for is published, and the hub\'s own test runs are not repeated', { options: { testCommand: './scripts/run-tests.sh' } }, async ($, on) => {
+  const world = project(on, { 'package.json': PACKAGE_JSON })
+  const hub = fakeHub(on)
+  const outputs: Record<string, { stdout: string; isError: boolean }> = {
+    'npm run lint': { stdout: '✖ 5 problems (3 errors, 2 warnings)\n', isError: true },
+    './scripts/run-tests.sh': { stdout: ' Test Files  1 passed (1)\n      Tests  7 passed (7)\n', isError: false },
+    'npm run build': { stdout: 'done\n', isError: false },
+  }
+  on('tool.call', (_$, e) => {
+    const ran = (e as { command: string }).command
+    const out = Object.entries(outputs).find(([command]) => ran.includes(command))?.[1] ?? { stdout: '', isError: false }
+    const result = { stdout: out.stdout, stderr: '', interrupted: false }
+    return out.isError ? { result, isError: true } : { result }
+  })
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos[0]?.publishes).toEqual(['test.result', 'build.result', 'lint.result', 'typecheck.result'])
+
+  await run($, 'l')
+  await run($, 't')
+  await run($, 'b')
+  await world.advance(1)
+  expect(world.submitted).toHaveLength(3)
+
+  // A command nobody asked for publishes nothing.
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.tool.call({ tool: 'Bash', command: 'npm run lint' })
+  await $.tool.call({ tool: 'Bash', command: 'cd /proj && ./scripts/run-tests.sh' })
+  await $.tool.call({ tool: 'Bash', command: 'npm run build' })
+  await world.advance(1)
+  expect(hub.published).toEqual([
+    { topic: 'lint.result', data: { tool: 'npm', errors: 3, warnings: 2 } },
+    { topic: 'test.result', data: { runner: 'vitest', outcome: 'passed', passed: 7, failed: null, durationMs: 0, command: 'cd /proj && ./scripts/run-tests.sh' } },
+    { topic: 'build.result', data: { tool: 'npm', outcome: 'passed', durationMs: 0, command: 'npm run build', errors: 0 } },
+  ])
+
+  // Run again by hand later: nothing is waiting for it any more.
+  await $.tool.call({ tool: 'Bash', command: 'npm run lint' })
+  await world.advance(1)
+  expect(hub.published).toHaveLength(3)
+})
+
+test('with mods-hub: a test runner the hub already reports is not published twice', async ($, on) => {
+  const world = project(on, { 'package.json': PACKAGE_JSON })
+  const hub = fakeHub(on)
+  on('tool.call', () => ({ result: { stdout: 'Tests  1 passed (1)', stderr: '', interrupted: false } }))
+  await run($, 't')
+  await world.advance(1)
+  await $.tool.call({ tool: 'Bash', command: 'npm run test' })
+  await world.advance(1)
+  expect(hub.published).toEqual([])
 })

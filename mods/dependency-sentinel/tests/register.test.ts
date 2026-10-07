@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { packageRequests } from '../hooks/parse'
+import { fakeHub } from './hub'
 
 const NOW = Date.parse('2026-10-07T12:00:00Z')
 const DAY = 86_400_000
@@ -131,6 +132,35 @@ test('leading package-manager options and env do not hide the install', () => {
   expect(names('yarn workspace web add lodahs')).toEqual(['lodahs'])
   expect(names('env CI=1 npm i lodahs')).toEqual(['lodahs'])
   expect(names('pnpm --filter web run build')).toEqual([])
+  // The shared shell reader: wrappers, shells handed a script, heredocs fed to a shell; a heredoc note or a comment is not an install.
+  expect(names('sudo -H timeout 120 pip install requestz')).toEqual(['requestz'])
+  expect(names(`bash -lc 'cd api && npm i lodahs'`)).toEqual(['lodahs'])
+  expect(names('bash <<EOF\ncargo add tokioo\nEOF')).toEqual(['tokioo'])
+  expect(names("cat <<'EOF' > NOTES.md\nnpm i lodahs\nEOF")).toEqual([])
+  expect(names('npm test # then npm i lodahs')).toEqual([])
+})
+
+test('with mods-hub: a hold is published as risk.blocked and asked about through the hub', async ($, on) => {
+  const { toasts } = world(on, {})
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect(await bash($, 'npm install lodahs')).toContain('held back')
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: {
+        guard: 'dependency-sentinel',
+        tool: 'Bash',
+        reason: expect.stringMatching(/^suspicious-package: lodahs looks like a typo of "lodash"/),
+        severity: 'medium',
+        command: 'npm install lodahs',
+      },
+    },
+  ])
+  expect(hub.notified).toEqual([{ level: 'warning', kind: 'question', title: 'Held back lodahs. Reply DEPS-OK to allow.', topic: 'risk.blocked' }])
+  expect(toasts).toEqual([])
 })
 
 test('regression: DEPS-OK does not carry into a turn the person did not start', async ($, on) => {

@@ -1,12 +1,15 @@
-import { test, expect } from 'claude-code/testing'
+import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
+
+import { fakeHub } from './hub'
 
 type World = { toasts: string[]; percent: number | undefined; failing: Set<string> }
 
 const answerEngine = (on: On): World => {
   const world: World = { toasts: [], percent: 70, failing: new Set() }
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.usage', () => ({
@@ -128,4 +131,41 @@ test('regression: a command that only mentions a test runner is no passing test 
 
   await turn($, bash($, 'cd api && CI=1 npx vitest run'))
   expect(world.toasts[0]).toContain('tests just passed')
+})
+
+const START = { cwd: '/w', surface: 'terminal', isInteractive: true } as const
+
+test('with mods-hub: says hello and sends the suggestion as an info notice, a warning past 85%', { options: { cooldownTurns: 0 } }, async ($, on) => {
+  const world = answerEngine(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['context.pressure'] }])
+
+  await turn($, bash($, 'git commit -m x'))
+  world.percent = 90
+  await turn($, bash($, 'npm test'))
+  expect(hub.notified.map(notice => [notice.level, notice.title])).toEqual([
+    ['info', 'Good moment to /compact (context 70%, after a commit)'],
+    ['warning', 'Good moment to /compact (context 90%, tests just passed)'],
+  ])
+  expect(world.toasts).toEqual([])
+})
+
+test('with mods-hub and no reading from the engine, the hub\'s recent context.pressure stands in', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const world = answerEngine(on)
+  world.percent = undefined
+  const hub = fakeHub(on, {}, clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  hub.events.push({ topic: 'context.pressure', data: { percent: 72, tokens: 144_000, window: 200_000 }, at: 900_000, source: 'mods-hub' })
+  await turn($, bash($, 'git commit -m x'))
+  expect(hub.notified.map(notice => notice.title)).toEqual(['Good moment to /compact (context 72%, after a commit)'])
+})
+
+test('without mods-hub and no reading, nothing is suggested', async ($, on) => {
+  const world = answerEngine(on)
+  world.percent = undefined
+  await turn($, bash($, 'git commit -m x'))
+  expect(world.toasts).toEqual([])
 })

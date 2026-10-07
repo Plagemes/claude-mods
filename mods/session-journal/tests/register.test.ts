@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { CommandRunInput, ModelForkResult, On, SessionMessage, TurnCompleteInput } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const ROOT = '/home/me/shop'
 const TODAY = `${ROOT}/.claude/journal/2026-10-07.md`
 const USAGE = { input_tokens: 5, output_tokens: 50, cache_read_input_tokens: 4000, cache_creation_input_tokens: 0 }
@@ -164,4 +166,45 @@ test('headless runs are never journaled', async ($, on) => {
   await start($, false)
   await end($)
   expect(seen.files.size).toBe(0)
+})
+
+test('with mods-hub: the entry lists the commits, decisions, lessons and last test run other mods reported, and is published', async ($, on) => {
+  const clock = startAt(on)
+  const seen = world(on, { isAnswered: true, text: SUMMARY, usage: USAGE })
+  const hub = fakeHub(on)
+  const at = clock.now()
+  hub.events.push(
+    { topic: 'git.commit', source: 'commit-composer', at, data: { sha: '1a2b3c4d5e6f', message: 'fix: stop the login redirect loop\n\nbody', branch: 'main', files: 2 } },
+    { topic: 'decision.recorded', source: 'decision-log', at, data: { title: 'Expire sessions after 7 days', path: 'docs/decisions/0004-expire-sessions.md' } },
+    { topic: 'lesson.learned', source: 'lessons-learned', at, data: { lesson: 'Clear the session cookie in auth tests.' } },
+    { topic: 'test.result', source: 'mods-hub', at, data: { runner: 'jest', outcome: 'failed', passed: 10, failed: 1 } },
+    { topic: 'test.result', source: 'test-watch', at, data: { runner: 'vitest', outcome: 'passed', passed: 12, failed: 0 } },
+    { topic: 'cost.update', source: 'mods-hub', at, data: { turnUsd: 0.1, sessionUsd: 0.4231, model: 'claude-opus-5-5', tokens: 900, isEstimate: false } },
+  )
+
+  await start($)
+  expect(hub.hellos[0]?.publishes).toEqual(['x.session-journal.entry'])
+  expect(hub.hellos[0]?.consumes).toContain('decision.recorded')
+  await end($)
+
+  const entry = seen.files.get(TODAY) ?? ''
+  expect(entry).toContain('### Commits\n- `1a2b3c4` fix: stop the login redirect loop')
+  expect(entry).toContain('### Decisions\n- Expire sessions after 7 days (`docs/decisions/0004-expire-sessions.md`)')
+  expect(entry).toContain('### Lessons\n- Clear the session cookie in auth tests.')
+  expect(entry).toContain('### Last test run\n- ✓ 12 passed (vitest)')
+  expect(entry).toContain('_2 prompts · 1 command · $0.42 · session abcdef12 · ended: prompt_input_exit_')
+  expect(hub.published).toEqual([
+    { topic: 'x.session-journal.entry', data: { path: '.claude/journal/2026-10-07.md', project: 'shop', turns: 2, ending: 'ended: prompt_input_exit' }, scope: 'global' },
+  ])
+})
+
+test('without mods-hub the entry has no bus sections', async ($, on) => {
+  startAt(on)
+  const seen = world(on, { isAnswered: true, text: SUMMARY, usage: USAGE })
+  await start($)
+  await end($)
+  const entry = seen.files.get(TODAY) ?? ''
+  expect(entry).not.toContain('### Commits')
+  expect(entry).not.toContain('### Last test run')
+  expect(entry).toContain('_2 prompts · 1 command · session abcdef12')
 })

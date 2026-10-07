@@ -1,4 +1,4 @@
-// @vendored mods/mods-hub/types/index.d.ts sha256:354119a82e1e by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
+// @vendored mods/mods-hub/types/index.d.ts sha256:3067da5cb269 by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
 // The mods-hub contract: the `$.mods` noun every Claude Mod can talk to, the standard events, and the
 // hub's public state. Self-contained (no import) so it can be laid beside a dependent mod by the engine
 // (`"dependencies": ["mods-hub"]`) or vendored as `types/mods-hub.d.ts` by scripts/sync-shared.mjs.
@@ -69,7 +69,22 @@ export type ModsEventMap = {
   'focus.started': { minutes: number; label?: string }
   'focus.ended': { minutes: number; isCompleted: boolean }
   'notification.sent': { level: ModsLevel; title: string; source: string; targets: string[]; held: boolean }
+  /** Stop the automatic work (autopilot, task-queue, night-shift, workflows): raised by `$.mods.stop`, never published directly. */
+  'control.stop': ModsControlData
+  /** Pause the automatic work until a `control.resume`. */
+  'control.pause': ModsControlData
+  /** Lift a pause (or a stop) for what may run again. */
+  'control.resume': ModsControlData
 }
+
+/**
+ * A stop, pause or resume as the hub raises it. `scope: 'all'` reaches every session on this machine (through
+ * `~/.claude/claude-mods/hub/control.json`, within 5 seconds); `session` only the session that asked. `session` is
+ * the asking session's id, `by` who asked in words (`owner via whatsapp`), the event's `source` the mod that called.
+ */
+export type ModsControlData = { id: string; scope: ModsControlScope; reason: string; by: string; session: string }
+export type ModsControlScope = 'session' | 'all'
+export type ModsControlAction = 'stop' | 'pause' | 'resume'
 
 export type ModsPresenceReason = 'activity' | 'timer' | 'manual' | 'channel'
 
@@ -129,15 +144,26 @@ export type ModsNotice = ModsNotifyInput & {
 
 export type ModsNotifyResult = { id: string; targets: string[]; held: boolean; reason?: string }
 
-/** The global mode every mod respects: read it with `$.mods.mode()` or the `mode` state. */
+/**
+ * The global mode every mod respects: read it with `$.mods.mode()` or the `mode` state.
+ *
+ * Fields added after the first release are optional in the type (`isNightOn`, `idleMinutes`, `awayMinutes`): the
+ * hub always sets them, but a mod's vendored contract may meet a test stand-in (or an older hub) that does not.
+ */
 export type ModsMode = {
   presence: ModsPresence
   /** Silent: mods' toasts and sounds are held in the hub's inbox. */
   isSilent: boolean
+  /** When Silent ends by itself; null while it is off or on with no end (until switched off). */
   silentUntil: number | null
-  /** Night: inside quiet hours; sounds off, only critical reaches channels, the rest waits for the morning digest. */
+  /** Night: inside quiet hours now (and the schedule is on); sounds off, only critical reaches channels, the rest waits for the morning digest. */
   isNight: boolean
+  /** Whether the Night schedule is on at all (`isNight` is whether it applies right now). */
+  isNightOn?: boolean
   quietHours: string
+  /** Minutes without activity before presence turns `idle`, and `away` (the hub's settings). */
+  idleMinutes?: number
+  awayMinutes?: number
   interaction: ModsInteraction
   /** Whether a mod may ask the person something on a channel right now (Interaction × presence × night). */
   canAsk: boolean
@@ -157,7 +183,14 @@ export type ModsPrefs = {
   channels: Record<string, { isEnabled: boolean; minLevel: ModsLevel }>
 }
 
-export type ModsSetModeInput = { interaction?: ModsInteraction; silentMinutes?: number | null; isNightOn?: boolean; quietHours?: string }
+/**
+ * A change of the global mode; absent fields stay as they are.
+ *
+ * Silent: `isSilent: true` turns it on with no end (until switched off), or for `silentMinutes` when that is a
+ * positive number too; `isSilent: false` turns it off. Without `isSilent`, `silentMinutes: n > 0` is Silent for n
+ * minutes and `silentMinutes: null` (or ≤ 0) is off, as before `isSilent` existed.
+ */
+export type ModsSetModeInput = { interaction?: ModsInteraction; isSilent?: boolean; silentMinutes?: number | null; isNightOn?: boolean; quietHours?: string }
 
 // ── Panel, channels, discovery, shared facts ────────────────────────────────────────────────────────
 
@@ -181,6 +214,20 @@ export type ModsChannel = {
 export type ModsChannelInput = Omit<ModsChannel, 'owner'>
 
 export type ModsDeliverInput = { channel: string; notice: ModsNotice }
+
+/**
+ * What a pull channel's owner asks `$.mods.drain` for. `after` is the channel's cursor: the id of the last notice
+ * the owner handled (null on its first call). The hub drops every notice up to and including it and returns the
+ * ones still waiting, oldest first, WITHOUT removing them: a notice comes back until a later drain acknowledges it
+ * (at-least-once; dedupe by `id`). Without `after` (the first contract), what is returned is removed at once.
+ */
+export type ModsDrainInput = { channel: string; after?: string | null }
+
+/** What `$.mods.stop` takes: `action` defaults to `stop`, `scope` to `session`; `by` defaults to the calling mod. */
+export type ModsStopInput = { action?: ModsControlAction; scope?: ModsControlScope; reason: string; by?: string }
+
+/** The stop, pause or resume in force (the `control` state): the last one raised, here or in another session. */
+export type ModsControl = ModsControlData & { action: ModsControlAction; source: string; at: number }
 export type ModsDeliverResult = { isDelivered: boolean; reason?: string }
 
 /** A mod that said hello this session, and what it trades on the bus. */
@@ -225,8 +272,10 @@ export type Mods = {
   channelStatus: (input: { id: string; status: ModsChannelStatus; detail?: string }) => Promise<{ channels: ModsChannel[] }>
   /** Raised BY the hub for each push channel; the channel's owner answers `{ value: { isDelivered } }`. */
   deliver: (input: ModsDeliverInput) => Promise<ModsDeliverResult>
-  /** For pull channels: the notices waiting for this channel, removed as they are returned (owner only). */
-  drain: (input: { channel: string }) => Promise<ModsNotice[]>
+  /** For pull channels (owner only): the notices waiting, oldest first; pass `after` (your cursor) to acknowledge. */
+  drain: (input: ModsDrainInput) => Promise<ModsNotice[]>
+  /** Stop, pause or resume the automatic work in this session or all sessions; raises `control.<action>`. */
+  stop: (input: ModsStopInput) => Promise<ModsControl>
   /** Announce the calling mod and what it trades on the bus. */
   hello: (input: ModsHelloInput) => Promise<{ installed: ModsInstalled }>
   /** Capability discovery: the mods that said hello and the installed plugins. */
@@ -259,6 +308,10 @@ declare module 'claude-code' {
       /** The last notifications (theirs, and other mods' captured toasts), newest last. */
       inbox: ModsNotice[]
       installed: ModsInstalled
+      /** Notices waiting for each pull channel (secrets masked), by channel id, until its owner drains them. */
+      outbox: Record<string, ModsNotice[]>
+      /** The last stop, pause or resume (this session's, or another session's with scope `all`); null before any. */
+      control: ModsControl | null
     }
   }
 }

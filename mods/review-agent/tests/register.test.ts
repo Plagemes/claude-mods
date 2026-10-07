@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 import { countSeverities, describeCounts, whyNotReadOnly } from '../hooks/review'
 
 const DIFF = 'diff --git a/src/pay.ts b/src/pay.ts\n@@ -1,2 +1,2 @@\n-const fee = 1\n+const fee = amount * 0.1\n'
@@ -177,4 +179,36 @@ test("a reviewer's Bash is held to read-only git; other agents and the main loop
   await $.tool.call({ tool: 'Bash', command: 'npm test', agentId: 'other-agent' } as never)
   await $.tool.call({ tool: 'Bash', command: 'npm run build' })
   expect(state.ran).toEqual(['git diff HEAD -- src/pay.ts', 'npm test', 'npm run build'])
+})
+
+test('with mods-hub: says hello; a finished review is published as agent.finished and announced as a success notice, a failed one as a warning', async ($, on) => {
+  const state = world(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', () => ({ deny: 'review is a built-in command' }))
+  on('agent.register', ($, e) => ({ value: { agent: `review-agent:${e.name}` } }))
+  on('tool.list', () => ({ value: [] }))
+  on('ui.log', () => ({ value: undefined }))
+  await $.session.start({ cwd: '/work/pay', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['agent.finished'], consumes: [] }])
+
+  await $.command.run(review())
+  expect(state.spawns).toHaveLength(1)
+  await $.turn.complete({ ...COMPLETE, answer: REPORT })
+  expect(hub.published).toEqual([{ topic: 'agent.finished', data: { agentType: 'review-agent:reviewer', outcome: 'ok', durationMs: 0, agentId: 'rev-1' } }])
+  expect(hub.notified).toEqual([{ level: 'success', title: 'Review ready, 1 major, 1 nit' }])
+
+  hub.published.length = 0
+  await $.command.run(review())
+  await $.turn.complete({ ...COMPLETE, answer: '', reason: 'aborted' } as never)
+  expect(hub.published).toMatchObject([{ topic: 'agent.finished', data: { outcome: 'failed' } }])
+  expect(hub.notified.at(-1)).toEqual({ level: 'warning', title: 'The review did not finish' })
+})
+
+test('without mods-hub the finished review is the same toast and nothing is published', async ($, on) => {
+  const state = world(on)
+  await $.command.run(review())
+  await $.turn.complete({ ...COMPLETE, answer: REPORT })
+  expect(state.spawns).toHaveLength(1)
 })

@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 type Repo = { branch: string | undefined }
 
 /** Stands in for the engine; `repo.branch` is what `git symbolic-ref` answers (undefined: not a repo). */
@@ -88,4 +90,27 @@ test('the list of main branches is configurable', { options: { branches: 'produc
   repo.branch = 'release'
   await $.tool.call(write('/repo/a.ts'))
   expect(toasts).toHaveLength(1)
+})
+
+test('with mods-hub: the warning goes through the hub, and a blocked edit is published as risk.blocked', { options: { block: true } }, async ($, on) => {
+  const { toasts } = engine(on, { branch: 'main' })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect((await $.tool.call(write('/repo/src/a.ts'))).deny).toContain('main-branch-warn')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'main-branch-warn', tool: 'Write', reason: 'edit-on-main: editing directly on "main"', severity: 'low', path: '/repo/src/a.ts' } },
+  ])
+  expect(toasts).toEqual([])
+})
+
+test('with mods-hub in warn mode: the one-time warning is a notification, not a toast', async ($, on) => {
+  const { toasts } = engine(on, { branch: 'master' })
+  const hub = fakeHub(on)
+  await $.tool.call(write('/repo/src/a.ts'))
+  await $.tool.call(write('/repo/src/b.ts'))
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'Claude is editing directly on "master". Branch first: git switch -c <name> (or /git-branch).' }])
+  expect(hub.published).toEqual([])
+  expect(toasts).toEqual([])
 })

@@ -27,6 +27,7 @@ Not blocked: `curl`/`wget`/httpie calls whose every target is this machine (`loc
 No configuration needed.
 
 ## How it works
-- The on/off flag lives in `$.state`; `/offline` also sets and clears the status line. Hooks `tool.call` for `WebFetch`, `WebSearch` and `Bash`. The shell command is split into words (quotes, `&&`, `|`, `;`), looked through `sudo`, `env VAR=x`, `time`, `timeout` and `xargs`, and read inside `bash -c "..."`, `eval`, `$(...)` and backticks.
+- The on/off flag lives in `$.state`; `/offline` also sets and clears the status line. Hooks `tool.call` for `WebFetch`, `WebSearch` and `Bash`. The shell command is read with the shared claude-mods shell reader (quotes, `&&`, `|`, `;`, heredocs), looked through `sudo`, `env VAR=x`, `time`, `timeout` and `xargs`, and read inside `bash -c "..."`, `su -c`, `eval`, `$(...)`, backticks and heredocs fed to a shell.
 - It is a guard with a `.catch`: if it cannot read its state it refuses the call rather than let the network through.
+- With [mods-hub](../mods-hub) installed, the flag is shared on the hub's blackboard as `offline-mode.on`, every blocked call is also published as `risk.blocked` (rule `offline`, severity `low`, the command with secrets masked), and the "blocked …" note goes through the hub's notifications (`info`) instead of a toast. Without the hub nothing changes.
 - Limits: it judges commands by their words, so a script, a Makefile, `npm run`, `npx`, an IDE task or a program that makes its own requests can still reach the network, and `curl "$URL"` (a target that cannot be read) is treated as external. It stops Claude's tools, not your machine.

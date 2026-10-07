@@ -1,7 +1,8 @@
 import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { durationBar, formatDuration, formatOffset, toolLabel } from '../hooks/format'
+import { describeTurn, durationBar, formatDuration, formatOffset, toolLabel, turnEnds, turnMarksOf } from '../hooks/format'
+import { fakeHub } from './hub'
 
 const PANE = {
   plugin: 'tool-timeline',
@@ -105,4 +106,76 @@ test('formats durations, offsets, bars and tool names', () => {
   expect(durationBar(100, 1000, 12).length).toBeLessThan(12)
   expect(toolLabel('mcp__github__get_file_contents')).toBe('github:get_file_contents')
   expect(toolLabel('Bash')).toBe('Bash')
+})
+
+const HUB_PANE = { ...PANE, requestId: 'claude-mods', props: { ...PANE.props, title: 'Claude Mods' } } as const
+const START = { cwd: '/repo', surface: 'terminal', isInteractive: true } as const
+const turnEvent = (at: number, tools: number, durationMs: number, isAborted = false) => ({ id: `t${at}`, topic: 'turn.finished', data: { durationMs, tools, isAborted }, source: 'mods-hub', at, session: 's', scope: 'session' as const })
+
+test('with mods-hub: the Timeline tab opens with /timeline and marks where each turn ended', async ($, on) => {
+  const { clock, opened } = engine(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  let feed: unknown[] = []
+  on('state.get', { plugin: 'mods-hub', key: 'feed' }, () => ({ value: { value: feed, version: 1 } }))
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['turn.finished'] }])
+  expect(hub.tabs).toEqual([{ id: 'timeline', title: 'Timeline', order: 270, command: 'timeline' }])
+
+  await $.tool.call({ tool: 'Read', file_path: '/repo/a.ts' })
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  const firstTurnEnd = clock.now
+  clock.now += 5_000
+  await $.tool.call({ tool: 'Read', file_path: '/repo/b.ts' })
+  feed = [turnEvent(firstTurnEnd + 1, 2, 4_000), turnEvent(clock.now + 1, 1, 65_000, true)]
+
+  await $.command.run({ command: 'timeline', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } })
+  expect(hub.shown).toEqual(['timeline'])
+  expect(opened).toEqual([])
+  hub.tab = 'timeline'
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...HUB_PANE, surface })
+    expect(await ui.find({ type: 'Text', text: '3 calls' })).toBeDefined()
+    expect((await ui.findAll({ type: 'Text', text: /^─── turn/ })).map(found => found.text)).toEqual(['─── turn · 2 tools · 4.0s', '─── turn · 1 tool · 1m05s · interrupted'])
+    await ui.press({ key: 'filter' })
+    expect(await ui.find({ type: 'Text', text: /^─── turn/ })).toBeUndefined()
+    await ui.press({ key: 'filter' })
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub: another tab of the panel is left to its owner', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  hub.tab = 'cost'
+  const ui = await $.ui.mount({ ...HUB_PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'filter' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without mods-hub no turn marks are drawn in the own pane, and /timeline opens it', async ($, on) => {
+  const { opened } = engine(on)
+  await $.session.start(START)
+  await $.tool.call({ tool: 'Read', file_path: '/repo/a.ts' })
+  await $.command.run({ command: 'timeline', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } })
+  expect(opened).toEqual(['timeline'])
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^─── turn/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('turnMarksOf and turnEnds: a mark goes under the last call before the turn ended; a turn with no calls leaves none', () => {
+  const call = (id: string, startedAt: number) => ({ id, tool: 'Bash', summary: '', startedAt, endedAt: startedAt + 1, outcome: 'ok' as const })
+  const calls = [call('a', 10), call('b', 20), call('c', 40)]
+  const marks = turnMarksOf([
+    { topic: 'cost.update', at: 1, data: {} },
+    { topic: 'turn.finished', at: 25, data: { durationMs: 1000, tools: 2, isAborted: false } },
+    { topic: 'turn.finished', at: 26, data: { durationMs: 10, tools: 0, isAborted: false } },
+    { topic: 'turn.finished', at: 50, data: { durationMs: 3000, tools: 1, isAborted: true } },
+    { topic: 'turn.finished', at: 60, data: 'broken' },
+  ])
+  expect(marks).toHaveLength(3)
+  expect([...turnEnds(calls, marks)].map(([id, mark]) => [id, mark.tools])).toEqual([['b', 2], ['c', 1]])
+  expect(describeTurn(marks[2] as never)).toBe('turn · 1 tool · 3.0s · interrupted')
 })

@@ -44,3 +44,33 @@ export const progressOf = (items: readonly TodoPaneItem[]): { done: number; tota
   done: items.filter(item => item.status === 'completed').length,
   total: items.length,
 })
+
+/** What the bus is told about a list that changed: `task.started` for an item that turned in progress, `task.finished` for one that was completed or removed while open. */
+export type TaskEvent =
+  | { topic: 'task.started'; data: { id: string; title: string } }
+  | { topic: 'task.finished'; data: { id: string; title: string; outcome: 'ok' | 'cancelled' } }
+
+const TITLE_LIMIT = 200
+
+/** TodoWrite numbers items by position, so a rewritten list moves them: those are known by their text, task-tool items by their id. */
+const keyOf = (item: TodoPaneItem): string => (item.id.startsWith('todo-') ? `text:${item.content}` : `id:${item.id}`)
+
+export const taskEvents = (before: readonly TodoPaneItem[], after: readonly TodoPaneItem[]): TaskEvent[] => {
+  const was = new Map(before.map(item => [keyOf(item), item]))
+  const now = new Set(after.map(keyOf))
+  const events: TaskEvent[] = []
+
+  for (const item of after) {
+    const old = was.get(keyOf(item))
+    const title = (item.status === 'in_progress' ? item.activeForm : item.content).slice(0, TITLE_LIMIT)
+    // An item the mod has not seen before only announces that it started; a completed one it never saw open is not news.
+    if (item.status === 'in_progress' && old?.status !== 'in_progress') events.push({ topic: 'task.started', data: { id: item.id, title } })
+    else if (item.status === 'completed' && old !== undefined && old.status !== 'completed') events.push({ topic: 'task.finished', data: { id: item.id, title, outcome: 'ok' } })
+  }
+  for (const old of before) {
+    if (!now.has(keyOf(old)) && old.status === 'in_progress') {
+      events.push({ topic: 'task.finished', data: { id: old.id, title: old.content.slice(0, TITLE_LIMIT), outcome: 'cancelled' } })
+    }
+  }
+  return events
+}

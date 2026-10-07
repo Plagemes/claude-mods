@@ -47,3 +47,4 @@ In a monorepo, Claude often runs `pnpm test` at the root and waits for every pac
 - Limits:
   - Scripts called through other names (`pnpm t`, custom aliases) aren't recognised.
   - Only commands Claude runs through Bash are scoped.
+- Commands are now also read with the shared shell reader: a root run is rewritten only when the reader finds exactly one simple command, so a pipe, `&&`, a substitution or a nested script that the pattern check missed is left as written. With [mods-hub](../mods-hub) installed the mod says hello and shares the fact `monorepo-scope.package` (`{ name, dir, isPinned, manager }`, or null while scoping is off) each time the package changes, so other mods (stack-detector, context-optimizer) know which package the work is in. Without the hub nothing is shared and the status line is as above.

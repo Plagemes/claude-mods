@@ -1,8 +1,9 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { parseDescription } from '../hooks/describe'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'pr-describer'
 const PANE_PROPS = {
@@ -143,4 +144,44 @@ test('a refused model call ends in an error the pane shows, with Regenerate and 
   expect(await ui.find({ key: 'regenerate' })).toBeDefined()
   expect(await ui.find({ key: 'close' })).toBeDefined()
   await ui.unmount()
+})
+
+test('with mods-hub: a newer commit on the branch marks the draft stale, and the opened pull request is published', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000 })
+  world(on)
+  const hub = fakeHub(on)
+  let latestCommit: unknown = null
+  on('state.get', { plugin: 'mods-hub', key: 'latest', id: 'git.commit' }, () => ({ value: { value: latestCommit as never, version: 1 } }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('tool.call', () => ({ result: { stdout: 'https://github.com/acme/app/pull/42\n', stderr: '', interrupted: false }, text: 'https://github.com/acme/app/pull/42\n' }))
+
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['pr.opened'], consumes: ['git.commit'] }])
+  await runPrDesc($)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mountPane($, surface)
+    expect(await ui.find({ key: 'stale' })).toBeUndefined()
+    await ui.unmount()
+  }
+
+  await clock.advance(5_000)
+  // A commit on another branch says nothing about this draft.
+  latestCommit = { id: 'e1', topic: 'git.commit', source: 'commit-composer', at: clock.now(), session: 's1', scope: 'global', data: { sha: 'ffff000', message: 'chore: elsewhere', branch: 'main', files: 1 } }
+  let ui = await mountPane($, 'terminal')
+  expect(await ui.find({ key: 'stale' })).toBeUndefined()
+  await ui.unmount()
+
+  latestCommit = { id: 'e2', topic: 'git.commit', source: 'commit-composer', at: clock.now(), session: 's1', scope: 'global', data: { sha: 'c0ffee1234', message: 'fix(auth): retry once\n\nbody', branch: 'feature/refresh', files: 1 } }
+  for (const surface of ['terminal', 'desktop'] as const) {
+    ui = await mountPane($, surface)
+    expect((await ui.find({ key: 'stale' }))?.text).toBe('New commit since this draft (c0ffee1 fix(auth): retry once): Regenerate to include it.')
+    await ui.unmount()
+  }
+
+  await $.tool.call({ tool: 'Bash', command: 'gh pr create --base main --title "whatever" --body-file /tmp/body.md' })
+  await clock.advance(0)
+  expect(hub.published).toEqual([
+    { topic: 'pr.opened', data: { url: 'https://github.com/acme/app/pull/42', title: 'Add token refresh to the auth client', branch: 'feature/refresh' }, scope: 'global' },
+  ])
 })

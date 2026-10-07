@@ -3,6 +3,8 @@
 import type {
   ModsAudience,
   ModsChannel,
+  ModsControlAction,
+  ModsControlScope,
   ModsInteraction,
   ModsLevel,
   ModsMode,
@@ -82,8 +84,12 @@ export function presenceOf(override: ModsPrefs['presence'], clock: PresenceClock
   return quiet >= clock.awayMs ? 'away' : quiet >= clock.idleMs ? 'idle' : 'here'
 }
 
+/** The hub's presence settings, in minutes, as the mode reports them. */
+export type PresenceMinutes = { idleMinutes: number; awayMinutes: number }
+export const DEFAULT_PRESENCE_MINUTES: PresenceMinutes = { idleMinutes: 10, awayMinutes: 30 }
+
 /** The mode every mod reads: prefs, presence and the clock folded together. */
-export function deriveMode(prefs: ModsPrefs, presence: ModsPresence, now: number, minuteOfDay: number): ModsMode {
+export function deriveMode(prefs: ModsPrefs, presence: ModsPresence, now: number, minuteOfDay: number, minutes: PresenceMinutes = DEFAULT_PRESENCE_MINUTES): ModsMode {
   const isSilent = prefs.isSilent && (prefs.silentUntil === null || now < prefs.silentUntil)
   const isNight = prefs.isNightOn && isQuietAt(prefs.quietHours, minuteOfDay)
   const canAsk = prefs.interaction === 'on' ? !isNight : prefs.interaction === 'auto' ? presence === 'away' && !isNight : false
@@ -92,7 +98,10 @@ export function deriveMode(prefs: ModsPrefs, presence: ModsPresence, now: number
     isSilent,
     silentUntil: isSilent ? prefs.silentUntil : null,
     isNight,
+    isNightOn: prefs.isNightOn,
     quietHours: prefs.quietHours,
+    idleMinutes: minutes.idleMinutes,
+    awayMinutes: minutes.awayMinutes,
     interaction: prefs.interaction,
     canAsk,
   }
@@ -153,10 +162,11 @@ export type HubCommand =
   | { kind: 'route'; level: ModsLevel; value: ModsRoute }
   | { kind: 'tab'; id: string }
   | { kind: 'test'; level: ModsLevel }
+  | { kind: 'control'; action: ModsControlAction; scope: ModsControlScope }
   | { kind: 'error'; message: string }
 
 export const HUB_USAGE =
-  'Usage: /hub [status | silent [minutes|off] | night [on|off|22:00-07:00] | away | back | interaction auto|on|off | route <level> terminal|away|always|off | tab <id> | test [level]]'
+  'Usage: /hub [status | silent [minutes|off] | night [on|off|22:00-07:00] | away | back | interaction auto|on|off | route <level> terminal|away|always|off | tab <id> | test [level] | stop|pause|resume [all]]'
 
 /** `/hub` arguments. */
 export function parseHubArgs(args: string): HubCommand {
@@ -190,6 +200,11 @@ export function parseHubArgs(args: string): HubCommand {
       return first === '' ? { kind: 'error', message: 'tab takes a tab id (home, or one a mod registered).' } : { kind: 'tab', id: first }
     case 'test':
       return { kind: 'test', level: isOneOf(LEVELS, first) ? first : 'success' }
+    case 'stop':
+    case 'pause':
+    case 'resume':
+      if (first !== '' && first !== 'all') return { kind: 'error', message: `${verb} takes nothing (this session) or all (every session).` }
+      return { kind: 'control', action: verb, scope: first === 'all' ? 'all' : 'session' }
     default:
       return { kind: 'error', message: HUB_USAGE }
   }

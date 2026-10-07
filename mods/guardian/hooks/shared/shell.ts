@@ -1,4 +1,4 @@
-// @vendored shared/shell.ts sha256:da6a631897e5 by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
+// @vendored shared/shell.ts sha256:34d589dca76d by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
 /**
  * shared/shell.ts — one conservative shell reader for every guard.
  *
@@ -14,7 +14,12 @@
  * Pure: no `$`, no I/O. Vendored into mods by scripts/sync-shared.mjs.
  */
 
-export type ShellWord = { kind: 'word'; text: string }
+/**
+ * A word, quotes resolved; `start`/`end` are its offsets in the text read (quotes included), so it can be rewritten.
+ * `substitutions` are the bodies of the `$(…)` and backticks the shell would run for it: bare or inside double
+ * quotes, never inside single quotes, `$'…'` or after a backslash (`echo '$(rm a)'` runs nothing).
+ */
+export type ShellWord = { kind: 'word'; text: string; start: number; end: number; substitutions: string[] }
 export type ShellOp = { kind: 'op'; text: string }
 export type ShellRedirect = {
   kind: 'redirect'
@@ -31,12 +36,19 @@ export type ShellToken = ShellWord | ShellOp | ShellRedirect
 export type ShellCommand = {
   /** The command and its arguments, quotes resolved. `argv[0]` may be a path (`/bin/rm`). */
   argv: string[]
+  /**
+   * Where each argv word is in the text that was read (quotes included), for guards that rewrite a word. At depth 0
+   * that is the line itself; deeper, it is the nested script, so only depth-0 spans can be applied to the line.
+   */
+  spans: { start: number; end: number }[]
   /** `argv[0]`'s base name, lowercased (`/usr/bin/RM` → `rm`). */
   name: string
   /** Redirections of this command: operator and target (`>` `out.txt`); heredocs have no target. */
   redirects: { op: string; target: string }[]
   /** The wrappers that were peeled off, outermost first (`['sudo', 'timeout']`). */
   wrappers: string[]
+  /** `NAME=value` words peeled off (in front of the command, and `env`'s), later ones winning: `{ RAILS_ENV: 'test' }`. */
+  assignments: Record<string, string>
   /**
    * Which pipeline it is in, and its place in that pipeline (0 = first stage). Pipeline numbers are unique
    * across the whole result, nested scripts included, so commands of two different `bash -c` scripts never
@@ -44,10 +56,20 @@ export type ShellCommand = {
    */
   pipeline: number
   stage: number
+  /**
+   * Sent to the background with `&` (`npm run dev &`): every stage of that pipeline, and what it runs inside
+   * (its `bash -c` script, its substitutions), does not hold the line.
+   */
+  isBackground: boolean
   /** 0 for the line itself; 1+ inside `bash -c`, `eval`, `$(...)`, backticks or a heredoc fed to a shell. */
   depth: number
   /** How a nested command was reached: `sh -c`, `eval`, `$()`, `heredoc`; absent at depth 0. */
   via?: 'sh -c' | 'eval' | '$()' | 'heredoc'
+  /**
+   * Which script it was read from: 0 for the line itself, a new number for each nested script (each `bash -c`,
+   * `$(…)`, heredoc), so the commands of one nested script can be told from a sibling's.
+   */
+  script: number
 }
 
 export const SHELLS: ReadonlySet<string> = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'ash', 'fish', 'csh', 'tcsh', 'mksh', 'busybox'])
@@ -56,7 +78,7 @@ export const MAX_NESTING = 3
 
 const SEPARATORS = new Set(['&&', '||', ';', '&', '\n', '(', ')', '{', '}'])
 const PIPES = new Set(['|', '|&'])
-const PREFIX_WORDS = new Set(['command', 'builtin', 'nohup', 'time', 'exec', 'then', 'do', 'else', 'elif', 'if', 'while', 'until', '!', 'noglob'])
+const PREFIX_WORDS = new Set(['command', 'builtin', 'nohup', 'then', 'do', 'else', 'elif', 'if', 'while', 'until', '!', 'noglob'])
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*\+?=/
 const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
 /** Programs that run a command string as another user: `su -c '…' root`, `runuser -l app -c '…'`. */
@@ -70,11 +92,18 @@ const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
   stdbuf: new Set(['-i', '-o', '-e']),
   timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
   env: new Set(['-u', '-C', '-S', '--unset', '--chdir', '--split-string']),
-  xargs: new Set(['-I', '-i', '-L', '-n', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file', '--replace']),
+  xargs: new Set(['-I', '-i', '-L', '-n', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file', '--replace', '--max-lines']),
+  /** The shell keyword and GNU time (`time -f '%e' -o t.txt cmd`). */
+  time: new Set(['-f', '-o', '--format', '--output']),
+  exec: new Set(['-a']),
   chronic: new Set(),
+  setsid: new Set(),
   caffeinate: new Set(['-t', '-w']),
   watch: new Set(['-n', '-d', '--interval']),
 }
+
+/** The escapes `$'…'` decodes when reading a word (`$'a\tb'`); any other is kept as written. */
+const ANSI_C_ESCAPES: Readonly<Record<string, string>> = { n: '\n', t: '\t', r: '\r', "'": "'", '"': '"', '\\': '\\', e: '\u001b', E: '\u001b', a: '\u0007', b: '\b', f: '\f', v: '\v' }
 
 /** Splits a command line into words, separators and redirections, honouring quotes, escapes and heredocs. */
 export function tokenize(command: string): ShellToken[] {
@@ -82,12 +111,43 @@ export function tokenize(command: string): ShellToken[] {
   const heredocs: { token: ShellRedirect; delimiter: string; stripTabs: boolean }[] = []
   let word = ''
   let hasWord = false
+  let wordStart = 0
+  let substitutions: string[] = []
   let i = 0
 
   const pushWord = (): void => {
-    if (hasWord) tokens.push({ kind: 'word', text: word })
+    // A line continuation right after the word (`origin\⏎ main`) is not part of it.
+    let end = i
+    while (end - 2 >= wordStart && command.slice(end - 2, end) === '\\\n') end -= 2
+    if (hasWord) tokens.push({ kind: 'word', text: word, start: wordStart, end, substitutions })
     word = ''
     hasWord = false
+    substitutions = []
+  }
+  /** The `$(…)` starting at `i`, kept whole in the word and its body noted; leaves `i` past its `)`. */
+  const readDollarParen = (): void => {
+    let depth = 0
+    const start = i
+    for (; i < command.length; i += 1) {
+      if (command[i] === '(') depth += 1
+      else if (command[i] === ')' && --depth === 0) break
+    }
+    word += command.slice(start, i + 1)
+    substitutions.push(command.slice(start + 2, i))
+    i += 1
+  }
+  /** The backtick substitution starting at `i`, kept whole and its body noted; leaves `i` past its closing backtick. */
+  const readBackticks = (): void => {
+    const end = command.indexOf('`', i + 1)
+    const stop = end === -1 ? command.length : end
+    word += command.slice(i, stop + 1)
+    if (end !== -1) substitutions.push(command.slice(i + 1, end))
+    i = stop + 1
+  }
+  /** The current word has content from `at` on (its first piece starts the word). */
+  const mark = (at: number): void => {
+    if (!hasWord) wordStart = at
+    hasWord = true
   }
 
   /** Reads the heredoc bodies that start after the newline at `i`, and keeps each on its redirect. */
@@ -110,11 +170,12 @@ export function tokenize(command: string): ShellToken[] {
   while (i < command.length) {
     const char = command[i] as string
     const next = command[i + 1] ?? ''
+    const at = i
 
     if (char === '\\' && next !== '') {
       if (next !== '\n') {
         word += next
-        hasWord = true
+        mark(at)
       }
       i += 2
       continue
@@ -123,49 +184,56 @@ export function tokenize(command: string): ShellToken[] {
       const end = command.indexOf("'", i + 1)
       const stop = end === -1 ? command.length : end
       word += command.slice(i + 1, stop)
-      hasWord = true
+      mark(at)
       i = stop + 1
       continue
     }
     if (char === '$' && next === "'") {
-      // ANSI-C quoting: $'…', its escapes kept as written (good enough to read words).
-      const end = command.indexOf("'", i + 2)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i + 2, stop)
-      hasWord = true
-      i = stop + 1
+      // ANSI-C quoting: $'…' expands nothing; `\'` does not end it; common escapes are decoded, others kept as written.
+      i += 2
+      while (i < command.length && command[i] !== "'") {
+        if (command[i] === '\\' && i + 1 < command.length) {
+          const escaped = command[i + 1] as string
+          word += ANSI_C_ESCAPES[escaped] ?? `\\${escaped}`
+          i += 2
+          continue
+        }
+        word += command[i]
+        i += 1
+      }
+      mark(at)
+      i += 1
       continue
     }
     if (char === '"') {
       i += 1
       while (i < command.length && command[i] !== '"') {
+        // Substitutions run inside double quotes too; an escaped `\$` or `\`` is a plain character.
+        if (command[i] === '$' && command[i + 1] === '(') {
+          readDollarParen()
+          continue
+        }
+        if (command[i] === '`') {
+          readBackticks()
+          continue
+        }
         if (command[i] === '\\' && i + 1 < command.length && '"\\$`\n'.includes(command[i + 1] as string)) i += 1
         word += command[i]
         i += 1
       }
-      hasWord = true
+      mark(at)
       i += 1
       continue
     }
     if (char === '$' && next === '(') {
       // Keep a command substitution whole inside the word: its contents are not this line's separators.
-      let depth = 0
-      const start = i
-      for (; i < command.length; i += 1) {
-        if (command[i] === '(') depth += 1
-        else if (command[i] === ')' && --depth === 0) break
-      }
-      word += command.slice(start, i + 1)
-      hasWord = true
-      i += 1
+      readDollarParen()
+      mark(at)
       continue
     }
     if (char === '`') {
-      const end = command.indexOf('`', i + 1)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i, stop + 1)
-      hasWord = true
-      i = stop + 1
+      readBackticks()
+      mark(at)
       continue
     }
     if (char === '#' && !hasWord) {
@@ -230,7 +298,7 @@ export function tokenize(command: string): ShellToken[] {
       continue
     }
     word += char
-    hasWord = true
+    mark(at)
     i += 1
   }
   pushWord()
@@ -245,12 +313,20 @@ export function baseName(word: string): string {
 }
 
 /** Peels wrappers (sudo, env, timeout, nice, xargs, ...), prefix words and `VAR=x` assignments off an argv. */
-export function unwrap(argv: readonly string[]): { argv: string[]; wrappers: string[] } {
+export function unwrap(argv: readonly string[]): { argv: string[]; wrappers: string[]; assignments: Record<string, string> } {
   const wrappers: string[] = []
+  const assignments: Record<string, string> = {}
+  const assign = (word: string): void => {
+    const at = word.indexOf('=')
+    assignments[word.slice(0, word[at - 1] === '+' ? at - 1 : at)] = word.slice(at + 1)
+  }
   let start = 0
   for (let previous = -1; previous !== start; ) {
     previous = start
-    while (start < argv.length && (PREFIX_WORDS.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) start += 1
+    while (start < argv.length && (PREFIX_WORDS.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) {
+      if (ASSIGNMENT.test(argv[start] as string)) assign(argv[start] as string)
+      start += 1
+    }
     const name = baseName(argv[start] ?? '')
     const valued = WRAPPERS[name]
     if (valued === undefined) continue
@@ -258,8 +334,10 @@ export function unwrap(argv: readonly string[]): { argv: string[]; wrappers: str
     start += 1
     while (start < argv.length) {
       const arg = argv[start] as string
-      if (name === 'env' && ASSIGNMENT.test(arg)) start += 1
-      else if (arg === '--') {
+      if (name === 'env' && ASSIGNMENT.test(arg)) {
+        assign(arg)
+        start += 1
+      } else if (arg === '--') {
         start += 1
         break
       } else if (arg.startsWith('-') && arg !== '-') start += valued.has(arg) ? 2 : 1
@@ -268,11 +346,15 @@ export function unwrap(argv: readonly string[]): { argv: string[]; wrappers: str
     // `timeout 5 cmd`, `watch -n 2 cmd`: timeout's duration is its first operand.
     if (name === 'timeout' && start < argv.length) start += 1
   }
-  return { argv: argv.slice(start), wrappers }
+  return { argv: argv.slice(start), wrappers, assignments }
 }
 
-/** The commands inside `$(...)` and backticks of a word, which run before the word is used. */
-export function substitutionBodies(word: string): string[] {
+/**
+ * The commands inside `$(...)` and backticks of raw shell text. A word from `tokenize` has had its quotes resolved,
+ * so pass it whole: `substitutionBodies(token)` returns `token.substitutions`, which knows `'$(x)'` runs nothing.
+ */
+export function substitutionBodies(word: string | ShellWord): string[] {
+  if (typeof word !== 'string') return word.substitutions
   const bodies: string[] = []
   for (let i = 0; i < word.length; i += 1) {
     if (word[i] === '`') {
@@ -344,18 +426,24 @@ export function shellReadsStdin(argv: readonly string[]): boolean {
  * (up to MAX_NESTING deep). Never throws.
  */
 export function simpleCommands(command: string, depth = 0, via?: ShellCommand['via']): ShellCommand[] {
-  return readScript(command, depth, via, { pipelines: 0 })
+  return readScript(command, depth, via, { pipelines: 0, scripts: 0 })
 }
 
-/** simpleCommands, with one pipeline counter shared by the line and every script nested in it. */
-function readScript(command: string, depth: number, via: ShellCommand['via'], counter: { pipelines: number }): ShellCommand[] {
+/** simpleCommands, with one pipeline and script counter shared by the line and every script nested in it. */
+function readScript(command: string, depth: number, via: ShellCommand['via'], counter: { pipelines: number; scripts: number }): ShellCommand[] {
   const out: ShellCommand[] = []
+  const script = counter.scripts
+  counter.scripts += 1
   let words: string[] = []
+  let spans: ShellCommand['spans'] = []
   let redirects: { op: string; target: string }[] = []
   let heredocBodies: string[] = []
   let pendingRedirect: ShellRedirect | undefined
   let pipeline = counter.pipelines
   counter.pipelines += 1
+  /** Where the current pipeline's commands (and those nested in them) start in `out`; a `( … )` or `{ …; }` group counts as one. */
+  let pipelineStart = 0
+  const groupStarts: number[] = []
   let stage = 0
 
   const nested = (script: string, how: ShellCommand['via']): void => {
@@ -364,16 +452,18 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
   }
 
   const flush = (): void => {
-    const { argv, wrappers } = unwrap(words)
+    const { argv, wrappers, assignments } = unwrap(words)
     if (argv.length > 0 || redirects.length > 0) {
       const name = baseName(argv[0] ?? '')
-      out.push({ argv, name, redirects, wrappers, pipeline, stage, depth, ...(via === undefined ? {} : { via }) })
-      const script = shellScriptArg(argv)
-      if (script !== undefined) nested(script, 'sh -c')
+      const argvSpans = spans.slice(words.length - argv.length)
+      out.push({ argv, spans: argvSpans, name, redirects, wrappers, assignments, pipeline, stage, isBackground: false, depth, ...(via === undefined ? {} : { via }), script })
+      const handed = shellScriptArg(argv)
+      if (handed !== undefined) nested(handed, 'sh -c')
       if (name === 'eval') nested(argv.slice(1).join(' '), 'eval')
       if (shellReadsStdin(argv)) for (const body of heredocBodies) nested(body, 'heredoc')
     }
     words = []
+    spans = []
     redirects = []
     heredocBodies = []
     pendingRedirect = undefined
@@ -384,7 +474,7 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
       if (token.kind === 'word') {
         redirects.push({ op: pendingRedirect.text, target: token.text })
         if (pendingRedirect.text === '<<<') heredocBodies.push(token.text)
-        for (const body of substitutionBodies(token.text)) nested(body, '$()')
+        for (const body of token.substitutions) nested(body, '$()')
         pendingRedirect = undefined
         continue
       }
@@ -405,6 +495,10 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
         stage += 1
       } else if (SEPARATORS.has(token.text)) {
         flush()
+        if (token.text === '&') for (const cmd of out.slice(pipelineStart)) cmd.isBackground = true
+        if (token.text === '(' || token.text === '{') groupStarts.push(out.length)
+        // After a group closes, a `&` sends the whole group to the background.
+        pipelineStart = token.text === ')' || token.text === '}' ? (groupStarts.pop() ?? out.length) : out.length
         pipeline = counter.pipelines
         counter.pipelines += 1
         stage = 0
@@ -412,7 +506,8 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
       continue
     }
     words.push(token.text)
-    for (const body of substitutionBodies(token.text)) nested(body, '$()')
+    spans.push({ start: token.start, end: token.end })
+    for (const body of token.substitutions) nested(body, '$()')
   }
   flush()
   return out

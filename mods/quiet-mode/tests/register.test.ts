@@ -153,13 +153,13 @@ test('with mods-hub: /quiet sets the hub\'s Silent for every session and the sta
   expect(toasts).toEqual([])
 })
 
-test('with mods-hub: /quiet on asks for the longest Silent, and a Silent the hub ends clears the status line', async ($, on) => {
+test('with mods-hub: /quiet on asks for a Silent with no end, and a Silent the hub ends clears the status line', async ($, on) => {
   const { statuses, clock } = world(on)
   const hub = fakeHub(on, {}, clock)
 
-  expect((await quiet($, 'on')).text).toContain('until you run /quiet again (at most a day)')
-  expect(hub.modes).toEqual([{ silentMinutes: 24 * 60 }])
-  expect(statuses).toEqual(['🔕 quiet 24h'])
+  expect((await quiet($, 'on')).text).toContain('until you run /quiet again, in every session')
+  expect(hub.modes).toEqual([{ isSilent: true }])
+  expect(statuses).toEqual(['🔕 quiet'])
 
   hub.mode = { ...hub.mode, isSilent: false, silentUntil: null }
   await clock.advance(30_000)

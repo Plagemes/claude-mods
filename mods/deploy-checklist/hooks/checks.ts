@@ -1,4 +1,5 @@
 import type { DeployChecklistItem as Item } from '../types'
+import { isTestCommand as isSharedTestCommand } from './shared/test-runners'
 
 /** One known deploy command: what to call it and how to spot it in a shell line. */
 type Deploy = { label: string; pattern: RegExp }
@@ -52,9 +53,10 @@ export const deployKind = (command: string, extra: RegExp | undefined): string |
   return extra?.test(command) === true ? 'custom deploy' : undefined
 }
 
+/** A test run: this mod's runners, or the ones every Claude Mod knows (`shared/test-runners.ts`: `just test`...). */
 export const isTestCommand = (command: string): boolean => {
   const code = matchText(command)
-  return code.split(SEGMENTS).some(segment => TEST_COMMAND.test(segment))
+  return code.split(SEGMENTS).some(segment => TEST_COMMAND.test(segment)) || isSharedTestCommand(code)
 }
 
 /** True when the line runs a test command and only then (`&&`) the deploy. */

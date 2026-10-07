@@ -18,6 +18,7 @@ import {
 } from './explore'
 import type { Angle } from './explore'
 import { READ_TOOLS, whyNotReadOnly } from './readonly'
+import { routesOf } from './routes'
 
 const PANE = 'explore'
 const BUILT_IN_TYPE = 'Explore'
@@ -135,27 +136,28 @@ async function maybeMerge($: EngineInterface, settings: Settings, timers: Timers
   if (!isMine) return
   const run = (await read($, runAtom)) as ParallelExploreRun
   timers.deadline?.cancel()
-  const finish = async (change: Partial<ParallelExploreRun>, toast: string) => {
+  const finish = async (change: Partial<ParallelExploreRun>, toast: string, level: 'success' | 'warning') => {
     stopTimers(timers)
     const finishedAt = await $.clock.now()
     await patchRun($, id, current => ({ ...current, ...change, finishedAt }))
-    $.ui.toast(toast)
+    // A notice through the hub (your phone channel while you are away: the exploration ran in the background); a toast without it.
+    await hubNotify($, { level, title: toast })
   }
   if (run.angles.every(angle => angle.status === 'failed')) {
-    await finish({ phase: 'failed', error: 'none of the explorers reported back' }, 'Explore failed: no explorer reported back')
+    await finish({ phase: 'failed', error: 'none of the explorers reported back' }, 'Explore failed: no explorer reported back', 'warning')
     return
   }
   try {
     const model = settings.mergeModel === 'inherit' ? await $.session.model() : settings.mergeModel
     const reply = await $.model.complete({ model, system: MERGER_SYSTEM, prompt: mergePrompt(run.question, run.angles), maxTokens: MERGE_MAX_TOKENS, timeoutMs: MERGE_TIMEOUT_MS })
     if (reply.isAnswered && reply.text.trim() !== '') {
-      await finish({ phase: 'done', answer: reply.text.trim() }, 'Explore: findings merged')
+      await finish({ phase: 'done', answer: reply.text.trim() }, 'Explore: findings merged', 'success')
       return
     }
   } catch {
     // Fall through to the reports side by side.
   }
-  await finish({ phase: 'done', answer: unmergedAnswer(run.angles), isUnmerged: true }, 'Explore: merging failed, the reports are shown side by side')
+  await finish({ phase: 'done', answer: unmergedAnswer(run.angles), isUnmerged: true }, 'Explore: merging failed, the reports are shown side by side', 'warning')
 }
 
 async function startExplore($: EngineInterface, settings: Settings, timers: Timers, question: string): Promise<string> {
@@ -172,6 +174,28 @@ async function startExplore($: EngineInterface, settings: Settings, timers: Time
   const started = (await read($, runAtom))?.angles.filter(angle => angle.status !== 'failed') ?? []
   if (started.length === 0) return 'No explorer could be started; see the Explore pane.'
   return `Exploring with ${started.length} agents in parallel: ${started.map(angle => angle.title).join(' · ')}. The merged findings land in the Explore pane.`
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello (this mod publishes `agent.finished` and reads `agent.routed`, to show which model took each angle). */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['agent.finished'], consumes: ['agent.routed'] })
+}
+
+/** The models smart-router routed the agents to (`agent.routed`), by agent id. Read while drawing, so the pane redraws when one lands; empty without a hub. */
+async function hubRoutes($: EngineInterface) {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'feed' })
+  return routesOf(value ?? [])
 }
 
 async function registerScout($: EngineInterface): Promise<void> {
@@ -208,6 +232,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'explore', description: 'Send three read-only agents to investigate the codebase in parallel and merge their findings', argumentHint: '<question>' })
+    await greetHub($)
     try {
       await registerScout($)
     } catch (error) {
@@ -245,6 +270,16 @@ export const register: Register = (on, options) => {
     if (run === null || index === -1) return next(e)
     const report = e.answer.trim()
     const finishedAt = await $.clock.now()
+    const angle = run.angles[index]
+    await hubPublish($, {
+      topic: 'agent.finished',
+      data: {
+        agentType: angle?.agentType ?? BUILT_IN_TYPE,
+        outcome: e.reason === 'answer' && report !== '' ? 'ok' : 'failed',
+        durationMs: Math.max(0, finishedAt - (angle?.startedAt ?? finishedAt)),
+        agentId: e.agentId,
+      },
+    })
     await patchAngle(
       $,
       run.id,
@@ -284,6 +319,7 @@ export const register: Register = (on, options) => {
     const run = await read($, runAtom)
     if (run === null) return <Text dimColor>{USAGE}</Text>
     const now = await $.clock.now()
+    const routes = await hubRoutes($)
     const done = run.angles.filter(angle => angle.status === 'done' || angle.status === 'failed').length
     const elapsed = formatElapsed((run.finishedAt ?? now) - run.startedAt)
     const phase =
@@ -312,6 +348,7 @@ export const register: Register = (on, options) => {
                   <Text bold>{angle.title}</Text>
                   {angle.startedAt !== undefined && <Text dimColor>{formatElapsed((angle.finishedAt ?? now) - angle.startedAt)}</Text>}
                   {angle.agentType === SCOUT_TYPE && <Text dimColor>(scout)</Text>}
+                  {angle.agentId !== undefined && routes.has(angle.agentId) && <Text dimColor>{routes.get(angle.agentId)}</Text>}
                 </Box>
                 <Text dimColor wrap="truncate-end">{angle.status === 'failed' ? `  ${angle.error ?? 'failed'}` : `  ${angle.focus}`}</Text>
               </Box>
@@ -343,3 +380,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

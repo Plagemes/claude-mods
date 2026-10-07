@@ -3,6 +3,7 @@ import type { Engine, MockClock } from 'claude-code/testing'
 import type { On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
 
 import { fromStore, moveItem, parseQueueArgs, statusText } from '../hooks/queue'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const STORE_KEY = `queue:${ROOT}`
@@ -215,4 +216,45 @@ test('the pane reorders, removes, adds and pauses on terminal and desktop', asyn
   await seen.clock.advance(SETTLE)
   expect(seen.submitted).toEqual(['beta'])
   await ui.unmount()
+})
+
+test('with mods-hub: tasks are published, a hub pause holds the queue until its resume, and the end reaches you when away', async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on, { presence: 'away' }, seen.clock)
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+  await start($)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['task.queued', 'task.started', 'task.finished'], consumes: ['session.idle', 'control.stop', 'control.pause', 'control.resume'] }])
+  expect(hub.tabs).toEqual([{ id: 'queue', title: 'Queue', order: 220, command: 'queue' }])
+
+  await queue($, 'write tests for the cart')
+  await seen.clock.advance(500)
+  const [queued, started] = hub.published
+  expect(queued).toEqual({ topic: 'task.queued', data: { id: expect.any(String), title: 'write tests for the cart' } })
+  expect(started).toEqual({ topic: 'task.started', data: { id: (queued?.data as { id: string }).id, title: 'write tests for the cart' } })
+  await runTurn($, seen, 'queued-1')
+  expect(hub.published.at(-1)).toEqual({ topic: 'task.finished', data: { id: (queued?.data as { id: string }).id, title: 'write tests for the cart', outcome: 'ok' } })
+  expect(hub.notified).toEqual([{ level: 'success', title: '✓ Queue done: 1 prompt ran', body: 'write tests for the cart', topic: 'task.finished' }])
+
+  // A STOP from the phone, through the hub: the queue holds.
+  hub.events.push({ topic: 'control.pause', source: 'telegram-bridge', at: seen.clock.now() + 1, data: { id: 'c1', scope: 'all', reason: 'lunch', by: 'owner via telegram', session: 's1' } })
+  await seen.clock.advance(5_000)
+  expect(await queue($, 'update the README')).toContain('the queue is paused')
+  expect(await queue($, 'list')).toContain('paused by owner via telegram (lunch)')
+  await seen.clock.advance(10_000)
+  expect(seen.submitted).toEqual(['write tests for the cart'])
+
+  hub.events.push({ topic: 'control.resume', source: 'telegram-bridge', at: seen.clock.now() + 1, data: { id: 'c2', scope: 'all', reason: '', by: 'owner via telegram', session: 's1' } })
+  await seen.clock.advance(5_500)
+  expect(seen.submitted).toEqual(['write tests for the cart', 'update the README'])
+
+  // /queue opens the Queue tab of the shared panel instead of its own pane.
+  await queue($, '')
+  expect(hub.shown).toEqual(['queue'])
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'task-queue', surface, component: 'Pane', requestId: 'claude-mods', props: { ...PANE, title: 'Claude Mods' } })
+    expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+    expect(await ui.find({ key: 'headline' })).toBeDefined()
+    expect(await ui.find({ key: 'close' })).toBeUndefined()
+    await ui.unmount()
+  }
 })

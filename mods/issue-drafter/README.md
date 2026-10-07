@@ -27,3 +27,7 @@
 - `command.run` (`/issue`) calls `$.model.fork`, so the draft sees the whole conversation without adding to it; the pane draws from `$.state`.
 - **Create with gh** writes the body to `$TMPDIR/claude-issue-<time>.md` (default `/tmp`) with `$.fs`, then runs `gh issue create --title … --body-file …` in the project root. Errors from gh (not installed, not logged in, unknown label) are shown in the pane and the draft is kept.
 - Needs `gh` installed and authenticated for the current repository; Copy works anywhere. The temporary body file is left in the temp folder.
+- With [mods-hub](../mods-hub) installed:
+  - `/issue` tells the draft about the failures other mods reported this session: CI runs that failed (`ci.result`, from ci-watch) and commands that failed again and again (`error.repeated`), so a bug report about them carries the workflow, branch, link and command;
+  - a created issue is published as `issue.drafted` (title, body masked with the shared secret rules, link, labels) for every session, so ticket-linker and team-hub pick it up.
+  Without the hub nothing changes.

@@ -5,7 +5,7 @@
 
 ## What it does
 Before Claude edits or writes a file, secret-shield scans the new text for well-known credential formats:
-AWS, GitHub, Anthropic, OpenAI, Stripe live, Slack and Google API keys, PEM private-key headers, and
+AWS, GitHub, Anthropic, OpenAI, Stripe live, Slack and Google API keys, JSON web tokens, PEM private keys, and
 high-entropy values assigned to names like `*_KEY`, `*_SECRET`, `*_TOKEN` or `*_PASSWORD`. A match refuses
 the tool call and tells Claude which pattern hit and on which line, with the secret masked.
 
@@ -35,5 +35,7 @@ only the known key formats are checked, not the high-entropy heuristic, since th
 
 ## How it works
 - A `tool.call` guard on `Edit`, `Write`, `NotebookEdit` (and `MultiEdit` where a build has it) scans only the text being added (`new_string`, `content`, `new_source`).
+- The rules are the shared claude-mods secret rules (`shared/secrets`, the same ones redactor, pii-in-logs and mods-hub use): bounded patterns, entropy checks, and placeholders (`changeme`, `your-key-here`, `AKIA…EXAMPLE`, `process.env.X`) left alone. In template files (`.env.example`, `*.sample.*`) only the known key formats count.
 - It fails closed: if the scan itself throws, the write is denied.
+- With [mods-hub](../mods-hub) installed, every refusal also publishes `secret.detected` for each kind found (where `edit`, action `blocked`, the path) and `risk.blocked` (rule `secret-in-file`, severity `high`); never the value. Without the hub nothing changes.
 - Limits: pattern-based, so a secret in an unknown format slips through, and it does not look at what is already on disk or at secrets written through `Bash`.

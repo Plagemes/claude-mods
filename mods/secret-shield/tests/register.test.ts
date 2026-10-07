@@ -1,5 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 // Built at run time so this file holds nothing a secret scanner would flag.
 const fake = (prefix: string, body: string) => prefix + body
 const AWS_KEY = fake('AKIA', 'Z7Q3M9XK2P4W8L5N')
@@ -123,4 +125,27 @@ test('a .env.example full of made-up values is written; a real key format in it 
   // Outside a template, fill-me-in values pass but a random-looking one does not.
   const env = await $.tool.call({ tool: 'Write', file_path: '/repo/.env', content: 'NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32\nAPP_SECRET="9fA3kD82hQzL0pX7vB1mW4nE6tY"' })
   expect(env.deny).toContain('line 2: high-entropy secret assignment')
+})
+
+test('the shared rules: a JWT and a documented example key', async ($, on) => {
+  on('tool.call', () => ({ result: 'ok' }))
+  const jwt = fake('eyJhbGciOiJIUzI1NiJ9', '.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U')
+  expect((await $.tool.call({ tool: 'Write', file_path: '/repo/auth.ts', content: `const t = '${jwt}'` })).deny).toContain('JSON web token')
+  const documented = fake('AKIA', 'IOSFODNN7EXAMPLE')
+  expect((await $.tool.call({ tool: 'Write', file_path: '/repo/docs.ts', content: `// e.g. ${documented}` })).deny).toBeUndefined()
+})
+
+test('with mods-hub: a refusal publishes secret.detected per kind and risk.blocked, never the value', async ($, on) => {
+  on('tool.call', () => ({ result: 'ok' }))
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked', 'secret.detected'], consumes: [] }])
+  await $.tool.call({ tool: 'Write', file_path: '/repo/config.ts', content: `const a = '${AWS_KEY}'\nconst b = '${GITHUB_TOKEN}'\nconst c = '${AWS_KEY}'` })
+  expect(hub.published).toEqual([
+    { topic: 'secret.detected', data: { kind: 'aws-key', where: 'edit', action: 'blocked', path: '/repo/config.ts' } },
+    { topic: 'secret.detected', data: { kind: 'github-token', where: 'edit', action: 'blocked', path: '/repo/config.ts' } },
+    { topic: 'risk.blocked', data: { guard: 'secret-shield', tool: 'Write', reason: 'secret-in-file: AWS access key, GitHub token', severity: 'high', path: '/repo/config.ts' } },
+  ])
+  expect(JSON.stringify(hub.published)).not.toContain(AWS_KEY)
 })

@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { AgentInfo, On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 type Agents = AgentInfo[]
 
 const agent = (id: string, status: AgentInfo['status']): AgentInfo => ({ id, status, type: 'general-purpose', description: id })
@@ -114,4 +116,25 @@ test('notices agents that end without a turn.complete, by polling while any run'
   await seen.advance(3000)
 
   expect(seen.statuses.at(-1)).toBeUndefined()
+})
+
+test('with mods-hub: smart-router\'s lower parallel limit holds here, and a refusal is published', async ($, on) => {
+  const seen = world(on, [agent('a1', 'running'), agent('a2', 'running')])
+  const hub = fakeHub(on)
+  let maxParallel = 2
+  on('mods.read', (_$, e) => ({
+    value: e.key === 'smart-router.policy' ? { key: e.key, owner: 'smart-router', at: 0, value: { profile: 'saver', maxParallel } } : null,
+  }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: ['smart-router.policy'] }])
+  const refused = await spawn($)
+  expect(refused.deny).toContain('subagent-cap: 2 of 2 subagents are already running')
+  expect(hub.published).toEqual([{ topic: 'risk.blocked', data: { guard: 'subagent-cap', tool: 'Agent', reason: '2 of 2 subagents already running', severity: 'low' } }])
+
+  // A policy never raises the configured cap of 3.
+  maxParallel = 8
+  seen.agents.push(agent('a3', 'running'))
+  expect((await spawn($)).deny).toContain('3 of 3')
 })

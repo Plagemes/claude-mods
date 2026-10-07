@@ -4,6 +4,7 @@ import type { On } from 'claude-code'
 
 import { trackersAdded, trackersIn, trackersInstalledBy } from '../hooks/detect'
 import { TRACKERS, isApproved, trackerOfPackage } from '../hooks/trackers'
+import { fakeHub } from './hub'
 
 /** The engine beneath the plugin: files on disk, and tool calls that run when nobody refuses them. */
 const engine = (on: On, files: Record<string, string> = {}) => {
@@ -167,6 +168,12 @@ test('detection helpers', () => {
   expect(trackersInstalledBy('npm install ./mixpanel-browser').map(t => t.id)).toEqual([])
   expect(trackersInstalledBy('pip install -r requirements.txt').map(t => t.id)).toEqual([])
   expect(trackersInstalledBy('pip install "Mixpanel[extra]>=4" PostHog').map(t => t.id)).toEqual(['mixpanel', 'posthog'])
+  // The shared shell reader: wrappers, shells handed a script, heredocs fed to a shell; a heredoc note or a comment is not an install.
+  expect(trackersInstalledBy('timeout 120 npm i posthog-js').map(t => t.id)).toEqual(['posthog'])
+  expect(trackersInstalledBy(`bash -c 'cd web && pnpm add mixpanel-browser'`).map(t => t.id)).toEqual(['mixpanel'])
+  expect(trackersInstalledBy('bash <<EOF\npip install posthog\nEOF').map(t => t.id)).toEqual(['posthog'])
+  expect(trackersInstalledBy("cat <<'EOF' > NOTES.md\nnpm i posthog-js\nEOF").map(t => t.id)).toEqual([])
+  expect(trackersInstalledBy('npm i react # not posthog-js').map(t => t.id)).toEqual([])
   expect(trackersIn('/r/index.html', 'no scripts here')).toEqual([])
   expect(trackersAdded('/r/a.html', HTML_GA, `${HTML_GA}\n<script src="https://static.hotjar.com/c/h.js"></script>`).map(t => t.id)).toEqual(['hotjar'])
   expect(trackerOfPackage('@Segment/Analytics-Next')?.id).toBe('segment')
@@ -204,4 +211,18 @@ test('regression: TRACKER-OK does not carry into a turn the person did not start
   // A notification that starts a turn of its own is not approved.
   await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
   expect((await bash($, 'npm install mixpanel-browser')).deny).toContain('tracker-guard')
+})
+
+test('with mods-hub: refusals are published as risk.blocked, with the command or the path', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect((await bash($, 'npm i posthog-js')).deny).toContain('tracker-guard: blocked')
+  expect((await edit($, '/r/index.html', HTML_GA)).deny).toContain('tracker-guard: blocked')
+  expect(hub.published.map(event => event.data)).toEqual([
+    { guard: 'tracker-guard', tool: 'Bash', reason: expect.stringMatching(/^tracker: adds PostHog/), severity: 'medium', command: 'npm i posthog-js' },
+    { guard: 'tracker-guard', tool: 'Edit', reason: expect.stringMatching(/^tracker: adds Google/), severity: 'medium', path: '/r/index.html' },
+  ])
 })

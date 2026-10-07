@@ -78,5 +78,8 @@ describe('catalog and /hub', () => {
     expect(parseHubArgs('night 23:00-06:30')).toEqual({ kind: 'night', isOn: true, quietHours: '23:00-06:30' })
     expect(parseHubArgs('route error always')).toEqual({ kind: 'route', level: 'error', value: 'always' })
     expect(parseHubArgs('route error loud').kind).toBe('error')
+    expect(parseHubArgs('stop')).toEqual({ kind: 'control', action: 'stop', scope: 'session' })
+    expect(parseHubArgs('resume all')).toEqual({ kind: 'control', action: 'resume', scope: 'all' })
+    expect(parseHubArgs('pause now').kind).toBe('error')
   })
 })

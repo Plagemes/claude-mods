@@ -1,3 +1,5 @@
+import { simpleCommands } from './shared/shell'
+
 export type FileInfo = { path: string; size: number; mtimeMs: number }
 
 /** What is kept of a build between sessions: the total, and the largest files by their hash-free names. */
@@ -16,17 +18,26 @@ const BUILD_COMMANDS = [
 ]
 const WATCHING = /(?:^|\s)(?:--watch|-w|serve|--help|-h|--version)(?:\s|=|$)/
 
+/** The programs a build command can start with (the shared shell reader peels `sudo`, `env`, `time` and the like). */
+const BUILD_PROGRAMS = new Set([
+  'npm', 'pnpm', 'bun', 'yarn', 'npx', 'bunx', 'vite', 'next', 'nuxt', 'nuxi', 'astro', 'ng', 'parcel', 'rsbuild', 'rspack', 'svelte-kit',
+  'vue-cli-service', 'gatsby', 'turbo', 'webpack', 'webpack-cli', 'rollup', 'esbuild', 'tsup',
+])
+
+/** The build command a shell line runs (`npm`, `vite`, `webpack`…), read command by command so a quoted `npm run build` in a commit message is no build; undefined when it runs none (or only a watcher or dev server). */
+export const buildToolOf = (command: string): string | undefined =>
+  simpleCommands(command).find(({ name, argv }) => {
+    const text = argv.join(' ')
+    return BUILD_PROGRAMS.has(name) && BUILD_COMMANDS.some(pattern => pattern.test(text)) && !WATCHING.test(text)
+  })?.name
+
 /** True for a command that builds a front-end bundle (and is not a watcher or dev server). */
-export const isBuildCommand = (command: string): boolean => {
-  // "git commit -m 'npm run build'" is not a build, but `bash -c "npm run build"` is.
-  const visible = /\b(?:bash|sh|zsh|eval|xargs)\b/.test(command) ? command : command.replace(/"[^"]*"|'[^']*'/g, '""')
-  return BUILD_COMMANDS.some(pattern => pattern.test(visible)) && !WATCHING.test(visible)
-}
+export const isBuildCommand = (command: string): boolean => buildToolOf(command) !== undefined
 
 /** The folder a command starts with `cd` into: `cd web && npm run build` builds in `web`. */
 export const leadingCd = (command: string): string | undefined => {
-  const match = /^\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))\s*(?:&&|;)/.exec(command)
-  return match?.[1] ?? match?.[2] ?? match?.[3]
+  const [first, ...rest] = simpleCommands(command)
+  return first?.name === 'cd' && rest.length > 0 && first.depth === 0 ? first.argv[1] : undefined
 }
 
 const HASHED = /([.-])([A-Za-z0-9_]{6,20})((?:\.(?:chunk|min|bundle|esm|umd))*\.[A-Za-z0-9]+)$/

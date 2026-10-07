@@ -4,6 +4,7 @@ import type { On } from 'claude-code'
 
 import { packageJsonGlobs, pnpmGlobs, scopeCommand } from '../hooks/workspace'
 import type { Package } from '../hooks/workspace'
+import { fakeHub } from './hub'
 
 type World = { executed: string[]; statuses: (string | undefined)[] }
 
@@ -159,4 +160,35 @@ test('a turbo command that does not parse is rejected at once, not after exponen
   expect(scopeCommand(`turbo run ${'a'.repeat(40)}.`, pkg, 'pnpm', new Set(['test']))).toBeUndefined()
   expect(Date.now() - started).toBeLessThan(100)
   expect(scopeCommand('turbo run test lint --force', pkg, 'pnpm', new Set(['test']))).toEqual({ command: 'turbo run test lint --force --filter=@app/web', task: 'test lint' })
+})
+
+test('with mods-hub: says hello and shares the fact monorepo-scope.package as the package follows the edits, is pinned, and scoping is turned off', async ($, on) => {
+  const w = world(on, PNPM_REPO)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+  expect(hub.facts.size).toBe(0)
+
+  await edit($, '/repo/apps/web/src/App.tsx')
+  expect(hub.facts.get('package')).toEqual({ name: '@app/web', dir: 'apps/web', isPinned: false, manager: 'pnpm' })
+  await scopePkg($, 'ui')
+  expect(hub.facts.get('package')).toEqual({ name: '@app/ui', dir: 'packages/ui', isPinned: true, manager: 'pnpm' })
+  await scopePkg($, 'off')
+  expect(hub.facts.get('package')).toBeNull()
+  expect(w.statuses.at(-1)).toBeUndefined()
+})
+
+test('a root command the shell reader finds compound is left alone, whatever the pattern check thought', async ($, on) => {
+  const w = world(on, PNPM_REPO)
+  await edit($, '/repo/apps/web/src/App.tsx')
+  for (const compound of ['pnpm test $(echo -r)', 'pnpm test\npnpm lint']) {
+    await bash($, compound)
+    expect(w.executed.at(-1)).toBe(compound)
+  }
+})
+
+test('without mods-hub nothing is shared', async ($, on) => {
+  const w = world(on, PNPM_REPO)
+  await edit($, '/repo/apps/web/src/App.tsx')
+  expect(w.statuses.at(-1)).toBe('📦 @app/web')
 })

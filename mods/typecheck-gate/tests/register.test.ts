@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 type Run = { argv: readonly string[]; cwd: string | undefined }
 
 const PROJECT = {
@@ -192,4 +194,20 @@ test('regression: a solution-style tsconfig (Vite) is checked through the projec
 
   expect(runs.map(run => run.argv.at(-1))).toEqual(['/repo/tsconfig.app.json', '/repo/tsconfig.node.json'])
   expect(statuses.at(-1)).toBe('✗ types: 2 type errors (tsc)')
+})
+
+test('with mods-hub: each check is published as typecheck.result and its errors are an error notice', async ($, on) => {
+  const clock = mock.clock(on)
+  const { toasts } = world(on, () => TSC_ERRORS)
+  const hub = fakeHub(on)
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['typecheck.result'], consumes: [] }])
+  await $.tool.call(edit('/repo/src/a.ts'))
+  await $.turn.complete(TURN_END)
+  await clock.settle()
+
+  expect(hub.published).toEqual([{ topic: 'typecheck.result', data: { tool: 'tsc', errors: 2, files: ['src/a.ts', 'src/b.ts'] } }])
+  expect(hub.notified).toEqual([{ level: 'error', title: '2 type errors (tsc)', topic: 'typecheck.result' }])
+  expect(toasts).toEqual([])
 })

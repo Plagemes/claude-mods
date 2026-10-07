@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Origin, Register, Timer } from 'claude-code'
 
 import type { QuietState } from '../types'
-import { MAX_MINUTES, formatMinutes, muteVerdict, parseQuietArgs } from './args'
+import { formatMinutes, muteVerdict, parseQuietArgs } from './args'
 import type { QuietCommand } from './args'
 
 const quiet = atom({ plugin: 'quiet-mode', key: 'quiet' } as const, { isOn: false, until: null } satisfies QuietState)
@@ -108,10 +108,10 @@ const runOnHub = async ($: EngineInterface, timers: Timers, command: Exclude<Qui
     return mode.isSilent ? 'Quiet mode is off in every session: toasts and sounds from your mods are back.' : 'Quiet mode was already off.'
   }
 
-  // The hub's setMode takes minutes only, so "on until switched off" is the longest quiet period, a day.
-  const minutes = command.kind === 'on' && command.minutes !== null ? command.minutes : MAX_MINUTES
-  await showHubSilent($, timers, await $.mods.setMode({ silentMinutes: minutes }))
-  const length = command.kind === 'on' && command.minutes !== null ? `for ${formatMinutes(minutes * MINUTE_MS)}` : 'until you run /quiet again (at most a day)'
+  // With no minutes, Silent has no end: it lasts until /quiet (or /hub silent off) switches it off.
+  const minutes = command.kind === 'on' ? command.minutes : null
+  await showHubSilent($, timers, await $.mods.setMode(minutes === null ? { isSilent: true } : { silentMinutes: minutes }))
+  const length = minutes === null ? 'until you run /quiet again' : `for ${formatMinutes(minutes * MINUTE_MS)}`
   return `Quiet mode is on ${length}, in every session (mods-hub's Silent): toasts and sounds from your mods wait in the Claude Mods panel.`
 }
 
@@ -184,7 +184,7 @@ export const register: Register = on => {
   on('audio.speak', async ($, e, next) => ((await isMuting($, timers, next.origin)) ? { value: { via: 'system' as const } } : next(e)))
 }
 
-// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -199,12 +199,17 @@ async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish
   }
 }
 
-/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
-async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
   try {
     await $.mods.notify(input)
   } catch {
-    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
   }
 }
 
@@ -234,6 +239,38 @@ async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
     return (await $.mods.showTab({ id })).isPlaced
   } catch {
     return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
   }
 }
 

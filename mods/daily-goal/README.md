@@ -44,3 +44,4 @@ Claude Code ships its own `/goal` command (a stop condition for Claude), so this
   - One goal per project per day.
   - Days and hours are in your machine's time zone.
   - The question appears when you're at Claude Code. It never sends a notification.
+- With [mods-hub](../mods-hub) installed the mod says hello and the "Goal reached" message goes out as a success notice through the hub (a toast, and your phone channel while you are away). The map lists `session.ended` as an input, but the hub raises it when a session is ending, and by then this mod's band is gone; the band re-reads the goals at each turn instead, so another session's answer is still noticed. Without the hub it is the toast above.

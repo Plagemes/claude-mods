@@ -44,3 +44,4 @@ Screenshots are saved in `.claude/screenshots/` (git-ignored, the newest 10 capt
   Read tool. Automatic captures leave the same note in the conversation without starting a turn.
 - Limits: Playwright's Chromium must be installed (`npx playwright install chromium`); pages behind a login show
   the login page; desktop-app previews depend on the app drawing embedded SVG images.
+- With [mods-hub](../mods-hub) installed, each screenshot is published as `screenshot.taken` (file, page, size, why it was taken), the "updated" toast becomes a hub notice, and auto mode skips a capture when a build reported as failed (`build.result`, from quick-commands or a dev server mod) after your edits: the page would only show its error. Without the hub nothing changes.

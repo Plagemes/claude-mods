@@ -7,6 +7,9 @@
  */
 type FieldSpec = string
 
+/** `control.*`: raised by the hub for `$.mods.stop` (a mod publishing one directly is refused in register.tsx). */
+const CONTROL = { id: 'string', scope: "'session'|'all'", reason: 'string', by: 'string', session: 'string' } as const
+
 export const TOPICS: Readonly<Record<string, Readonly<Record<string, FieldSpec>>>> = {
   'test.result': { runner: 'string', outcome: "'passed'|'failed'|'error'", passed: 'number|null', failed: 'number|null', durationMs: 'number?', command: 'string?', failures: 'string[]?' },
   'build.result': { tool: 'string', outcome: "'passed'|'failed'|'error'", durationMs: 'number?', command: 'string?', errors: 'number?' },
@@ -49,6 +52,9 @@ export const TOPICS: Readonly<Record<string, Readonly<Record<string, FieldSpec>>
   'focus.started': { minutes: 'number', label: 'string?' },
   'focus.ended': { minutes: 'number', isCompleted: 'boolean' },
   'notification.sent': { level: "'info'|'success'|'warning'|'error'|'critical'", title: 'string', source: 'string', targets: 'string[]', held: 'boolean' },
+  'control.stop': CONTROL,
+  'control.pause': CONTROL,
+  'control.resume': CONTROL,
 }
 
 /** A mod's own topic: `x.<mod>.<name>`, lowercase words joined by dots, dashes or underscores. */

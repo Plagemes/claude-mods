@@ -1,6 +1,9 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
+import { findDestructive } from '../hooks/commands'
+import { fakeHub } from './hub'
+
 const REMOTE_ENV = 'DATABASE_URL="postgresql://app:s3cret@db.abcdefgh.supabase.co:5432/postgres?sslmode=require"\n'
 const LOCAL_ENV = 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dev\n'
 
@@ -58,6 +61,10 @@ const DESTRUCTIVE = [
   "cd api && sh -lc 'rails db:reset'",
   'npm run reset',
   'npm run drop:db',
+  // The shared shell reader: GNU time, substitutions, heredocs fed to a shell.
+  'time -p npx prisma migrate reset --force',
+  'echo "$(rails db:reset)"',
+  'bash <<EOF\nnpx prisma db seed\nEOF',
 ]
 
 const HARMLESS = [
@@ -84,6 +91,7 @@ const HARMLESS = [
   'npm run reset-cache',
   'yarn fresh-install',
   'bash -c "npm run build"',
+  "cat <<'EOF' > NOTES.md\nrails db:reset wipes everything\nEOF",
 ]
 
 test('denies seed, reset and drop commands when .env points at a remote database', async ($, on) => {
@@ -201,4 +209,35 @@ test('fails closed when its own check throws on a destructive command, and leave
   expect((await $.tool.call({ tool: 'Bash', command: 'npx prisma migrate reset' })).deny).toContain('its check failed')
   expect((await $.tool.call({ tool: 'Bash', command: 'npm test' })).deny).toBeUndefined()
   expect(ran).toEqual(['npm test'])
+})
+
+test('a nested script runs where its parent runs, with its assignments; its own cd stays inside it', () => {
+  expect(findDestructive('cd api && DATABASE_URL=postgres://x bash -c "cd db && rails db:reset"')).toEqual([
+    { label: 'rails db:reset', directory: 'api/db', assignments: { DATABASE_URL: 'postgres://x' } },
+  ])
+  expect(findDestructive('bash -c "cd api" && export RAILS_ENV=test && rails db:seed')).toEqual([{ label: 'rails db:seed', directory: '', assignments: { RAILS_ENV: 'test' } }])
+  expect(findDestructive('RAILS_ENV=production echo $(rails db:seed)')).toEqual([{ label: 'rails db:seed', directory: '', assignments: {} }])
+})
+
+test('with mods-hub: a deny is published as risk.blocked, credentials in the command masked', async ($, on) => {
+  engine(on, { '/repo/.env': LOCAL_ENV })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  const command = 'DATABASE_URL=postgresql://app:Xk9pQ2vL7mR4tZ8w@prod.example.com/app npx prisma migrate reset'
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('prod.example.com')
+  expect((await $.tool.call({ tool: 'Bash', command: 'npx prisma migrate reset' })).deny).toBeUndefined()
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: {
+        guard: 'seed-guard',
+        tool: 'Bash',
+        reason: 'remote-database: "prisma migrate reset" would run against DATABASE_URL host "prod.example.com" (from the command).',
+        severity: 'high',
+        command: 'DATABASE_URL=postgresql://app:[REDACTED:email]/app npx prisma migrate reset',
+      },
+    },
+  ])
 })

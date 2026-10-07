@@ -1,3 +1,5 @@
+import { lineFinder } from './shared/line-index'
+
 export type Rule = 'update-without-where' | 'delete-without-where' | 'drop' | 'truncate'
 
 export type Finding = {
@@ -121,14 +123,11 @@ export function findSql(source: string, extension: string): Finding[] {
   if (extension === SQL_FILE) return statementsOf(sqlPiece(source))
   const lang = LANGUAGES[extension]
   if (lang === undefined) return []
-  // Lines are counted from one literal to the next, not from the top each time, so a file with thousands of strings stays fast.
-  let line = 1
-  let counted = 0
+  // One pass over the newlines, then a binary search per literal, so a file with thousands of strings stays fast.
+  const lineOf = lineFinder(source)
   return literalsOf(source, lang).flatMap(literal => {
-    line += countLines(source.slice(counted, literal.start))
-    counted = literal.start
     const isDynamic = /^\s*(?:\+|\.\s*[$\w(])/.test(source.slice(literal.end, literal.end + 40))
-    return statementsOf({ text: literal.content, line, isDynamic, isCode: true })
+    return statementsOf({ text: literal.content, line: lineOf(literal.start), isDynamic, isCode: true })
   })
 }
 

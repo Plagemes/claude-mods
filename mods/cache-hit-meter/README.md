@@ -27,3 +27,4 @@ After every turn it works out which share of the input tokens was served from th
 - Hooks `turn.complete` and reads the turn's `usage` (the four token counts of every request of the turn, summed).
 - Totals live in `$.state`, so a hot reload of the mod keeps them; the status line is `$.ui.status`.
 - Only the main conversation counts: subagent turns run on their own context and are ignored. A turn the API reported no usage for (an interrupt) is skipped.
+- With [mods-hub](../mods-hub) installed the status line also says what the cache saved, priced with the shared price table (cache reads against the input rate) and set against the session spend the hub reports in `cost.update`: `cache 79% · last 91% · saved $3.80 (25% off)`; the low-cache warning is sent through the hub's notifications (level info: a toast, held while you are Silent). Without the hub the status line and the toast are exactly as above.

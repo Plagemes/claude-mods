@@ -3,6 +3,7 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { findSql } from '../hooks/sql'
+import { fakeHub } from './hub'
 
 const FILE = '/repo/src/users.ts'
 
@@ -145,4 +146,39 @@ test('regression: big files with thousands of strings or statements scan fast, w
   expect(performance.now() - startedAt).toBeLessThan(1000)
   expect(inCode).toEqual([{ rule: 'delete-without-where', statement: 'DELETE FROM sessions', line: 8003 }])
   expect(inSql).toEqual([{ rule: 'delete-without-where', statement: 'DELETE FROM users', line: 10001 }])
+})
+
+test('with mods-hub: says hello, publishes lint.result for each scanned file, and warns through the hub instead of a toast', async ($, on) => {
+  const seen = engine(on, { [FILE]: 'PLACEHOLDER\n' })
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked', 'lint.result'], consumes: [] }])
+
+  await $.tool.call({ tool: 'Write', file_path: FILE, content: 'await db.query("UPDATE users SET active = false")\nawait db.query("DELETE FROM carts")\n' })
+  expect(hub.published).toEqual([{ topic: 'lint.result', data: { tool: 'sql-safety', errors: 2, warnings: 0, files: [FILE] } }])
+  expect(hub.notified).toEqual([{ level: 'warning', title: '2 risky SQL statements added to users.ts' }])
+  expect(seen.toasts).toEqual([])
+
+  hub.published.length = 0
+  await $.tool.call({ tool: 'Write', file_path: '/repo/README.md', content: 'DELETE FROM x' })
+  await $.tool.call({ tool: 'Write', file_path: FILE, content: 'const ok = 1\n' })
+  expect(hub.published).toEqual([{ topic: 'lint.result', data: { tool: 'sql-safety', errors: 0, warnings: 0, files: [FILE] } }])
+})
+
+test('with mods-hub, block mode also publishes risk.blocked for the refusal', { options: { mode: 'block' } }, async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  const result = await $.tool.call({ tool: 'Write', file_path: '/repo/db/cleanup.sql', content: 'DELETE FROM orders;\nTRUNCATE TABLE sessions;\n' })
+  expect(result.deny).toContain('sql-safety: blocked')
+  expect(hub.published).toEqual([
+    { topic: 'lint.result', data: { tool: 'sql-safety', errors: 2, warnings: 0, files: ['/repo/db/cleanup.sql'] } },
+    { topic: 'risk.blocked', data: { guard: 'sql-safety', tool: 'Edit', reason: 'adds SQL that can destroy data (delete-without-where, truncate)', severity: 'high', path: '/repo/db/cleanup.sql' } },
+  ])
+})
+
+test('without mods-hub the warning is the same toast', async ($, on) => {
+  const seen = engine(on)
+  await $.tool.call({ tool: 'Write', file_path: FILE, content: 'await db.query("UPDATE users SET active = false")' })
+  expect(seen.toasts).toEqual(['1 risky SQL statement added to users.ts'])
 })

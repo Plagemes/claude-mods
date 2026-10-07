@@ -1,7 +1,5 @@
-import { baseName, parseShell } from './shell'
+import { baseName, simpleCommands } from './shared/shell'
 
-const WRAPPERS = new Set(['sudo', 'time', 'nohup', 'command', 'exec', 'env'])
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const PIP_NAME = /^pip\d*(?:\.\d+)*(?:\.exe)?$/
 const PYTHON_NAME = /^(?:python|py)\d*(?:\.\d+)*(?:\.exe)?$/
 /** `.venv/bin/pip`, `venv/Scripts/python.exe`, `~/envs/api/bin/pip`: the folder before bin/ is an environment. */
@@ -12,25 +10,6 @@ const ACTIVATE_SCRIPT = /[\\/]?activate(?:\.\w+)?$/
 const CONDA_LIKE = new Set(['conda', 'mamba', 'micromamba'])
 /** Flags that mean nothing gets installed, or that it goes to a folder of its own. */
 const HARMLESS_FLAGS = /^(?:--dry-run|--help|-h|--require-virtualenv|--target(?:=.*)?|-t)$/
-
-type Words = { assignments: string[]; words: string[]; isSudo: boolean }
-
-/** Separates the leading `NAME=value` words and wrappers (`sudo`, `env`) from the command itself. */
-function splitPrefix(all: readonly string[]): Words {
-  const assignments: string[] = []
-  let index = 0
-  let isAfterWrapper = false
-  let isSudo = false
-  for (; index < all.length; index += 1) {
-    const word = all[index] as string
-    if (ASSIGNMENT.test(word)) assignments.push(word)
-    else if (WRAPPERS.has(baseName(word))) {
-      isAfterWrapper = true
-      isSudo ||= baseName(word) === 'sudo'
-    } else if (!(isAfterWrapper && word.startsWith('-'))) break
-  }
-  return { assignments, words: all.slice(index), isSudo }
-}
 
 /** A `pip install` found in a command line, and whether it reaches the system Python even inside a virtualenv. */
 export type GlobalInstall = {
@@ -50,7 +29,7 @@ function pipArguments(words: readonly string[]): string[] | undefined {
 }
 
 /** `source .venv/bin/activate`, `. venv/bin/activate`, `conda activate api`, `workon api`, or `export VIRTUAL_ENV=...`. */
-function activatesEnvironment({ words }: Words): boolean {
+function activatesEnvironment(words: readonly string[]): boolean {
   const [first = '', second = '', third] = words
   if (first === 'source' || first === '.') return ACTIVATE_SCRIPT.test(second)
   if (CONDA_LIKE.has(baseName(first))) return second === 'activate' && third !== undefined && third !== 'base'
@@ -61,22 +40,29 @@ function activatesEnvironment({ words }: Words): boolean {
 /**
  * The first `pip install` of the command line that would reach the system Python,
  * as the words were typed, or undefined when there is none. Reads text; runs nothing.
+ * The shared shell reader peels wrappers and `NAME=value` words, treats here-document bodies as text, and opens
+ * `bash -c`, `eval`, `$(…)` and heredocs fed to a shell; a nested script starts activated when the command that
+ * runs it was, and an activation inside it stays inside it.
  */
 export function findGlobalInstall(command: string): GlobalInstall | undefined {
-  let isActivated = false
-  for (const segment of parseShell(command)) {
-    const prefix = splitPrefix(segment.words)
-    if (activatesEnvironment(prefix)) {
-      isActivated = true
+  const activated = new Map<number, boolean>()
+  /** Whether the latest script seen at each depth is activated so far: a script at depth d belongs to the one at d - 1. */
+  const latest: number[] = []
+  for (const { argv: words, wrappers, assignments, depth, script } of simpleCommands(command)) {
+    if (!activated.has(script)) activated.set(script, depth > 0 && activated.get(latest[depth - 1] ?? -1) === true)
+    latest[depth] = script
+    if (activatesEnvironment(words)) {
+      activated.set(script, true)
       continue
     }
-    const args = pipArguments(prefix.words)
+    const args = pipArguments(words)
     if (args === undefined || !args.includes('install') || args.some(arg => HARMLESS_FLAGS.test(arg))) continue
-    const isNamedEnvironment = ENVIRONMENT_EXECUTABLE.test(prefix.words[0] ?? '')
-    const isSystemWide = (prefix.isSudo && !isNamedEnvironment) || args.includes('--user')
+    const isSudo = wrappers.includes('sudo')
+    const isNamedEnvironment = ENVIRONMENT_EXECUTABLE.test(words[0] ?? '')
+    const isSystemWide = (isSudo && !isNamedEnvironment) || args.includes('--user')
     const isIsolated =
-      isActivated || prefix.assignments.some(assignment => ISOLATING_ASSIGNMENT.test(assignment)) || isNamedEnvironment
-    if (isSystemWide || !isIsolated) return { command: [...(prefix.isSudo ? ['sudo'] : []), ...prefix.words].join(' '), isSystemWide }
+      activated.get(script) === true || Object.entries(assignments).some(([name, value]) => ISOLATING_ASSIGNMENT.test(`${name}=${value}`)) || isNamedEnvironment
+    if (isSystemWide || !isIsolated) return { command: [...(isSudo ? ['sudo'] : []), ...words].join(' '), isSystemWide }
   }
   return undefined
 }

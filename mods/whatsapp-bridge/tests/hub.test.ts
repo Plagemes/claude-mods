@@ -113,3 +113,18 @@ test('with mods-hub: /wa opens the Channels tab, drawn under the hub strip with 
     await ui.unmount()
   }
 })
+
+test('with mods-hub: STOP from the phone raises control.stop for this session, STOP ALL for every session', async ($, on) => {
+  const seen = world(on, { files: noConfirm() })
+  const hub = fakeHub(on, { presence: 'away' }, seen.clock)
+  await lead($, seen)
+  await $.turn.start({ text: 'refactor the cart', turnId: 'turn-1' })
+  arrive(seen, { chatId: GROUP, author: OWNER_CHAT, body: 'stop' })
+  await pass(seen, 12_000)
+  expect(seen.aborted).toEqual(['turn-1'])
+  expect(hub.controls).toMatchObject([{ action: 'stop', scope: 'session', by: 'owner via whatsapp', reason: 'STOP from WhatsApp' }])
+
+  arrive(seen, { chatId: OWNER_CHAT, author: OWNER_CHAT, body: 'STOP ALL' })
+  await pass(seen, 12_000)
+  expect(hub.controls.find(control => control.scope === 'all')).toMatchObject({ action: 'stop', reason: 'STOP ALL from WhatsApp' })
+})

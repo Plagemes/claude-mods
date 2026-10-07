@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, SessionMessage, TurnCompleteInput } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const ROOT = '/home/me/shop'
 const KEY = `brief:${ROOT}`
 const NOW = Date.UTC(2026, 9, 7, 12)
@@ -197,4 +199,45 @@ test('the engine band is not drawn under a Box with a size prop', async ($, on) 
     expect(sizedAbove(await band.drawn())).toEqual([])
     await band.unmount()
   }
+})
+
+test('with mods-hub: warns about other sessions open on the project and passes on decisions they recorded since', async ($, on) => {
+  const seen = world(on, { [KEY]: PREVIOUS })
+  const hub = fakeHub(on)
+  const SESSIONS = {
+    'new-session': { id: 'new-session', cwd: ROOT, lastSeen: NOW, events: [] },
+    'web-session': {
+      id: 'web-session',
+      cwd: `${ROOT}/web`,
+      lastSeen: NOW,
+      events: [
+        { topic: 'decision.recorded', at: NOW - 3 * HOUR, data: { title: 'Too old: before the brief' } },
+        { topic: 'decision.recorded', at: NOW - HOUR, data: { title: 'Use cursor pagination' } },
+      ],
+    },
+    'blog-session': { id: 'blog-session', cwd: '/home/me/blog', lastSeen: NOW, events: [{ topic: 'decision.recorded', at: NOW, data: { title: 'Elsewhere' } }] },
+  }
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/home/me' : undefined }))
+  on('fs.read', ($, e) => (e.path === '/home/me/.claude/claude-mods/hub/sessions.json' ? { value: JSON.stringify(SESSIONS) } : { deny: 'ENOENT' }))
+
+  await start($)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['session.started', 'decision.recorded'] }])
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const band = await $.ui.mount({ plugin: 'resume-brief', surface, component: 'AbovePrompt', props: BAND })
+    expect((await band.find({ type: 'Text', text: /other session/ }))?.text).toBe('1 other session is open on this project now')
+    await band.unmount()
+  }
+
+  const band = await $.ui.mount({ plugin: 'resume-brief', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await band.press({ key: 'continue' })
+  expect(seen.prompts.at(-1)?.text).toContain('- Decided since, in other sessions: Use cursor pagination\n')
+  await band.unmount()
+})
+
+test('without mods-hub there is no other-sessions line', async ($, on) => {
+  world(on, { [KEY]: PREVIOUS })
+  await start($)
+  const band = await $.ui.mount({ plugin: 'resume-brief', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect(await band.find({ type: 'Text', text: /other session/ })).toBeUndefined()
+  await band.unmount()
 })

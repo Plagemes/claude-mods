@@ -22,6 +22,9 @@ const NOTE_FILES = ['CLAUDE.md', '.claude/CLAUDE.md', 'CLAUDE.local.md']
 const NOTE_DIRS = ['.claude/journal', 'docs/decisions', 'docs/adr', 'doc/adr', '.claude/handoff']
 const NOTE_FILE = /\.(md|mdx|markdown|txt)$/i
 const GLOBAL_FLAG = /^(-g|--global)(\s+|$)/
+/** The hub's topics recall indexes, and how many of each it reads. */
+const HUB_TOPICS = ['decision.recorded', 'lesson.learned'] as const
+const MAX_HUB_EVENTS = 50
 
 const TOOL_DESCRIPTION =
   "Search this project's saved knowledge: memories saved with /remember, CLAUDE.md, the session journal " +
@@ -71,7 +74,7 @@ const inProject = (memories: readonly RecallMemory[], root: string): RecallMemor
 const hitsMarkdown = (hits: readonly RecallHit[]): string =>
   hits
     .map((hit, index) => {
-      const where = hit.source === 'memory' ? `memory · ${hit.title}` : `${hit.source} › ${hit.title} · line ${hit.line}`
+      const where = hit.source === 'memory' || hit.source === 'hub' ? `${hit.source} · ${hit.title}` : `${hit.source} › ${hit.title} · line ${hit.line}`
       return `${index + 1}. **${where}**\n   ${hit.snippet}`
     })
     .join('\n')
@@ -112,23 +115,86 @@ async function noteFiles($: EngineInterface, root: string, extraPaths: readonly 
   return [...new Set(found)].slice(0, MAX_FILES)
 }
 
+// ── mods-hub: decisions and lessons other mods record ───────────────────────────────────────────────
+
+/** A decision or lesson as another mod published it: where its file is (when it has one), and its words. */
+type Recorded = { path: string | undefined; title: string; text: string }
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: [], consumes: [...HUB_TOPICS] })
+}
+
+const field = (data: unknown, key: string): string => {
+  const value = typeof data === 'object' && data !== null ? (data as Record<string, unknown>)[key] : undefined
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * The decisions (decision-log) and lessons (lessons-learned) published on mods-hub's bus this session; none
+ * without the hub. Their files are searched like any note, even outside the folders recall knows.
+ */
+async function recordedOnHub($: EngineInterface): Promise<Recorded[]> {
+  const recorded: Recorded[] = []
+  for (const topic of HUB_TOPICS) {
+    try {
+      for (const event of await $.mods.recent({ topic, limit: MAX_HUB_EVENTS })) {
+        const path = field(event.data, 'path') || undefined
+        if (topic === 'decision.recorded') {
+          const title = field(event.data, 'title')
+          if (title !== '') recorded.push({ path, title: `decision · ${title}`, text: [title, field(event.data, 'summary')].filter(Boolean).join('\n') })
+        } else {
+          const lesson = field(event.data, 'lesson')
+          if (lesson !== '') recorded.push({ path, title: 'lesson', text: [lesson, field(event.data, 'context')].filter(Boolean).join('\n') })
+        }
+      }
+    } catch {
+      return [] // No hub.
+    }
+  }
+  return recorded
+}
+
 async function runSearch($: EngineInterface, settings: Settings, query: string, limit: number): Promise<RecallResults> {
   const root = await $.session.root()
-  const files = await noteFiles($, root, settings.extraPaths)
+  const recorded = await recordedOnHub($)
+  const listed = await noteFiles($, root, settings.extraPaths)
+  const extra = recorded.flatMap(one => (one.path !== undefined && NOTE_FILE.test(one.path) && !listed.includes(one.path) ? [one.path] : []))
+  const files = [...new Set([...listed, ...extra])]
   const chunks: Chunk[] = []
+  const readFiles: string[] = []
   for (const path of files) {
     try {
       chunks.push(...chunkMarkdown(path, await $.fs.read(resolvePath(root, path))))
+      readFiles.push(path)
     } catch {
       // Unreadable (binary, permissions, vanished): skip it.
     }
   }
+  // A recorded decision or lesson whose file was read is already searched; the others are searched as they were published.
+  const events = recorded.filter(one => one.path === undefined || !readFiles.includes(one.path))
+  for (const one of events) chunks.push({ source: 'hub', title: one.title, line: 0, text: one.text })
   const memories = inProject(await loadMemories($), root)
   for (const memory of memories) {
     const title = `${day(memory.createdAt)}${memory.project === null ? ' (global)' : ''}`
     chunks.push({ source: 'memory', title, line: 0, text: memory.text })
   }
-  const searched = `searched ${plural(files.length, 'file', 'files')} and ${plural(memories.length, 'memory', 'memories')}`
+  // A recorded file that could not be read was not searched (the notes recall lists count as before).
+  const searchedFiles = listed.length + extra.filter(path => readFiles.includes(path)).length
+  const counted = [plural(searchedFiles, 'file', 'files'), plural(memories.length, 'memory', 'memories')]
+  if (events.length > 0) counted.push(plural(events.length, 'hub event', 'hub events'))
+  const searched = `searched ${counted.slice(0, -1).join(', ')} and ${counted.at(-1) ?? ''}`
   const hits = search(chunks, query, limit).map(({ source, title, line, snippet, score }) => ({ source, title, line, snippet, score }))
   return { query, hits, searched }
 }
@@ -186,6 +252,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     await registerAll($)
+    await greetHub($)
     return next(e)
   })
 
@@ -298,3 +365,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

@@ -1,4 +1,4 @@
-// @vendored shared/shell.ts sha256:50a3aa3350e9 by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
+// @vendored shared/shell.ts sha256:34d589dca76d by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
 /**
  * shared/shell.ts — one conservative shell reader for every guard.
  *
@@ -14,8 +14,12 @@
  * Pure: no `$`, no I/O. Vendored into mods by scripts/sync-shared.mjs.
  */
 
-/** A word, quotes resolved; `start`/`end` are its offsets in the text read (quotes included), so it can be rewritten. */
-export type ShellWord = { kind: 'word'; text: string; start: number; end: number }
+/**
+ * A word, quotes resolved; `start`/`end` are its offsets in the text read (quotes included), so it can be rewritten.
+ * `substitutions` are the bodies of the `$(…)` and backticks the shell would run for it: bare or inside double
+ * quotes, never inside single quotes, `$'…'` or after a backslash (`echo '$(rm a)'` runs nothing).
+ */
+export type ShellWord = { kind: 'word'; text: string; start: number; end: number; substitutions: string[] }
 export type ShellOp = { kind: 'op'; text: string }
 export type ShellRedirect = {
   kind: 'redirect'
@@ -52,6 +56,11 @@ export type ShellCommand = {
    */
   pipeline: number
   stage: number
+  /**
+   * Sent to the background with `&` (`npm run dev &`): every stage of that pipeline, and what it runs inside
+   * (its `bash -c` script, its substitutions), does not hold the line.
+   */
+  isBackground: boolean
   /** 0 for the line itself; 1+ inside `bash -c`, `eval`, `$(...)`, backticks or a heredoc fed to a shell. */
   depth: number
   /** How a nested command was reached: `sh -c`, `eval`, `$()`, `heredoc`; absent at depth 0. */
@@ -88,9 +97,13 @@ const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
   time: new Set(['-f', '-o', '--format', '--output']),
   exec: new Set(['-a']),
   chronic: new Set(),
+  setsid: new Set(),
   caffeinate: new Set(['-t', '-w']),
   watch: new Set(['-n', '-d', '--interval']),
 }
+
+/** The escapes `$'…'` decodes when reading a word (`$'a\tb'`); any other is kept as written. */
+const ANSI_C_ESCAPES: Readonly<Record<string, string>> = { n: '\n', t: '\t', r: '\r', "'": "'", '"': '"', '\\': '\\', e: '\u001b', E: '\u001b', a: '\u0007', b: '\b', f: '\f', v: '\v' }
 
 /** Splits a command line into words, separators and redirections, honouring quotes, escapes and heredocs. */
 export function tokenize(command: string): ShellToken[] {
@@ -99,15 +112,37 @@ export function tokenize(command: string): ShellToken[] {
   let word = ''
   let hasWord = false
   let wordStart = 0
+  let substitutions: string[] = []
   let i = 0
 
   const pushWord = (): void => {
     // A line continuation right after the word (`origin\⏎ main`) is not part of it.
     let end = i
     while (end - 2 >= wordStart && command.slice(end - 2, end) === '\\\n') end -= 2
-    if (hasWord) tokens.push({ kind: 'word', text: word, start: wordStart, end })
+    if (hasWord) tokens.push({ kind: 'word', text: word, start: wordStart, end, substitutions })
     word = ''
     hasWord = false
+    substitutions = []
+  }
+  /** The `$(…)` starting at `i`, kept whole in the word and its body noted; leaves `i` past its `)`. */
+  const readDollarParen = (): void => {
+    let depth = 0
+    const start = i
+    for (; i < command.length; i += 1) {
+      if (command[i] === '(') depth += 1
+      else if (command[i] === ')' && --depth === 0) break
+    }
+    word += command.slice(start, i + 1)
+    substitutions.push(command.slice(start + 2, i))
+    i += 1
+  }
+  /** The backtick substitution starting at `i`, kept whole and its body noted; leaves `i` past its closing backtick. */
+  const readBackticks = (): void => {
+    const end = command.indexOf('`', i + 1)
+    const stop = end === -1 ? command.length : end
+    word += command.slice(i, stop + 1)
+    if (end !== -1) substitutions.push(command.slice(i + 1, end))
+    i = stop + 1
   }
   /** The current word has content from `at` on (its first piece starts the word). */
   const mark = (at: number): void => {
@@ -154,17 +189,34 @@ export function tokenize(command: string): ShellToken[] {
       continue
     }
     if (char === '$' && next === "'") {
-      // ANSI-C quoting: $'…', its escapes kept as written (good enough to read words).
-      const end = command.indexOf("'", i + 2)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i + 2, stop)
+      // ANSI-C quoting: $'…' expands nothing; `\'` does not end it; common escapes are decoded, others kept as written.
+      i += 2
+      while (i < command.length && command[i] !== "'") {
+        if (command[i] === '\\' && i + 1 < command.length) {
+          const escaped = command[i + 1] as string
+          word += ANSI_C_ESCAPES[escaped] ?? `\\${escaped}`
+          i += 2
+          continue
+        }
+        word += command[i]
+        i += 1
+      }
       mark(at)
-      i = stop + 1
+      i += 1
       continue
     }
     if (char === '"') {
       i += 1
       while (i < command.length && command[i] !== '"') {
+        // Substitutions run inside double quotes too; an escaped `\$` or `\`` is a plain character.
+        if (command[i] === '$' && command[i + 1] === '(') {
+          readDollarParen()
+          continue
+        }
+        if (command[i] === '`') {
+          readBackticks()
+          continue
+        }
         if (command[i] === '\\' && i + 1 < command.length && '"\\$`\n'.includes(command[i + 1] as string)) i += 1
         word += command[i]
         i += 1
@@ -175,23 +227,13 @@ export function tokenize(command: string): ShellToken[] {
     }
     if (char === '$' && next === '(') {
       // Keep a command substitution whole inside the word: its contents are not this line's separators.
-      let depth = 0
-      const start = i
-      for (; i < command.length; i += 1) {
-        if (command[i] === '(') depth += 1
-        else if (command[i] === ')' && --depth === 0) break
-      }
-      word += command.slice(start, i + 1)
+      readDollarParen()
       mark(at)
-      i += 1
       continue
     }
     if (char === '`') {
-      const end = command.indexOf('`', i + 1)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i, stop + 1)
+      readBackticks()
       mark(at)
-      i = stop + 1
       continue
     }
     if (char === '#' && !hasWord) {
@@ -307,8 +349,12 @@ export function unwrap(argv: readonly string[]): { argv: string[]; wrappers: str
   return { argv: argv.slice(start), wrappers, assignments }
 }
 
-/** The commands inside `$(...)` and backticks of a word, which run before the word is used. */
-export function substitutionBodies(word: string): string[] {
+/**
+ * The commands inside `$(...)` and backticks of raw shell text. A word from `tokenize` has had its quotes resolved,
+ * so pass it whole: `substitutionBodies(token)` returns `token.substitutions`, which knows `'$(x)'` runs nothing.
+ */
+export function substitutionBodies(word: string | ShellWord): string[] {
+  if (typeof word !== 'string') return word.substitutions
   const bodies: string[] = []
   for (let i = 0; i < word.length; i += 1) {
     if (word[i] === '`') {
@@ -395,6 +441,9 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
   let pendingRedirect: ShellRedirect | undefined
   let pipeline = counter.pipelines
   counter.pipelines += 1
+  /** Where the current pipeline's commands (and those nested in them) start in `out`; a `( … )` or `{ …; }` group counts as one. */
+  let pipelineStart = 0
+  const groupStarts: number[] = []
   let stage = 0
 
   const nested = (script: string, how: ShellCommand['via']): void => {
@@ -407,7 +456,7 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
     if (argv.length > 0 || redirects.length > 0) {
       const name = baseName(argv[0] ?? '')
       const argvSpans = spans.slice(words.length - argv.length)
-      out.push({ argv, spans: argvSpans, name, redirects, wrappers, assignments, pipeline, stage, depth, ...(via === undefined ? {} : { via }), script })
+      out.push({ argv, spans: argvSpans, name, redirects, wrappers, assignments, pipeline, stage, isBackground: false, depth, ...(via === undefined ? {} : { via }), script })
       const handed = shellScriptArg(argv)
       if (handed !== undefined) nested(handed, 'sh -c')
       if (name === 'eval') nested(argv.slice(1).join(' '), 'eval')
@@ -425,7 +474,7 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
       if (token.kind === 'word') {
         redirects.push({ op: pendingRedirect.text, target: token.text })
         if (pendingRedirect.text === '<<<') heredocBodies.push(token.text)
-        for (const body of substitutionBodies(token.text)) nested(body, '$()')
+        for (const body of token.substitutions) nested(body, '$()')
         pendingRedirect = undefined
         continue
       }
@@ -446,6 +495,10 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
         stage += 1
       } else if (SEPARATORS.has(token.text)) {
         flush()
+        if (token.text === '&') for (const cmd of out.slice(pipelineStart)) cmd.isBackground = true
+        if (token.text === '(' || token.text === '{') groupStarts.push(out.length)
+        // After a group closes, a `&` sends the whole group to the background.
+        pipelineStart = token.text === ')' || token.text === '}' ? (groupStarts.pop() ?? out.length) : out.length
         pipeline = counter.pipelines
         counter.pipelines += 1
         stage = 0
@@ -454,7 +507,7 @@ function readScript(command: string, depth: number, via: ShellCommand['via'], co
     }
     words.push(token.text)
     spans.push({ start: token.start, end: token.end })
-    for (const body of substitutionBodies(token.text)) nested(body, '$()')
+    for (const body of token.substitutions) nested(body, '$()')
   }
   flush()
   return out

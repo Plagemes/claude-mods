@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'commit-composer'
 const PANE_PROPS = {
   title: 'Commit',
@@ -48,6 +50,9 @@ const world = (on: On, overrides: Partial<World> = {}): World => {
       return answer('[main abc1234] done\n')
     }
     if (line.startsWith('log -1')) return answer(`abc1234 ${state.committed.split('\n')[0]}\n`)
+    if (line === 'rev-parse HEAD') return answer('abc1234def5678\n')
+    if (line === 'rev-parse --abbrev-ref HEAD') return answer('feat/auth\n')
+    if (line === 'show --name-only --format= HEAD') return answer('src/auth.ts\nsrc/token.ts\n')
     return answer('')
   })
   on('fs.read', ($, e) => {
@@ -133,4 +138,32 @@ test('a model that does not answer leaves Regenerate and Cancel', async ($, on) 
   expect((await runCommit($)).text).toBe('commit-composer: No message: empty-reply.')
   const ui = await mountPane($, 'desktop')
   expect((await ui.findAll({ type: 'Button' })).map(button => button.text)).toEqual(['Regenerate', 'Cancel'])
+})
+
+test('with mods-hub: a commit made from the pane is published as git.commit', async ($, on) => {
+  const state = world(on, { replies: ['feat(auth): add token refresh'] })
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['git.commit'], consumes: [] }])
+  await runCommit($)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'commit' })
+  await ui.unmount()
+
+  expect(state.committed).toBe('feat(auth): add token refresh')
+  expect(hub.published).toEqual([
+    { topic: 'git.commit', data: { sha: 'abc1234def5678', message: 'feat(auth): add token refresh', branch: 'feat/auth', files: 2 }, scope: 'global' },
+  ])
+})
+
+test('without mods-hub a commit runs no extra git command', async ($, on) => {
+  const state = world(on, { replies: ['fix: x'] })
+  await runCommit($)
+  const ui = await mountPane($, 'desktop')
+  await ui.press({ key: 'commit' })
+  await ui.unmount()
+  expect(state.calls).not.toContain('rev-parse HEAD')
 })

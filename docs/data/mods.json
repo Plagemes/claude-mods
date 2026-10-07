@@ -7,7 +7,7 @@
       "id": "core",
       "title": "Core",
       "tagline": "The mod store and essentials.",
-      "count": 1
+      "count": 3
     },
     {
       "id": "security",
@@ -55,7 +55,7 @@
       "id": "notifications",
       "title": "Notifications & Audio",
       "tagline": "Know when it is done, wherever you are.",
-      "count": 10
+      "count": 11
     },
     {
       "id": "memory",
@@ -103,7 +103,7 @@
       "id": "agents",
       "title": "Agents & Orchestration",
       "tagline": "Scope, queue and supervise Claude's work.",
-      "count": 10
+      "count": 11
     },
     {
       "id": "learning",
@@ -147,6 +147,24 @@
         "/mods"
       ],
       "since": "1.0.0"
+    },
+    {
+      "name": "mods-hub",
+      "category": "core",
+      "tier": "complex",
+      "description": "The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "core",
+        "event-bus",
+        "notifications",
+        "panel"
+      ],
+      "commands": [
+        "/hub"
+      ],
+      "since": "2.0.0"
     },
     {
       "name": "secret-shield",
@@ -3447,6 +3465,60 @@
       ],
       "commands": [
         "/replay"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "mod-advisor",
+      "category": "core",
+      "tier": "complex",
+      "description": "Recommends the right mods for your project and for what you're asking, with the commands to type, and installs them in one click.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "core",
+        "recommendations",
+        "discovery"
+      ],
+      "commands": [
+        "/mods-advisor"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "smart-router",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "routing",
+        "subagents",
+        "cost"
+      ],
+      "commands": [
+        "/route",
+        "/router"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "whatsapp-bridge",
+      "category": "notifications",
+      "tier": "complex",
+      "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "whatsapp",
+        "remote-control",
+        "openwa"
+      ],
+      "commands": [
+        "/wa"
       ],
       "since": "2.0.0"
     }

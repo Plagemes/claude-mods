@@ -4,6 +4,10 @@ import type { EngineInterface, Register, RenderElement, RenderInput, Timer } fro
 import type {
   Mods,
   ModsChannel,
+  ModsControl,
+  ModsControlAction,
+  ModsControlScope,
+  ModsDrainInput,
   ModsEvent,
   ModsFact,
   ModsInstall,
@@ -18,6 +22,7 @@ import type {
   ModsPresence,
   ModsPresenceReason,
   ModsPublishInput,
+  ModsStopInput,
   ModsTab,
 } from '../types'
 import { problemWith, topicMatches } from './catalog'
@@ -69,6 +74,14 @@ const CHANNEL_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
 const FACT_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/
 const MAX_FACT_CHARS = 16_000
 const MAX_TEXT = 2_000
+/** Notices kept per pull channel until its owner acknowledges them; beyond this the oldest are dropped. */
+const OUTBOX_SIZE = 100
+/** How often a session looks for a stop, pause or resume another session raised for all sessions. */
+const CONTROL_POLL_MS = 5_000
+const CONTROL_KEEP = 20
+const CONTROL_MAX_AGE_MS = 60 * 60_000
+const CONTROL_ACTIONS: readonly ModsControlAction[] = ['stop', 'pause', 'resume']
+const CONTROL_SCOPES: readonly ModsControlScope[] = ['session', 'all']
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
 
 // ── State the panel draws from ──────────────────────────────────────────────────────────────────────
@@ -84,6 +97,9 @@ const channelsAtom = atom({ plugin: 'mods-hub', key: 'channels' } as const, [] a
 const feedAtom = atom({ plugin: 'mods-hub', key: 'feed' } as const, [] as ModsEvent[])
 const inboxAtom = atom({ plugin: 'mods-hub', key: 'inbox' } as const, [] as ModsNotice[])
 const installedAtom = atom({ plugin: 'mods-hub', key: 'installed' } as const, EMPTY_INSTALLED)
+/** Pull channels' notices, by channel id; in state so a hot reload loses none. */
+const outboxAtom = atom({ plugin: 'mods-hub', key: 'outbox' } as const, {} as Record<string, ModsNotice[]>)
+const controlAtom = atom({ plugin: 'mods-hub', key: 'control' } as const, null as ModsControl | null)
 /** Families: the member id is the topic (latest) or the fact's key (facts). */
 const LATEST = { plugin: 'mods-hub', key: 'latest' } as const
 const FACTS = { plugin: 'mods-hub', key: 'facts' } as const
@@ -108,6 +124,7 @@ const BOTTOM: Mods = {
   channelStatus: async () => ({ channels: [] }),
   deliver: async () => ({ isDelivered: false, reason: 'no mod delivers to this channel' }),
   drain: async () => [],
+  stop: async input => ({ id: '', action: input.action ?? 'stop', scope: input.scope ?? 'session', reason: input.reason, by: input.by ?? '', session: '', source: '', at: 0 }),
   hello: async () => ({ installed: EMPTY_INSTALLED }),
   installed: async () => EMPTY_INSTALLED,
   share: async input => ({ key: input.name, owner: '', value: input.value, at: 0 }),
@@ -121,6 +138,8 @@ type Options = { idleMs: number; awayMs: number; sensors: boolean; captureToasts
 type Runtime = {
   options: Options
   sessionId: string
+  /** Tells this load's ids from an earlier load's (sequence numbers start again after a hot reload). */
+  load: string
   startedAt: number
   cwd: string
   project: string
@@ -140,15 +159,20 @@ type Runtime = {
   contextStep: number
   recentNotices: Map<string, number>
   held: ModsNotice[]
-  outbox: Map<string, ModsNotice[]>
   globalFeed: ModsEvent[]
   lastHeartbeatAt: number
   timer: Timer | undefined
+  controlTimer: Timer | undefined
+  /** Controls already applied here (raised here, or read from control.json). */
+  controlSeen: Set<string>
+  /** control.json entries older than this were raised before this session (or load) looked. */
+  controlFloor: number
 }
 
 const newRuntime = (options: Options): Runtime => ({
   options,
   sessionId: '',
+  load: Math.random().toString(36).slice(2, 6),
   startedAt: 0,
   cwd: '',
   project: '',
@@ -167,11 +191,16 @@ const newRuntime = (options: Options): Runtime => ({
   contextStep: 0,
   recentNotices: new Map(),
   held: [],
-  outbox: new Map(),
   globalFeed: [],
   lastHeartbeatAt: 0,
   timer: undefined,
+  controlTimer: undefined,
+  controlSeen: new Set(),
+  controlFloor: 0,
 })
+
+/** The prefix of the ids this load gives notices and controls: session, then load. */
+const idTag = (rt: Runtime): string => `${rt.sessionId.slice(0, 8) || 'hub'}-${rt.load}`
 
 const minuteOfDay = (now: number): number => {
   const date = new Date(now)
@@ -253,7 +282,7 @@ async function refreshMode($: EngineInterface, rt: Runtime, reason: ModsPresence
   const now = await $.clock.now()
   const prefs = await read($, prefsAtom)
   const presence = presenceOf(prefs.presence, { lastActivityAt: rt.lastActivityAt, now, idleMs: rt.options.idleMs, awayMs: rt.options.awayMs })
-  const mode = deriveMode(prefs, presence, now, minuteOfDay(now))
+  const mode = deriveMode(prefs, presence, now, minuteOfDay(now), { idleMinutes: rt.options.idleMs / MINUTE_MS, awayMinutes: rt.options.awayMs / MINUTE_MS })
   await update($, modeAtom, () => mode)
   if (presence !== rt.presence) {
     const since = rt.presenceSince
@@ -364,7 +393,7 @@ async function dispatch($: EngineInterface, rt: Runtime, input: ModsNotifyInput,
   const seen = rt.recentNotices.get(key)
   for (const [old, at] of rt.recentNotices) if (now - at > DEDUPE_MS) rt.recentNotices.delete(old)
   rt.seq += 1
-  const id = `n-${rt.sessionId.slice(0, 8) || 'hub'}-${rt.seq}`
+  const id = `n-${idTag(rt)}-${rt.seq}`
   if (seen !== undefined && now - seen < DEDUPE_MS) return { id, targets: [], held: false, reason: 'a repeat of the last 30 seconds' }
   rt.recentNotices.set(key, now)
 
@@ -412,8 +441,28 @@ async function deliverAll($: EngineInterface, rt: Runtime, notice: ModsNotice, i
         isDelivered = false
       }
     }
-    if (!isDelivered) rt.outbox.set(id, [...(rt.outbox.get(id) ?? []), safe].slice(-INBOX_SIZE))
+    if (!isDelivered) await update($, outboxAtom, box => ({ ...box, [id]: [...(box[id] ?? []), safe].slice(-OUTBOX_SIZE) }))
   }
+}
+
+/**
+ * A pull channel's drain. With a cursor (`after`: the last id its owner handled, null at first) it acknowledges
+ * everything up to that id and returns what still waits, keeping it: at-least-once. Without one (the first
+ * contract) it hands the notices over and forgets them.
+ */
+async function drainOutbox($: EngineInterface, input: ModsDrainInput): Promise<ModsNotice[]> {
+  let waiting: ModsNotice[] = []
+  await update($, outboxAtom, box => {
+    const list = box[input.channel] ?? []
+    if (input.after === undefined) {
+      waiting = list
+      return { ...box, [input.channel]: [] }
+    }
+    const handled = input.after === null ? -1 : list.findIndex(notice => notice.id === input.after)
+    waiting = list.slice(handled + 1)
+    return handled < 0 ? box : { ...box, [input.channel]: waiting }
+  })
+  return waiting
 }
 
 /** Night is over: what was held goes out as one digest to the person's channels. */
@@ -424,7 +473,7 @@ async function sendDigest($: EngineInterface, rt: Runtime): Promise<void> {
   const now = await $.clock.now()
   rt.seq += 1
   const digest: ModsNotice = {
-    id: `d-${rt.seq}`,
+    id: `d-${idTag(rt)}-${rt.seq}`,
     level: 'info',
     title: `${held.length} notification${held.length === 1 ? '' : 's'} overnight`,
     body: held.map(notice => `${GLYPH[notice.level]} ${notice.source}: ${notice.title}`).join('\n').slice(0, MAX_TEXT),
@@ -436,6 +485,81 @@ async function sendDigest($: EngineInterface, rt: Runtime): Promise<void> {
   const channels = (await read($, channelsAtom)).filter(channel => channel.audience === 'me' && channel.status !== 'unconfigured').map(channel => channel.id)
   await addToInbox($, { ...digest, targets: channels })
   if (channels.length > 0) await deliverAll($, rt, digest, channels)
+}
+
+// ── Stop, pause, resume: the automatic work, in this session or all of them ─────────────────────────
+
+const isControl = (value: unknown): value is ModsControl => {
+  if (value === null || typeof value !== 'object') return false
+  const one = value as Record<string, unknown>
+  return (
+    typeof one.id === 'string' &&
+    CONTROL_ACTIONS.includes(one.action as ModsControlAction) &&
+    CONTROL_SCOPES.includes(one.scope as ModsControlScope) &&
+    typeof one.reason === 'string' &&
+    typeof one.by === 'string' &&
+    typeof one.session === 'string' &&
+    typeof one.source === 'string' &&
+    typeof one.at === 'number'
+  )
+}
+
+const problemWithStop = (input: ModsStopInput): string | undefined => {
+  if (input.action !== undefined && !CONTROL_ACTIONS.includes(input.action)) return `action must be one of ${CONTROL_ACTIONS.join(', ')}`
+  if (input.scope !== undefined && !CONTROL_SCOPES.includes(input.scope)) return `scope must be one of ${CONTROL_SCOPES.join(', ')}`
+  if (typeof input.reason !== 'string' || input.reason.trim() === '') return 'a stop needs a reason'
+  return undefined
+}
+
+/** control.json: the last stops, pauses and resumes raised for all sessions (one hour, twenty at most). */
+async function readControls($: EngineInterface, rt: Runtime): Promise<ModsControl[]> {
+  const raw = (await readJsonFile($, `${rt.dir}/control.json`)) as { controls?: unknown } | undefined
+  return Array.isArray(raw?.controls) ? raw.controls.filter(isControl) : []
+}
+
+/** A control takes effect here: the `control` state, and `control.<action>` on the bus with the asking mod as source. */
+async function applyControl($: EngineInterface, rt: Runtime, control: ModsControl): Promise<void> {
+  rt.controlSeen.add(control.id)
+  await update($, controlAtom, () => control)
+  const input = { topic: `control.${control.action}`, data: { id: control.id, scope: control.scope, reason: control.reason, by: control.by, session: control.session } } as ModsPublishInput
+  await record($, rt, input, control.source)
+  try {
+    await $.mods.publish(input)
+  } catch {
+    // A subscriber that refused it changes nothing: the state and the feed hold it.
+  }
+}
+
+/** `$.mods.stop` (and `/hub stop|pause|resume`): applied here, and written for the other sessions when scope is all. */
+async function raiseControl($: EngineInterface, rt: Runtime, input: ModsStopInput, source: string): Promise<ModsControl> {
+  const now = await $.clock.now()
+  rt.seq += 1
+  const control: ModsControl = {
+    id: `c-${idTag(rt)}-${rt.seq}`,
+    action: input.action ?? 'stop',
+    scope: input.scope ?? 'session',
+    reason: oneLine(input.reason, 200),
+    by: oneLine(input.by ?? '', 80) || source,
+    session: rt.sessionId,
+    source,
+    at: now,
+  }
+  await applyControl($, rt, control)
+  if (control.scope === 'all' && rt.dir !== '') {
+    const kept = (await readControls($, rt)).filter(one => now - one.at < CONTROL_MAX_AGE_MS && one.id !== control.id)
+    await writeJsonFile($, `${rt.dir}/control.json`, { controls: [...kept, control].slice(-CONTROL_KEEP) })
+  }
+  return control
+}
+
+/** Every 5 s: what other sessions raised for all sessions since this one started, applied in order, once. */
+async function pollControls($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.dir === '') return
+  if (rt.controlFloor === 0) rt.controlFloor = await $.clock.now()
+  const fresh = (await readControls($, rt))
+    .filter(one => one.scope === 'all' && one.session !== rt.sessionId && one.at >= rt.controlFloor && !rt.controlSeen.has(one.id))
+    .sort((a, b) => a.at - b.at)
+  for (const control of fresh) await applyControl($, rt, control)
 }
 
 // ── Sensors: standard events from what the session does ─────────────────────────────────────────────
@@ -516,8 +640,10 @@ async function runHub($: EngineInterface, rt: Runtime, args: string): Promise<st
       const mode = await refreshMode($, rt, 'timer')
       const channels = await read($, channelsAtom)
       const tabs = await read($, tabsAtom)
+      const control = await read($, controlAtom)
       return [
         `Mode: ${describeMode(mode, now)}`,
+        `Automatic work: ${control === null || control.action === 'resume' ? 'running' : `${control.action === 'stop' ? 'stopped' : 'paused'} by ${control.by} (${control.reason})`}`,
         `Channels: ${channels.length === 0 ? 'none registered' : channels.map(channel => `${channel.id} (${channel.status})`).join(', ')}`,
         `Tabs: ${['home', ...tabs.map(tab => tab.id)].join(', ')}`,
       ].join('\n')
@@ -556,6 +682,13 @@ async function runHub($: EngineInterface, rt: Runtime, args: string): Promise<st
       const result = await dispatch($, rt, { level: command.level, title: 'Test notification', body: 'Sent with /hub test' }, 'mods-hub')
       return `Routed to ${result.targets.length === 0 ? 'nowhere' : result.targets.join(', ')}${result.held ? ' (held for the morning digest)' : ''}${result.reason === undefined ? '' : ` — ${result.reason}`}.`
     }
+    case 'control': {
+      await raiseControl($, rt, { action: command.action, scope: command.scope, reason: `/hub ${command.action}`, by: 'you, at the terminal' }, 'mods-hub')
+      const where = command.scope === 'all' ? 'every session' : 'this session'
+      return command.action === 'resume'
+        ? `Resume sent to ${where}: mods that work on their own may start again.`
+        : `${command.action === 'stop' ? 'Stop' : 'Pause'} sent to ${where}: autopilot, task-queue, night-shift and workflows ${command.action === 'stop' ? 'stop' : 'pause'} (/hub resume${command.scope === 'all' ? ' all' : ''} lifts it).`
+    }
     case 'error':
       return command.message === HUB_USAGE ? HUB_USAGE : `${command.message}\n${HUB_USAGE}`
   }
@@ -576,6 +709,8 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime)
   const inbox = await read($, inboxAtom)
   const installed = await read($, installedAtom)
   const tabs = await read($, tabsAtom)
+  const control = await read($, controlAtom)
+  const isHalted = control !== null && control.action !== 'resume'
   const now = await $.clock.now()
   const ours = installed.plugins.filter(plugin => plugin.marketplace === 'claude-mods')
   const room = Math.max(3, (e.props.scroll.bodyRows || 24) - 16)
@@ -592,6 +727,12 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime)
         <Button key="night" label={`Night ${prefs.quietHours}: ${prefs.isNightOn ? 'on' : 'off'}`} onPress={() => toggleNight($, rt)} />
         <Button key="presence" label={mode.presence === 'away' ? "I'm back" : "I'm away"} onPress={() => togglePresence($, rt)} />
       </Box>
+      {isHalted ? (
+        <Box key="control" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          <Text color="warning">{`${control.action === 'stop' ? '⏹ Stopped' : '⏸ Paused'} by ${control.by}: ${control.reason}`}</Text>
+          <Button key="resume" label="Resume" onPress={() => resumeFromPanel($, rt, control.scope)} />
+        </Box>
+      ) : null}
 
       <Box marginTop={1} flexDirection="column">
         <Text bold>Channels</Text>
@@ -720,6 +861,11 @@ async function togglePresence($: EngineInterface, rt: Runtime): Promise<void> {
   }
 }
 
+async function resumeFromPanel($: EngineInterface, rt: Runtime, scope: ModsControlScope): Promise<void> {
+  await noteActivity($, rt)
+  await raiseControl($, rt, { action: 'resume', scope, reason: 'Resume in the Claude Mods panel', by: 'you, at the terminal' }, 'mods-hub')
+}
+
 async function cycleRoute($: EngineInterface, rt: Runtime, level: ModsLevel): Promise<void> {
   await noteActivity($, rt)
   await changePrefs($, rt, prefs => ({ ...prefs, routes: { ...prefs.routes, [level]: cycle(ROUTES, prefs.routes[level]) } }))
@@ -755,6 +901,9 @@ async function startSession($: EngineInterface, rt: Runtime): Promise<void> {
   })
   rt.timer?.cancel()
   rt.timer = $.clock.every(TICK_MS, () => void tick($, rt))
+  rt.controlFloor = now
+  rt.controlTimer?.cancel()
+  rt.controlTimer = $.clock.every(CONTROL_POLL_MS, () => void pollControls($, rt))
   $.clock.after(0, () => void afterStart($, rt))
 }
 
@@ -785,6 +934,7 @@ export const register: Register = (on, options) => {
   on('mods.publish', async ($, e, next) => {
     // The hub's own events are recorded by publishSelf.
     if (next.origin.plugin === 'mods-hub') return next(e)
+    if (e.topic.startsWith('control.')) return { deny: 'mods-hub: control.* events are raised by $.mods.stop({ action, scope, reason }), not published' }
     const problem = problemWith(e.topic, e.data)
     if (problem !== undefined) return { deny: `mods-hub: ${problem}` }
     const ran = await next(e)
@@ -809,11 +959,15 @@ export const register: Register = (on, options) => {
       ...(e.interaction === undefined ? {} : { interaction: e.interaction }),
       ...(e.isNightOn === undefined ? {} : { isNightOn: e.isNightOn }),
       ...(e.quietHours === undefined ? {} : { quietHours: e.quietHours }),
-      ...(e.silentMinutes === undefined
-        ? {}
-        : e.silentMinutes === null || e.silentMinutes <= 0
-          ? { isSilent: false, silentUntil: null }
-          : { isSilent: true, silentUntil: now + e.silentMinutes * MINUTE_MS }),
+      ...(e.isSilent === false
+        ? { isSilent: false, silentUntil: null }
+        : e.isSilent === true
+          ? { isSilent: true, silentUntil: typeof e.silentMinutes === 'number' && e.silentMinutes > 0 ? now + e.silentMinutes * MINUTE_MS : null }
+          : e.silentMinutes === undefined
+            ? {}
+            : e.silentMinutes === null || e.silentMinutes <= 0
+              ? { isSilent: false, silentUntil: null }
+              : { isSilent: true, silentUntil: now + e.silentMinutes * MINUTE_MS }),
     }))
     return { value: mode }
   })
@@ -857,9 +1011,15 @@ export const register: Register = (on, options) => {
   on('mods.drain', async ($, e, next) => {
     const channel = (await read($, channelsAtom)).find(one => one.id === e.channel)
     if (channel === undefined || channel.owner !== next.origin.plugin) return { deny: `mods-hub: no channel "${e.channel}" of yours` }
-    const waiting = rt.outbox.get(e.channel) ?? []
-    rt.outbox.delete(e.channel)
-    return { value: waiting }
+    if (e.after !== undefined && e.after !== null && typeof e.after !== 'string') return { deny: 'mods-hub: after is the id of the last notice you handled, or null' }
+    return { value: await drainOutbox($, e) }
+  })
+  on('mods.stop', async ($, e, next) => {
+    const problem = problemWithStop(e)
+    if (problem !== undefined) return { deny: `mods-hub: ${problem}` }
+    const ran = await next(e)
+    if (ran.deny !== undefined) return ran
+    return { value: await raiseControl($, rt, e, next.origin.plugin) }
   })
   on('mods.hello', async ($, e, next) => {
     const name = next.origin.plugin
@@ -885,6 +1045,7 @@ export const register: Register = (on, options) => {
   })
   on('session.end', async ($, e, next) => {
     rt.timer?.cancel()
+    rt.controlTimer?.cancel()
     if (rt.options.sensors) {
       const now = await $.clock.now()
       await publishSelf($, rt, { topic: 'session.ended', data: { durationMs: now - rt.startedAt, turns: rt.turns, usd: rt.sessionUsd }, scope: 'global' })

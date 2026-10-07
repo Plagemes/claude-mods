@@ -1,7 +1,9 @@
 import { test, expect, mock } from 'claude-code/testing'
+import type { MockClock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { insertEntry, parseCommit, TEMPLATE, unreleasedOf } from '../hooks/changelog'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const PATH = `${ROOT}/CHANGELOG.md`
@@ -33,13 +35,12 @@ const PANE_PROPS = {
 }
 const BASH_OK = { stdout: '', stderr: '', interrupted: false }
 
-type Repo = { files: Map<string, string>; runs: string[][]; toasts: string[]; copies: string[] }
+type Repo = { files: Map<string, string>; runs: string[][]; toasts: string[]; copies: string[]; clock: MockClock }
 
 /** A repository whose HEAD is the given commit, and the nouns the mod calls. */
 const repo = (on: On, subject: string, options: { file?: string; committedAt?: number; body?: string } = {}): Repo => {
-  const state: Repo = { files: new Map(), runs: [], toasts: [], copies: [] }
+  const state: Repo = { files: new Map(), runs: [], toasts: [], copies: [], clock: mock.clock(on, { now: NOW }) }
   if (options.file !== undefined) state.files.set(PATH, options.file)
-  mock.clock(on, { now: NOW })
   on('process.run', ($, e) => {
     state.runs.push([...e.argv])
     const args = e.argv.slice(1).join(' ')
@@ -167,4 +168,28 @@ test('regression: a CRLF changelog keeps its line endings', () => {
   const { markdown } = insertEntry(crlf, { section: 'Added', text: 'Dark mode' })
   expect(markdown.replace(/\r\n/g, '')).not.toContain('\n')
   expect(markdown).toContain('### Added\r\n\r\n- Dark mode\r\n')
+})
+
+test('with mods-hub: a commit commit-composer published is recorded too, once, and the entry is a hub notice', async ($, on) => {
+  const state = repo(on, 'feat(cart): add coupons', { file: EXISTING })
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.log', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['git.commit'] }])
+
+  // commit-composer committed from its pane with git directly: no Bash call to watch.
+  hub.events.push({ topic: 'git.commit', source: 'commit-composer', at: NOW + 1, data: { sha: 'a1b2c3d4e5f6', message: 'feat(cart): add coupons', branch: 'main', files: 2 } })
+  await state.clock.advance(10_000)
+  expect(unreleasedOf(state.files.get(PATH) ?? '')).toBe('### Added\n\n- **cart:** Add coupons\n\n### Fixed\n\n- Handle empty carts')
+  expect(hub.notified).toEqual([{ level: 'info', title: 'Added · **cart:** Add coupons', topic: 'git.commit' }])
+  expect(state.toasts).toEqual([])
+
+  // Seen once: the next look reads nothing new.
+  const writes = state.runs.length
+  await state.clock.advance(10_000)
+  expect(state.runs.length).toBe(writes)
+  expect(hub.notified).toHaveLength(1)
 })

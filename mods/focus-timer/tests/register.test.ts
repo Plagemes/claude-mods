@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const NOW = new Date(2026, 9, 7, 9, 0).getTime()
 const MINUTE = 60_000
 
@@ -93,4 +95,44 @@ test('bad durations are refused, and with the sound off nothing plays', { option
   expect(engine.toasts).toEqual(['🍅 Round 1 done. /pomodoro starts the next one.'])
   expect(engine.status.at(-1)).toBeUndefined()
   expect(engine.played).toHaveLength(0)
+})
+
+test('with mods-hub: a focus round silences the other mods, is published, and its end reaches you when away', { options: { breakMinutes: 1 } }, async ($, on) => {
+  const { engine, clock } = answerEngine(on)
+  const hub = fakeHub(on, {}, clock)
+
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['focus.started', 'focus.ended'], consumes: ['session.away'] }])
+
+  await $.command.run(pomodoro('2'))
+  expect(hub.published).toEqual([{ topic: 'focus.started', data: { minutes: 2 } }])
+  expect(hub.modes).toEqual([{ silentMinutes: 2 }])
+  expect(hub.mode.isSilent).toBe(true)
+
+  await clock.advance(2 * MINUTE)
+  expect(hub.modes.at(-1)).toEqual({ silentMinutes: null })
+  expect(hub.published.at(-1)).toEqual({ topic: 'focus.ended', data: { minutes: 2, isCompleted: true } })
+  expect(hub.notified).toEqual([{ level: 'info', title: '🍅 Round 1 done: take a 1-minute break.', topic: 'focus.ended' }])
+  expect(engine.toasts).toEqual([])
+  expect(engine.played).toEqual(['assets/bell.wav'])
+
+  // Stepped away during the break: its end goes to your channels too.
+  hub.mode = { ...hub.mode, presence: 'away' }
+  await clock.advance(MINUTE)
+  expect(hub.notified.at(-1)).toEqual({ level: 'success', title: '☕ Break over. /pomodoro starts round 2.', topic: 'focus.ended' })
+  expect(hub.published).toHaveLength(2)
+})
+
+test('with mods-hub: Silent already on is left alone, and a stopped round is published as not completed', async ($, on) => {
+  const { clock } = answerEngine(on)
+  const hub = fakeHub(on, { isSilent: true }, clock)
+
+  await $.command.run(pomodoro('25'))
+  await clock.advance(10 * MINUTE)
+  await $.command.run(pomodoro('stop'))
+  expect(hub.modes).toEqual([])
+  expect(hub.published).toEqual([
+    { topic: 'focus.started', data: { minutes: 25 } },
+    { topic: 'focus.ended', data: { minutes: 10, isCompleted: false } },
+  ])
 })

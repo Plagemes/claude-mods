@@ -5,6 +5,7 @@ import type { On } from 'claude-code'
 import { detectCommand } from '../hooks/detect'
 import { findUrl, kindOf, lastErrorBlock, splitLines } from '../hooks/output'
 import type { DevServerLine } from '../types'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'dev-server-pane'
 const PANE_PROPS = {
@@ -285,4 +286,74 @@ test('reads output pieces into clean lines, URLs and error blocks', () => {
     "ValueError: invalid literal for int() with base 10: 'x'",
   ])
   expect(lastErrorBlock(lines(['ready', 'all good']))).toBeUndefined()
+})
+
+const HUB_PANE_PROPS = { ...PANE_PROPS, title: 'Claude Mods' }
+
+test('with mods-hub: /dev opens the Dev server tab, publishes build.result as the server comes up, fails, and dies; the crash is an error notice', SERVER_TEST, async ($, on) => {
+  const w = world(on, NODE_APP)
+  const hub = fakeHub(on, {}, w.clock)
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+  await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['build.result'], consumes: [] }])
+  expect(hub.tabs).toEqual([{ id: 'devserver', title: 'Dev server', order: 300, command: 'dev' }])
+
+  await dev($)
+  expect(hub.shown).toEqual(['devserver'])
+  expect(w.opened).toEqual([])
+  hub.tab = 'devserver'
+
+  w.server.write(VITE_BOOT)
+  await w.clock.advance(200)
+  expect(hub.published).toEqual([{ topic: 'build.result', data: { tool: 'pnpm dev', outcome: 'passed', command: 'pnpm dev' } }])
+
+  w.server.write(VITE_ERROR, 'stderr')
+  await w.clock.advance(6_000)
+  expect(hub.published.at(-1)).toEqual({ topic: 'build.result', data: { tool: 'pnpm dev', outcome: 'failed', command: 'pnpm dev', errors: 2 } })
+  expect(hub.published).toHaveLength(2)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: 'claude-mods', props: HUB_PANE_PROPS })
+    expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+    expect((await ui.find({ key: 'header' }))?.text).toContain('● running')
+    expect(await ui.find({ key: 'pane' })).toBeDefined()
+    expect(await ui.find({ key: 'close' })).toBeUndefined()
+    expect(await ui.find({ key: 'fix' })).toBeDefined()
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'claude-mods', props: HUB_PANE_PROPS })
+  await ui.press({ key: 'pane' })
+  expect(w.opened).toEqual(['dev-server'])
+  await ui.unmount()
+
+  w.server.exit(1)
+  await w.clock.settle()
+  expect(hub.published.at(-1)).toEqual({ topic: 'build.result', data: { tool: 'pnpm dev', outcome: 'error', command: 'pnpm dev', errors: 2 } })
+  expect(hub.notified).toEqual([{ level: 'error', title: 'pnpm dev exited (1). /dev shows its output.' }])
+  expect(w.toasts).toEqual([])
+})
+
+test('with mods-hub: a server that never prints an error is reported up once, and stopping it reports nothing more', SERVER_TEST, async ($, on) => {
+  const w = world(on, NODE_APP)
+  const hub = fakeHub(on, {}, w.clock)
+  await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  await dev($)
+  w.server.write(VITE_BOOT)
+  await w.clock.advance(200)
+  w.server.write('hot updated src/a.ts\n')
+  await w.clock.advance(200)
+  await dev($, 'stop')
+  expect(hub.published.map(event => (event.data as { outcome: string }).outcome)).toEqual(['passed'])
+  expect(hub.notified).toEqual([])
+})
+
+test('with mods-hub: another tab of the panel is left to its owner', SERVER_TEST, async ($, on) => {
+  const w = world(on, NODE_APP)
+  const hub = fakeHub(on, {}, w.clock)
+  hub.tab = 'cost'
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'claude-mods', props: HUB_PANE_PROPS })
+  expect(await ui.find({ key: 'header' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'No dev server yet' })).toBeUndefined()
+  await ui.unmount()
 })

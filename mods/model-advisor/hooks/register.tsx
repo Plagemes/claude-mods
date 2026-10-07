@@ -4,6 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { ModelAdvisorHint, ModelAdvisorTier } from '../types'
 import { CLASSIFIER_SYSTEM, classifyLocally, tierFromReply } from './classify'
 import type { Verdict } from './classify'
+import { familyOf } from './shared/prices'
 
 const NAME = 'model-advisor'
 /** Prompts before a suggestion that was dismissed or replaced may show again. */
@@ -17,6 +18,8 @@ const DISPLAYS = ['band', 'toast', 'both'] as const
 const PERSON_ORIGINS: ReadonlySet<string> = new Set(['composer', 'bridge'])
 const RANK: Record<ModelAdvisorTier, number> = { light: 0, standard: 1, heavy: 2 }
 const ALIAS: Record<ModelAdvisorTier, string> = { light: 'haiku', standard: 'sonnet', heavy: 'opus' }
+/** smart-router's routing policy on mods-hub's blackboard: its tiers' models are the ones worth suggesting. */
+const ROUTER_POLICY = 'smart-router.policy'
 
 const hint = atom({ plugin: 'model-advisor', key: 'hint' } as const, null)
 const prompts = atom({ plugin: 'model-advisor', key: 'prompts' } as const, 0)
@@ -29,9 +32,15 @@ type Settings = { useModel: boolean; classifierModel: string; display: (typeof D
 const tierOfModel = (model: string): ModelAdvisorTier =>
   /haiku/i.test(model) ? 'light' : /opus|fable|mythos/i.test(model) ? 'heavy' : 'standard'
 
-/** The alias worth switching to, if any: down for a simple task, up for a harder one. */
-const suggestionFor = (needed: ModelAdvisorTier, running: ModelAdvisorTier): string | undefined =>
-  needed === 'light' ? (running === 'light' ? undefined : ALIAS.light) : RANK[needed] > RANK[running] ? ALIAS[needed] : undefined
+/**
+ * The alias worth switching to, if any: down for a simple task, up for a harder one. `aliases` are the models
+ * of each tier (smart-router's when it shares them); one of the model already running is never suggested.
+ */
+const suggestionFor = (needed: ModelAdvisorTier, runningModel: string, aliases: Record<ModelAdvisorTier, string> = ALIAS): string | undefined => {
+  const running = tierOfModel(runningModel)
+  const alias = needed === 'light' ? (running === 'light' ? undefined : aliases.light) : RANK[needed] > RANK[running] ? aliases[needed] : undefined
+  return alias === undefined || (familyOf(alias) !== 'other' && familyOf(alias) === familyOf(runningModel)) ? undefined : alias
+}
 
 const headline = ({ tier, model, reason }: ModelAdvisorHint): string =>
   tier === 'light'
@@ -60,13 +69,47 @@ async function verdictFor($: EngineInterface, text: string, settings: Settings):
   return { tier, reason: tier === local.tier ? local.reason : `rated ${tier} by ${settings.classifierModel}` }
 }
 
+// ── mods-hub: the router's models, and suggestions on the bus ───────────────────────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['x.model-advisor.suggested'], consumes: [ROUTER_POLICY] })
+}
+
+/**
+ * The model of each tier, from smart-router's policy when mods-hub has it (its light/standard/deep models, so
+ * the session and its subagents follow one profile: Saver, Fast, Max...); the defaults otherwise.
+ */
+async function tierAliases($: EngineInterface): Promise<Record<ModelAdvisorTier, string>> {
+  try {
+    const fact = await $.mods.read({ key: ROUTER_POLICY })
+    const models = (fact?.value as { models?: Record<string, unknown> } | undefined)?.models
+    const pick = (value: unknown, fallback: string): string => (typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback)
+    if (models === undefined || models === null) return ALIAS
+    return { light: pick(models.light, ALIAS.light), standard: pick(models.standard, ALIAS.standard), heavy: pick(models.deep, ALIAS.heavy) }
+  } catch {
+    return ALIAS
+  }
+}
+
 /** Classifies one prompt and shows, keeps or clears the suggestion. */
 async function advise($: EngineInterface, text: string, settings: Settings): Promise<void> {
   if (await read($, isMuted)) return
 
   const count = await update($, prompts, n => n + 1)
   const verdict = await verdictFor($, text, settings)
-  const model = verdict && suggestionFor(verdict.tier, tierOfModel(await $.session.model()))
+  const model = verdict && suggestionFor(verdict.tier, await $.session.model(), await tierAliases($))
   const showing = await read($, hint)
   const last = model === undefined ? undefined : (await read($, lastSuggested))[model]
   const isFresh = model !== undefined && showing?.model !== model
@@ -81,7 +124,9 @@ async function advise($: EngineInterface, text: string, settings: Settings): Pro
   await update($, lastSuggested, before => ({ ...before, [model]: count }))
   await update($, hint, () => shown)
 
-  if (isFresh && settings.display !== 'band') $.ui.toast(headline(shown))
+  if (!isFresh) return
+  if (settings.display !== 'band') await hubNotify($, { level: 'info', title: headline(shown), audience: 'terminal' })
+  await hubPublish($, { topic: 'x.model-advisor.suggested', data: { tier: shown.tier, model, reason: shown.reason } })
 }
 
 /** `advise`, its failure logged rather than thrown: a suggestion is never worth an error. */
@@ -118,6 +163,7 @@ export const register: Register = (on, options: PluginOptions) => {
       argumentHint: '[on | off]',
       immediate: true,
     })
+    await greetHub($)
 
     return next(e)
   })
@@ -168,3 +214,100 @@ export const register: Register = (on, options: PluginOptions) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

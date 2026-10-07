@@ -12,6 +12,9 @@ export const BOT = '15550001111'
 export const GROUP = '120363000000000001@g.us'
 export const SESSION = '3f6b9c1e-0000-4000-8000-000000000001'
 export const KEY = 'owa_k1_scopedoperatorkey0000000000'
+/** What the bridge appends to a phone prompt so Claude knows its reply goes to the phone (the prompt carries it itself). */
+export const PHONE_NOTE =
+  '\n\n(This prompt was sent by the user from WhatsApp (whatsapp-bridge). Your final reply is relayed to their phone: end with a short plain-text summary of what you did or found.)'
 /** A real 1×1 PNG. */
 export const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
@@ -46,7 +49,10 @@ export type World = {
   clock: MockClock
   files: Map<string, string>
   wa: FakeWa
+  /** Prompts the bridge submitted, the phone note (PHONE_NOTE) taken off: what the person wrote. */
   submitted: { text: string; asUser: boolean }[]
+  /** The same prompts as the model reads them, the phone note included. */
+  prompts: string[]
   toasts: string[]
   aborted: string[]
   forks: string[]
@@ -172,6 +178,7 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
     files: new Map(Object.entries(options.files ?? {})),
     wa: { status: options.status ?? 'ready', phone: BOT, role: 'operator', canCreateGroups: options.canCreateGroups ?? true, rows: [], groups: [], calls: [], next: 0 },
     submitted: [],
+    prompts: [],
     toasts: [],
     aborted: [],
     forks: [],
@@ -244,7 +251,10 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
   on('tool.register', ($, e) => ({ value: { tool: `mcp__whatsapp-bridge__${e.name}` } }))
   on('tool.check', () => ({ decision: 'ask' }))
   on('prompt.submit', ($, e) => {
-    if (e.origin.kind === 'plugin') seen.submitted.push({ text: e.text, asUser: (e.origin as { asUser?: boolean }).asUser === true })
+    if (e.origin.kind === 'plugin') {
+      seen.prompts.push(e.text)
+      seen.submitted.push({ text: e.text.replace(PHONE_NOTE, ''), asUser: (e.origin as { asUser?: boolean }).asUser === true })
+    }
     return { text: e.text, ...(e.context !== undefined ? { context: e.context } : {}) }
   })
   on('prompt.compose', () => ({ sections: [] }))

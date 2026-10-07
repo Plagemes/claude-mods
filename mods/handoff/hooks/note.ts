@@ -15,7 +15,35 @@ export const stampOf = (ms: number): string => {
 /** `2026-10-07 13:42` */
 export const readableStamp = (ms: number): string => stampOf(ms).replace(/^(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})$/, '$1 $2:$3')
 
-export const handoffPrompt = (facts: GitFacts | undefined, note: string): string =>
+/** A decision somebody recorded (the hub's `decision.recorded`), as the handoff lists it. */
+export type Decision = { title: string; summary?: string }
+
+const DECISION_CLIP = 200
+const MAX_DECISIONS = 8
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+const clip = (text: string): string => {
+  const line = text.trim().replace(/\s+/g, ' ')
+  return line.length > DECISION_CLIP ? `${line.slice(0, DECISION_CLIP - 1)}…` : line
+}
+
+/** The `decision.recorded` events in a list of bus events (this session's, and other sessions' from sessions.json) since `sinceMs`, oldest first, each title once. */
+export const decisionsOf = (events: readonly unknown[], sinceMs: number): Decision[] => {
+  const found: { at: number; decision: Decision }[] = []
+  for (const event of events) {
+    if (!isRecord(event) || event.topic !== 'decision.recorded' || typeof event.at !== 'number' || event.at < sinceMs || !isRecord(event.data)) continue
+    const { title, summary } = event.data
+    if (typeof title !== 'string' || title.trim() === '') continue
+    found.push({ at: event.at, decision: { title: clip(title), ...(typeof summary === 'string' && summary.trim() !== '' ? { summary: clip(summary) } : {}) } })
+  }
+  const titles = new Set<string>()
+  return found
+    .sort((a, b) => a.at - b.at)
+    .map(one => one.decision)
+    .filter(decision => !titles.has(decision.title) && (titles.add(decision.title), true))
+    .slice(-MAX_DECISIONS)
+}
+
+export const handoffPrompt = (facts: GitFacts | undefined, note: string, decisions: readonly Decision[] = []): string =>
   [
     'Write a handoff note so a teammate can pick up exactly where this session leaves off.',
     'Be specific and factual: real file paths, commands, decisions and the reasons for them. No filler, no',
@@ -33,6 +61,9 @@ export const handoffPrompt = (facts: GitFacts | undefined, note: string): string
           'Recent commits:',
           facts.commits === '' ? '(none)' : facts.commits,
         ]),
+    ...(decisions.length === 0
+      ? []
+      : ['', 'Decisions recorded for this project (mention the ones that matter, with their reasons):', ...decisions.map(one => `- ${one.title}${one.summary === undefined ? '' : `: ${one.summary}`}`)]),
     '',
     'Answer in Markdown with exactly these sections, in this order, and nothing before the first:',
     '## Goal',

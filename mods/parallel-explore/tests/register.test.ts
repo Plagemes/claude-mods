@@ -4,6 +4,8 @@ import type { ModelCompleteResult, On } from 'claude-code'
 
 import { FIXED_ANGLES, mergePrompt, parseAngles } from '../hooks/explore'
 import { whyNotReadOnly } from '../hooks/readonly'
+import { routesOf } from '../hooks/routes'
+import { fakeHub } from './hub'
 
 const USAGE = { input_tokens: 500, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const QUESTION = 'How does the session token get refreshed?'
@@ -408,4 +410,57 @@ test('fixed angles when planning is off; a failed explorer and the deadline stil
   expect(answer).toContain('Implementation lives in src/auth/session.ts:42.')
   expect(answer).toContain('No report: it stopped (error) without a report.')
   expect(answer).toContain('No report: no report within 2 min.')
+})
+
+test('with mods-hub: says hello, publishes agent.finished per explorer, shows the model smart-router routed each to, and announces the merge through the hub', async ($, on) => {
+  const { state, clock } = world(on)
+  const hub = fakeHub(on, {}, clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  const feed = [
+    { id: 'e1', topic: 'agent.routed', data: { agentType: 'Explore', tier: 'light', model: 'haiku', reason: 'read-only', agentId: 'agent-1' }, source: 'smart-router', at: 1, session: 's', scope: 'session' },
+    { id: 'e2', topic: 'cost.update', data: {}, source: 'mods-hub', at: 2, session: 's', scope: 'session' },
+  ]
+  on('state.get', { plugin: 'mods-hub', key: 'feed' }, () => ({ value: { value: feed, version: 1 } }))
+  await start($)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['agent.finished'], consumes: ['agent.routed'] }])
+
+  await $.command.run(explore(QUESTION))
+  await clock.settle()
+  await clock.advance(5_000)
+  await $.turn.complete(complete('agent-1', 'Findings: src/auth/session.ts:42.'))
+  await $.turn.complete(complete('agent-2', '', 'error'))
+  await $.turn.complete(complete('agent-3', 'TOKEN_TTL in .env.example:3.'))
+  await clock.settle()
+  expect(hub.published).toEqual([
+    { topic: 'agent.finished', data: { agentType: 'Explore', outcome: 'ok', durationMs: 5000, agentId: 'agent-1' } },
+    { topic: 'agent.finished', data: { agentType: 'Explore', outcome: 'failed', durationMs: 5000, agentId: 'agent-2' } },
+    { topic: 'agent.finished', data: { agentType: 'Explore', outcome: 'ok', durationMs: 5000, agentId: 'agent-3' } },
+  ])
+  expect(hub.notified).toEqual([{ level: 'success', title: 'Explore: findings merged' }])
+  expect(state.toasts).toEqual([])
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect((await ui.find({ key: 'angles' }))?.text).toContain('✓Refresh logic0:05haiku · light')
+    await ui.unmount()
+  }
+})
+
+test('without mods-hub the merge is announced by toast and no routing is shown', async ($, on) => {
+  const { state, clock } = world(on)
+  await start($)
+  await $.command.run(explore(QUESTION))
+  await clock.settle()
+  for (const id of ['agent-1', 'agent-2', 'agent-3']) await $.turn.complete(complete(id, `report ${id}`))
+  await clock.settle()
+  expect(state.toasts.at(-1)).toBe('Explore: findings merged')
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await ui.find({ key: 'angles' }))?.text).not.toContain('·')
+  await ui.unmount()
+})
+
+test('routesOf maps agent ids to model and tier from the hub feed', () => {
+  expect(routesOf([{ topic: 'agent.routed', data: { agentId: 'a', model: 'haiku', tier: 'light' } }, { topic: 'agent.routed', data: { agentId: 'b', model: 'opus' } }, { topic: 'agent.routed', data: { model: 'x' } }, { topic: 'other', data: null }])).toEqual(
+    new Map([['a', 'haiku · light'], ['b', 'opus']]),
+  )
 })

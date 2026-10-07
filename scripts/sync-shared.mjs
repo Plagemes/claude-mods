@@ -8,6 +8,8 @@
 //   mods/mods-hub/types/index.d.ts     → mods/<mod>/types/mods-hub.d.ts         (hub-types: the hub's contract, for `$.mods`)
 //   shared/hub-client.ts  (its region) → a region of mods/<mod>/hooks/<entry>  (hub-client: functions taking `$` must
 //                                         live in the hooks file itself, so they are pasted between markers)
+//   shared/testing/hub.ts              → mods/<mod>/tests/hub.ts                (fake-hub: the stand-in for mods-hub in
+//                                         tests; it imports ../types/mods-hub, so vendor hub-client first)
 //
 // Usage:
 //   node scripts/sync-shared.mjs                     rewrite every vendored copy from its source
@@ -32,6 +34,7 @@ const LIBS = {
   'line-index': { kind: 'file', source: 'shared/line-index.ts', target: 'hooks/shared/line-index.ts' },
   'hub-types': { kind: 'file', source: `mods/${HUB}/types/index.d.ts`, target: 'types/mods-hub.d.ts' },
   'hub-client': { kind: 'region', source: 'shared/hub-client.ts', region: 'hub-client' },
+  'fake-hub': { kind: 'file', source: 'shared/testing/hub.ts', target: 'tests/hub.ts' },
 }
 
 const sha = text => createHash('sha256').update(text).digest('hex').slice(0, 12)

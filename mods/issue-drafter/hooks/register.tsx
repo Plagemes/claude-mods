@@ -4,11 +4,15 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { IssueDraftState } from '../types'
 import { asText, draftPrompt, issueUrl, parseArgs, parseDraft } from './draft'
 import type { IssueKind } from './draft'
+import { redactText } from './shared/secrets'
 
 const PANE = 'issue'
 const GH_TIMEOUT_MS = 60_000
 const DEFAULT_TMP = '/tmp'
 const TYPE_LABELS: Record<IssueKind, string> = { bug: 'bug', feature: 'enhancement' }
+/** How many failures of each kind the hub's bus may add to the draft's prompt, and how much of a body an event carries. */
+const FAILURES_KEPT = 3
+const EVENT_BODY_CHARS = 4_000
 
 const draftAtom = atom({ plugin: 'issue-drafter', key: 'draft' } as const, null)
 
@@ -18,10 +22,60 @@ const firstLine = (text: string): string => text.trim().split('\n')[0]?.trim() ?
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
+// ── mods-hub: failures other mods reported, and the issue on the bus ────────────────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['issue.drafted'], consumes: ['ci.result', 'error.repeated'] })
+}
+
+/**
+ * The failures mods-hub's bus reported this session, newest last: CI runs that failed (ci-watch) and commands
+ * that failed again and again (`error.repeated`). None without the hub.
+ */
+async function reportedFailures($: EngineInterface): Promise<string[]> {
+  try {
+    const ci = (await $.mods.recent({ topic: 'ci.result', limit: 20 }))
+      .map(event => event.data as { workflow?: unknown; outcome?: unknown; branch?: unknown; url?: unknown })
+      .filter(data => data.outcome === 'failed')
+      .slice(-FAILURES_KEPT)
+      .map(data => `CI workflow "${asString(data.workflow)}" failed${data.branch ? ` on ${asString(data.branch)}` : ''}${data.url ? ` (${asString(data.url)})` : ''}`)
+    const repeated = (await $.mods.recent({ topic: 'error.repeated', limit: FAILURES_KEPT }))
+      .map(event => event.data as { command?: unknown; signature?: unknown; count?: unknown; tool?: unknown })
+      .map(data => `\`${asString(data.command ?? data.signature)}\` (${asString(data.tool)}) failed ${asString(data.count)} times in a row`)
+    return [...ci, ...repeated]
+  } catch {
+    return []
+  }
+}
+
+const asString = (value: unknown): string => (typeof value === 'string' || typeof value === 'number' ? String(value) : '')
+
+/** A created issue on the hub's bus, for every session (ticket-linker, team-hub). Its body is masked. */
+async function publishIssue($: EngineInterface, issue: { title: string; body: string }, url: string, labels: readonly string[]): Promise<void> {
+  const body = redactText(issue.body).text
+  await hubPublish($, {
+    topic: 'issue.drafted',
+    data: { title: issue.title, body: body.length > EVENT_BODY_CHARS ? `${body.slice(0, EVENT_BODY_CHARS - 1)}…` : body, url, labels: [...labels] },
+    scope: 'global',
+  })
+}
+
 /** Asks a fork of this conversation for the draft; answers why not when there is none. */
 async function draft($: EngineInterface, kind: IssueKind | undefined, focus: string): Promise<string | undefined> {
   await update($, draftAtom, (): IssueDraftState => ({ status: 'drafting', kind: kind ?? 'bug', title: '', body: '', focus, note: '' }))
-  const reply = await $.model.fork({ prompt: draftPrompt(kind, focus) })
+  const reply = await $.model.fork({ prompt: draftPrompt(kind, focus, await reportedFailures($)) })
   if (!reply.isAnswered) {
     const why =
       reply.reason === 'nothing-to-fork' ? 'Nothing to draft yet: describe the problem or idea to Claude first.'
@@ -61,6 +115,7 @@ async function createIssue($: EngineInterface, settings: Settings): Promise<void
     }
     await update($, draftAtom, (): IssueDraftState => ({ ...current, status: 'created', url, note: '' }))
     $.ui.toast(`Created ${url}`)
+    await publishIssue($, current, url, labels)
   } catch (error) {
     const message = errorText(error)
     await fail(/ENOENT|not found|cannot start/i.test(message)
@@ -81,6 +136,7 @@ export const register: Register = (on, options) => {
       description: 'Turn this conversation into a GitHub issue (preview, then create with gh or copy)',
       argumentHint: '[bug|feature] [focus]',
     })
+    await greetHub($)
     return next(e)
   })
 
@@ -145,3 +201,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

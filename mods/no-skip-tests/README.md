@@ -26,3 +26,5 @@ Recognised markers: `it/test/describe/context.skip` and `.only` (any chain, such
 - Hooks `tool.call` for `Edit`, `Write` and `MultiEdit`. For `Edit` it compares `old_string` with `new_string`; for `Write` it compares the file on disk (read with `$.fs.read`) with the new content. A marker only counts when there are more of its kind afterwards than before.
 - A file counts as a test file by name (`*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`, `*Test.java`, a `tests/`, `__tests__/` or `spec/` folder); every `.rs` file is checked because Rust keeps tests inline.
 - It guards quality, not security, so it fails open: if the file cannot be read the change goes through. Only the file tools are watched, not a `sed -i` in Bash.
+- Test files are also recognised by the shapes every Claude Mod shares (`shared/test-runners.ts`).
+- With [mods-hub](../mods-hub) installed, each refusal is also published as `risk.blocked` (guard, tool, what it adds, the file; severity low) for guardian, audit-trail and permission-log. The decision never waits on the hub. Without the hub nothing changes.

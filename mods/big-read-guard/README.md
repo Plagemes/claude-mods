@@ -24,3 +24,4 @@ Nothing to do. When a read is refused Claude sees: `big-read-guard: /repo/pnpm-l
 - Hooks `tool.call` for `Read`, and lets it through at once when `limit`, `offset` or `pages` is given, for PDFs and images, and for files on an attached machine.
 - Otherwise it calls `$.fs.stat`. Generated files (`*.min.js`, `*.bundle.js`, `*.chunk.js`, `*.js.map`, `package-lock.json`, `yarn.lock`, `Cargo.lock`, `go.sum` and other lock files) are refused above 16 KB; smaller ones are harmless and pass.
 - It is a cost guard, not a security guard: if the check itself fails (file missing, stat error) the read goes ahead and the Read tool reports what is wrong. Detection is by file name only, the content is not inspected.
+- With [mods-hub](../mods-hub) installed every refusal is also published as `risk.blocked` (guard `big-read-guard`, tool `Read`, severity `low`, the path and the reason) for guardian, audit-trail and permission-log. Without the hub nothing changes.

@@ -35,6 +35,7 @@ Covered (leading options like `pnpm --filter web add` and `yarn workspace web ad
 | `checkRegistry` | boolean | `true` | Ask npm, PyPI, crates.io and the Go proxy. Off: only the offline typosquat check runs. |
 
 ## How it works
-- A `tool.call` hook on Bash parses the command line; `prompt.submit` watches your prompts for `DEPS-OK`.
+- A `tool.call` hook on Bash parses the command line with the shared claude-mods shell reader (wrappers such as `sudo`, `env` and `timeout` peeled; `bash -c`, `eval`, `$(…)` and heredocs fed to a shell read; comments and heredoc notes ignored); `prompt.submit` watches your prompts for `DEPS-OK`.
+- With [mods-hub](../mods-hub) installed, every hold is also published as `risk.blocked` (rule `suspicious-package`, the reasons, severity `medium`, the command with secrets masked), the "Held back … Reply DEPS-OK" note goes through the hub as a `warning` question (it reaches your phone when the hub's Interaction mode allows), and the "could not check" note as `info`. Without the hub they are toasts as before.
 - Registry answers are fetched with `$.http.fetch` (popular packages are never looked up) and cached in the plugin store for a day; approved packages are kept there too.
 - Fails open by design: a registry timeout, a network error or a failed check lets the install through and says so in a toast. Packages pulled in by a lockfile, `requirements.txt` or a transitive dependency are not checked.

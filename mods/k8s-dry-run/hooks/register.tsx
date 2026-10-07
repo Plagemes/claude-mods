@@ -144,6 +144,35 @@ async function reject($: EngineInterface): Promise<void> {
   await $.prompt.submit({ text: `I rejected \`${preview.command}\`: do not run it. Tell me what you would change instead.`, asUser: true })
 }
 
+// ── mods-hub: refusals and cluster changes on the bus ───────────────────────────────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['risk.blocked', 'deploy.started'], consumes: [] })
+}
+
+/** A held or blocked kubectl change on the hub's bus (guardian, audit-trail); the decision never waits on it. */
+async function publishBlocked($: EngineInterface, command: string, reason: string, isProd: boolean): Promise<void> {
+  await hubPublish($, { topic: 'risk.blocked', data: { guard: 'k8s-dry-run', tool: 'Bash', reason, severity: isProd ? 'high' : 'medium', command: command.slice(0, 200) } })
+}
+
+/** A kubectl change about to reach the cluster, on the hub's bus for every session (team-hub, guardian). */
+async function publishDeploy($: EngineInterface, call: KubectlCall, context: string | null): Promise<void> {
+  const target = `kubectl ${call.verb}${call.namespace === undefined ? '' : ` -n ${call.namespace}`}`
+  await hubPublish($, { topic: 'deploy.started', data: { target, environment: context ?? 'current context' }, scope: 'global' })
+}
+
 async function hold($: EngineInterface, preview: Preview): Promise<void> {
   await update($, pendingAtom, () => preview)
   $.ui.status(`⎈ kubectl ${preview.verb} awaiting approval${preview.isProd ? ' · PRODUCTION' : ''}`)
@@ -162,6 +191,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'k8s-approve', description: 'Approve the kubectl change k8s-dry-run is holding (once)' })
     await $.command.register({ name: 'k8s-diff', description: 'Show the server-side diff of the kubectl change awaiting approval' })
+    await greetHub($)
     return next(e)
   })
 
@@ -192,6 +222,7 @@ export const register: Register = (on, options) => {
     if (call === undefined) return next(e)
     // One approval stands for one previewed change: a second change in the same command would run unreviewed.
     if (others.length > 0) {
+      await publishBlocked($, e.command, `${others.length + 1} kubectl changes in one command`, settings.isProd(e.command))
       return {
         deny: `k8s-dry-run: this command makes ${others.length + 1} kubectl changes. Run each kubectl apply, replace or delete as its own command (or pass several -f to one apply), so each change gets its own dry run and approval.`,
       }
@@ -201,21 +232,27 @@ export const register: Register = (on, options) => {
     const context = await contextOf($, call, cwd)
     const isProd = settings.isProd(context ?? '') || settings.isProd(call.namespace ?? '')
     host.wasProd = isProd
-    if (await consumeApproval($, approvalKey(e.command, context))) return next(e)
+    if (await consumeApproval($, approvalKey(e.command, context))) {
+      await publishDeploy($, call, context)
+      return next(e)
+    }
 
     const outcome = await dryRun($, settings, call, e.command, cwd, context, isProd)
     if (outcome.kind === 'error') {
       if (isProd) {
+        await publishBlocked($, e.command, `no server-side dry run possible on production (${outcome.reason})`, true)
         return {
           deny: `k8s-dry-run: blocked. No server-side dry run of this change on production ${where({ context, namespace: call.namespace ?? null })} was possible (${outcome.reason}), and production changes are only run after a reviewed diff. Fix what stops the dry run, or ask the user to run the command themselves.`,
         }
       }
+      await publishDeploy($, call, context)
       return withNote(await next(e), `k8s-dry-run: no dry run was possible (${outcome.reason}), so the command ran without a reviewed diff.`)
     }
     if (outcome.preview.objects.length === 0) {
       return withNote(await next(e), 'k8s-dry-run: the server-side dry run showed no changes, so the command ran without asking.')
     }
     await hold($, outcome.preview)
+    await publishBlocked($, e.command, `held for approval: ${outcome.preview.objects.length} object${outcome.preview.objects.length === 1 ? '' : 's'} would change`, isProd)
     return { deny: holdMessage(outcome.preview) }
   }).catch(($, e, next) => {
     if (next.called) return next(e)
@@ -316,3 +353,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

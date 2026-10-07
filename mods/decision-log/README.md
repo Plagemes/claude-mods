@@ -41,3 +41,4 @@ Files look like:
 - `/decide` calls `$.model.fork`, which asks one tool-less question over this session's own transcript (served from the prompt cache), so the ADR reflects what was actually discussed. It is told to write "TBD" rather than invent facts; review it before saving.
 - The draft lives in `$.state` and is drawn in a `Pane` with `Markdown` and `Button` elements (terminal and desktop).
 - Numbers come from the highest `NNNN-*.md` in the folder, re-checked at save time so two drafts never collide; `/decisions` reads each file's heading, `Status:` and `Date:` lines (MADR front matter works too).
+- With [mods-hub](../mods-hub) installed, every saved ADR is published as `decision.recorded` (title, Decision summary, path, status) for all sessions, so project-brain, recall, session-journal and team-hub pick it up. Without the hub nothing changes.

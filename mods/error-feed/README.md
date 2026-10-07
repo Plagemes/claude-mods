@@ -30,3 +30,8 @@ Every tool call that comes back as an error (a Bash command exiting non-zero, an
 - A `tool.call` hook passes every call through untouched and looks at the result: one flagged `isError` is recorded. A Bash command that exits non-zero is reported that way (its exit code is parsed from the output), except exit codes the Bash tool reads as normal, such as `grep` finding nothing.
 - Refusals are not failures: calls you declined or interrupted are skipped.
 - The feed lives in session state (it survives a hot reload, not a new session). Only the first 300 characters of each error are kept and sent.
+- With [mods-hub](../mods-hub) installed:
+  - `/errors` opens the **Errors** tab of the shared Claude Mods panel instead of its own pane (same view, without Close);
+  - each recorded failure is published as `tool.failed` (tool, the error's first line, the command);
+  - the command the hub reports as failing again and again (`error.repeated`) is flagged `↻ 3× in a row` in the feed.
+  Without the hub nothing changes.

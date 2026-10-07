@@ -1,7 +1,7 @@
 // Pure search: markdown → chunks → BM25 ranking. No `$` here, so tests can call it directly.
 
 export type Chunk = {
-  /** Where the text came from: a relative path, or `memory`. */
+  /** Where the text came from: a relative path, `memory`, or `hub` (a decision or lesson published on mods-hub). */
   source: string
   /** The heading the chunk sits under, or the file's name. */
   title: string
@@ -154,7 +154,7 @@ export const search = (chunks: readonly Chunk[], query: string, limit: number): 
 export const formatHits = (query: string, hits: readonly ShownHit[], searched: string): string => {
   if (hits.length === 0) return `No matches for "${query}" (${searched}).`
   const lines = hits.map((hit, index) => {
-    const where = hit.source === 'memory' ? `memory · ${hit.title}` : `${hit.source} › ${hit.title} (line ${hit.line})`
+    const where = hit.source === 'memory' || hit.source === 'hub' ? `${hit.source} · ${hit.title}` : `${hit.source} › ${hit.title} (line ${hit.line})`
     return `${index + 1}. ${where} — score ${hit.score.toFixed(1)}\n   ${hit.snippet}`
   })
   return [`${hits.length} match${hits.length === 1 ? '' : 'es'} for "${query}" (${searched}):`, '', lines.join('\n\n')].join('\n')

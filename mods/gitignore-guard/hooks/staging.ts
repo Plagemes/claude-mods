@@ -1,4 +1,4 @@
-import { baseName, type ShellCommand } from './shell'
+import { baseName, embeddedShellScripts, simpleCommands } from './shared/shell'
 
 export type GitAdd = {
   /** `-A`, `--all`, `.` or `*`: stage everything. */
@@ -16,6 +16,8 @@ export type Junk = { reason: string; ignoreLine: string }
 const SKIPPED_FLAGS = new Set(['-f', '--force', '-n', '--dry-run', '-p', '--patch', '-i', '--interactive', '-e', '--edit', '-u', '--update'])
 const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
 const ENV_TEMPLATE = /\.(?:example|sample|template|dist)$/
+/** How deep scripts handed to a shell further along (`docker exec app sh -c "…"`) are opened up. */
+const MAX_NESTING = 3
 
 // Junk that is junk wherever it is named.
 const STRONG: ReadonlyArray<readonly [RegExp, Junk]> = [
@@ -54,9 +56,20 @@ function parseOneAdd(words: readonly string[]): GitAdd | undefined {
   }
 }
 
+/**
+ * The argv of every simple command of a line. The shared shell reader opens `bash -c`, `eval`, `$(…)` and
+ * heredocs fed to a shell; scripts handed to a shell further along (`docker exec app sh -c "…"`) are opened here.
+ */
+function commandsOf(line: string, depth = 0): string[][] {
+  return simpleCommands(line).flatMap(({ argv }) => [
+    argv,
+    ...(depth < MAX_NESTING ? embeddedShellScripts(argv).flatMap(script => commandsOf(script, depth + 1)) : []),
+  ])
+}
+
 /** Every `git add` of a command line merged into one, or undefined when none needs a look. */
-export function parseGitAdd(commands: readonly ShellCommand[]): GitAdd | undefined {
-  const adds = commands.flatMap(({ words }) => parseOneAdd(words) ?? [])
+export function parseGitAdd(line: string): GitAdd | undefined {
+  const adds = commandsOf(line).flatMap(argv => parseOneAdd(argv) ?? [])
   if (adds.length === 0) return undefined
   const broad = adds.filter(add => add.isBroad)
   return {

@@ -119,6 +119,7 @@ const hub: Plugin = {
         channelStatus: async () => ({ channels: [] }),
         deliver: async () => ({ isDelivered: false }),
         drain: async () => [],
+        stop: async input => ({ id: 'c1', action: input.action ?? 'stop', scope: input.scope ?? 'session', reason: input.reason, by: input.by ?? '', session: 's', source: '', at: 0 }),
         hello: async () => ({ installed: INSTALLED }),
         installed: async () => INSTALLED,
         share: async input => ({ key: input.name, owner: '', value: input.value, at: 0 }),
@@ -327,6 +328,27 @@ test('with the hub and interaction off: never asks, parks questions, notifies an
   expect(await pilot($, 'status')).toContain('Reason: stopped from whatsapp')
   expect(seen.toasts).toContain('HUB notify warning: Autopilot stopped')
   expect(seen.toasts).toContain('HUB publish task.finished')
+})
+
+test('with the hub: control.pause, control.resume and control.stop ($.mods.stop, from any session) drive the run', { plugins: [hub] }, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await pilot($, 'add a database')
+  await pilot($, 'go')
+  await seen.clock.settle()
+  const control = (topic: string, at: number, reason: string) => ({ id: `e-${at}`, topic, data: { id: `c-${at}`, scope: 'all', reason, by: 'owner via whatsapp', session: 'other' }, source: 'whatsapp-bridge', at, session: 'other', scope: 'session' })
+
+  seen.files.set('/hub/events.json', JSON.stringify([control('control.pause', NOON + 60_000, 'lunch')]))
+  await seen.clock.advance(65_000)
+  expect(await pilot($, 'status')).toContain('paused by owner via whatsapp: lunch')
+
+  seen.files.set('/hub/events.json', JSON.stringify([control('control.resume', NOON + 130_000, 'back')]))
+  await seen.clock.advance(10_000)
+  expect(await pilot($, 'status')).not.toContain('paused')
+
+  seen.files.set('/hub/events.json', JSON.stringify([control('control.stop', NOON + 140_000, 'STOP ALL from WhatsApp')]))
+  await seen.clock.advance(10_000)
+  expect(await pilot($, 'status')).toContain('Reason: stopped by owner via whatsapp: STOP ALL from WhatsApp')
 })
 
 test('resumes a run saved by a session that closed mid-turn', async ($, on) => {

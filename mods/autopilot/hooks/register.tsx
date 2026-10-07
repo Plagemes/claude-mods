@@ -58,7 +58,7 @@ const PERSON_ORIGINS: ReadonlySet<string> = new Set(['composer', 'bridge', 'sdk'
 const REMOTE_STOP = /^\s*\/?(?:autopilot\s+)?(?:stop|abort)\b/i
 const REMOTE_PAUSE = /^\s*\/?(?:autopilot\s+)?pause\b/i
 const REMOTE_RESUME = /^\s*\/?(?:autopilot\s+)?(?:resume|continue|go on)\b/i
-/** A hub-wide emergency stop any mod may raise (mods-hub has no stop verb of its own yet). */
+/** A mod's own hub-wide stop topic, still honoured beside the hub's `control.stop`. */
 const HUB_STOP_TOPIC = /^x\.[a-z0-9-]+\.(?:stop-all|emergency-stop)$/
 const INTERACTIONS: readonly AutopilotInteraction[] = ['hub', 'ask', 'never']
 const INTERACTION_LABEL: Record<AutopilotInteraction, string> = { hub: 'Follow the hub', ask: 'Ask when blocked', never: 'Never ask' }
@@ -481,7 +481,13 @@ async function pollHub($: EngineInterface, ctx: Ctx, run: AutopilotRun): Promise
     ctx.hubSince = Math.max(ctx.hubSince, event.at + 1)
     if (event.source === 'autopilot') continue
     const data = (event.data ?? {}) as Record<string, unknown>
-    if (event.topic === 'channel.inbound' && data.isOwner === true && typeof data.text === 'string') {
+    // The hub's own verb ($.mods.stop): this session's or every session's stop, pause and resume.
+    const asked = `${String(data.by ?? event.source)}${typeof data.reason === 'string' && data.reason !== '' ? `: ${data.reason}` : ''}`
+    if (event.topic === 'control.stop') await stopRun($, ctx, `stopped by ${asked}`)
+    else if (event.topic === 'control.pause') await pauseRun($, ctx, `paused by ${asked}`)
+    else if (event.topic === 'control.resume') await resumeRun($, ctx, '')
+    // Without control.* (an older hub, a mod that raises its own topic), the stop is inferred as before.
+    else if (event.topic === 'channel.inbound' && data.isOwner === true && typeof data.text === 'string') {
       const text = data.text
       if (REMOTE_STOP.test(text)) await stopRun($, ctx, `stopped from ${String(data.channel ?? 'a channel')}`)
       else if (REMOTE_PAUSE.test(text)) await pauseRun($, ctx, `paused from ${String(data.channel ?? 'a channel')}`)
@@ -831,7 +837,7 @@ export const register: Register = (on, options) => {
   })
 }
 
-// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -846,12 +852,17 @@ async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish
   }
 }
 
-/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
-async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
   try {
     await $.mods.notify(input)
   } catch {
-    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
   }
 }
 
@@ -881,6 +892,38 @@ async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
     return (await $.mods.showTab({ id })).isPlaced
   } catch {
     return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
   }
 }
 

@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const ROOT = '/home/me/shop'
 const CLAUDE_MD = `${ROOT}/CLAUDE.md`
 const USAGE = { input_tokens: 300, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -183,4 +185,51 @@ test('the engine band is not drawn under a Box with a size prop', async ($, on) 
     expect(sizedAbove(await band.drawn())).toEqual([])
     await band.unmount()
   }
+})
+
+test('with mods-hub: a fix seen through test-watch\'s test.result becomes a lesson, and a saved lesson is published', async ($, on) => {
+  const seen = world(on, LESSON)
+  const hub = fakeHub(on, { presence: 'away' })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lesson.learned'], consumes: ['test.result', 'error.repeated'] }])
+
+  // test-watch runs the tests on its own after edits: Claude never runs them through Bash.
+  await seen.clock.advance(1_000)
+  hub.events.push({ topic: 'test.result', source: 'test-watch', at: seen.clock.now(), data: { runner: 'vitest', outcome: 'failed', passed: 3, failed: 1, command: 'vitest run src/cart.test.ts', failures: ['cart > totals'] } })
+  // The hub's own sensor reports the Bash runs this mod already watches: never counted twice.
+  hub.events.push({ topic: 'test.result', source: 'mods-hub', at: seen.clock.now(), data: { runner: 'jest', outcome: 'failed', passed: 0, failed: 1 } })
+  await seen.clock.advance(1_000)
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/src/cart.ts`, old_string: 'a', new_string: 'b' })
+  await seen.clock.advance(1_000)
+  hub.events.push({ topic: 'test.result', source: 'test-watch', at: seen.clock.now(), data: { runner: 'vitest', outcome: 'passed', passed: 4, failed: 0, command: 'vitest run src/cart.test.ts' } })
+  await $.turn.complete(TURN)
+  await seen.clock.advance(0)
+
+  expect(seen.asked).toHaveLength(1)
+  expect(seen.asked[0]).toContain('Failed command: vitest run src/cart.test.ts')
+  expect(seen.asked[0]).toContain('cart > totals')
+  expect(seen.asked[0]).toContain('Files edited before it passed: cart.ts')
+  // Away from the keyboard: the lesson also goes out through the hub, as a question.
+  expect(hub.notified).toEqual([
+    { level: 'info', kind: 'question', title: '💡 Lesson learned from fixing vitest', body: `${LESSON}\nSave it to CLAUDE.md from the terminal.` },
+  ])
+
+  const band = await $.ui.mount({ plugin: 'lessons-learned', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await band.press({ key: 'save' })
+  await band.unmount()
+  expect(seen.toasts).toEqual(['📘 Saved to CLAUDE.md'])
+  expect(hub.published).toEqual([{ topic: 'lesson.learned', data: { lesson: LESSON, context: 'fixing vitest', path: 'CLAUDE.md' }, scope: 'global' }])
+})
+
+test('with mods-hub: a check the hub saw fail three times in a row is not taken for a one-off', async ($, on) => {
+  const seen = world(on, LESSON)
+  const hub = fakeHub(on)
+  hub.events.push({ topic: 'error.repeated', source: 'mods-hub', at: 0, data: { signature: 'npm run test', count: 3, tool: 'Bash', command: 'npm run test -- cart' } })
+
+  await fixCycle($, seen)
+  expect(seen.asked[0]).toContain('It failed 3 times in a row before the fix')
+  // The person is here: the band is enough.
+  expect(hub.notified).toEqual([])
 })

@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { networkUse } from '../hooks/network'
+import { fakeHub } from './hub'
 
 type Seen = { reached: string[]; statuses: (string | undefined)[]; toasts: string[]; registered: string[] }
 
@@ -128,6 +129,11 @@ test('commands are read the way the shell reads them: wrappers, shells, substitu
     'git lfs pull',
     'dig example.com',
     'npm --prefix web install',
+    // The shared shell reader: su -c, heredocs fed to a shell, xargs with options, GNU time.
+    "su -c 'apt-get update' root",
+    'bash <<EOF\ngit fetch origin\nEOF',
+    'cat urls.txt | xargs -n 1 -P 4 curl -O',
+    'time -f %e git clone https://github.com/a/b',
   ]
   for (const command of network) expect(`${command} => ${networkUse(command) !== undefined}`).toBe(`${command} => true`)
 
@@ -166,6 +172,8 @@ test('commands are read the way the shell reads them: wrappers, shells, substitu
     'cat package.json | npm',
     'mkdir -p ssh/keys && ls',
     '',
+    "cat <<'EOF' > NOTES.md\nrun npm install first\nEOF",
+    'npm run build > build.log 2>&1',
   ]
   for (const command of local) expect(`${command} => ${networkUse(command)}`).toBe(`${command} => undefined`)
 
@@ -214,4 +222,24 @@ test('bash -lc, command and doas do not hide a network call', () => {
   expect(networkUse('command curl https://example.com')).toBe('curl')
   expect(networkUse('doas apt install ripgrep')).toBe('apt install')
   expect(networkUse(`bash -lc 'npm run build'`)).toBeUndefined()
+})
+
+test('with mods-hub: the flag is shared as a fact, a block is published as risk.blocked and noted through the hub', async ($, on) => {
+  const seen = engine(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect(hub.facts.get('on')).toBe(false)
+  await offline($, 'on')
+  expect(hub.facts.get('on')).toBe(true)
+  expect((await bash($, 'git push origin main')).deny).toContain('offline mode is on')
+  expect((await $.tool.call({ tool: 'WebSearch', query: 'x', mode: 'standard' })).deny).toContain('offline mode is on')
+  expect(hub.published.map(event => event.data)).toEqual([
+    { guard: 'offline-mode', tool: 'Bash', reason: 'offline: git push needs the network', severity: 'low', command: 'git push origin main' },
+    { guard: 'offline-mode', tool: 'WebSearch', reason: 'offline: WebSearch needs the network', severity: 'low' },
+  ])
+  expect(hub.notified.map(notice => notice.title)).toEqual(['blocked git push (offline). /offline off turns it off', 'blocked WebSearch (offline). /offline off turns it off'])
+  expect(seen.toasts).toEqual([])
+  await offline($, 'off')
+  expect(hub.facts.get('on')).toBe(false)
 })

@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { backoffMs, isRetryable, segmentsOf, transientError } from '../hooks/commands'
+import { fakeHub } from './hub'
 
 const TIMEOUT_OUTPUT = 'Exit code 1\nnpm ERR! code ETIMEDOUT\nnpm ERR! network request to https://registry.npmjs.org/left-pad failed'
 const BAD_GATEWAY_OUTPUT = 'Exit code 1\nnpm ERR! 502 Bad Gateway - GET https://registry.npmjs.org/x'
@@ -205,4 +206,31 @@ test('regression: a fetch behind bash -lc / sh -ec or timeout with options is re
   for (const command of ['bash -lc "npm publish"', "sh -c 'curl -X POST https://api/x'", 'bash deploy.sh', 'bash -c']) {
     expect(isRetryable(command)).toBe(false)
   }
+})
+
+test('wrappers and nested scripts are peeled by the shared shell reader', () => {
+  for (const command of ['sudo -E -u ci npm install', 'nice -n 5 ionice -c3 git fetch origin', 'env -S "A=1" pnpm i', 'doas pip install requests', "bash -c 'sudo apt-get update'"]) {
+    expect(isRetryable(command)).toBe(true)
+  }
+  for (const command of ['sudo -u ci npm publish', 'nice make install', "bash -c 'env FOO=1 npm test'"]) {
+    expect(isRetryable(command)).toBe(false)
+  }
+})
+
+test('with mods-hub: says hello and retries exactly as without it', async ($, on) => {
+  const { clock, toasts, calls } = world(on, [failure(TIMEOUT_OUTPUT), success()])
+  const hub = fakeHub(on, {}, clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
+
+  const pending = $.tool.call({ tool: 'Bash', command: 'npm install' })
+  await clock.advance(2000)
+  const ran = await pending
+  expect(calls()).toBe(2)
+  expect(ran.context?.[0]).toContain('run again 1 time (ETIMEDOUT, waited 2 s)')
+  expect(toasts).toEqual(['network error (ETIMEDOUT); retrying in 2 s (1/2)'])
+  expect(hub.published).toEqual([])
+  expect(hub.notified).toEqual([])
 })

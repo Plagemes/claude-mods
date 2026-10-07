@@ -3,6 +3,8 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { deployKind, isTestCommand, testsRunFirst } from '../hooks/checks'
+import { deployTargetOf, failureOf, urlIn } from '../hooks/events'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'deploy-checklist'
 const PANE_PROPS = {
@@ -26,6 +28,8 @@ type Repo = {
   toasts: string[]
   opened: number
   clock: ReturnType<typeof mock.clock>
+  /** What Bash prints for a command, when it is not just `ok`. */
+  outputs: Record<string, { text: string; isError?: boolean }>
 }
 
 /** A git repository and an engine whose Bash runs everything it is asked to. */
@@ -42,6 +46,7 @@ const world = (on: On, overrides: Partial<Repo> = {}): Repo => {
     toasts: [],
     opened: 0,
     clock: mock.clock(on),
+    outputs: {},
     ...overrides,
   }
   on('process.run', ($, e) => {
@@ -76,6 +81,8 @@ const world = (on: On, overrides: Partial<Repo> = {}): Repo => {
   on('tool.call', ($, e) => {
     const command = 'command' in e ? String(e.command) : String(e.tool)
     repo.ran.push(command)
+    const output = repo.outputs[command]
+    if (output !== undefined) return output.isError === true ? { isError: true, result: output.text, text: output.text } : { result: output.text, text: output.text }
     return repo.failingTests && isTestCommand(command) ? { isError: true, result: 'exit 1', text: '1 failed' } : { result: 'ok' }
   })
   return repo
@@ -257,4 +264,62 @@ test('regression: a deploy inside bash -lc or sh -ec is recognised', () => {
   expect(deployKind(`bash -lc "vercel --prod"`, undefined)).toBe('vercel --prod')
   expect(deployKind(`sh -ec 'npm test && fly deploy'`, undefined)).toBe('fly deploy')
   expect(deployKind(`git commit -m "fly deploy"`, undefined)).toBeUndefined()
+})
+
+test('reads what a deploy deploys, where to, and how it ended', () => {
+  expect(deployTargetOf('cd web && npx vercel --prod', undefined)).toEqual({ target: 'vercel', environment: 'production' })
+  expect(deployTargetOf('fly deploy --app shop-staging', undefined)).toEqual({ target: 'fly', environment: 'shop-staging' })
+  expect(deployTargetOf('kubectl --context=prod-eu rollout restart deploy/api', undefined)).toEqual({ target: 'kubectl', environment: 'prod-eu' })
+  expect(deployTargetOf('cap production deploy', undefined)).toEqual({ target: 'cap', environment: 'production' })
+  expect(deployTargetOf('pnpm publish', undefined)).toEqual({ target: 'pnpm', environment: 'registry' })
+  expect(deployTargetOf('firebase deploy', undefined)).toEqual({ target: 'firebase', environment: 'default' })
+  expect(deployTargetOf('git push origin main', undefined)).toBeUndefined()
+  expect(urlIn('Inspect: https://vercel.com/acme/shop/abc\nProduction: https://shop.vercel.app [2s]')).toBe('https://vercel.com/acme/shop/abc')
+  expect(failureOf('Building…\nError: Missing env var STRIPE_KEY\nDone in 3s')).toBe('Error: Missing env var STRIPE_KEY')
+})
+
+test('with mods-hub: the checklist reads test.result and the branch\'s ci.result, and an approved deploy is published', async ($, on) => {
+  const repo = world(on, { outputs: { 'vercel --prod': { text: 'Production: https://shop.vercel.app [12s]' }, 'fly deploy': { text: 'Error: failed to fetch an image\nexit 1', isError: true } } })
+  const hub = fakeHub(on, {}, repo.clock)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['deploy.started', 'deploy.finished', 'deploy.failed'], consumes: ['test.result', 'ci.result'] }])
+
+  // test-watch ran the tests on its own, and CI failed on main: no guessing from Bash history.
+  hub.events.push(
+    { topic: 'test.result', source: 'test-watch', at: repo.clock.now(), data: { runner: 'vitest', outcome: 'passed', passed: 12, failed: 0, command: 'vitest run src/cart.test.ts' } },
+    { topic: 'ci.result', source: 'ci-watch', at: repo.clock.now(), data: { provider: 'github', workflow: 'test', outcome: 'passed', branch: 'feature/x' } },
+    { topic: 'ci.result', source: 'ci-watch', at: repo.clock.now(), data: { provider: 'github', workflow: 'test', outcome: 'failed', branch: 'main', url: 'https://github.com/acme/shop/actions/runs/9' } },
+  )
+  const refused = await bash($, 'vercel --prod')
+  expect(refused.deny).toContain('✓ Tests: vitest run src/cart.test.ts passed just now (test-watch)')
+  expect(refused.deny).toContain('✗ CI: test failed on main just now (https://github.com/acme/shop/actions/runs/9)')
+  // Refused by the checklist: nothing was deployed, nothing published.
+  expect(hub.published).toEqual([])
+
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ key: 'item:ci' }))?.text).toContain('test failed on main')
+  await ui.press({ key: 'deploy' })
+  await ui.unmount()
+  await repo.clock.advance(5_000)
+  await bash($, 'vercel --prod')
+  await repo.clock.advance(0)
+  expect(hub.published).toEqual([
+    { topic: 'deploy.started', data: { target: 'vercel', environment: 'production' }, scope: 'global' },
+    { topic: 'deploy.finished', data: { target: 'vercel', environment: 'production', durationMs: 0, url: 'https://shop.vercel.app' }, scope: 'global' },
+  ])
+
+  await bash($, 'fly deploy')
+  const again = await mountPane($, 'terminal')
+  await again.press({ key: 'deploy' })
+  await again.unmount()
+  await bash($, 'fly deploy')
+  await repo.clock.advance(0)
+  expect(hub.published.slice(2)).toEqual([
+    { topic: 'deploy.started', data: { target: 'fly', environment: 'default' }, scope: 'global' },
+    { topic: 'deploy.failed', data: { target: 'fly', environment: 'default', reason: 'Error: failed to fetch an image' }, scope: 'global' },
+  ])
+  expect(hub.notified).toEqual([{ level: 'error', title: 'Deploy failed: fly (default)', body: 'Error: failed to fetch an image', topic: 'deploy.failed' }])
 })

@@ -1,7 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { defaultDays, fallbackSections, formatSections, parseSections } from '../hooks/standup'
+import { defaultDays, fallbackSections, formatSections, neighboursOf, parseSections, unseenCommits } from '../hooks/standup'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const WEDNESDAY = Date.UTC(2026, 9, 7, 9)
@@ -28,7 +29,7 @@ const run = (args = '') => ({
 const NO_USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
 type World = { gitCalls: string[][]; prompts: string[]; copies: string[] }
-type Setup = { now?: number; log?: string; status?: string; repo?: boolean; reply?: string | 'fails'; journal?: boolean }
+type Setup = { sessions?: unknown; now?: number; log?: string; status?: string; repo?: boolean; reply?: string | 'fails'; journal?: boolean }
 
 const world = (on: On, setup: Setup = {}): World => {
   const state: World = { gitCalls: [], prompts: [], copies: [] }
@@ -51,7 +52,11 @@ const world = (on: On, setup: Setup = {}): World => {
       ? { value: ['2026-10-06.md', '2026-09-01.md'].map(name => ({ name, kind: 'file' as const, size: 10, mtimeMs: 0, isLink: false })) }
       : { deny: 'ENOENT' },
   )
-  on('fs.read', ($, e) => (e.path.endsWith('2026-10-06.md') ? { value: 'Paired with Sam on the checkout bug.' } : { value: 'old notes' }))
+  mock.env(on, { HOME: '/home/me' })
+  on('session.id', () => ({ value: 'me' }))
+  on('fs.read', ($, e) =>
+    e.path.endsWith('/hub/sessions.json') ? (setup.sessions === undefined ? { deny: 'ENOENT' } : { value: JSON.stringify(setup.sessions) }) : e.path.endsWith('2026-10-06.md') ? { value: 'Paired with Sam on the checkout bug.' } : { value: 'old notes' },
+  )
   on('model.complete', ($, e) => {
     state.prompts.push(e.prompt)
     if (setup.reply === 'fails') return { value: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: NO_USAGE } }
@@ -132,4 +137,53 @@ test('outside a git repository it says so', async ($, on) => {
   world(on, { repo: false })
   const ran = await $.command.run(run())
   expect(ran.text).toBe('Not inside a git repository.')
+})
+
+const SESSIONS = {
+  me: { id: 'me', cwd: ROOT, turns: 4, usd: 1, events: [{ topic: 'git.commit', at: WEDNESDAY - 3_600_000, data: { sha: 'a1b2c3d4e5', message: 'feat(api): add pagination to /orders', branch: 'x', files: 2 } }] },
+  other: {
+    id: 'other',
+    cwd: `${ROOT}/packages/web`,
+    turns: 27,
+    usd: 3.2,
+    events: [
+      { topic: 'git.commit', at: WEDNESDAY - 7_200_000, data: { sha: 'f9e8d7c6b5', message: 'fix(web): focus ring on the cart button\n\nlong body', branch: 'fix/focus', files: 1 } },
+      { topic: 'git.commit', at: WEDNESDAY - 90 * 86_400_000, data: { sha: '0000000aaa', message: 'ancient', branch: 'x', files: 1 } },
+      { topic: 'test.result', at: WEDNESDAY - 1000, data: {} },
+    ],
+  },
+  elsewhere: { id: 'elsewhere', cwd: '/work/blog', turns: 9, usd: 9, events: [] },
+}
+
+test('with mods-hub: says hello, adds commits other sessions made on other branches, and tells the model about the other sessions', async ($, on) => {
+  const state = world(on, { sessions: SESSIONS })
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['git.commit', 'session.ended'] }])
+
+  await $.command.run(run())
+  const prompt = state.prompts[0] ?? ''
+  expect(prompt).toContain('Commits (newest first):\n2026-10-07  fix(web): focus ring on the cart button\n2026-10-06  feat(api): add pagination to /orders')
+  expect(prompt).not.toContain('ancient')
+  expect(prompt.match(/pagination/g)).toHaveLength(1)
+  expect(prompt).toContain('Other Claude sessions on this project right now: 1 (27 turns, $3.20 so far).')
+})
+
+test('without mods-hub the standup is built from git and the journal alone', async ($, on) => {
+  const state = world(on, { sessions: SESSIONS })
+  await $.command.run(run())
+  expect(state.prompts[0]).not.toContain('Other Claude sessions')
+  expect(state.prompts[0]).not.toContain('f9e8d7c')
+})
+
+test('neighboursOf and unseenCommits read the hub heartbeat defensively', () => {
+  const day = (ms: number) => `d${ms}`
+  expect(neighboursOf('nope', ROOT, 'me', 0, day)).toEqual({ commits: [], sessions: 0, turns: 0, usd: 0 })
+  expect(neighboursOf({ a: { cwd: 5 }, b: null, c: { cwd: `${ROOT}-other`, turns: 1 } }, ROOT, 'me', 0, day).sessions).toBe(0)
+  const found = neighboursOf(SESSIONS, ROOT, 'me', WEDNESDAY - 86_400_000, day)
+  expect(found).toMatchObject({ sessions: 1, turns: 27, usd: 3.2 })
+  expect(found.commits.map(commit => commit.hash)).toEqual(['a1b2c3d', 'f9e8d7c'])
+  expect(unseenCommits([{ date: '', hash: 'a1b2c3d', subject: 'x' }], found.commits).map(commit => commit.hash)).toEqual(['f9e8d7c'])
 })

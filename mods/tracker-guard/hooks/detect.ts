@@ -1,51 +1,9 @@
+import { simpleCommands } from './shared/shell'
 import { TRACKERS, trackerOfPackage } from './trackers'
 import type { Tracker } from './trackers'
 
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const PREFIXES = new Set(['sudo', 'command', 'exec', 'time', 'nohup'])
 /** A cheap test before parsing: does the command mention an installer at all? */
 export const INSTALLER_HINT = /\b(?:npm|pnpm|yarn|bun|pip3?|python3?|uv|poetry)\b/
-
-/** Splits a command line into simple commands, each a list of words; quotes are honoured, expansions kept as text. */
-const simpleCommands = (command: string): string[][] => {
-  const commands: string[][] = []
-  let words: string[] = []
-  let word = ''
-  let isOpen = false
-  const endWord = (): void => {
-    if (isOpen) words.push(word)
-    word = ''
-    isOpen = false
-  }
-  const endCommand = (): void => {
-    endWord()
-    if (words.length > 0) commands.push(words)
-    words = []
-  }
-  for (let i = 0; i < command.length; i += 1) {
-    const char = command[i] as string
-    if (char === '\\' && i + 1 < command.length) {
-      word += command[i + 1]
-      isOpen = true
-      i += 1
-    } else if (char === "'" || char === '"') {
-      const end = command.indexOf(char, i + 1)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i + 1, stop)
-      isOpen = true
-      i = stop
-    } else if (char === ' ' || char === '\t') {
-      endWord()
-    } else if (char === ';' || char === '|' || char === '&' || char === '\n' || char === '(' || char === ')') {
-      endCommand()
-    } else {
-      word += char
-      isOpen = true
-    }
-  }
-  endCommand()
-  return commands
-}
 
 /** Operands of an install command: options dropped, and the values of the options in `valued` with them. */
 const operandsOf = (args: readonly string[], valued: ReadonlySet<string>): string[] => {
@@ -89,19 +47,18 @@ const pypiName = (spec: string): string | undefined => {
   return name?.toLowerCase().replace(/[-_.]+/g, '-')
 }
 
+/** The packages one simple command installs; `argv` comes from the shared shell reader, wrappers already peeled. */
 const packagesOf = (argv: readonly string[]): string[] => {
-  let start = 0
-  while (start < argv.length && (PREFIXES.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) start += 1
-  const [tool = '', sub = '', third = '', ...rest] = argv.slice(start)
+  const [tool = '', sub = '', third = '', ...rest] = argv
   const name = tool.replace(/^.*\//, '')
-  const afterSub = argv.slice(start + 2)
+  const afterSub = argv.slice(2)
   const names = (specs: readonly string[], nameOf: (spec: string) => string | undefined): string[] =>
     specs.flatMap(spec => nameOf(spec) ?? [])
 
   if (name === 'npm' || name === 'pnpm' || name === 'bun' || name === 'yarn') {
     const valued = name === 'pnpm' ? PNPM_VALUED : NPM_VALUED
     // Options may come before the subcommand: `pnpm --filter web add x`, `npm -w web install x`, `yarn workspace web add x`.
-    const args = argv.slice(start + 1)
+    const args = argv.slice(1)
     let at = 0
     while (at < args.length && (args[at] as string).startsWith('-')) at += valued.has(args[at] as string) ? 2 : 1
     if (name === 'yarn' && args[at] === 'workspace') at += 2
@@ -120,10 +77,14 @@ const packagesOf = (argv: readonly string[]): string[] => {
 
 const unique = (trackers: readonly Tracker[]): Tracker[] => [...new Set(trackers)]
 
-/** The trackers an install command adds to a project. */
+/**
+ * The trackers an install command adds to a project. The shared shell reader splits the line, peels wrappers
+ * (`sudo`, `env`, `timeout`, ...), skips comments and here-document bodies, and reads `bash -c`, `eval`, `$(...)`
+ * and heredocs fed to a shell.
+ */
 export const trackersInstalledBy = (command: string): Tracker[] => {
   if (!INSTALLER_HINT.test(command)) return []
-  return unique(simpleCommands(command).flatMap(packagesOf).flatMap(name => trackerOfPackage(name) ?? []))
+  return unique(simpleCommands(command).flatMap(({ argv }) => packagesOf(argv)).flatMap(name => trackerOfPackage(name) ?? []))
 }
 
 const MANIFEST = /(?:^|[/\\])(?:package\.json|requirements[\w.-]*\.txt|constraints[\w.-]*\.txt|pyproject\.toml|Pipfile|setup\.py|setup\.cfg)$/i

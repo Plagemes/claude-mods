@@ -1,4 +1,5 @@
-const MAX_NESTING = 3
+import { simpleCommands } from './shared/shell'
+
 
 /** Programs that always talk to the network (curl and friends are judged by their targets, see LOOPBACK_OK). */
 const NETWORK_PROGRAMS = new Set([
@@ -8,8 +9,6 @@ const NETWORK_PROGRAMS = new Set([
   'bunx', 'pnpx', 'uvx',
 ])
 const FETCHERS = new Set(['curl', 'wget', 'http', 'https', 'httpie', 'xh', 'xhs'])
-const WRAPPERS = new Set(['sudo', 'doas', 'command', 'builtin', 'env', 'time', 'nohup', 'nice', 'exec', 'timeout', 'stdbuf', 'xargs'])
-const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-n', '-I', '-L', '-P'])
 const OFFLINE_FLAGS = new Set(['--offline', '--no-index', '--local'])
 const INFO_FLAGS = new Set(['--version', '-V', '--help', '-h'])
 
@@ -48,96 +47,6 @@ const SUBCOMMANDS: Record<string, readonly string[]> = {
 const GIT_NETWORK = new Set(['push', 'pull', 'fetch', 'clone', 'ls-remote', 'remote update', 'submodule update', 'submodule sync', 'lfs pull', 'lfs push', 'lfs fetch', 'subtree pull', 'subtree push', 'svn', 'send-email'])
 const OPTIONS_WITH_VALUE = new Set(['--prefix', '-C', '--cwd', '-w', '--workspace', '--filter', '-F', '--registry', '--project', '-p', '--directory', '-c', '--git-dir', '--work-tree', '-f', '--file'])
 
-const basename = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
-
-/** Words of each simple command, quotes resolved. */
-const simpleCommands = (command: string): string[][] => {
-  const commands: string[][] = [[]]
-  let word: string | undefined
-  let index = 0
-  const endWord = (): void => {
-    if (word !== undefined) commands.at(-1)?.push(word)
-    word = undefined
-  }
-  while (index < command.length) {
-    const char = command[index] ?? ''
-    if (char === "'" || char === '"') {
-      let close = index + 1
-      while (close < command.length && command[close] !== char) close += char === '"' && command[close] === '\\' ? 2 : 1
-      if (close >= command.length) break
-      const inner = command.slice(index + 1, close)
-      word = (word ?? '') + (char === '"' ? inner.replace(/\\(["\\$`])/g, '$1') : inner)
-      index = close + 1
-    } else if (char === '\\') {
-      word = (word ?? '') + (command[index + 1] ?? '')
-      index += 2
-    } else if (/[ \t]/.test(char)) {
-      endWord()
-      index += 1
-    } else if ('|;&\n(){}<>'.includes(char)) {
-      endWord()
-      if (commands.at(-1)?.length !== 0) commands.push([])
-      index += 1
-    } else {
-      word = (word ?? '') + char
-      index += 1
-    }
-  }
-  endWord()
-  return commands.filter(words => words.length > 0)
-}
-
-/** The text of every `$(...)` and `` `...` `` that is not inside single quotes: commands that run inside other commands. */
-const substitutions = (command: string): string[] => {
-  const found: string[] = []
-  let isSingleQuoted = false
-  for (let index = 0; index < command.length; index += 1) {
-    const char = command[index]
-    if (char === "'") isSingleQuoted = !isSingleQuoted
-    else if (char === '\\') index += 1
-    else if (!isSingleQuoted && char === '$' && command[index + 1] === '(') {
-      let depth = 0
-      for (let end = index + 1; end < command.length; end += 1) {
-        if (command[end] === '(') depth += 1
-        if (command[end] === ')') depth -= 1
-        if (depth === 0) {
-          found.push(command.slice(index + 2, end))
-          break
-        }
-      }
-    } else if (!isSingleQuoted && char === '`') {
-      const end = command.indexOf('`', index + 1)
-      if (end > index) {
-        found.push(command.slice(index + 1, end))
-        index = end
-      }
-    }
-  }
-  return found
-}
-
-const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-
-/** The program a simple command runs and its arguments, past env assignments and wrappers such as sudo and timeout. */
-const programOf = (words: readonly string[]): { name: string; args: string[] } | undefined => {
-  let index = 0
-  while (index < words.length) {
-    const word = words[index] ?? ''
-    if (ENV_ASSIGNMENT.test(word)) {
-      index += 1
-    } else if (WRAPPERS.has(basename(word))) {
-      const wrapper = basename(word)
-      index += 1
-      // `command -v curl` only looks the program up.
-      if (wrapper === 'command' && /^-[a-zA-Z]*[vV]/.test(words[index] ?? '')) return undefined
-      while (words[index]?.startsWith('-') === true) index += WRAPPER_OPTIONS_WITH_VALUE.has(words[index] ?? '') && wrapper === 'sudo' ? 2 : 1
-      if (wrapper === 'timeout') index += 1
-    } else break
-  }
-  const name = basename(words[index] ?? '')
-  return name === '' ? undefined : { name, args: words.slice(index + 1) }
-}
-
 /** Non-option words, skipping the values of options that take one. */
 const positionals = (args: readonly string[]): string[] => {
   const found: string[] = []
@@ -161,11 +70,8 @@ const fetchesOnlyLocally = (args: readonly string[]): boolean => {
 
 const isLocalGitSource = (source: string | undefined): boolean => source !== undefined && /^(?:\.{0,2}\/|file:\/\/|~)/.test(source)
 
-/** The network operation a simple command performs, as a short label, or undefined. */
-const networkLabel = (words: readonly string[]): string | undefined => {
-  const program = programOf(words)
-  if (program === undefined) return undefined
-  const { name, args } = program
+/** The network operation a simple command performs (its program's name and arguments), as a short label, or undefined. */
+const networkLabel = (name: string, args: readonly string[]): string | undefined => {
   if (FETCHERS.has(name)) return args.some(arg => INFO_FLAGS.has(arg)) || fetchesOnlyLocally(args) ? undefined : name
   if (NETWORK_PROGRAMS.has(name)) return name
   if (name === 'rsync') return args.some(arg => REMOTE_SPEC.test(arg)) ? 'rsync to a remote host' : undefined
@@ -191,28 +97,16 @@ const networkLabel = (words: readonly string[]): string | undefined => {
   return subcommand === undefined ? undefined : `${name} ${subcommand}`
 }
 
-/** What a shell command does with the network, as a short label such as "git push" or "npm install"; undefined when nothing. */
-export const networkUse = (command: string, depth = 0): string | undefined => {
-  for (const words of simpleCommands(command)) {
-    const label = networkLabel(words)
+/**
+ * What a shell command does with the network, as a short label such as "git push" or "npm install"; undefined
+ * when nothing. The shared shell reader splits the line, peels wrappers (`sudo`, `env VAR=x`, `time`, `timeout`,
+ * `xargs`; `command -v curl` only looks a program up) and reads `bash -c "..."`, `su -c`, `eval`, `$(...)`,
+ * backticks and heredocs fed to a shell.
+ */
+export const networkUse = (command: string): string | undefined => {
+  for (const { name, argv } of simpleCommands(command)) {
+    const label = name === '' ? undefined : networkLabel(name, argv.slice(1))
     if (label !== undefined) return label
-
-    // `bash -c "..."` and `eval ...` run a command line of their own.
-    const program = programOf(words)
-    if (depth < MAX_NESTING && program !== undefined) {
-      // `-c`, alone or grouped with other short options (`bash -lc`, `sh -ec`).
-      const flagAt = program.args.findIndex(arg => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(arg))
-      const isShell = /^(?:ba|z|da|k)?sh$/.test(program.name) && flagAt >= 0
-      const script = isShell ? program.args[flagAt + 1] : program.name === 'eval' ? program.args.join(' ') : undefined
-      const inner = script === undefined ? undefined : networkUse(script, depth + 1)
-      if (inner !== undefined) return inner
-    }
-  }
-  if (depth < MAX_NESTING) {
-    for (const inner of substitutions(command)) {
-      const label = networkUse(inner, depth + 1)
-      if (label !== undefined) return label
-    }
   }
   return undefined
 }

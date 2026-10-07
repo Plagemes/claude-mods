@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { issueUrl, parseArgs, parseDraft } from '../hooks/draft'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const FORK_REPLY = [
@@ -137,4 +138,43 @@ test('a missing gh says how to get it', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'issue-drafter', surface: 'terminal', component: 'Pane', requestId: 'issue', props: PANE_PROPS })
   await ui.press({ key: 'create' })
   expect(await ui.find({ type: 'Text', text: /not installed or not on PATH/ })).toBeDefined()
+})
+
+test('with mods-hub: failed CI runs and repeated errors inform the draft, and the created issue is published masked', async ($, on) => {
+  const state = world(on, { fork: FORK_REPLY.replace('fails.', 'fails with token ghp_abcdefghijklmnopqrstuvwxyz0123456789.') })
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  hub.events.push(
+    { topic: 'ci.result', source: 'ci-watch', at: 1, data: { provider: 'github', workflow: 'test', outcome: 'passed', branch: 'main' } },
+    { topic: 'ci.result', source: 'ci-watch', at: 2, data: { provider: 'github', workflow: 'test', outcome: 'failed', branch: 'fix/totals', url: 'https://github.com/acme/shop/actions/runs/7' } },
+    { topic: 'error.repeated', source: 'mods-hub', at: 3, data: { signature: 'npm test', count: 3, tool: 'Bash', command: 'npm test -- total' } },
+  )
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['issue.drafted'], consumes: ['ci.result', 'error.repeated'] }])
+  await $.command.run(issue('bug'))
+  expect(state.forks[0]).toContain('- CI workflow "test" failed on fix/totals (https://github.com/acme/shop/actions/runs/7)')
+  expect(state.forks[0]).toContain('- `npm test -- total` (Bash) failed 3 times in a row')
+  expect(state.forks[0]).not.toContain('"test" failed on main')
+
+  const ui = await $.ui.mount({ plugin: 'issue-drafter', surface: 'terminal', component: 'Pane', requestId: 'issue', props: PANE_PROPS })
+  await ui.press({ key: 'create' })
+  await ui.unmount()
+  expect(hub.published).toHaveLength(1)
+  const published = hub.published[0]
+  expect(published?.topic).toBe('issue.drafted')
+  expect(published?.scope).toBe('global')
+  const data = published?.data as { title: string; body: string; url: string; labels: string[] }
+  expect(data.title).toBe('Checkout total rounds half-cents down')
+  expect(data.url).toBe('https://github.com/acme/shop/issues/42')
+  expect(data.labels).toEqual([])
+  expect(data.body).toContain('## Summary')
+  expect(data.body).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz0123456789')
+})
+
+test('without mods-hub the draft prompt is unchanged', async ($, on) => {
+  const state = world(on)
+  await $.command.run(issue('bug'))
+  expect(state.forks[0]).not.toContain('Failures reported')
 })

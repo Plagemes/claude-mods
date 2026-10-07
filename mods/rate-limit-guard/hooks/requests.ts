@@ -1,26 +1,6 @@
+import { simpleCommands } from './shared/shell'
+
 const FETCH_PROGRAMS = new Set(['curl', 'wget', 'http', 'https', 'httpie', 'xh', 'xhs'])
-/** Commands that run the command after their own options, and those options that take a value. */
-const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
-  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-r', '-t', '--user', '--group', '--host', '--prompt', '--chdir']),
-  doas: new Set(['-u', '-C']),
-  env: new Set(['-u', '--unset', '-C', '--chdir']),
-  time: new Set(['-f', '--format', '-o', '--output']),
-  nohup: new Set(),
-  nice: new Set(['-n', '--adjustment']),
-  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata']),
-  exec: new Set(['-a']),
-  command: new Set(),
-  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
-  stdbuf: new Set(['-i', '-o', '-e']),
-  xargs: new Set(['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file']),
-  do: new Set(),
-  then: new Set(),
-  else: new Set(),
-}
-const SHELL = /^(?:ba|z|da|k)?sh$/
-/** `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`. */
-const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
-const MAX_NESTING = 3
 const URL_WITH_SCHEME = /^([a-z][a-z0-9+.-]*):\/\/([^/?#\\]*)/i
 const BARE_HOST = /^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#]|$)/i
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
@@ -41,62 +21,6 @@ const VALUE_OPTIONS: Record<'curl' | 'wget', ReadonlySet<string>> = {
 const CLUSTER_ENDING_IN_VALUE_OPTION = /^-[A-Za-z]*[AbcCdDeEFHKmoPQrTuUwxXyYz]$/
 const LOOP_START = /(?:^|[;&|(\n"']\s*)(?:for|while|until)\b/
 const POLITE = /\bsleep\b|\bwait\b|--limit-rate|--rate\b|--wait\b/
-
-const basename = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
-
-/** Words of each simple command, quotes resolved. */
-const simpleCommands = (command: string): string[][] => {
-  const commands: string[][] = [[]]
-  let word: string | undefined
-  let index = 0
-  const endWord = (): void => {
-    if (word !== undefined) commands.at(-1)?.push(word)
-    word = undefined
-  }
-  while (index < command.length) {
-    const char = command[index] ?? ''
-    if (char === "'" || char === '"') {
-      let close = index + 1
-      while (close < command.length && command[close] !== char) close += char === '"' && command[close] === '\\' ? 2 : 1
-      if (close >= command.length) break
-      const inner = command.slice(index + 1, close)
-      word = (word ?? '') + (char === '"' ? inner.replace(/\\(["\\$`])/g, '$1') : inner)
-      index = close + 1
-    } else if (char === '\\') {
-      word = (word ?? '') + (command[index + 1] ?? '')
-      index += 2
-    } else if (/[ \t]/.test(char)) {
-      endWord()
-      index += 1
-    } else if ('|;&\n(){}<>'.includes(char)) {
-      endWord()
-      if (commands.at(-1)?.length !== 0) commands.push([])
-      index += 1
-    } else {
-      word = (word ?? '') + char
-      index += 1
-    }
-  }
-  endWord()
-  return commands.filter(words => words.length > 0)
-}
-
-const programOf = (words: readonly string[]): { name: string; args: string[] } | undefined => {
-  let index = 0
-  while (index < words.length) {
-    const word = words[index] ?? ''
-    const wrapper = basename(word)
-    const valued = Object.hasOwn(WRAPPERS, wrapper) ? WRAPPERS[wrapper] : undefined
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) index += 1
-    else if (valued !== undefined) {
-      index += 1
-      while (words[index]?.startsWith('-') === true) index += valued.has(words[index] ?? '') ? 2 : 1
-      if (wrapper === 'timeout') index += 1
-    } else break
-  }
-  const name = basename(words[index] ?? '')
-  return name === '' ? undefined : { name, args: words.slice(index + 1) }
-}
 
 /** The host of a URL, lower-cased, without userinfo or port; undefined when it cannot be told. */
 export const hostOf = (url: string): string | undefined => {
@@ -131,24 +55,20 @@ const targetsOf = (name: string, args: readonly string[]): string[] => {
   return target === undefined || target.startsWith(':') ? [] : [name === 'https' || name === 'xhs' ? `https://${target.replace(/^[a-z]+:\/\//i, '')}` : target]
 }
 
-/** The external hosts a command sends curl, wget or httpie requests to, once per mention. */
-export const externalHosts = (command: string, depth = 0): string[] =>
-  simpleCommands(command).flatMap(words => {
-    const program = programOf(words)
-    if (program === undefined) return []
-    if (!FETCH_PROGRAMS.has(program.name)) {
-      // `bash -lc "curl …"` and `eval "curl …"` run their text as a command line of its own.
-      if (depth >= MAX_NESTING) return []
-      if (program.name === 'eval') return externalHosts(program.args.join(' '), depth + 1)
-      const flag = SHELL.test(program.name) ? program.args.findIndex(arg => SHELL_COMMAND_FLAG.test(arg)) : -1
-      const script = flag === -1 ? undefined : program.args[flag + 1]
-      return script === undefined ? [] : externalHosts(script, depth + 1)
-    }
-    return targetsOf(program.name, program.args).flatMap(url => {
-      const host = hostOf(url)
-      return host === undefined || isLocalHost(host) ? [] : [host]
-    })
-  })
+/**
+ * The external hosts a command sends curl, wget or httpie requests to, once per mention. The shared shell reader
+ * splits the line, peels wrappers (`sudo`, `env`, `time`, `timeout`, `xargs`) and reads `bash -c "…"`, `su -c`,
+ * `eval`, `$(…)`, backticks and heredocs fed to a shell.
+ */
+export const externalHosts = (command: string): string[] =>
+  simpleCommands(command).flatMap(({ name, argv }) =>
+    FETCH_PROGRAMS.has(name)
+      ? targetsOf(name, argv.slice(1)).flatMap(url => {
+          const host = hostOf(url)
+          return host === undefined || isLocalHost(host) ? [] : [host]
+        })
+      : [],
+  )
 
 export type LoopUse = { iterations: number | undefined }
 

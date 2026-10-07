@@ -4,7 +4,7 @@ import {
   EKS_DEFAULT_NODES, EKS_DEFAULT_NODE_TYPE, GCP_ACCELERATORS, GCP_DEFAULT_GPU, GCP_DEFAULT_PER_VCPU, GCP_GPU_FAMILIES,
   GCP_MEMORY_FAMILIES, GCP_PER_VCPU, GKE_DEFAULT_MACHINE, GKE_DEFAULT_NODES, RDS_DEFAULT_PER_VCPU, RDS_PER_VCPU,
 } from './prices'
-import { baseName, parseShell } from './shell'
+import { simpleCommands } from './shared/shell'
 
 export type Estimate = {
   /** The command, as typed (shortened). */
@@ -20,8 +20,6 @@ export type Estimate = {
 
 type Range = readonly [number, number]
 
-const WRAPPERS = new Set(['sudo', 'time', 'nohup', 'command', 'exec', 'env'])
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const SPREAD: Range = [0.85, 1.2]
 export const HOURS_PER_MONTH = 730
 const MAX_COMMAND_LENGTH = 90
@@ -48,12 +46,6 @@ export function vcpusOfSize(size: string): number | undefined {
 /** How many vCPUs the `largeSize` setting stands for; 8xlarge (32) when it is not a size. */
 export function largeThreshold(setting: string): number {
   return vcpusOfSize(setting.trim().toLowerCase()) ?? DEFAULT_LARGE_VCPUS
-}
-
-function withoutPrefix(all: readonly string[]): string[] {
-  let index = 0
-  while (index < all.length && (ASSIGNMENT.test(all[index] as string) || WRAPPERS.has(baseName(all[index] as string)))) index += 1
-  return all.slice(index)
 }
 
 /** The value of `--name value` or `--name=value`. */
@@ -251,25 +243,13 @@ function aks(words: readonly string[], command: string): Estimate[] {
   ]
 }
 
-const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh'])
-const MAX_NESTING = 3
-
-/** The script a shell is handed to run (`bash -c "…"`, `sh -lc '…'`, `eval …`), or undefined. */
-function innerScript(words: readonly string[]): string | undefined {
-  const tool = baseName(words[0] ?? '')
-  if (tool === 'eval') return words.slice(1).join(' ')
-  if (!SHELLS.has(tool)) return undefined
-  const flag = words.findIndex((word, index) => index > 0 && /^-[a-z]*c[a-z]*$/.test(word))
-  return flag < 0 ? undefined : words[flag + 1]
-}
-
-/** Commands of the line that create expensive cloud resources, with a rough hourly cost; reads text, runs nothing. */
-export function findExpensive(line: string, large: number, depth = 0): Estimate[] {
-  return parseShell(line).flatMap(segment => {
-    const words = withoutPrefix(segment.words)
-    const script = innerScript(words)
-    if (script !== undefined) return depth < MAX_NESTING ? findExpensive(script, large, depth + 1) : []
-    const tool = baseName(words[0] ?? '')
+/**
+ * Commands of the line that create expensive cloud resources, with a rough hourly cost; reads text, runs nothing.
+ * The shared shell reader peels wrappers (`sudo`, `env`, `timeout`, ...) and opens `bash -c`, `eval`, `$(…)` and
+ * heredocs fed to a shell.
+ */
+export function findExpensive(line: string, large: number): Estimate[] {
+  return simpleCommands(line).flatMap(({ argv: words, name: tool }) => {
     const shown = words.join(' ')
     const command = shown.length > MAX_COMMAND_LENGTH ? `${shown.slice(0, MAX_COMMAND_LENGTH)}...` : shown
     switch (tool) {

@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptComposeInput } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const ROOT = '/work/app'
 
 const facts: PromptComposeInput = {
@@ -115,4 +117,18 @@ test('regression: with bun the test script runs with `bun run test`, since `bun 
   const text = (await conventions($))?.text ?? ''
   expect(text).toContain('Run the tests with `bun run test` (`vitest run`).')
   expect(text).not.toContain('`bun test`')
+})
+
+test('with mods-hub: the stack is shared as the fact stack-detector.stack, skipped technologies left out', { options: { skip: 'terraform' } }, async ($, on) => {
+  project(on, NEXT_APP)
+  const hub = fakeHub(on)
+  await start($)
+
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+  const shared = hub.facts.get('stack') as { root: string; ids: string[]; packageManager: string | null; testCommand: string | null; techs: { id: string; evidence: string }[] }
+  expect(shared.root).toBe(ROOT)
+  expect(shared.ids).toEqual(['next', 'react', 'typescript', 'node', 'docker'])
+  expect(shared.techs[0]).toEqual({ id: 'next', name: 'Next.js', evidence: 'package.json: next 14.2.3' })
+  expect(shared.packageManager).toBe('pnpm')
+  expect(shared.testCommand).toBe('pnpm test')
 })

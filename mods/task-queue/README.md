@@ -34,3 +34,9 @@ Safety rails:
 - `turn.start` / `turn.complete` (main loop only) track whether Claude is busy; 1.5 s after a clean turn ends, the next item goes out with `$.prompt.submit({ asUser: true })`. A prompt you typed during the turn is started by Claude Code first, and the queue waits for that turn too.
 - `prompt.submit` sees your own prompts (terminal, desktop, remote) to reset the runaway count; the queue lives in `$.state` for the pane and in `$.store` under the project root.
 - A queued prompt is matched to the first turn that starts after it is sent; if none starts within two minutes it is marked failed and the queue pauses, so it can never stall silently.
+- With [mods-hub](../mods-hub) installed:
+  - `/queue` opens the **Queue** tab of the shared Claude Mods panel instead of its own pane (same view, without Close);
+  - each prompt is published as `task.queued`, `task.started` and `task.finished` (ok, failed, cancelled) for autopilot, workflow-studio and mission-control;
+  - a stop or pause raised through the hub (`control.stop` / `control.pause`: a STOP from your phone, mission-control) pauses the queue within 5 seconds, the running prompt finishing first; `control.resume` lifts that pause, never one you made yourself;
+  - a pause becomes a `warning` notice, and while you are away (`session.idle`/`session.away`) the end of the queue is a `success` notice, both reaching your channels.
+  Without the hub nothing changes.

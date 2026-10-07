@@ -3,6 +3,7 @@ import type { Engine, MockClock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { externalHosts, hostOf, isLocalHost, loopOfFetches } from '../hooks/requests'
+import { fakeHub } from './hub'
 
 const NOW = 1_800_000_000_000
 
@@ -163,6 +164,29 @@ test('regression: requests behind bash -lc, eval and wrappers with options are c
   expect(externalHosts('timeout -s KILL 30 curl https://api.example.com/e')).toEqual(['api.example.com'])
   expect(externalHosts('sudo -n curl https://api.example.com/f')).toEqual(['api.example.com'])
   expect(externalHosts('bash ./fetch.sh https://api.example.com/g')).toEqual([])
+  // The shared shell reader: su -c, substitutions, heredocs fed to a shell, GNU time; a heredoc note is only text.
+  expect(externalHosts(`su -c 'curl https://api.example.com/h' me`)).toEqual(['api.example.com'])
+  expect(externalHosts('ID=$(curl -s https://api.example.com/i)')).toEqual(['api.example.com'])
+  expect(externalHosts('bash <<EOF\nwget https://api.example.com/j\nEOF')).toEqual(['api.example.com'])
+  expect(externalHosts('time -o t.txt curl https://api.example.com/k')).toEqual(['api.example.com'])
+  expect(externalHosts("cat <<'EOF' > notes.md\ncurl https://api.example.com/l\nEOF")).toEqual([])
+})
+
+test('with mods-hub: a refusal is published as risk.blocked and the pause note goes through the hub', { options: { maxCalls: 1 } }, async ($, on) => {
+  const { seen } = engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect((await bash($, 'curl https://api.example.com/1')).deny).toBeUndefined()
+  expect((await bash($, 'curl https://api.example.com/2')).deny).toContain('the limit is 1')
+  expect((await bash($, 'curl https://api.example.com/3')).deny).toContain('paused for 60 more s')
+  expect(hub.published.map(event => event.data)).toEqual([
+    { guard: 'rate-limit-guard', tool: 'Bash', reason: 'limit-reached: 1 requests to api.example.com in the last 60 s, limit 1', severity: 'low', command: 'curl https://api.example.com/2' },
+    { guard: 'rate-limit-guard', tool: 'Bash', reason: 'paused: requests to api.example.com are paused for 60 more s', severity: 'low', command: 'curl https://api.example.com/3' },
+  ])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'paused requests to api.example.com for 60 s (1 in the last 60 s)', topic: 'risk.blocked' }])
+  expect(seen.toasts).toEqual([])
 })
 
 test('regression: a fetch loop inside bash -lc is warned about', () => {

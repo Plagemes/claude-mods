@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PANE = {
   plugin: 'scratchpad',
   component: 'Pane',
@@ -100,4 +102,53 @@ test('in the pane, Enter adds a note, To prompt fills the prompt box and Delete 
   }
 
   expect(engine.store.has('notes:/work/alpha')).toBe(false)
+})
+
+const HUB_PANE = { ...PANE, requestId: 'claude-mods', props: { ...PANE.props, title: 'Claude Mods' } } as const
+const START = { cwd: '/work/alpha', surface: 'terminal', isInteractive: true } as const
+
+test('with mods-hub: the Notes tab loads this project\'s notes at start, /notes opens it, and the field does not grab the keyboard', async ($, on) => {
+  const engine = answerEngine(on)
+  engine.store.set('notes:/work/alpha', [{ id: 'n1', text: 'check the retry budget', createdAt: new Date(2026, 9, 7, 9, 30).getTime() }])
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
+  expect(hub.tabs).toEqual([{ id: 'notes', title: 'Notes', order: 280, command: 'notes' }])
+
+  expect((await $.command.run(run('notes'))).text).toBe('1 note for alpha.')
+  expect(hub.shown).toEqual(['notes'])
+  expect(engine.opened).toEqual([])
+  hub.tab = 'notes'
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...HUB_PANE, surface })
+    expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'check the retry budget' })).toBeDefined()
+    expect((await ui.find({ type: 'Input', key: 'new' }))?.props.autoFocus).toBeFalsy()
+    await ui.input({ key: 'new', text: `from the tab ${surface}` })
+    expect(await ui.find({ type: 'Text', text: `from the tab ${surface}` })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub: another tab of the panel is left to its owner', async ($, on) => {
+  answerEngine(on)
+  const hub = fakeHub(on)
+  hub.tab = 'cost'
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+  const ui = await $.ui.mount({ ...HUB_PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Input' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without mods-hub the own pane keeps the keyboard in its field', async ($, on) => {
+  answerEngine(on)
+  await $.command.run(run('notes'))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await ui.find({ type: 'Input', key: 'new' }))?.props.autoFocus).toBe(true)
+  await ui.unmount()
 })

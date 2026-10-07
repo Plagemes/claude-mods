@@ -18,6 +18,11 @@ export type Brief = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'resume-brief': { brief: Brief | null; isHidden: boolean }
+    'resume-brief': {
+      brief: Brief | null
+      isHidden: boolean
+      /** Other live sessions on this project, from mods-hub's sessions.json (0 without the hub). */
+      others: number
+    }
   }
 }

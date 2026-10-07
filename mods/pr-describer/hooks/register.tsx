@@ -26,7 +26,12 @@ const IDLE: Draft = {
   error: null,
   templateSource: null,
   hasUncommitted: false,
+  draftedAt: 0,
 }
+/** `gh pr create` / `glab mr create`, and the pull request link they print. */
+const OPENS_PR = /\b(?:gh\s+pr|glab\s+mr)\s+create\b/
+const PR_URL = /https?:\/\/\S+?\/(?:pull|merge_requests)\/\d+/
+const TITLE_FLAG = /(?:--title|-t)[=\s]+(?:"([^"]*)"|'([^']*)'|(\S+))/
 
 const draft = atom({ plugin: 'pr-describer', key: 'draft' } as const, IDLE)
 
@@ -116,7 +121,9 @@ const compose = async ($: EngineInterface, settings: Settings): Promise<void> =>
     return
   }
   const { title, body } = parseDescription(reply.text)
-  await setDraft($, { phase: 'ready', title, body })
+  // Only mods-hub's `git.commit` is compared with it; without the hub the time is never read.
+  const draftedAt = (await hubMode($)) === undefined ? 0 : await $.clock.now()
+  await setDraft($, { phase: 'ready', title, body, draftedAt })
 }
 
 const copy = async ($: EngineInterface, what: string, text: string, surface: RenderSurface): Promise<void> => {
@@ -128,6 +135,47 @@ const insertIntoPrompt = async ($: EngineInterface): Promise<void> => {
   const { title, body, branch, base } = await read($, draft)
   const filled = await $.prompt.fill({ text: promptText(title, body, branch, base), mode: 'append' })
   $.ui.toast(filled.isFilled ? 'Inserted into the prompt: edit it and press Enter' : `${PLUGIN}: the prompt box is not available right now`)
+}
+
+// ── mods-hub: commits that make a draft stale, and the pull request once it is open ─────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+const ownVersion = async ($: EngineInterface): Promise<string> => {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+const greetHub = async ($: EngineInterface): Promise<void> => {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['pr.opened'], consumes: ['git.commit'] })
+}
+
+/** The latest `git.commit` on the hub's bus made on `branch` after `since`, as `abc1234 subject`; read while drawing, it redraws the pane. */
+const newerCommit = async ($: EngineInterface, branch: string, since: number): Promise<string | undefined> => {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'latest', id: 'git.commit' })
+  if (value === undefined || value === null || value.at <= since) return undefined
+  const data = value.data as { sha?: unknown; message?: unknown; branch?: unknown }
+  if (data.branch !== branch || typeof data.sha !== 'string') return undefined
+  return `${data.sha.slice(0, 7)} ${typeof data.message === 'string' ? (data.message.split('\n')[0] ?? '') : ''}`.trim()
+}
+
+/**
+ * A pull request Claude opened (`gh pr create`, `glab mr create`, typically after "Insert into prompt"), on the
+ * hub's bus as `pr.opened`: the link from the command's output, the drafted title when there is one. Only with the hub.
+ */
+const publishOpened = async ($: EngineInterface, command: string, output: string): Promise<void> => {
+  const url = PR_URL.exec(output)?.[0]
+  if (url === undefined || (await hubMode($)) === undefined) return
+  const current = await read($, draft)
+  const flag = TITLE_FLAG.exec(command)
+  const title = current.phase === 'ready' && current.title !== '' ? current.title : (flag?.[1] ?? flag?.[2] ?? flag?.[3] ?? 'Pull request')
+  const branch = current.branch !== '' ? current.branch : (await git($, undefined, ['rev-parse', '--abbrev-ref', 'HEAD'])).out
+  await hubPublish($, { topic: 'pr.opened', data: { url, title, branch }, scope: 'global' })
 }
 
 /** `/pr-desc [base]`: finds the base, opens the pane and writes the description. */
@@ -158,7 +206,18 @@ export const register: Register = (on, options) => {
       description: 'Draft a pull request title and description from this branch',
       argumentHint: '[base]',
     })
+    await greetHub($)
     return next(e)
+  })
+
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (ran.deny === undefined && ran.isError !== true && OPENS_PR.test(e.command)) {
+      const output = `${typeof ran.text === 'string' ? ran.text : ''}\n${JSON.stringify(ran.result ?? '')}`
+      const command = e.command
+      $.clock.after(0, () => void publishOpened($, command, output))
+    }
+    return ran
   })
 
   on('command.run', { command: 'pr-desc' }, ($, e) => runDescribe($, e.args, model))
@@ -169,6 +228,7 @@ export const register: Register = (on, options) => {
     if (current.repo === null) return <Text dimColor>Run /pr-desc [base] to draft a pull request description.</Text>
     const settings: Settings = { model, root: current.repo, base: current.base }
     const shortBase = current.base.replace(/^origin\//, '')
+    const newer = current.phase === 'ready' ? await newerCommit($, current.branch, current.draftedAt) : undefined
     const details = [
       `${current.commitCount} commit${current.commitCount === 1 ? '' : 's'}`,
       current.summary,
@@ -198,6 +258,11 @@ export const register: Register = (on, options) => {
             <Button key="copy-title" label="Copy title" plain dimColor onPress={press => copy($, 'title', current.title, press.surface)} />
           </Box>
         )}
+        {newer !== undefined && (
+          <Box key="stale">
+            <Text color="warning">New commit since this draft ({newer}): Regenerate to include it.</Text>
+          </Box>
+        )}
         {current.phase === 'ready' && <Markdown key="body" text={current.body} />}
         {current.phase !== 'generating' && (
           <Box flexDirection="row" gap={1} flexWrap="wrap">
@@ -223,3 +288,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

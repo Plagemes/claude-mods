@@ -45,3 +45,4 @@ Nothing to run. You'll see:
   - golangci-lint lints the file's package, and clippy checks the whole crate, which is slower on the first run.
   - The edit's result reaches Claude only once the lint finishes.
   - Edits made through Bash aren't linted.
+- With [mods-hub](../mods-hub) installed, each lint is published as `lint.result` (linter, errors, warnings, the file) for autopilot and the other mods that follow code health, and "linter is not installed" becomes a `warning` notice. Without the hub nothing changes.

@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'auto-checkpoint'
 const PANE_PROPS = {
   title: 'Checkpoints',
@@ -179,4 +181,53 @@ test('regression: a snapshot that times out pauses checkpoints for the session i
   await startTurn($, 't2', 'second')
   await edit($)
   expect(calls.filter(line => line.startsWith('add -A'))).toHaveLength(1)
+})
+
+const START = { cwd: '/work/app', surface: 'terminal', isInteractive: true } as const
+
+test('with mods-hub: says hello and publishes each saved checkpoint as x.auto-checkpoint.saved', async ($, on) => {
+  const repo = fakeGit(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['x.auto-checkpoint.saved'], consumes: [] }])
+
+  await startTurn($, 't1', 'fix the login bug')
+  await edit($)
+  await edit($)
+  repo.worktree = 'tree-b'
+  await startTurn($, 't2', 'x'.repeat(200))
+  await edit($)
+  expect(hub.published).toEqual([
+    { topic: 'x.auto-checkpoint.saved', data: { n: 1, sha: 'commit-tree-a', repo: 'app', prompt: 'fix the login bug' } },
+    { topic: 'x.auto-checkpoint.saved', data: { n: 2, sha: 'commit-tree-b', repo: 'app', prompt: 'x'.repeat(80) } },
+  ])
+  expect(hub.notified).toEqual([])
+})
+
+test('with mods-hub: a snapshot that times out is also a warning notice; without it only the status line says so', async ($, on) => {
+  const statuses: (string | undefined)[] = []
+  mock.store(on)
+  mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') })
+  const hub = fakeHub(on)
+  on('process.run', ($, e) => {
+    const line = e.argv.slice(1).join(' ')
+    if (line.startsWith('add -A')) return { deny: 'aborted: still running after 20000ms' }
+    const stdout = line === 'rev-parse --show-toplevel' ? '/work/app\n' : line.startsWith('rev-parse --git-path') ? '.git/claude-checkpoint.index\n' : 'head0\n'
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('ui.status', ($, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('ui.log', () => ({ value: undefined }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('tool.call', () => ({ result: 'ok' }))
+
+  await startTurn($, 't1', 'first')
+  await edit($)
+  expect(statuses.at(-1)).toContain('paused')
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'Checkpoints paused', body: 'a snapshot took over 20s in this repository, so no more are taken this session.' }])
+  expect(hub.published).toEqual([])
 })

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { argv, claudeBinary, parseInstalled, parseMarketplaceNames, parseOutcome } from '../hooks/cli'
-import { detectDrift, driftEvent, driftSignature, driftSummary, modStates } from '../hooks/drift'
+import { detectDrift, driftEvent, driftSignature, driftSummary, guardLevelOfPolicy, modStates } from '../hooks/drift'
 import type { Personal } from '../hooks/drift'
 import { summaryText } from '../hooks/report'
 import { EMPTY_TEAM } from '../hooks/team'
@@ -137,4 +137,16 @@ test('the text summary: conventions, mods with their state, differences with hin
   expect(summaryText({ ...view, phase: 'absent', team: null })).toContain('No .claude/team.json in this repository. /team init creates one.')
   expect(summaryText({ ...view, phase: 'invalid', team: null, problems: ['team.json is not valid JSON: x'] })).toContain('cannot be used: team.json is not valid JSON')
   expect(summaryText({ ...view, isInstalledKnown: false })).toContain('? secret-shield')
+})
+
+test("guardian's fact: its level, or a custom policy's base; permissive is weaker than the team's standard", () => {
+  // The shape guardian shares as `guardian.policy` (mods/guardian/hooks/register.tsx).
+  const fact = { level: 'strict', base: 'strict', fallback: true, project: '/work/shop', guards: { 'rm-rf-guard': {} } }
+  expect(guardLevelOfPolicy(fact)).toBe('strict')
+  expect(guardLevelOfPolicy({ ...fact, level: 'custom', base: 'permissive' })).toBe('permissive')
+  expect(guardLevelOfPolicy({ ...fact, level: 'permissive' })).toBe('permissive')
+  expect([guardLevelOfPolicy(null), guardLevelOfPolicy({ level: 'loud' }), guardLevelOfPolicy('strict')]).toEqual([undefined, undefined, undefined])
+  expect(detectDrift({ ...TEAM, guardLevel: 'standard' }, personal({ guardLevel: guardLevelOfPolicy({ ...fact, level: 'custom', base: 'permissive' }) }))).toEqual([
+    { id: 'guard', title: 'Guard level', team: 'standard', personal: 'permissive', hint: 'Raise the level in guardian.' },
+  ])
 })

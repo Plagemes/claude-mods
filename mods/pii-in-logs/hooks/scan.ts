@@ -1,3 +1,5 @@
+import { findSecrets } from './shared/secrets'
+
 /** A log statement that prints something that looks personal or secret. */
 export type Finding = {
   /** Line of the statement in the text that was scanned, from 1. */
@@ -276,6 +278,11 @@ const sensitiveIn = (args: string, isFormatMacro: boolean): string[] => {
   return reasons.slice(0, MAX_REASONS)
 }
 
+const SECRETS_ONLY = new Set(['secrets'] as const)
+
+/** Keys and tokens written into the call itself (`console.log("using ghp_…")`), by the shared secret rules. */
+const literalSecretsIn = (args: string): string[] => [...new Set(findSecrets(args, { enabled: SECRETS_ONLY }).map(found => `a hard-coded ${found.kind}`))]
+
 const show = (call: string): string => (call.length > MAX_SHOWN_CHARS ? `${call.slice(0, MAX_SHOWN_CHARS - 1)}…` : call)
 
 /** The log statements `after` has that `before` does not, as a multiset, and what each prints that is sensitive. */
@@ -290,7 +297,7 @@ export const findPii = (before: string, after: string): Finding[] => {
       continue
     }
     if (call.isAllowed) continue
-    const reasons = sensitiveIn(call.args, FORMAT_MACRO.test(call.name))
+    const reasons = [...new Set([...sensitiveIn(call.args, FORMAT_MACRO.test(call.name)), ...literalSecretsIn(call.args)])].slice(0, MAX_REASONS)
     if (reasons.length > 0) findings.push({ line: call.line, call: show(call.text), reasons })
   }
   return findings

@@ -1,3 +1,5 @@
+import { simpleCommands } from './shared/shell'
+
 /** What `df -Pk .` says about the disk the working directory is on. */
 export type DiskUsage = {
   totalKb: number
@@ -25,7 +27,20 @@ const HEAVY_WRITERS: readonly RegExp[] = [
 /** Why a command failed when the disk was full: what the shell, Node, Docker and pip all say. */
 export const NO_SPACE = /No space left on device|\bENOSPC\b|Disk quota exceeded|not enough space on the disk/i
 
-export const isHeavyWrite = (command: string): boolean => HEAVY_WRITERS.some(pattern => pattern.test(command))
+/** The programs that can be a heavy writer, so `git commit -m "npm install"` or `echo npm install` is not mistaken for one. */
+const HEAVY_PROGRAMS: ReadonlySet<string> = new Set([
+  'npm', 'yarn', 'pnpm', 'bun', 'pip', 'pip3', 'python', 'python3', 'uv', 'poetry', 'pipenv', 'conda', 'cargo', 'go', 'gem', 'bundle',
+  'composer', 'dotnet', 'mvn', 'gradle', 'gradlew', 'docker', 'docker-compose', 'git', 'apt-get', 'apt', 'dnf', 'yum', 'apk', 'brew',
+])
+
+/** Whether a shell line runs a command that writes a lot: read command by command (`sudo` and `env` peeled, `bash -c` opened), so a quoted `npm install` in a commit message is not one. */
+export const isHeavyWrite = (command: string): boolean =>
+  simpleCommands(command).some(({ name, argv }) => {
+    if (!HEAVY_PROGRAMS.has(name)) return false
+    // The command as its program's name and arguments, matched from the start: what a later argument says (a commit message) is no command.
+    const text = [name, ...argv.slice(1)].join(' ')
+    return HEAVY_WRITERS.some(pattern => pattern.exec(text)?.index === 0)
+  })
 
 /** The numbers on the last line of POSIX `df -Pk` output; undefined when it does not look like that. */
 export const parseDf = (stdout: string): DiskUsage | undefined => {

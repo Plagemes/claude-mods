@@ -28,6 +28,9 @@ const probe: Plugin = {
           case 'notify': value = await $.mods.notify(call.input); break
           case 'mode': value = await $.mods.mode(); break
           case 'setPresence': value = await $.mods.setPresence(call.input); break
+          case 'setMode': value = await $.mods.setMode(call.input); break
+          case 'drain': value = await $.mods.drain(call.input); break
+          case 'stop': value = await $.mods.stop(call.input); break
           case 'registerTab': value = await $.mods.registerTab(call.input); break
           case 'registerChannel': value = await $.mods.registerChannel(call.input); break
           case 'hello': value = await $.mods.hello(call.input); break
@@ -236,4 +239,74 @@ test('discovery and status: who said hello, what is installed, /hub status', { p
   expect(status).toContain('Mode: here · interaction auto')
   expect(status).toContain('Channels: none registered')
   expect(String((await hub($, 'route error loud')).text)).toContain('Usage: /hub')
+})
+
+test('mode: Silent with no end, the Night schedule and the presence minutes are in the mode', { plugins: [probe] }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  expect((await mods($, 'mode')).value).toMatchObject({ isNightOn: true, isNight: false, idleMinutes: 10, awayMinutes: 30 })
+
+  expect((await mods($, 'setMode', { isSilent: true })).value).toMatchObject({ isSilent: true, silentUntil: null })
+  await w.clock.advance(90 * MINUTE)
+  expect((await mods($, 'mode')).value.isSilent).toBe(true)
+  expect((await mods($, 'setMode', { isSilent: true, silentMinutes: 20 })).value.silentUntil).toBe(NOON + 90 * MINUTE + 20 * MINUTE)
+  expect((await mods($, 'setMode', { isSilent: false })).value).toMatchObject({ isSilent: false, silentUntil: null })
+  // The first contract still works: minutes on, null off.
+  expect((await mods($, 'setMode', { silentMinutes: 5 })).value.isSilent).toBe(true)
+  expect((await mods($, 'setMode', { silentMinutes: null })).value.isSilent).toBe(false)
+  expect((await mods($, 'setMode', { isNightOn: false })).value).toMatchObject({ isNightOn: false })
+})
+
+test('pull channels: drain with a cursor is at-least-once; without one it hands over and forgets', { plugins: [probe] }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await mods($, 'registerChannel', { id: 'mail', title: 'Mail', audience: 'me', delivery: 'pull', status: 'connected' })
+  await mods($, 'setPresence', { presence: 'away', reason: 'manual' })
+  for (const title of ['one', 'two', 'three']) await mods($, 'notify', { level: 'error', title })
+  await w.clock.settle()
+
+  const first = (await mods($, 'drain', { channel: 'mail', after: null })).value as { id: string; title: string }[]
+  expect(first.map(notice => notice.title)).toEqual(['one', 'two', 'three'])
+  expect(new Set(first.map(notice => notice.id)).size).toBe(3)
+  // Not acknowledged yet: a second drainer (or a retry after a crash) gets them again.
+  expect((await mods($, 'drain', { channel: 'mail', after: null })).value).toHaveLength(3)
+  const rest = (await mods($, 'drain', { channel: 'mail', after: first[1]?.id })).value as { title: string }[]
+  expect(rest.map(notice => notice.title)).toEqual(['three'])
+  // An id it no longer knows acknowledges nothing: everything still waiting comes back.
+  expect((await mods($, 'drain', { channel: 'mail', after: 'n-gone-1' })).value).toHaveLength(1)
+
+  expect((await mods($, 'drain', { channel: 'mail' })).value.map((notice: { title: string }) => notice.title)).toEqual(['three'])
+  expect((await mods($, 'drain', { channel: 'mail', after: null })).value).toEqual([])
+  expect((await mods($, 'drain', { channel: 'phone', after: null })).error).toContain('no channel "phone" of yours')
+})
+
+test('stop, pause, resume: control.* on the bus and in state, all sessions through control.json, never published directly', { plugins: [probe] }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await w.clock.settle()
+  const CONTROL_FILE = '/home/me/.claude/claude-mods/hub/control.json'
+
+  const stopped = await mods($, 'stop', { scope: 'all', reason: 'STOP ALL from the phone', by: 'owner via whatsapp' })
+  expect(stopped.value).toMatchObject({ action: 'stop', scope: 'all', by: 'owner via whatsapp', source: 'probe', session: 'sess-1234abcd' })
+  expect((await mods($, 'latest', { topic: 'control.stop' })).value).toMatchObject({ source: 'probe', data: { scope: 'all', reason: 'STOP ALL from the phone' } })
+  expect(JSON.parse(w.files.get(CONTROL_FILE) ?? '{}').controls).toHaveLength(1)
+  expect(String((await hub($, 'status')).text)).toContain('Automatic work: stopped by owner via whatsapp')
+
+  expect((await mods($, 'publish', { topic: 'control.stop', data: { id: 'x', scope: 'all', reason: 'r', by: 'b', session: 's' } })).error).toContain('$.mods.stop')
+  expect((await mods($, 'stop', { reason: '' })).error).toContain('needs a reason')
+
+  // Another session resumes everything: this one picks it up within 5 seconds.
+  const other = { id: 'c-other-1', action: 'resume', scope: 'all', reason: 'back at it', by: 'you', session: 'sess-other', source: 'mods-hub', at: NOON + 1_000 }
+  w.files.set(CONTROL_FILE, JSON.stringify({ controls: [...JSON.parse(w.files.get(CONTROL_FILE) ?? '{}').controls, other] }))
+  await w.clock.advance(6_000)
+  expect((await mods($, 'latest', { topic: 'control.resume' })).value).toMatchObject({ data: { id: 'c-other-1', session: 'sess-other' } })
+  await w.clock.advance(6_000)
+  expect((await mods($, 'recent', { topic: 'control.resume' })).value).toHaveLength(1)
+
+  expect(String((await hub($, 'pause')).text)).toContain('Pause sent to this session')
+  expect((await mods($, 'latest', { topic: 'control.pause' })).value.data.scope).toBe('session')
+  const ui = await $.ui.mount({ plugin: 'mods-hub', surface: 'terminal', component: 'Pane', requestId: 'claude-mods', props: PANE })
+  await ui.press({ key: 'resume' })
+  expect((await mods($, 'latest', { topic: 'control.resume' })).value.data.session).toBe('sess-1234abcd')
+  await ui.unmount()
 })
