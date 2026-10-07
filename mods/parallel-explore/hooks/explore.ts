@@ -1,5 +1,5 @@
-// Pure parts of parallel-explore: the angles, the prompts for planning, exploring and merging, and
-// the read-only rule for the explorers' shell commands. No `$` here.
+// Pure parts of parallel-explore: the angles and the prompts for planning, exploring and merging.
+// The explorers' read-only rule lives in ./readonly. No `$` here.
 
 import type { ParallelExploreAngle } from '../types'
 
@@ -61,7 +61,7 @@ export const explorerPrompt = (question: string, angle: Angle, index: number): s
 
 export const SCOUT_PROMPT = `You are a read-only code explorer. You investigate a codebase to answer one question from one angle, then report what you found with precise file references (path:line).
 
-You never modify anything. Use Read, and Grep/Glob where available; in Bash use only read commands (ls, find, grep, rg, cat, head, tail, wc, git log/show/diff/grep/ls-files). Commands that write files, redirect output to a file, or run programs are refused.`
+You never modify anything. Use Read, and Grep/Glob where available; in Bash use only read commands (ls, find, grep, rg, cat, head, tail, wc, git log/show/diff/grep/ls-files), with patterns in quotes. Commands that write files, redirect output to a file, use variables, or run other programs are refused.`
 
 export const MERGER_SYSTEM = 'You merge the findings of several code explorers into one accurate, well-organised answer for a developer.'
 
@@ -103,37 +103,6 @@ export const messageForClaude = (question: string, answer: string): string =>
     '',
     'Use this as context for what we do next. Check a file reference before you rely on it.',
   ].join('\n')
-
-const READ_ONLY_PROGRAMS = new Set([
-  'cd', 'pushd', 'popd', 'ls', 'cat', 'head', 'tail', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'find', 'fd', 'wc', 'sort', 'uniq', 'cut', 'tr', 'awk',
-  'sed', 'jq', 'yq', 'tree', 'file', 'stat', 'du', 'pwd', 'echo', 'printf', 'basename', 'dirname', 'realpath', 'readlink', 'which',
-  'type', 'nl', 'column', 'diff', 'cmp', 'true', 'test', '[', 'git', 'less', 'more', 'strings', 'od', 'xxd', 'hexdump', 'md5sum', 'sha256sum',
-])
-const READ_ONLY_GIT = new Set(['log', 'show', 'diff', 'grep', 'ls-files', 'ls-tree', 'blame', 'status', 'rev-parse', 'describe', 'shortlog', 'cat-file', 'branch', 'tag', 'remote'])
-const SAFE_REDIRECT = /\d?>&\d|\d?>\s*\/dev\/null/g
-
-/** Why an explorer's shell command is refused, or undefined when it only reads. */
-export const whyNotReadOnly = (command: string): string | undefined => {
-  if (/\$\(|`/.test(command)) return 'no command substitution'
-  // Quoted text is data (a grep pattern with | or >), and fd duplication or /dev/null writes nothing.
-  const plain = command.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, "''").replace(SAFE_REDIRECT, ' ')
-  if (/>/.test(plain)) return 'no output redirection'
-  for (const segment of plain.split(/\|\||&&|[|;&\n]/)) {
-    const words = segment.trim().split(/\s+/).filter(word => !/^[A-Za-z_]\w*=/.test(word))
-    const program = (words[0] ?? '').replace(/^.*\//, '')
-    if (program === '') continue
-    if (!READ_ONLY_PROGRAMS.has(program)) return `${program} is not a read command`
-    const args = words.slice(1)
-    if (program === 'sed' && args.some(arg => /^-[a-zA-Z]*i|^--in-place/.test(arg))) return 'no sed -i'
-    if ((program === 'find' || program === 'fd') && args.some(arg => /^-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls|x|X)$|^--exec/.test(arg))) return `no ${program} -delete/-exec`
-    if (program === 'git') {
-      const sub = args.find(arg => !arg.startsWith('-'))
-      if (sub === undefined || !READ_ONLY_GIT.has(sub) || args.includes('-c')) return `git ${sub ?? 'without a subcommand'} is not a read command`
-      if ((sub === 'branch' || sub === 'tag' || sub === 'remote') && args.some(arg => /^-[dDmMcC]$|^--(?:delete|move|copy|set-upstream)|^(?:add|remove|rm|rename|set-url)$/.test(arg))) return `git ${sub} may only list`
-    }
-  }
-  return undefined
-}
 
 /** `1:05` */
 export const formatElapsed = (ms: number): string => {

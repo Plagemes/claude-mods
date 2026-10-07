@@ -15,16 +15,15 @@ import {
   parseAngles,
   planPrompt,
   unmergedAnswer,
-  whyNotReadOnly,
 } from './explore'
 import type { Angle } from './explore'
+import { READ_TOOLS, whyNotReadOnly } from './readonly'
 
 const PANE = 'explore'
 const BUILT_IN_TYPE = 'Explore'
 const SCOUT = 'scout'
 const SCOUT_TYPE = 'parallel-explore:scout'
 const SCOUT_TOOLS = ['Read', 'Grep', 'Glob', 'Bash']
-const WRITE_TOOLS = /^(?:Edit|Write|MultiEdit|NotebookEdit)$/
 const PLAN_MODEL = 'haiku'
 const PLAN_TIMEOUT_MS = 20_000
 const MERGE_TIMEOUT_MS = 180_000
@@ -264,18 +263,18 @@ export const register: Register = (on, options) => {
     return ids.some(id => e.text.includes(id)) ? { drop: 'parallel-explore: an explorer finished; its findings are in the Explore pane.' } : next(e)
   }).catch(($, e, next) => next(e))
 
-  // Explorers only read: no edits, and shell commands held to read-only programs.
+  // Explorers only read: read tools only (no edits, MCP or background commands), and Bash held to read commands.
   on('tool.call', async ($, e, next) => {
     if (e.agentId === undefined || !(await read($, agentsAtom)).includes(e.agentId)) return next(e)
     const tool = String(e.tool)
-    if (WRITE_TOOLS.test(tool)) return { deny: `parallel-explore: explorers are read-only (${tool} refused).` }
-    if (tool === 'Bash' && 'command' in e && typeof e.command === 'string') {
-      const why = whyNotReadOnly(e.command)
+    if (!READ_TOOLS.has(tool)) return { deny: `parallel-explore: explorers are read-only (${tool} refused).` }
+    if (tool === 'Bash') {
+      const why = 'command' in e && typeof e.command === 'string' ? whyNotReadOnly(e.command) : 'no command'
       if (why !== undefined) return { deny: `parallel-explore: explorers are read-only (${why}). Use Read, Grep, Glob or a read command such as rg, grep, find, cat.` }
     }
     return next(e)
   }).catch(($, e, next) =>
-    next.called || e.agentId === undefined || !(WRITE_TOOLS.test(String(e.tool)) || String(e.tool) === 'Bash')
+    next.called || e.agentId === undefined || (READ_TOOLS.has(String(e.tool)) && String(e.tool) !== 'Bash')
       ? next(e)
       : { deny: 'parallel-explore: could not confirm that this explorer call is read-only.' },
   )

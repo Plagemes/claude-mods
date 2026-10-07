@@ -2,7 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { ModelCompleteResult, On } from 'claude-code'
 
-import { FIXED_ANGLES, mergePrompt, parseAngles, whyNotReadOnly } from '../hooks/explore'
+import { FIXED_ANGLES, mergePrompt, parseAngles } from '../hooks/explore'
+import { whyNotReadOnly } from '../hooks/readonly'
 
 const USAGE = { input_tokens: 500, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const QUESTION = 'How does the session token get refreshed?'
@@ -77,7 +78,7 @@ const start = async ($: Engine) => {
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
 }
 
-test('plans angles from JSON, writes the merge prompt, and holds explorer shell commands to reading', () => {
+test('plans angles from JSON and writes the merge prompt', () => {
   expect(parseAngles(`Sure:\n\`\`\`json\n${JSON.stringify(ANGLES)}\n\`\`\``)).toEqual(ANGLES)
   expect(parseAngles('[{"title":"only one","focus":"x"}]')).toBeUndefined()
   const prompt = mergePrompt(QUESTION, [
@@ -87,14 +88,213 @@ test('plans angles from JSON, writes the merge prompt, and holds explorer shell 
   expect(prompt).toContain('## Explorer 1: Refresh logic')
   expect(prompt).toContain('(no report: no report within 10 min)')
   expect(prompt).toContain('Never invent a path or a line number.')
+})
 
-  expect(whyNotReadOnly('rg -n "refresh|renew" src | head -50')).toBeUndefined()
-  expect(whyNotReadOnly('cd src && git log --oneline -5 -- auth 2>/dev/null')).toBeUndefined()
-  expect(whyNotReadOnly('find . -name "*.ts" -exec rm {} +')).toBe('no find -delete/-exec')
+// Every way found to write or run something through a program the explorers may use.
+const BYPASSES = [
+  // awk: system(), pipes to and from commands, output redirection, gawk's @ directives, program files
+  `awk 'BEGIN{system("touch pwned")}'`,
+  `awk 'awk::system("id")'`,
+  `awk '{print > "out.txt"}' f`,
+  `awk '{printf "%s", $0 > "out.txt"}' f`,
+  `awk '{print(x) > "out.txt"}' f`,
+  `awk '{ if ($1 > 0) print $1 > "out.txt" }' f`,
+  `awk '{print >> "out.txt"}' f`,
+  `awk '{print $1 | "sh"}' f`,
+  `awk '{ "date" | getline d; print d }' f`,
+  `awk '{ print |& "cat" }' f`,
+  `awk 'BEGIN { f = "sys" "tem"; @f("id") }'`,
+  `awk '@load "filefuncs"'`,
+  `awk 'BEGIN { if (x) /"/; print > "f"; if (x) /"/ }'`,
+  'awk -f prog.awk f',
+  "awk -e 'BEGIN{}' f",
+  'awk --exec=prog.awk f',
+  "awk -o out.awk '1' f",
+  "awk -p '1' f",
+  'awk -W exec prog.awk',
+  // sed: w/W and e commands, the s///w and s///e flags, in-place editing, script files
+  "sed -n 'w out.txt' f",
+  "sed -n '/x/w out.txt' f",
+  "sed 'W out.txt' f",
+  "sed 's/a/b/w out.txt' f",
+  "sed 's/a/b/gw out.txt' f",
+  "sed '1e touch pwned' f",
+  "sed 's/.*/id/e' f",
+  "sed -e p -e 'w out.txt' f",
+  "sed --expression='w out.txt' f",
+  "sed -n 'bx;w out.txt' f",
+  "sed 's/[/]/x/w out.txt' f",
+  "sed -i 's/a/b/' f",
+  "sed -i.bak 's/a/b/' f",
+  "sed -Ei 's/a/b/' f",
+  "sed --in-place 's/a/b/' f",
+  "sed -I '' 's/a/b/' f",
+  "sed 's/a/b/' -i f",
+  'sed -f script.sed f',
+  // sort -o, uniq's output operand, tree -o
+  'sort -o out.txt f',
+  'sort -uo out.txt f',
+  'sort --output=out.txt f',
+  'sort --out=out.txt f',
+  'sort --compress-program=sh f',
+  'uniq in.txt out.txt',
+  'uniq -c -f 1 in.txt out.txt',
+  'uniq in.txt -- out.txt',
+  'tree -o out.txt',
+  'tree -aLo 2 out.txt',
+  'tree -R -H .',
+  // rg's preprocessors
+  'rg --pre sh foo',
+  'rg --pre=./x.sh foo',
+  "rg --pre-glob '*.pdf' --pre cat foo",
+  'rg --hostname-bin=sh foo',
+  // git: output files, pagers, external diff and textconv drivers, config and repository overrides, ref writes
+  'git log --output=out.txt',
+  'git log --output out.txt',
+  'git diff --output=out.txt',
+  'git show --output=out.txt',
+  'git grep -O x',
+  'git grep -nO x',
+  'git grep --open-files-in-pager=vi x',
+  'git log -p --ext-diff',
+  'git diff --ext-diff',
+  'git show --textconv HEAD',
+  'git cat-file --filters HEAD:x',
+  'git log --help',
+  'git -c core.pager=sh log',
+  'git -c diff.external=sh diff',
+  'git --config-env=core.pager=X log',
+  'git --exec-path=. log',
+  'git --git-dir=evil log',
+  'git -p log',
+  'git branch new-branch',
+  'git branch -D main',
+  'git branch -l new-branch',
+  'git tag v9',
+  'git tag -d v1',
+  'git remote add x https://example.com/x.git',
+  'git remote prune origin',
+  'git checkout main',
+  // find and fd actions
+  'find . -exec rm {} +',
+  'find . -execdir sh \\;',
+  'find . -ok rm {} \\;',
+  'find . -delete',
+  "find . '-delete'",
+  'find . -dele\\te',
+  'find . -fprint out.txt',
+  "find . -fprintf out.txt '%p'",
+  'find . -fls out.txt',
+  'fd -x rm',
+  'fd -HIx rm',
+  'fd --exec rm',
+  'fd -X rm',
+  // programs that are not read commands at all
+  'xargs rm',
+  'ls | xargs rm',
+  'env sh',
+  'env -i rm x',
+  'tee out.txt',
+  'ls | tee out.txt',
+  'less f',
+  'more f',
+  'xxd in.bin out.bin',
+  'ack --pager=sh x',
+  'ag --pager=sh x',
+  "yq -i '.a = 1' f.yaml",
+  'file -C -m magic',
+  'printf -v PATH x',
+  'npm install',
+  'cat x\nrm y',
+  // the shell itself: redirection, substitution, variables, braces, globs, paths, assignments
+  'cat x > out.txt',
+  'cat x >> out.txt',
+  'cat x >| out.txt',
+  'cat x &> out.txt',
+  'cat x >&out.txt',
+  'cat x >&1x',
+  'cat x 1>/dev/nullx',
+  'cat <> out.txt',
+  'cat <(touch pwned)',
+  'echo $(touch pwned)',
+  'echo `touch pwned`',
+  'echo "$(touch pwned)"',
+  'git log $IFS--output=x',
+  'OPT=--output=x; git log "$OPT"',
+  "cat $'\\x2d'",
+  'git log {--output=x,}',
+  'git log @{x},--output=y}',
+  'git log --out\\put=x',
+  "git log '--output=x'",
+  'rg foo *',
+  'sort *',
+  'sed -e x* f',
+  'PATH=. cat x',
+  'GIT_EXTERNAL_DIFF=sh git diff',
+  './cat x',
+  '/bin/rm x',
+  'r\\m -rf x',
+  '(rm -rf x)',
+  'f() { rm x; }; f',
+  'cat <<EOF',
+]
+
+// Everyday reading that must keep working.
+const READS = [
+  'rg -n foo src',
+  'git log --oneline -5',
+  'git grep -n x',
+  'sed -n 1,40p f',
+  "awk '{print $1}' f",
+  'sort f | uniq -c',
+  "find . -name '*.ts'",
+  'tree -L 2',
+  'rg -n "refresh|renew" src | head -50',
+  'cd src && git log --oneline -5 -- auth 2>/dev/null',
+  "grep -rn 'TODO' --include='*.ts' src",
+  'wc -l src/*.ts',
+  'du -sh *',
+  'git show HEAD~1 --stat',
+  'git diff main...HEAD -- src',
+  'git blame -L 10,20 src/a.ts',
+  'git -C src log -1',
+  'git log @{u}..HEAD',
+  'git branch -a --contains abc123',
+  "git tag -l 'v*'",
+  'git remote -v',
+  'git status --short',
+  'GIT_PAGER=cat git log -3',
+  'LC_ALL=C sort -u f',
+  "grep -o 'x' f | sort | uniq -c | sort -rn | head",
+  'ls 2>&1 | head',
+  "jq '.scripts' package.json",
+  "sed -n '/^export/p' src/a.ts",
+  "sed 's/[[:space:]]*$//' f",
+  "sed ':a;N;$!ba;s/\\n/ /g' f",
+  "awk -F: '$3 > 100 {print $1}' /etc/passwd",
+  "awk '/a|b/ {n++} END {print n}' f",
+  "awk '{ s += $2 } END { print s / NR }' f",
+  "fd -e ts src",
+  "rg -l foo -g '*.ts' --hidden",
+  '[ -f package.json ] && cat package.json',
+]
+
+test('explorer shell guard refuses every known write or run through an allowed program', () => {
+  expect(BYPASSES.filter(command => whyNotReadOnly(command) === undefined)).toEqual([])
+  expect(whyNotReadOnly(`awk 'BEGIN{system("touch pwned")}'`)).toBe('awk system() runs commands')
+  expect(whyNotReadOnly("sed 's/a/b/w out.txt' f")).toBe('sed s///w writes files')
+  expect(whyNotReadOnly('sort -o out.txt f')).toBe('sort -o writes or runs something')
+  expect(whyNotReadOnly('uniq in.txt out.txt')).toBe('uniq with a second file writes it')
+  expect(whyNotReadOnly('rg --pre sh foo')).toBe('rg --pre writes or runs something')
+  expect(whyNotReadOnly('git grep -O x')).toBe('git grep -O writes or runs something')
+  expect(whyNotReadOnly('find . -name "*.ts" -exec rm {} +')).toBe('find -exec writes or runs commands')
   expect(whyNotReadOnly('cat a > b')).toBe('no output redirection')
-  expect(whyNotReadOnly('npm install')).toBe('npm is not a read command')
   expect(whyNotReadOnly('git checkout main')).toBe('git checkout is not a read command')
   expect(whyNotReadOnly('sed -i s/a/b/ x.ts')).toBe('no sed -i')
+})
+
+test('explorer shell guard lets everyday read commands through', () => {
+  expect(READS.map(command => [command, whyNotReadOnly(command)]).filter(([, why]) => why !== undefined)).toEqual([])
 })
 
 test('/explore sends three Explore agents, shows progress, merges their reports and hands them to Claude', async ($, on) => {
@@ -158,10 +358,17 @@ test('explorers are read-only; other agents and the main loop are untouched; the
   expect(String(denied.deny ?? denied.text)).toContain('explorers are read-only (rm is not a read command)')
   const edit = await asExplorer({ tool: 'Edit', file_path: '/work/app/a.ts', old_string: 'a', new_string: 'b' })
   expect(String(edit.deny ?? edit.text)).toContain('explorers are read-only (Edit refused)')
+  const monitor = await asExplorer({ tool: 'Monitor', command: 'touch pwned', description: 'watch', timeout_ms: 1_000 })
+  expect(String(monitor.deny ?? monitor.text)).toContain('explorers are read-only (Monitor refused)')
+  const mcp = await asExplorer({ tool: 'mcp__github__create_or_update_file', path: 'a.ts' })
+  expect(String(mcp.deny ?? mcp.text)).toContain('explorers are read-only (mcp__github__create_or_update_file refused)')
+  const sorted = await asExplorer({ tool: 'Bash', command: 'sort -o out.txt names.txt' })
+  expect(String(sorted.deny ?? sorted.text)).toContain('explorers are read-only (sort -o writes or runs something)')
+  await asExplorer({ tool: 'Read', file_path: '/work/app/a.ts' })
   await asExplorer({ tool: 'Bash', command: 'rg -n refreshSession src' })
   await $.tool.call({ tool: 'Bash', command: 'npm test', agentId: 'someone-else' } as never)
   await $.tool.call({ tool: 'Bash', command: 'npm run build' })
-  expect(state.ran).toEqual(['rg -n refreshSession src', 'npm test', 'npm run build'])
+  expect(state.ran).toEqual(['Read', 'rg -n refreshSession src', 'npm test', 'npm run build'])
 
   const notice = await $.prompt.submit({ text: '<task-notification><task-id>agent-1</task-id><status>completed</status></task-notification>', wait: false, origin: { kind: 'task-notification' } })
   expect(notice.drop).toContain('its findings are in the Explore pane')
