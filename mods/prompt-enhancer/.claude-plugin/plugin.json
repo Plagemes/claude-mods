@@ -1,0 +1,25 @@
+{
+  "name": "prompt-enhancer",
+  "version": "1.0.0",
+  "description": "/enhance rewrites your draft prompt into a precise, well-scoped request.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#prompt-enhancer",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "prompting", "rewrite", "pane"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "The model that rewrites drafts: an alias (haiku, sonnet, opus) or a full model id.",
+      "default": "sonnet"
+    },
+    "includeContext": {
+      "type": "boolean",
+      "title": "Project context",
+      "description": "Tell the rewriting model the project's name, detected stack and top-level files.",
+      "default": true
+    }
+  }
+}
