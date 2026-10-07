@@ -1,0 +1,100 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in a mod
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill in as much detail as you can to help us fix it.
+
+  - type: input
+    id: mod_name
+    attributes:
+      label: Mod Name
+      description: Which mod is affected? (e.g., my-mod)
+      placeholder: my-mod
+    validations:
+      required: true
+
+  - type: input
+    id: claude_version
+    attributes:
+      label: Claude Code Version
+      description: What version of Claude Code are you using? (run `claude --version`)
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      description: Where are you running Claude Code?
+      options:
+        - Terminal
+        - VS Code Extension
+        - Desktop App
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What OS are you using?
+      placeholder: "macOS 14.0, Ubuntu 22.04, Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Clear steps to reproduce the bug
+      placeholder: |
+        1. Install the mod with `claude plugin install mods/my-mod`
+        2. Run Claude Code
+        3. Perform action X
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen?
+      placeholder: The mod should display a message in the pane
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: An error message appears instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Any relevant logs from `claude --debug` or console output.
+        Paste code blocks or large logs in between triple backticks.
+      placeholder: |
+        ```
+        Error: something went wrong
+        at handler.ts:42
+        ```
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other information that might help (screenshots, config, etc.)

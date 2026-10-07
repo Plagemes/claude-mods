@@ -1,0 +1,68 @@
+name: Mod Request
+description: Suggest an idea for a new mod
+labels: ["mod-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a great idea for a new mod? Let us know! Please describe the problem and your proposed solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem would this mod solve?
+      placeholder: |
+        I often need to... but it's tedious because...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_behavior
+    attributes:
+      label: Proposed Behavior
+      description: How should the mod work? What should it do?
+      placeholder: |
+        The mod should:
+        - Automatically do X
+        - Display Y in the pane
+        - Integrate with Z
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What category does this mod fit into?
+      options:
+        - Core
+        - Security & Guardrails
+        - Git & Versioning
+        - Cost, Tokens & Context
+        - Productivity
+        - Code Quality & Tests
+        - Panes & Dashboards
+        - Prompt & System Prompt
+        - Notifications & Audio
+        - Memory & Knowledge
+        - Team & Docs
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_cases
+    attributes:
+      label: Use Cases
+      description: Who would benefit from this mod? What are real-world scenarios?
+      placeholder: |
+        - A developer managing multiple Claude projects would use this to...
+        - Teams collaborating on prompts would benefit from...
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Are there existing tools or workarounds? Why isn't a manual solution enough?
+      placeholder: |
+        Currently, users must... which is error-prone because...
