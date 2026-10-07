@@ -1,5 +1,5 @@
 # session-stats
-> /stats shows a dashboard of turns, tools, tokens, cost, duration and files.
+> /session-stats shows a dashboard of turns, tools, tokens, cost, duration and files.
 
 **Category:** Panes & Dashboards · **Version:** 1.0.0
 

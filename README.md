@@ -138,9 +138,9 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | Mod | What it does | Commands |
 | --- | --- | --- |
 | [**git-status-line**](mods/git-status-line) | Shows the current branch, ahead/behind and dirty file count in the status line. | — |
-| [**auto-checkpoint**](mods/auto-checkpoint) | Snapshots your work tree before every editing turn and lets you /rewind to any checkpoint. | `/checkpoints` `/rollback` |
-| [**commit-composer**](mods/commit-composer) | /commit writes a Conventional Commit message from your staged diff and commits it. | — |
-| [**branch-namer**](mods/branch-namer) | /branch creates a well-named git branch from a short task description. | `/git-branch` |
+| [**auto-checkpoint**](mods/auto-checkpoint) | Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint. | `/checkpoints` `/rollback` |
+| [**commit-composer**](mods/commit-composer) | /commit writes a Conventional Commit message from your staged diff and commits it. | `/commit` |
+| [**branch-namer**](mods/branch-namer) | /git-branch creates a well-named git branch from a short task description. | `/git-branch` |
 | [**main-branch-warn**](mods/main-branch-warn) | Warns you the moment Claude starts editing files directly on main or master. | — |
 | [**diff-pane**](mods/diff-pane) | A live pane listing changed files with +/- line counts, updated after every edit. | `/changes` |
 | [**pr-describer**](mods/pr-describer) | /pr-desc drafts a pull request title and description from your branch diff. | `/pr-desc` |
@@ -203,7 +203,7 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | --- | --- | --- |
 | [**tool-timeline**](mods/tool-timeline) | A timeline pane of every tool call with duration, status and input summary. | — |
 | [**files-touched**](mods/files-touched) | A pane of every file read, edited or created in the session, with counts. | — |
-| [**session-stats**](mods/session-stats) | /stats shows a dashboard of turns, tools, tokens, cost, duration and files. | `/stats` `/session-stats` |
+| [**session-stats**](mods/session-stats) | /session-stats shows a dashboard of turns, tools, tokens, cost, duration and files. | `/session-stats` |
 | [**subagent-monitor**](mods/subagent-monitor) | Watch running subagents live: type, status, duration and last activity. | — |
 | [**error-feed**](mods/error-feed) | Collects every failed command and tool error in one pane. | — |
 | [**activity-heatmap**](mods/activity-heatmap) | A heat map of when you use Claude Code, by hour and weekday. | — |

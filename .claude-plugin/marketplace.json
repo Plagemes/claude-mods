@@ -230,7 +230,7 @@
     {
       "name": "auto-checkpoint",
       "source": "./mods/auto-checkpoint",
-      "description": "Snapshots your work tree before every editing turn and lets you /rewind to any checkpoint.",
+      "description": "Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint.",
       "version": "1.0.0",
       "author": {
         "name": "Plagemes",
@@ -266,7 +266,7 @@
     {
       "name": "branch-namer",
       "source": "./mods/branch-namer",
-      "description": "/branch creates a well-named git branch from a short task description.",
+      "description": "/git-branch creates a well-named git branch from a short task description.",
       "version": "1.0.0",
       "author": {
         "name": "Plagemes",
@@ -982,7 +982,7 @@
     {
       "name": "session-stats",
       "source": "./mods/session-stats",
-      "description": "/stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
+      "description": "/session-stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
       "version": "1.0.0",
       "author": {
         "name": "Plagemes",

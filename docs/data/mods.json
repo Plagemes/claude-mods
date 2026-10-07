@@ -248,7 +248,7 @@
       "name": "auto-checkpoint",
       "category": "git",
       "tier": "complex",
-      "description": "Snapshots your work tree before every editing turn and lets you /rewind to any checkpoint.",
+      "description": "Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint.",
       "version": "1.0.0",
       "keywords": [
         "claude-mods",
@@ -273,13 +273,15 @@
         "commit",
         "conventional-commits"
       ],
-      "commands": []
+      "commands": [
+        "/commit"
+      ]
     },
     {
       "name": "branch-namer",
       "category": "git",
       "tier": "simple",
-      "description": "/branch creates a well-named git branch from a short task description.",
+      "description": "/git-branch creates a well-named git branch from a short task description.",
       "version": "1.0.0",
       "keywords": [
         "claude-mods",
@@ -885,7 +887,7 @@
       "name": "session-stats",
       "category": "observability",
       "tier": "complex",
-      "description": "/stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
+      "description": "/session-stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
       "version": "1.0.0",
       "keywords": [
         "claude-mods",
@@ -894,7 +896,6 @@
         "tokens"
       ],
       "commands": [
-        "/stats",
         "/session-stats"
       ]
     },

@@ -30,10 +30,11 @@ const mods = catalog.mods.map(entry => {
   const manifest = readJson(manifestPath)
   if (manifest.name !== entry.name) problems.push(`${manifestPath}: name is ${manifest.name}`)
   if (!categoryById.has(entry.category)) problems.push(`${entry.name}: unknown category ${entry.category}`)
-  return { ...entry, version: manifest.version, keywords: manifest.keywords ?? [], commands: commandsOf(entry.name) }
+  return { ...entry, version: manifest.version, keywords: manifest.keywords ?? [], commands: entry.commands ?? commandsOf(entry.name) }
 }).filter(Boolean)
 
-// Slash commands a mod registers, read from its source for the site and README.
+// Slash commands a mod registers, read from its source for the site and README;
+// a catalog entry's own `commands` wins where a mod registers names dynamically.
 function commandsOf(name) {
   for (const file of ['hooks/register.ts', 'hooks/register.tsx']) {
     const path = join(ROOT, 'mods', name, file)

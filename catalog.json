@@ -145,7 +145,7 @@
       "name": "auto-checkpoint",
       "category": "git",
       "tier": "complex",
-      "description": "Snapshots your work tree before every editing turn and lets you /rewind to any checkpoint.",
+      "description": "Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint.",
       "spec": "On first Edit/Write/Bash of a turn, create a snapshot without touching the index or branch: `git stash create` (or write-tree with a temp index) and store the commit under refs/claude-checkpoints/<n> via git update-ref. Keep last N (userConfig, default 20) in $.store with timestamp and the prompt text. /checkpoints lists them in a pane; /rewind <n> restores with confirmation (git checkout <sha> -- . after stashing current state). Silent outside git repos."
     },
     {
@@ -153,13 +153,16 @@
       "category": "git",
       "tier": "complex",
       "description": "/commit writes a Conventional Commit message from your staged diff and commits it.",
-      "spec": "Register /commit. Read `git diff --cached` (if empty, offer to stage all via argument 'all'). Ask $.model.complete (small fast model, configurable) for a Conventional Commits message (type(scope): subject <=72 chars + body bullets). Show it in a Pane with Buttons Commit / Regenerate / Edit (Input) / Cancel. Commit via $.process.run(['git','commit','-m',msg]). Respect commitlint config if present."
+      "spec": "Register /commit. Read `git diff --cached` (if empty, offer to stage all via argument 'all'). Ask $.model.complete (small fast model, configurable) for a Conventional Commits message (type(scope): subject <=72 chars + body bullets). Show it in a Pane with Buttons Commit / Regenerate / Edit (Input) / Cancel. Commit via $.process.run(['git','commit','-m',msg]). Respect commitlint config if present.",
+      "commands": [
+        "/commit"
+      ]
     },
     {
       "name": "branch-namer",
       "category": "git",
       "tier": "simple",
-      "description": "/branch creates a well-named git branch from a short task description.",
+      "description": "/git-branch creates a well-named git branch from a short task description.",
       "spec": "Register /branch <description>. Slugify the description into <type>/<kebab-slug> (type inferred from keywords: fix, feat, chore, docs, refactor, test; userConfig prefix e.g. initials). Run git switch -c. If no description, use the last user prompt (track via prompt.submit). Return text with the branch name."
     },
     {
@@ -432,8 +435,11 @@
       "name": "session-stats",
       "category": "observability",
       "tier": "complex",
-      "description": "/stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
-      "spec": "Aggregate from prompt.submit, tool.call, turn.complete. /stats Pane with tiles (turns, tool calls by type top 5, tokens in/out/cache, est cost, wall time, files edited), tool histogram as text bars."
+      "description": "/session-stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
+      "spec": "Aggregate from prompt.submit, tool.call, turn.complete. /stats Pane with tiles (turns, tool calls by type top 5, tokens in/out/cache, est cost, wall time, files edited), tool histogram as text bars.",
+      "commands": [
+        "/session-stats"
+      ]
     },
     {
       "name": "subagent-monitor",

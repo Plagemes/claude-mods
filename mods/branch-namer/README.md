@@ -1,5 +1,5 @@
 # branch-namer
-> /branch creates a well-named git branch from a short task description.
+> /git-branch creates a well-named git branch from a short task description.
 
 **Category:** Git & Versioning · **Version:** 1.0.0
 
