@@ -20,6 +20,7 @@ import {
   buildCatalog,
   CATALOG_PATH,
   categoryOf,
+  compareVersions,
   countsOf,
   DEFAULT_BRANCH,
   DEFAULT_MARKETPLACE,
@@ -47,7 +48,18 @@ import {
   updatesOf,
 } from './catalog'
 import type { CatalogMeta, ModStatus, Row, Source } from './catalog'
-import { argv, claudeBinary, parseInstalled, parseMarketplaceNames, parseOutcome } from './cli'
+import {
+  argv,
+  CLAUDE,
+  claudeBinary,
+  desktopRoots,
+  isClaudeFile,
+  joinPath,
+  parseInstalled,
+  parseMarketplaceNames,
+  parseOutcome,
+  versionOrder,
+} from './cli'
 
 type Dollar = EngineInterface
 type Action = 'install' | 'update' | 'uninstall'
@@ -218,6 +230,39 @@ async function syncCatalog($: Dollar, config: Config, isForced: boolean): Promis
 
 // ── Installed mods: the `claude plugin` CLI ──────────────────────────────────
 
+/** The `claude` the desktop app installed, this engine's version first; undefined when there is none. */
+async function desktopBinary($: Dollar): Promise<string | undefined> {
+  const [appData, home, engine] = await Promise.all([
+    $.env.get('APPDATA').catch(() => undefined),
+    $.env.get('HOME').catch(() => undefined),
+    $.session.version().then(info => info.version, () => ''),
+  ])
+  for (const root of desktopRoots(appData, home)) {
+    const versions = (await $.fs.list(root).catch(() => [])).filter(entry => entry.kind === 'dir')
+    for (const version of versionOrder(versions.map(entry => entry.name), engine, compareVersions)) {
+      const folder = joinPath(root, version)
+      const entries = await $.fs.list(folder).catch(() => [])
+      const direct = entries.find(entry => entry.kind === 'file' && isClaudeFile(entry.name))
+      if (direct !== undefined) {
+        return joinPath(folder, direct.name)
+      }
+      for (const build of entries.filter(entry => entry.kind === 'dir')) {
+        const files = await $.fs.list(joinPath(folder, build.name)).catch(() => [])
+        const file = files.find(entry => entry.kind === 'file' && isClaudeFile(entry.name))
+        if (file !== undefined) {
+          return joinPath(folder, build.name, file.name)
+        }
+      }
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * The `claude` executable: the one CLAUDE_CODE_EXECPATH names (a terminal
+ * session), else the desktop app's own, else `claude` from PATH.
+ */
 async function claudeBin($: Dollar): Promise<string> {
   if (binary === undefined) {
     let execPath: string | undefined
@@ -226,7 +271,8 @@ async function claudeBin($: Dollar): Promise<string> {
     } catch {
       execPath = undefined
     }
-    binary = claudeBinary(execPath)
+    const fromEnv = claudeBinary(execPath)
+    binary = fromEnv !== CLAUDE ? fromEnv : (await desktopBinary($)) ?? CLAUDE
   }
 
   return binary
@@ -438,7 +484,11 @@ async function runAction($: Dollar, catalog: StoreCatalog, bin: string, action: 
 }
 
 async function runUpdateAll($: Dollar, catalog: StoreCatalog, bin: string): Promise<StoreNotice> {
-  const names = updatesOf(catalog, await knownInstalled($, catalog)).map(mod => mod.name)
+  const installed = await knownInstalled($, catalog)
+  if (!installed.isKnown) {
+    return failure(`Could not read the installed mods: ${installed.error}`)
+  }
+  const names = updatesOf(catalog, installed).map(mod => mod.name)
   return names.length === 0 ? info('Every installed mod is up to date.') : updateMods($, catalog, bin, names)
 }
 
@@ -572,9 +622,11 @@ async function refreshReport($: Dollar, config: Config): Promise<string> {
   const offline = sync.phase === 'offline'
     ? ` Offline (${sync.message ?? 'no answer'}): showing the catalog cached ${formatAge((await $.clock.now()) - catalog.fetchedAt)}.`
     : ''
-  const unknown = installed?.isKnown === false ? ` Install status unavailable: ${installed.error}.` : ''
+  const status = installed?.isKnown === false
+    ? `install status unavailable (${installed.error})`
+    : `${counts.installed} installed, ${plural(counts.updates, 'update')} available`
 
-  return `◆ ${plural(counts.mods, 'mod')} in ${categories}, ${counts.installed} installed, ${plural(counts.updates, 'update')} available.${offline}${unknown}`
+  return `◆ ${plural(counts.mods, 'mod')} in ${categories}, ${status}.${offline}`
 }
 
 async function openStore($: Dollar, config: Config, query: string | undefined): Promise<CommandRunResult> {
@@ -686,9 +738,15 @@ export const register: Register = (on, options) => {
             <Text>
               <Text>{plural(counts.mods, 'mod')}</Text>
               <Text dimColor> · </Text>
-              <Text color={counts.installed > 0 ? 'success' : 'inactive'}>{counts.installed} installed</Text>
-              <Text dimColor> · </Text>
-              <Text color={counts.updates > 0 ? 'warning' : 'inactive'}>{plural(counts.updates, 'update')}</Text>
+              {installed?.isKnown === false
+                ? <Text color="warning">install status unknown</Text>
+                : (
+                  <Text>
+                    <Text color={counts.installed > 0 ? 'success' : 'inactive'}>{counts.installed} installed</Text>
+                    <Text dimColor> · </Text>
+                    <Text color={counts.updates > 0 ? 'warning' : 'inactive'}>{plural(counts.updates, 'update')}</Text>
+                  </Text>
+                )}
             </Text>
           )
         })()}
@@ -705,7 +763,7 @@ export const register: Register = (on, options) => {
     const statusLines = (
       <Box flexDirection="column">
         {installed?.isKnown === false
-          ? <Text color="warning" wrap="truncate-end">▲ Install status unavailable: {installed.error}</Text>
+          ? <Text color="warning" wrap="wrap">▲ Install status unavailable: {installed.error}</Text>
           : null}
         {busy === null ? null : <Text color="suggestion">⟳ {busy.verb} {busy.name}…</Text>}
         {notice === null ? null : (
@@ -720,7 +778,7 @@ export const register: Register = (on, options) => {
       </Box>
     )
     const statusRows =
-      (installed?.isKnown === false ? 1 : 0) +
+      (installed?.isKnown === false ? Math.ceil((installed.error.length + 30) / Math.max(20, width)) : 0) +
       (busy === null ? 0 : 1) +
       (notice === null ? 0 : Math.ceil((notice.text.length + 30) / Math.max(20, width)))
 

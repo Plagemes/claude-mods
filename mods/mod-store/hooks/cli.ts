@@ -2,8 +2,9 @@ import type { ProcessRunResult } from 'claude-code'
 
 import type { StoreInstall } from '../types'
 
-const CLAUDE = 'claude'
+export const CLAUDE = 'claude'
 const CLAUDE_BINARY = /(^|[\\/])claude(\.exe)?$/i
+const CLAUDE_FILE = /^claude(\.exe)?$/i
 
 /** What one `claude plugin ... --json` run said. */
 export type CliOutcome = {
@@ -23,6 +24,32 @@ export type CliOutcome = {
  */
 export const claudeBinary = (execPath: string | undefined): string =>
   execPath !== undefined && CLAUDE_BINARY.test(execPath.trim()) ? execPath.trim() : CLAUDE
+
+export const isClaudeFile = (name: string): boolean => CLAUDE_FILE.test(name)
+
+/**
+ * Where the desktop app keeps the Claude Code it runs, as
+ * `<root>/<version>/[<build>/]claude(.exe)`: under %APPDATA% on Windows, under
+ * Application Support on macOS. The desktop app does not put `claude` on PATH
+ * and does not hand CLAUDE_CODE_EXECPATH to plugins, so this is how the store
+ * finds the CLI there.
+ */
+export function desktopRoots(appData: string | undefined, home: string | undefined): string[] {
+  return [
+    appData === undefined || appData === '' ? undefined : `${appData}\\Claude\\claude-code`,
+    home === undefined || home === '' ? undefined : `${home}/Library/Application Support/Claude/claude-code`,
+  ].filter((root): root is string => root !== undefined)
+}
+
+/** Joins path parts with the separator `root` uses. */
+export const joinPath = (root: string, ...parts: string[]): string =>
+  [root, ...parts].join(root.includes('\\') ? '\\' : '/')
+
+/** Version folders to try: the engine's own first, then the rest newest first. */
+export function versionOrder(names: readonly string[], engine: string, compare: (a: string, b: string) => number): string[] {
+  const rest = names.filter(name => name !== engine).sort((a, b) => compare(b, a))
+  return names.includes(engine) ? [engine, ...rest] : rest
+}
 
 export const pluginId = (name: string, marketplace: string): string => `${name}@${marketplace}`
 
