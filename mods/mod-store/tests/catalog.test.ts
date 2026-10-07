@@ -217,6 +217,10 @@ describe('commands and links', () => {
     expect(parseArgs('search git status')).toEqual({ kind: 'open', query: 'git status' })
     expect(parseArgs('refresh')).toEqual({ kind: 'refresh' })
     expect(parseArgs('update-all')).toEqual({ kind: 'update-all' })
+    expect(parseArgs('update all')).toEqual({ kind: 'update-all' })
+    expect(parseArgs('install-all')).toEqual({ kind: 'install-all' })
+    expect(parseArgs('install all')).toEqual({ kind: 'install-all' })
+    expect(parseArgs('install *')).toEqual({ kind: 'install-all' })
     expect(parseArgs('install cost-meter')).toEqual({ kind: 'install', name: 'cost-meter' })
     expect(parseArgs('remove cost-meter')).toEqual({ kind: 'uninstall', name: 'cost-meter' })
     expect(parseArgs('update').kind).toBe('usage')
@@ -226,7 +230,7 @@ describe('commands and links', () => {
 
   test('builds the install line, the README links and a trimmed README', () => {
     const mod = catalog.mods.find(one => one.name === 'cost-meter')!
-    expect(installLine('cost-meter', 'plagemes/claude-mods')).toBe('/plugin install cost-meter --marketplace plagemes/claude-mods')
+    expect(installLine('cost-meter', 'claude-mods')).toBe('/plugin install cost-meter@claude-mods')
     expect(readmeUrl(catalog, mod)).toBe('https://github.com/plagemes/claude-mods/blob/main/mods/cost-meter/README.md')
     expect(readmeRawUrl(catalog, mod)).toBe('https://raw.githubusercontent.com/plagemes/claude-mods/main/mods/cost-meter/README.md')
     expect(trimReadme('\n# cost-meter\n> Live session cost.\n\n## What it does\nShows it.\n', mod)).toBe('## What it does\nShows it.')

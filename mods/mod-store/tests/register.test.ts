@@ -235,7 +235,7 @@ test('the detail view shows the README, installs with the claude CLI and offers 
 
   expect(await ui.find({ type: 'Text', text: 'not installed' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Cost, Tokens & Context · simple' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '/plugin install cost-meter --marketplace plagemes/claude-mods' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '/plugin install cost-meter@claude-mods' })).toBeDefined()
   expect((await ui.find({ type: 'Markdown' }))?.text).toBe('## What it does\nShows the **cost** of the session.')
   expect((await ui.find({ type: 'Link' }))?.props.href).toBe('https://github.com/plagemes/claude-mods/blob/main/mods/cost-meter/README.md')
 
@@ -300,6 +300,46 @@ test('/mods update-all updates every outdated mod after refreshing the marketpla
 
   const again = await mods($, 'update-all')
   expect(again.text).toBe('• Every installed mod is up to date.')
+})
+
+test('/mods install-all installs every mod not yet installed after refreshing the marketplace', async ($, on) => {
+  const w = world(on, { installed: OUTDATED, marketplaces: [] })
+  const done = await mods($, 'install-all')
+  expect(done.text).toBe('✓ Installed 4 mods (mod-store, rm-rf-guard, branch-namer, …). Run /reload-plugins to activate them.')
+  expect(w.toasts).toContain(done.text)
+  expect(w.calls).toContain('plugin marketplace add plagemes/claude-mods --json')
+  const marketplaceUpdate = w.calls.indexOf('plugin marketplace update claude-mods --json')
+  expect(marketplaceUpdate).toBeGreaterThan(-1)
+  const installs = w.calls.filter(call => call.startsWith('plugin install'))
+  expect(installs).toEqual([
+    'plugin install mod-store@claude-mods --scope user --json',
+    'plugin install rm-rf-guard@claude-mods --scope user --json',
+    'plugin install branch-namer@claude-mods --scope user --json',
+    'plugin install cost-meter@claude-mods --scope user --json',
+  ])
+  expect(w.calls.indexOf(installs[0]!)).toBeGreaterThan(marketplaceUpdate)
+
+  const again = await mods($, 'install all')
+  expect(again.text).toBe('• Every mod is already installed.')
+})
+
+test('the pane installs every mod the list shows that is not installed yet', async ($, on) => {
+  const w = world(on, { installed: OUTDATED })
+  await mods($)
+  await w.clock.settle()
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...pane(), surface })
+    expect((await ui.find({ key: 'install-all' }))?.props).toMatchObject({ label: 'Install all (4)' })
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ ...pane(), surface: 'terminal' })
+  await ui.select({ key: 'filter', value: 'git' })
+  expect((await ui.find({ key: 'install-all' }))?.props).toMatchObject({ label: 'Install all (1)' })
+  await ui.press({ key: 'install-all' })
+  expect(w.calls.filter(call => call.startsWith('plugin install'))).toEqual(['plugin install branch-namer@claude-mods --scope user --json'])
+  expect(w.toasts).toContain('✓ Installed 1 mod (branch-namer). Run /reload-plugins to activate it.')
+  expect(await ui.find({ key: 'install-all' })).toBeUndefined()
 })
 
 test('offline, the store falls back to the cached catalog and says so', async ($, on) => {
@@ -392,7 +432,7 @@ test('copying the install line toasts, or shows the line where there is no clipb
   const ui = await $.ui.mount({ ...pane(), surface: 'desktop' })
   await ui.press({ key: 'open:branch-namer' })
   await ui.press({ key: 'copy-install' })
-  expect(await ui.find({ type: 'Text', text: /No clipboard here \(no-clipboard\)\. The install line: \/plugin install branch-namer --marketplace plagemes\/claude-mods/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /No clipboard here \(no-clipboard\)\. The install line: \/plugin install branch-namer@claude-mods/ })).toBeDefined()
   await ui.press({ key: 'dismiss' })
   expect(await ui.find({ key: 'dismiss' })).toBeUndefined()
 })
