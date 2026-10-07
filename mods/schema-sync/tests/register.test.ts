@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
 import { generateError, matchesSchema, parseDrizzleConfig, schemaChanges } from '../hooks/schema'
 
 const PLUGIN = 'schema-sync'
@@ -143,6 +144,31 @@ test('a failed generate shows its error and can go to Claude', async ($, on) => 
   expect((await band.find({ key: 'ss-generate' }))?.text).toContain('Strng')
   await band.press({ key: 'ss-fix' })
   expect(w.submitted.at(-1)).toBe(`\`prisma generate\` fails after the schema edit (prisma/schema.prisma in /app):\n\n${error}\n\nFix the schema so the client generates.`)
+})
+
+test('with mods-hub: every generate is a build.result, and a failed one a warning notification instead of a toast', async ($, on) => {
+  const w = world(on, { ...PRISMA_APP })
+  const hub = fakeHub(on, {}, w.clock)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['build.result'], consumes: [] }])
+
+  await editSchema($, '  total Int\n', '  total Int\n  status String @default("new")\n')
+  await w.clock.advance(2000)
+  expect(hub.published).toEqual([
+    { topic: 'build.result', data: { tool: 'prisma', outcome: 'passed', durationMs: 0, command: 'prisma generate', errors: 0 } },
+  ])
+  expect(hub.notified).toEqual([])
+
+  w.generate = { exitCode: 1, stderr: VALIDATION_ERROR }
+  await editSchema($, '  status String @default("new")\n', '  note  Strng\n')
+  await w.clock.advance(2000)
+  const error = 'error: Type "Strng" is neither a built-in type, nor refers to another model, composite type, or enum. -->  prisma/schema.prisma:9'
+  expect(hub.notified).toEqual([{ level: 'warning', title: `prisma generate failed: ${error}`, topic: 'build.result' }])
+  expect(hub.published.at(-1)).toEqual({ topic: 'build.result', data: { tool: 'prisma', outcome: 'failed', durationMs: 0, command: 'prisma generate', errors: 1 } })
+  expect(w.toasts).toEqual([])
+  expect(w.statuses.at(-1)).toBe('✗ prisma generate failed')
 })
 
 test('watches the Drizzle schema its config names; a push counts as in step', async ($, on) => {

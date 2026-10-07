@@ -2,6 +2,7 @@ import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
 import { matchesPin, parseVersion, satisfies } from '../hooks/semver'
 import type { Version } from '../hooks/semver'
 
@@ -50,6 +51,19 @@ test('at session start, warns once with a toast and the status line when node di
   expect(seen.statuses).toEqual(['⚠ node v18.19.0, project wants v20.11.0'])
   await start($, clock)
   expect(seen.toasts).toHaveLength(1)
+})
+
+test('with mods-hub: the start-up warning is a warning notification (the status line stays), not a toast', async ($, on) => {
+  const { seen, clock } = project(on, 'v18.19.0', { '/repo/.nvmrc': 'v20.11.0\n' })
+  const hub = fakeHub(on, {}, clock)
+  await start($, clock)
+
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'node v18.19.0 is running, but the project wants v20.11.0 (.nvmrc)' }])
+  expect(seen.statuses).toEqual(['⚠ node v18.19.0, project wants v20.11.0'])
+  await start($, clock)
+  expect(hub.notified).toHaveLength(1)
 })
 
 const MATCHING: Record<string, Record<string, string>> = {

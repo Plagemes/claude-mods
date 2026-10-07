@@ -3,6 +3,7 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { findLoopQueries } from '../hooks/loops'
+import { fakeHub } from './hub'
 
 /** Stands in for the engine: files on disk by path (any other file holds just PLACEHOLDER), what reaches the tool, and the toasts. */
 function engine(on: On, files: Record<string, string> = {}) {
@@ -35,6 +36,25 @@ test('flags a Prisma query in a for loop, with file:line, a toast and what to do
   expect(result.context?.[0]).toContain('/repo/src/posts.ts:3  prisma.user.findUnique(...) runs once per iteration')
   expect(result.context?.[0]).toContain('include/select on the outer query')
   expect(seen.toasts).toEqual(['possible N+1 query in posts.ts:3'])
+})
+
+test('with mods-hub: the hint is an info notification and a lint.result, not a toast', async ($, on) => {
+  const seen = engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
+
+  await $.tool.call({
+    tool: 'Edit',
+    file_path: '/repo/src/posts.ts',
+    old_string: 'PLACEHOLDER',
+    new_string: 'const out = []\nfor (const id of ids) {\n  const user = await prisma.user.findUnique({ where: { id } })\n  out.push(user)\n}',
+  })
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'info', title: 'possible N+1 query in posts.ts:3', topic: 'lint.result' }])
+  expect(hub.published).toEqual([{ topic: 'lint.result', data: { tool: 'n-plus-one-hint', errors: 0, warnings: 1, files: ['/repo/src/posts.ts'] } }])
 })
 
 test('sees queries in callbacks, comprehensions, blocks and brace-less loops, across languages', async ($, on) => {

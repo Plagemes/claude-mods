@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 const FILE = '/repo/src/user.ts'
 
 /** Stands in for the engine: records which tool calls reach it and which toasts are raised. */
@@ -125,4 +127,30 @@ test('a long run of backslashes after a stray quote does not hang the check', as
   const started = Date.now()
   await $.tool.call({ tool: 'Edit', file_path: FILE, old_string: 'a', new_string: `// don't ${'\\'.repeat(60)}` })
   expect(Date.now() - started).toBeLessThan(1000)
+})
+
+test('with mods-hub: the warning goes out through notify and lint.result is published, no toast', async ($, on) => {
+  const seen = engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
+
+  const result = await $.tool.call({ tool: 'Edit', file_path: FILE, old_string: 'x', new_string: 'const a = b as any as any' })
+  expect(result.context?.[0]).toContain('added as any x2')
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'Added as any x2 to user.ts', topic: 'lint.result' }])
+  expect(hub.published).toEqual([{ topic: 'lint.result', data: { tool: 'no-any', errors: 0, warnings: 2, files: [FILE] } }])
+})
+
+test('with mods-hub: a blocked edit is published as errors', { options: { mode: 'block' } }, async ($, on) => {
+  const seen = engine(on)
+  const hub = fakeHub(on)
+
+  const result = await $.tool.call({ tool: 'Write', file_path: FILE, content: 'export const x: any = 1\n' })
+  expect(result.deny).toContain('no-any: blocked')
+  expect(seen.reached).toBe(0)
+  expect(hub.published).toEqual([{ topic: 'lint.result', data: { tool: 'no-any', errors: 1, warnings: 0, files: [FILE] } }])
+  expect(hub.notified).toEqual([])
 })

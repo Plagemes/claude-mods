@@ -1,3 +1,5 @@
+import { lineFinder } from './shared/line-index'
+
 export type Finding = {
   kind: 'needs-client' | 'error-boundary' | 'server-import' | 'metadata' | 'needless-client'
   /** Line, counting from 1; 0 for the file as a whole. */
@@ -45,22 +47,6 @@ const withoutComments = (source: string): string => source.replace(TOKENS, token
 /** The source without comments and with the inside of strings blanked: what is left is code. */
 const codeOnly = (source: string): string =>
   source.replace(TOKENS, token => (token.startsWith('//') || token.startsWith('/*') ? blank(token) : `${token[0]}${blank(token.slice(1, -1))}${token.slice(-1)}`))
-
-/** A finder of 1-based line numbers in `text`: the newline offsets are found once, then each lookup is a binary search. */
-const lineFinder = (text: string): ((index: number) => number) => {
-  const newlines: number[] = []
-  for (let at = text.indexOf('\n'); at >= 0; at = text.indexOf('\n', at + 1)) newlines.push(at)
-  return index => {
-    let low = 0
-    let high = newlines.length
-    while (low < high) {
-      const middle = (low + high) >> 1
-      if ((newlines[middle] ?? Infinity) < index) low = middle + 1
-      else high = middle
-    }
-    return low + 1
-  }
-}
 
 const hasDirective = (text: string, directive: string): boolean => new RegExp(`^\\s*(['"])${directive}\\1`).test(text)
 

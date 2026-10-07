@@ -2,6 +2,7 @@ import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
 import { checkComponent, clientFeatures, nextProjectDirs } from '../hooks/component'
+import { fakeHub } from './hub'
 
 const NEXT_PACKAGE = JSON.stringify({ dependencies: { next: '15.0.0', react: '19.0.0' } })
 
@@ -36,6 +37,24 @@ test('tells Claude when a component uses hooks or handlers but has no "use clien
   expect(note).toContain('next-guard: 1 note on /repo/app/counter.tsx:')
   expect(note).toContain("warn: uses useState, onClick but has no 'use client'")
   expect(seen.toasts).toEqual(["1 'use client' note for counter.tsx"])
+})
+
+test('with mods-hub: a real problem is a warning notification and a lint.result, a mere hint only an info one', async ($, on) => {
+  const seen = project(on, { '/repo/package.json': NEXT_PACKAGE, '/repo/app/counter.tsx': COUNTER, '/repo/app/title.tsx': "'use client'\nexport default function T() {\n  return <h1>hi</h1>\n}\n" })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
+
+  await $.tool.call({ tool: 'Write', file_path: '/repo/app/counter.tsx', content: COUNTER })
+  await $.tool.call({ tool: 'Write', file_path: '/repo/app/title.tsx', content: 'x' })
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toEqual([
+    { level: 'warning', title: "1 'use client' note for counter.tsx", topic: 'lint.result' },
+    { level: 'info', title: "1 'use client' note for title.tsx", topic: 'lint.result' },
+  ])
+  expect(hub.published).toEqual([{ topic: 'lint.result', data: { tool: 'next-guard', errors: 0, warnings: 1, files: ['/repo/app/counter.tsx'] } }])
 })
 
 test('tells Claude when a "use client" file imports server-only modules, with the line', async ($, on) => {

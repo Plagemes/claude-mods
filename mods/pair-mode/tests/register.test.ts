@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
 import { cutDiff, parseAction, parseNumstat, writesFiles } from '../hooks/pair'
 
 const BAND = {
@@ -92,6 +93,20 @@ test('while on, file edits and file-writing shell commands are refused with a di
   expect((await pair($, 'off')).text).toBe('Pair mode off: Claude edits files again.')
   expect((await $.tool.call({ tool: 'Edit', file_path: '/repo/src/a.ts', old_string: 'a', new_string: 'b' })).deny).toBeUndefined()
   expect(reached).toContain('Edit')
+})
+
+test('with mods-hub: says hello, and the guard behaves the same', async ($, on) => {
+  const { reached } = world(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+
+  await pair($, 'on')
+  expect((await $.tool.call({ tool: 'Bash', command: 'sudo -u web env X=1 rm -rf build' })).deny).toContain('this command writes files (rm)')
+  expect((await $.tool.call({ tool: 'Bash', command: `bash -c "echo hi > notes.txt"` })).deny).toContain('(a redirection to notes.txt)')
+  expect((await $.tool.call({ tool: 'Bash', command: 'npm test 2>&1 | tail -20' })).deny).toBeUndefined()
+  expect(reached).toEqual(['npm test 2>&1 | tail -20'])
+  expect(hub.published).toEqual([])
 })
 
 test('the system prompt explains pair mode only while it is on', async ($, on) => {

@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
 import { diffRoutes, findIssues, isDocumented, mergeChanges, routesOf, specRoutesOf } from '../hooks/routes'
 
 const ROOT = '/work/api'
@@ -144,6 +145,25 @@ test('route changes the spec does not cover raise the band, and its button asks 
   expect(state.prompts[0]).toContain('- POST /users/{id}/avatar (defined in src/routes/users.ts) is not documented')
   expect(state.prompts[0]).toContain('- DELETE /users/{id} was removed from src/routes/users.ts but is still documented')
   expect(await band.find({ key: 'update' })).toBeUndefined()
+})
+
+test('with mods-hub: the routes out of sync are published as a lint.result at the turn end (no notification of its own)', async ($, on) => {
+  project(on, { 'openapi.yaml': SPEC, 'src/routes/users.ts': ROUTES_BEFORE })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
+
+  await $.turn.start({ text: 'add avatar upload, drop delete', turnId: 't1' })
+  await $.tool.call({ tool: 'Write', file_path: `${ROOT}/src/routes/users.ts`, content: ROUTES_AFTER })
+  expect(hub.published).toEqual([])
+  await $.turn.complete(TURN)
+
+  expect(hub.published).toEqual([
+    { topic: 'lint.result', data: { tool: 'openapi-sync', errors: 0, warnings: 2, files: ['openapi.yaml', 'src/routes/users.ts'] } },
+  ])
+  expect(hub.notified).toEqual([])
 })
 
 test('a spec updated in the same turn, or a later turn that fixes it, clears the warning', async ($, on) => {

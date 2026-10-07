@@ -34,3 +34,4 @@ After a turn that drifted, the band shows for example:
 - `tool.call` on `Edit`/`Write` reads the file through `$.fs` before and after the tool runs and diffs its surface; edits to `*.md`, `*.rst`, `*.txt` or anything under `docs/` count as doc updates. Test files are ignored.
 - `turn.start` / `turn.complete` scope the check to a turn; the `AbovePrompt` band draws from `$.state` and its button calls `$.prompt.submit`.
 - Detection is regex-based, so it can miss exotic declarations (multi-line export lists, flags defined from variables) and stays silent in projects with no README or docs folder.
+- With [mods-hub](../mods-hub) installed: the greeting says it publishes `lint.result` (`tool: readme-sync`, one warning per changed export, flag or env var, with the files), once per turn that changed documented surface without touching the docs. The band is unchanged and no notification is added. Without the hub nothing changes.

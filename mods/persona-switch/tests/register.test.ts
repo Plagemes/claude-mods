@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptAutocompleteInput, PromptAutocompleteResult, PromptComposeInput } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const ROOT = '/work/shop'
 
 const facts: PromptComposeInput = {
@@ -63,6 +65,21 @@ test('/persona adds the persona to the system prompt, shows it and remembers it 
   expect(await personaSection($)).toBeUndefined()
   expect(statuses.at(-1)).toBeUndefined()
   expect(store.has(`active:${ROOT}`)).toBe(false)
+})
+
+test('with mods-hub: says hello and shares the active persona as a fact', async ($, on) => {
+  world(on, { [`active:${ROOT}`]: 'teacher' })
+  const hub = fakeHub(on)
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+  expect(hub.facts.get('persona')).toEqual({ name: 'teacher', label: 'Teacher' })
+
+  await run($, 'persona', 'security auditor')
+  expect(hub.facts.get('persona')).toEqual({ name: 'security-auditor', label: 'Security auditor' })
+  await run($, 'persona', 'off')
+  expect(hub.facts.get('persona')).toEqual({ name: null, label: null })
+  expect(hub.published).toEqual([])
 })
 
 test('restores the project persona when a session starts', async ($, on) => {

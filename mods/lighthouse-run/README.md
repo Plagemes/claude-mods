@@ -43,3 +43,4 @@ A run takes 20–60 s (longer the first time, while `npx` fetches Lighthouse); a
   4200, 8000, 5000 and a few more. The last scores per page and device are kept in the mod's store.
 - Limits: it needs Node.js and network access the first time; scores vary a little from run to run, so treat
   small deltas as noise.
+- With [mods-hub](../mods-hub) installed: the greeting says it publishes `x.lighthouse-run.scores` (url, form factor and the four category scores of each finished run). The pane stays its own, and the toasts are unchanged. Without the hub nothing changes.

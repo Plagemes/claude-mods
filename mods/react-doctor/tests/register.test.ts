@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 
 import { analyze, boundNames } from '../hooks/analyze'
 import { scan } from '../hooks/scan'
+import { fakeHub } from './hub'
 
 const at = (source: string, needle: string): number => source.slice(0, source.indexOf(needle)).split('\n').length
 const rules = (source: string) => analyze(source).map(issue => `${issue.line} ${issue.rule}`)
@@ -201,6 +202,28 @@ test('notes new issues on the edit result once, with file:line, and shows them i
   await $.tool.call({ tool: 'Write', file_path: '/app/src/List.tsx', content: ISSUE_FREE })
   expect(w.statuses.at(-1)).toBeUndefined()
   expect(w.runs).toEqual([])
+})
+
+test('with mods-hub: each file\'s new issues are published as lint.result (rules-of-hooks mistakes as errors), once', async ($, on) => {
+  const w = world(on, { '/app/src/List.tsx': ISSUE_FREE, '/app/src/Search.tsx': ISSUE_FREE })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
+
+  const first = await $.tool.call({ tool: 'Write', file_path: '/app/src/List.tsx', content: RENDER })
+  expect(first.context).toHaveLength(1)
+  await $.tool.call({ tool: 'Write', file_path: '/app/src/Search.tsx', content: CONDITIONAL })
+  const again = await $.tool.call({ tool: 'Edit', file_path: '/app/src/List.tsx', old_string: 'rows', new_string: 'rows' })
+  expect(again.context ?? []).toEqual([])
+
+  expect(hub.published).toEqual([
+    { topic: 'lint.result', data: { tool: 'react-doctor', errors: 0, warnings: 5, files: ['/app/src/List.tsx'] } },
+    { topic: 'lint.result', data: { tool: 'react-doctor', errors: 5, warnings: 0, files: ['/app/src/Search.tsx'] } },
+  ])
+  expect(hub.notified).toEqual([])
+  expect(w.statuses.at(-1)).toBe('⚛ 10 React issues · List.tsx, Search.tsx')
 })
 
 test('checks hooks files that import react, and skips other scripts', async ($, on) => {

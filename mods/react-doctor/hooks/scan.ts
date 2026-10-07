@@ -194,23 +194,5 @@ export const matchBackward = (code: string, close: number): number => {
   return -1
 }
 
-/** Where the newlines of the last source asked about are: every finding in one file reuses them instead of recounting. */
-let indexed: { source: string; newlines: number[] } = { source: '', newlines: [] }
-
-/** The 1-based line of an offset (a binary search over the file's newline offsets, found once per file). */
-export const lineAt = (source: string, index: number): number => {
-  if (indexed.source !== source) {
-    const newlines: number[] = []
-    for (let at = source.indexOf('\n'); at >= 0; at = source.indexOf('\n', at + 1)) newlines.push(at)
-    indexed = { source, newlines }
-  }
-  const { newlines } = indexed
-  let low = 0
-  let high = newlines.length
-  while (low < high) {
-    const middle = (low + high) >> 1
-    if ((newlines[middle] ?? Infinity) < index) low = middle + 1
-    else high = middle
-  }
-  return low + 1
-}
+/** The 1-based line of an offset in a source (shared with the other scanners; the newline offsets are found once per file). */
+export { lineAt } from './shared/line-index'

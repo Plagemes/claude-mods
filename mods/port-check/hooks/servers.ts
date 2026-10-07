@@ -1,4 +1,4 @@
-import { baseName, parseShell } from './shell'
+import { baseName, simpleCommands } from './shared/shell'
 
 export type Server = { tool: string; port: number }
 
@@ -16,8 +16,6 @@ type Spec = {
   env?: readonly string[]
 }
 
-const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s
-const WRAPPERS = new Set(['sudo', 'time', 'nohup', 'command', 'exec', 'env'])
 const RUNNERS: readonly (readonly string[])[] = [['npx'], ['bunx'], ['pnpx'], ['npm', 'exec'], ['pnpm', 'exec'], ['pnpm', 'dlx'], ['yarn', 'exec'], ['yarn', 'dlx'], ['bun', 'x'], ['bundle', 'exec'], ['poetry', 'run'], ['pipenv', 'run'], ['uv', 'run']]
 const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun'])
 /** Package-manager words that are commands of their own, not script names. */
@@ -31,20 +29,6 @@ const LAUNCHERS = new Set(['node', 'nodemon', 'ts-node', 'ts-node-dev', 'tsx', '
 /** Programs that run several commands given as arguments: `concurrently "vite" "npm:api"`. */
 const CONCURRENT = new Set(['concurrently', 'npm-run-all', 'run-p', 'run-s'])
 const PYTHON = /^(?:python|py)\d*(?:\.\d+)*(?:\.exe)?$/
-
-function withoutPrefix(all: readonly string[]): { env: Record<string, string>; words: string[] } {
-  const env: Record<string, string> = {}
-  let index = 0
-  let isAfterWrapper = false
-  for (; index < all.length; index += 1) {
-    const word = all[index] as string
-    const assignment = ASSIGNMENT.exec(word)
-    if (assignment !== null) env[assignment[1] as string] = assignment[2] as string
-    else if (WRAPPERS.has(baseName(word))) isAfterWrapper = true
-    else if (!(isAfterWrapper && word.startsWith('-'))) break
-  }
-  return { env, words: all.slice(index) }
-}
 
 const runnerOf = (words: readonly string[]): readonly string[] | undefined =>
   RUNNERS.find(prefix => prefix.every((word, index) => words[index] === word))
@@ -241,9 +225,8 @@ export function analyze(text: string, inherited: Readonly<Record<string, string>
   const servers: Server[] = []
   const scripts: ScriptRef[] = []
   let directory = ''
-  for (const segment of parseShell(text)) {
-    const { env: own, words } = withoutPrefix(segment.words)
-    const env = { ...inherited, ...own }
+  for (const { argv: words, assignments } of simpleCommands(text)) {
+    const env = { ...inherited, ...assignments }
     if (words[0] === 'cd' && words[1] !== undefined) {
       directory = moveTo(directory, words[1])
       continue

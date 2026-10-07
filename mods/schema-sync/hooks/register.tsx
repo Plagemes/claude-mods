@@ -8,6 +8,7 @@ const DEFAULT_DEBOUNCE_SECONDS = 2
 const MAX_DEBOUNCE_SECONDS = 60
 const GENERATE_TIMEOUT_MS = 120_000
 const OK_STATUS_MS = 6_000
+const GENERATE_TOAST_MS = 8_000
 const MAX_LEVELS = 10
 const DRIZZLE_CONFIGS = ['drizzle.config.ts', 'drizzle.config.mts', 'drizzle.config.js', 'drizzle.config.mjs', 'drizzle.config.cjs', 'drizzle.config.json']
 const SCRIPT_FILE = /\.(?:ts|mts|cts|js|mjs|cjs)$/
@@ -144,20 +145,54 @@ async function publish($: EngineInterface, project: Project, schema: string, gen
   showStatus($, view)
 }
 
+/** The `prisma generate` toast with its own timeout without the hub; a warning notification through mods-hub when it is installed. */
+async function warnGenerateFailed($: EngineInterface, error: string): Promise<void> {
+  const title = `prisma generate failed: ${error}`
+  if ((await hubMode($)) === undefined) $.ui.toast(title, { timeoutMs: GENERATE_TOAST_MS })
+  else await hubNotify($, { level: 'warning', title, topic: 'build.result' })
+}
+
+/** One `prisma generate` as a `build.result` on the hub's bus (nothing happens without the hub). */
+async function publishGenerate($: EngineInterface, outcome: 'passed' | 'failed' | 'error', command: string, durationMs: number): Promise<void> {
+  await hubPublish($, { topic: 'build.result', data: { tool: 'prisma', outcome, durationMs, command, errors: outcome === 'passed' ? 0 : 1 } })
+}
+
 async function generate($: EngineInterface, project: Project, schema: string): Promise<Generate> {
   await publish($, project, schema, { status: 'running', error: null }, (await read($, viewAtom))?.missing ?? null)
   const local = `${project.root}/node_modules/.bin/prisma`
   const argv = (await exists($, local)) ? [local, 'generate'] : ['npx', '--no-install', 'prisma', 'generate']
+  const started = await $.clock.now()
   try {
     const ran = await $.process.run(argv, { cwd: project.root, timeoutMs: GENERATE_TIMEOUT_MS, env: RUN_ENV })
-    if (ran.exitCode === 0) return { status: 'ok', error: null }
+    if (ran.exitCode === 0) {
+      await publishGenerate($, 'passed', 'prisma generate', (await $.clock.now()) - started)
+      return { status: 'ok', error: null }
+    }
     const error = generateError(`${ran.stderr}\n${ran.stdout}`)
-    $.ui.toast(`prisma generate failed: ${error}`, { timeoutMs: 8_000 })
+    await warnGenerateFailed($, error)
+    await publishGenerate($, 'failed', 'prisma generate', (await $.clock.now()) - started)
     return { status: 'failed', error }
   } catch (error) {
     const reason = /ENOENT|failed to start/i.test(String(error)) ? 'the Prisma CLI is not installed' : `it did not finish in ${GENERATE_TIMEOUT_MS / 1000}s`
+    await publishGenerate($, 'error', 'prisma generate', (await $.clock.now()) - started)
     return { status: 'failed', error: reason }
   }
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['build.result'], consumes: [] })
 }
 
 /** Regenerates the client (Prisma) and compares the schema with the last migration this session saw. */
@@ -241,6 +276,11 @@ export const register: Register = (on, options) => {
   }
   const host: Host = { projects: new Map(), drizzle: new Map(), baselines: new Map(), queued: new Map(), timer: undefined, isBusy: false }
 
+  on('session.start', async ($, e, next) => {
+    await greetHub($)
+    return next(e)
+  })
+
   on('tool.call', { tool: ['Edit', 'Write'] }, async ($, e, next) => {
     const file = 'file_path' in e && typeof e.file_path === 'string' ? e.file_path : ''
     if (file === '' || SKIPPED_PATH.test(file)) return next(e)
@@ -305,3 +345,76 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:d76b7319c8a3: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

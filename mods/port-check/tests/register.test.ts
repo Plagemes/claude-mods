@@ -3,6 +3,7 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { analyze, portIn } from '../hooks/servers'
+import { fakeHub } from './hub'
 
 type Listening = Record<number, { pid: number; name: string; args?: string }>
 
@@ -55,6 +56,27 @@ test('tells the user and Claude which process holds the port, and still lets the
   expect(seen.toasts).toEqual(['port 3000 is already in use by node (pid 4821)'])
   expect(result.context?.[0]).toContain("port 3000 (next's port for this command) is already listening: node, pid 4821: node /app/server.js --watch")
   expect(result.context?.[0]).toContain('kill 4821')
+})
+
+test('with mods-hub: the busy-port toast is a warning notification, and Claude still gets the note', async ($, on) => {
+  const seen = machine(on, NODE_ON_3000)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+
+  const result = await bash($, 'next dev')
+  expect(seen.ran).toEqual(['next dev'])
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'port 3000 is already in use by node (pid 4821)' }])
+  expect(result.context?.[0]).toContain('kill 4821')
+})
+
+test('reads the commands behind sudo, env and bash -c like the shared shell reader does', () => {
+  expect(analyze('sudo -u app env PORT=4000 next dev').servers).toEqual([{ tool: 'next', port: 4000 }])
+  expect(analyze('bash -c "next dev -p 4100"').servers).toEqual([{ tool: 'next', port: 4100 }])
+  expect(analyze('cd web && PORT=4200 npm run dev').scripts).toEqual([{ name: 'dev', args: [], env: { PORT: '4200' }, directory: 'web' }])
 })
 
 test('stays quiet when the port is free, and never probes for commands that start no server', async ($, on) => {

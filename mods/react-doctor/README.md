@@ -45,3 +45,4 @@ The status line shows the open issues: `⚛ 2 React issues · Profile.tsx`. It c
 - Limits:
   - The scanner can't follow values across files or through custom hooks the way the React Compiler does. Dependencies are matched by name: listing `props.user` covers `props.user.id`.
   - The ESLint run adds a moment to each React edit. Turn `useEslint` off if that matters more than the exact rule set.
+- With [mods-hub](../mods-hub) installed: the greeting says it publishes `lint.result` (`tool: react-doctor`, once per edit that has new findings: the hook-order mistakes React rejects as `errors`, the rest as `warnings`, and the file). It adds no notification of its own (the status line and the note to Claude are unchanged), and the line numbers come from the shared `line-index` library. Without the hub nothing changes.
