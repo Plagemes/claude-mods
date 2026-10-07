@@ -1,0 +1,31 @@
+{
+  "name": "codebase-map",
+  "version": "1.0.0",
+  "description": "/map builds a compact map of your repository and gives it to Claude.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#codebase-map",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "memory", "context", "repository-map"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoInject": {
+      "type": "boolean",
+      "title": "Give the map to Claude every turn",
+      "description": "Adds the saved map to Claude's system prompt on every request, once /map has run in this project.",
+      "default": true
+    },
+    "depth": {
+      "type": "number",
+      "title": "Tree depth",
+      "description": "How many directory levels the tree shows (1-6). Lowered automatically when the map would exceed maxChars.",
+      "default": 3
+    },
+    "maxChars": {
+      "type": "number",
+      "title": "Size cap (characters)",
+      "description": "The most characters the map may take (1000-40000).",
+      "default": 6000
+    }
+  }
+}

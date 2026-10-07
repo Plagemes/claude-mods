@@ -1,0 +1,25 @@
+{
+  "name": "issue-drafter",
+  "version": "1.0.0",
+  "description": "/issue turns the current conversation into a well-structured GitHub issue.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#issue-drafter",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "team", "github", "issues"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "labels": {
+      "type": "string",
+      "title": "Labels",
+      "description": "Labels added to every issue created with gh, comma-separated. Each must already exist in the repository.",
+      "default": ""
+    },
+    "typeLabels": {
+      "type": "boolean",
+      "title": "Label by type",
+      "description": "Also add bug or enhancement, after the draft's type.",
+      "default": false
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "changelog-keeper",
+  "version": "1.0.0",
+  "description": "Keeps CHANGELOG.md's Unreleased section up to date as you commit.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#changelog-keeper",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "team", "changelog", "conventional-commits"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "path": {
+      "type": "string",
+      "title": "Changelog file",
+      "description": "Path of the changelog, relative to the repository root.",
+      "default": "CHANGELOG.md"
+    },
+    "createIfMissing": {
+      "type": "boolean",
+      "title": "Create the file if missing",
+      "description": "Start a Keep a Changelog file on the first entry when the repository has none.",
+      "default": true
+    },
+    "untyped": {
+      "type": "string",
+      "title": "Commits without a type",
+      "description": "What a subject that is not a Conventional Commit becomes: an entry under Changed, or nothing.",
+      "options": ["changed", "skip"],
+      "default": "changed"
+    },
+    "includeChores": {
+      "type": "boolean",
+      "title": "Include chores",
+      "description": "Also log docs, test, chore, ci, build and style commits (under Changed).",
+      "default": false
+    },
+    "includeHash": {
+      "type": "boolean",
+      "title": "Append the commit hash",
+      "description": "End each entry with the short commit hash, e.g. (a1b2c3d).",
+      "default": false
+    }
+  }
+}

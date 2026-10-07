@@ -1,0 +1,19 @@
+{
+  "name": "readme-sync",
+  "version": "1.0.0",
+  "description": "Warns when public APIs, CLI flags or env vars change but the docs do not.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#readme-sync",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "team", "docs", "readme"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "apiPaths": {
+      "type": "string",
+      "title": "Public API paths",
+      "description": "Path prefixes (comma-separated, from the project root) whose exports count as public API. Empty: watch only CLI flags and env vars.",
+      "default": "src/,lib/"
+    }
+  }
+}

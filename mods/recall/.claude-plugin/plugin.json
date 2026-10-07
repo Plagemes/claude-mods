@@ -1,0 +1,25 @@
+{
+  "name": "recall",
+  "version": "1.0.0",
+  "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#recall",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "memory", "search", "notes"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "limit": {
+      "type": "number",
+      "title": "Results per search",
+      "description": "How many passages a search returns when Claude does not say (1-20).",
+      "default": 5
+    },
+    "paths": {
+      "type": "string",
+      "title": "Extra notes",
+      "description": "More files or folders to search, comma-separated, relative to the project (e.g. notes, docs/rfcs).",
+      "default": ""
+    }
+  }
+}
