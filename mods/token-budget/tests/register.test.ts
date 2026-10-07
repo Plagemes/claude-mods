@@ -1,6 +1,8 @@
 import { test, expect } from 'claude-code/testing'
 import type { On, TurnUsage } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const BAND = {
   plugin: 'token-budget',
   component: 'AbovePrompt',
@@ -120,4 +122,28 @@ test('/budget shows the status and /budget set changes the limits', async ($, on
   expect((await $.prompt.submit(typed('free again'))).drop).toBeUndefined()
 
   expect((await run('set lots')).text).toContain('is not an amount')
+})
+
+test('with mods-hub: publishes budget.threshold, notifies warning then critical, and shares its status', { options: { budgetUsd: 1 } }, async ($, on) => {
+  const engine = answerEngine(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.2.3"}' }))
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.2.3', publishes: ['budget.threshold'], consumes: [] }])
+
+  await $.turn.complete(turn(opusOutput(42_500)))
+  await $.turn.complete(turn(opusOutput(12_500)))
+
+  expect(hub.published).toEqual([
+    { topic: 'budget.threshold', data: { kind: 'usd', scope: 'session', used: 0.85, limit: 1, percent: 85 } },
+    { topic: 'budget.threshold', data: { kind: 'usd', scope: 'session', used: 1.1, limit: 1, percent: 110 } },
+  ])
+  expect(hub.notified.map(notice => [notice.level, notice.title])).toEqual([
+    ['warning', '85% of the session budget used'],
+    ['critical', 'Session budget reached: prompts are paused'],
+  ])
+  // The hub shows (or holds, when Silent) the notices: no toast of the mod's own.
+  expect(engine.toasts).toEqual([])
+  expect(hub.facts.get('status')).toMatchObject({ level: 'over', percent: 110, turns: 2, limits: { usd: 1, tokens: null } })
+  expect((await $.prompt.submit(typed('still paused'))).drop).toContain('budget is spent')
 })

@@ -14,6 +14,7 @@ import type {
   WaSessionInfo,
   WaTab,
 } from '../types'
+import type { ModsEvent, ModsNotice } from '../types/mods-hub'
 import { MAX_OPTIONS, matchAnswer, optionsFor, pendingFor, questionText } from './answers'
 import type { Answer, Pending } from './answers'
 import { HELP_TEXT, parseCommand, reactionMeaning } from './commands'
@@ -60,11 +61,32 @@ import { clean, oneLine } from './privacy'
 import { chartSvg, chartText, costChart, routerChart, testsChart } from './reports'
 import type { Chart } from './reports'
 import { LIVE_MS, defaultLabel, isLive, projectOfChat, route } from './routing'
-import { EVENT_KEYS, EVENT_LABELS, defaultPrefs, digitsOnly, interactionAllowed, interactionLabel, mergePrefs, parseClock, readSettings, windowEnd } from './settings'
+import {
+  EVENT_KEYS,
+  EVENT_LABELS,
+  channelStatusOf,
+  defaultPrefs,
+  digitsOnly,
+  hubModeLabel,
+  interactionAllowed,
+  interactionLabel,
+  mergePrefs,
+  parseClock,
+  prefsFromHub,
+  readSettings,
+  windowEnd,
+} from './settings'
 import type { Settings } from './settings'
 
 const NAME = 'whatsapp-bridge'
 const PANE = 'whatsapp-bridge'
+/** mods-hub: its shared panel, the bridge's tab in it (order 80: Channels), and its channel id. */
+const HUB_PANE = 'claude-mods'
+const TAB = { id: 'channels', title: 'Channels', order: 80, command: 'wa' } as const
+const CHANNEL = 'whatsapp'
+/** How a hub notification's level travels: critical at once, info in the digest, the rest as normal. */
+const HUB_PRIORITY: Record<string, WaPriority> = { critical: 'critical', error: 'normal', warning: 'normal', success: 'normal', info: 'info' }
+const HUB_GLYPH: Record<string, string> = { critical: '🚨', error: '❌', warning: '⚠️', success: '✅', info: 'ℹ️' }
 const PANE_COLUMNS = 52
 const TOOL_PREFIX = 'mcp__whatsapp-bridge__'
 const HEARTBEAT_MS = LEASE_RENEW_MS
@@ -219,7 +241,15 @@ type Runtime = {
   isPaneOpen: boolean
   sendCount: number
   isConsuming: boolean
+  /** mods-hub's global mode when it is installed (refreshed every heartbeat); undefined without the hub. */
+  hub: HubMode | undefined
+  /** The newest hub event already read. */
+  hubSeenAt: number
+  /** The link phase last reported to the hub's channel list ('' before the channel is registered). */
+  channelPhase: string
 }
+
+type HubMode = NonNullable<Awaited<ReturnType<typeof hubMode>>>
 
 type CallResult = { status: number; ok: boolean; json: unknown; text: string; retryAfter?: string }
 
@@ -289,6 +319,9 @@ const newRuntime = (settings: Settings): Runtime => ({
   isPaneOpen: false,
   sendCount: 0,
   isConsuming: false,
+  hub: undefined,
+  hubSeenAt: 0,
+  channelPhase: '',
 })
 
 function emptyFile(): SessionFile {
@@ -335,7 +368,11 @@ const paths = {
 
 /** Whether the mod knows enough to talk to OpenWA: a key, a WhatsApp session and an owner. */
 const isConfigured = (rt: Runtime): boolean => rt.apiKey !== '' && rt.sessionId !== '' && rt.owners.length > 0
-const canInteract = (rt: Runtime, now: number): boolean => interactionAllowed(rt.prefs, rt.settings.interactionOffHours, now)
+/** The prefs presence, interaction and quiet hours are judged by: mods-hub's global mode, when it is installed. */
+const attention = (rt: Runtime): WaPrefs => (rt.hub === undefined ? rt.prefs : prefsFromHub(rt.prefs, rt.hub))
+const canInteract = (rt: Runtime, now: number): boolean => interactionAllowed(attention(rt), rt.settings.interactionOffHours, now)
+const interactionText = (rt: Runtime, now: number): string =>
+  rt.hub === undefined ? interactionLabel(rt.prefs, rt.settings.interactionOffHours, now) : hubModeLabel(rt.hub)
 const ownerChat = (rt: Runtime): string => directChat(rt.owners[0] ?? '')
 const projectGroup = (rt: Runtime): WaGroupLink | undefined => rt.groups[rt.root]
 
@@ -734,7 +771,7 @@ async function alertChat($: EngineInterface, rt: Runtime, isOwnerOnly: boolean):
 
 // ── Notifications ────────────────────────────────────────────────────────────────────────────────
 
-type Notice = { text: string; priority: WaPriority; event?: WaEventKey; isOwnerOnly?: boolean; quotedId?: string; kind?: string }
+type Notice = { text: string; priority: WaPriority; event?: WaEventKey; isOwnerOnly?: boolean; quotedId?: string; kind?: string; isRouted?: boolean }
 
 /** The newest keystroke or prompt in any live session: away is judged across the machine. */
 async function lastActivity($: EngineInterface, rt: Runtime): Promise<{ lastActiveAt: number; sentTimes: number[] }> {
@@ -752,13 +789,15 @@ async function lastActivity($: EngineInterface, rt: Runtime): Promise<{ lastActi
 async function emit($: EngineInterface, rt: Runtime, notice: Notice): Promise<{ action: 'send' | 'digest' | 'drop'; reason: string; messageId: string }> {
   if (!isConfigured(rt)) return { action: 'drop', reason: 'WhatsApp is not set up (/wa setup)', messageId: '' }
   if (notice.event !== undefined && !rt.prefs.events[notice.event]) return { action: 'drop', reason: `${EVENT_LABELS[notice.event]} is switched off`, messageId: '' }
+  await refreshHub($, rt)
   const now = await $.clock.now()
   const activity = await lastActivity($, rt)
   const delivery = decide({
     priority: notice.priority,
     now,
-    prefs: rt.prefs,
-    notifyMode: rt.settings.notifyMode,
+    prefs: attention(rt),
+    // The hub already judged presence for what it routes here; off still means off.
+    notifyMode: notice.isRouted === true && rt.settings.notifyMode !== 'off' ? 'always' : rt.settings.notifyMode,
     lastActiveAt: activity.lastActiveAt,
     sentTimes: activity.sentTimes,
     maxPerHour: rt.settings.maxPerHour,
@@ -861,7 +900,7 @@ async function pollRound($: EngineInterface, rt: Runtime): Promise<void> {
     busy = await pollMessages($, rt, files)
     rt.polls += 1
     if (rt.polls % REACTION_EVERY_POLLS === 0) await pollReactions($, rt, files)
-    const anyAway = isAway(rt.prefs, Math.max(...files.map(file => file.info.lastActiveAt), rt.lastActiveAt), now)
+    const anyAway = isAway(attention(rt), Math.max(...files.map(file => file.info.lastActiveAt), rt.lastActiveAt), now)
     const anyOpen = files.some(file => file.pending.some(item => item.kind !== 'alert'))
     busy = busy || anyAway || anyOpen || now - rt.lastInboundAt < 5 * 60_000
     await leaderSchedules($, rt, files)
@@ -1117,7 +1156,7 @@ async function handleGlobalCommand(
       await reply(HELP_TEXT)
       return true
     case 'status':
-      await reply(statusText(live, now, `\n\n_Interaction: ${interactionLabel(rt.prefs, rt.settings.interactionOffHours, now)}${rt.prefs.paused ? ' · notifications paused' : ''}_`))
+      await reply(statusText(live, now, `\n\n_Interaction: ${interactionText(rt, now)}${rt.prefs.paused ? ' · notifications paused' : ''}_`))
       return true
     case 'sessions':
       await reply(sessionsText(live, now))
@@ -1143,15 +1182,20 @@ async function handleGlobalCommand(
       return true
     case 'away':
     case 'here':
-      await savePrefs($, rt, prefs => ({ ...prefs, presence: command.kind }))
+      if ((await changeOnHub($, rt, { presence: command.kind }, 'channel')) === undefined) await savePrefs($, rt, prefs => ({ ...prefs, presence: command.kind }))
       await reply(command.kind === 'away' ? '🚶 Marked away: updates come here.' : '💻 Marked at the keyboard: only critical updates come here.')
       return true
     case 'interact':
-      await savePrefs($, rt, prefs => ({ ...prefs, interaction: command.isOn ? 'on' : 'off' }))
+      if ((await changeOnHub($, rt, { interaction: command.isOn ? 'on' : 'off' }, 'channel')) === undefined) await savePrefs($, rt, prefs => ({ ...prefs, interaction: command.isOn ? 'on' : 'off' }))
       await reply(command.isOn ? '💬 Interaction on: Claude may ask you things and request approvals here.' : '🔕 Interaction off (silent mode): Claude will not ask; questions are parked until you turn it back on.')
       if (command.isOn) await deliverParked($, rt, files, row.chatId)
       return true
     case 'night': {
+      const onHub = await changeOnHub($, rt, { night: true }, 'channel')
+      if (onHub !== undefined) {
+        await reply(`🌙 Night mode on (mods-hub, ${onHub.quietHours}): no questions then, only critical messages; the rest comes in the morning digest.`)
+        return true
+      }
       const until = windowEnd(rt.settings.interactionOffHours, now)
       await savePrefs($, rt, prefs => ({ ...prefs, interaction: 'night', nightUntil: until }))
       await reply(`🌙 Night mode until ${clockTime(until)}: no questions, only the updates you enabled.`)
@@ -1208,7 +1252,7 @@ async function sendDigest($: EngineInterface, rt: Runtime, files: SessionFile[],
     leader.lastDigestAt = now
     return
   }
-  if (why === 'periodic' && (rt.prefs.paused || !isAway(rt.prefs, Math.max(...files.map(file => file.info.lastActiveAt), rt.lastActiveAt), now))) return
+  if (why === 'periodic' && (rt.prefs.paused || !isAway(attention(rt), Math.max(...files.map(file => file.info.lastActiveAt), rt.lastActiveAt), now))) return
   const title = why === 'evening' ? '🌙 *Evening digest*' : '🗞 *Digest*'
   const header = why === 'evening' ? `${briefingText('evening', files.map(file => file.info).filter(info => now - info.lastSeen < 12 * 60 * 60_000), now)}\n\n` : ''
   const sent = await waSendText($, rt, { chatId, kind: 'digest', text: header + digestText(items.sort((a, b) => a.at - b.at), parked, title) })
@@ -1259,6 +1303,7 @@ async function consumeInbox($: EngineInterface, rt: Runtime): Promise<void> {
 async function handleEntry($: EngineInterface, rt: Runtime, entry: InboxEntry): Promise<void> {
   const who = entry.kind === 'member' || entry.kind === 'bug' ? 'member' : 'owner'
   await appendLog($, rt, { dir: 'in', chatId: entry.chatId, kind: entry.kind, text: entry.emoji ?? entry.text, messageId: entry.messageId, who })
+  await publishInbound($, rt, entry, who)
   switch (entry.kind) {
     case 'reaction':
       return handleReaction($, rt, entry)
@@ -1841,7 +1886,7 @@ async function remotePermission(
   if (!isConfigured(rt) || !rt.prefs.events.permissions) return undefined
   const now = await $.clock.now()
   const activity = await lastActivity($, rt)
-  if (!isAway(rt.prefs, activity.lastActiveAt, now)) return undefined
+  if (!isAway(attention(rt), activity.lastActiveAt, now)) return undefined
   const detail = describeInput(e.tool_input)
   const what = `${e.tool_name}${detail !== '' ? ` — ${detail}` : ''}`
   if (!canInteract(rt, now) || !rt.settings.remoteApprovals) {
@@ -1863,6 +1908,7 @@ async function remotePermission(
     const answer = await waitForAnswer($, rt, id, now + APPROVAL_WAIT_MS, budgetLeft, signal, () => rt.typed)
     if (answer?.verdict === undefined) return undefined
     await waSendText($, rt, { chatId, quotedId: messageId, kind: 'permission', text: answer.verdict === 'approve' ? '✅ Allowed.' : '⛔ Denied.' })
+    if (rt.hub !== undefined) await hubPublish($, { topic: 'approval.answered', data: { id, answer: answer.verdict === 'approve' ? 'allow' : 'deny', by: CHANNEL } })
     return answer.verdict === 'approve' ? 'allow' : 'deny'
   } finally {
     await dropPending($, rt, id)
@@ -1940,7 +1986,11 @@ async function onToolResult($: EngineInterface, rt: Runtime, tool: string, input
   if (tool !== 'Bash' || typeof input.command !== 'string') return
   if (PUSH_COMMAND.test(input.command) && !isFailed) rt.pushedThisTurn = true
   if (!TEST_COMMAND.test(input.command)) return
-  const ok = !isFailed
+  await noteTests($, rt, !isFailed, oneLine(input.command, 60))
+}
+
+/** A test run's verdict (a Bash run, or one another mod published): counted for the report, red ↔ green reported. */
+async function noteTests($: EngineInterface, rt: Runtime, ok: boolean, what: string): Promise<void> {
   const day = dayKey(await $.clock.now())
   const runs = rt.file.stats.tests[day] ?? { pass: 0, fail: 0 }
   rt.file.stats.tests[day] = ok ? { ...runs, pass: runs.pass + 1 } : { ...runs, fail: runs.fail + 1 }
@@ -1948,7 +1998,7 @@ async function onToolResult($: EngineInterface, rt: Runtime, tool: string, input
   rt.testsOk = ok
   if (was !== undefined && was !== ok) {
     await emit($, rt, {
-      text: ok ? `🟢 *${tagOf(rt)}*: tests are green again.` : `🔴 *${tagOf(rt)}*: tests went red (${oneLine(input.command, 60)}).`,
+      text: ok ? `🟢 *${tagOf(rt)}*: tests are green again.` : `🔴 *${tagOf(rt)}*: tests went red (${what}).`,
       priority: ok ? 'info' : 'normal',
       event: 'tests',
     })
@@ -1960,7 +2010,7 @@ async function updateLiveStatus($: EngineInterface, rt: Runtime, text: string): 
   if (!isConfigured(rt) || !rt.prefs.events.liveStatus) return
   const now = await $.clock.now()
   const activity = await lastActivity($, rt)
-  if (!isAway(rt.prefs, activity.lastActiveAt, now) || rt.prefs.paused) return
+  if (!isAway(attention(rt), activity.lastActiveAt, now) || rt.prefs.paused) return
   const live = rt.liveStatus
   const body = clean(`${text}\n_${clockTime(now)}_`, { audience: 'owner', maxChars: 400, root: rt.root }).text
   if (live !== undefined && now - live.at < EDIT_WINDOW_MS) {
@@ -1983,6 +2033,11 @@ async function watchCi($: EngineInterface, rt: Runtime): Promise<void> {
 async function checkCi($: EngineInterface, rt: Runtime, startedAt: number): Promise<void> {
   const now = await $.clock.now()
   if (now - startedAt > CI_GIVE_UP_MS) {
+    rt.ci?.cancel()
+    rt.ci = undefined
+    return
+  }
+  if (await isCiReported($, rt, startedAt)) {
     rt.ci?.cancel()
     rt.ci = undefined
     return
@@ -2014,7 +2069,7 @@ async function scanScreenshots($: EngineInterface, rt: Runtime): Promise<void> {
     if (entry.mtimeMs < rt.startedAt) continue
     if (!canInteract(rt, now)) continue
     const activity = await lastActivity($, rt)
-    if (!isAway(rt.prefs, activity.lastActiveAt, now) && rt.settings.notifyMode !== 'always') continue
+    if (!isAway(attention(rt), activity.lastActiveAt, now) && rt.settings.notifyMode !== 'always') continue
     const path = `${paths.shots(rt)}/${entry.name}`
     if (entry.size > rt.settings.maxFileMb * 1024 * 1024) continue
     const bytes = await $.fs.read(path, { as: 'bytes' }).catch(() => undefined)
@@ -2038,6 +2093,126 @@ async function onSessionEnd($: EngineInterface, rt: Runtime): Promise<void> {
   }
   await saveSelf($, rt)
   for (const timer of rt.timers) timer.cancel()
+}
+
+// ── mods-hub: one presence, one quiet, one notification router for every channel ──────────────────
+
+/** The hub's global mode, re-read (another session or the phone may have changed it); unchanged without the hub. */
+async function refreshHub($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.hub !== undefined) rt.hub = (await hubMode($)) ?? rt.hub
+}
+
+type AttentionChange = { presence: 'away' | 'here' | 'auto' } | { interaction: 'on' | 'off' | 'auto' } | { night: true }
+
+/**
+ * With mods-hub installed, presence, interaction and night are the hub's (every session, every channel): a change
+ * from /wa, the panel or the phone goes there. Undefined without the hub, and the bridge changes its own prefs.
+ */
+async function changeOnHub($: EngineInterface, rt: Runtime, change: AttentionChange, reason: 'manual' | 'channel'): Promise<HubMode | undefined> {
+  if (rt.hub === undefined) return undefined
+  try {
+    if ('presence' in change) rt.hub = await $.mods.setPresence({ presence: change.presence, reason })
+    else if ('interaction' in change) rt.hub = await $.mods.setMode({ interaction: change.interaction })
+    else rt.hub = await $.mods.setMode({ isNightOn: true })
+    return rt.hub
+  } catch {
+    return undefined
+  }
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello, the Channels tab, the `whatsapp` channel, and a pull of its notifications every few seconds. */
+async function greetHub($: EngineInterface, rt: Runtime): Promise<void> {
+  rt.hub = await hubMode($)
+  if (rt.hub === undefined) return
+  rt.hubSeenAt = await $.clock.now()
+  await hubHello(
+    $,
+    {
+      version: await ownVersion($),
+      publishes: ['channel.inbound', 'approval.answered'],
+      consumes: ['session.idle', 'session.away', 'session.back', 'test.result', 'ci.result', 'budget.threshold'],
+    },
+    TAB,
+  )
+  await syncChannel($, rt)
+  rt.timers.push($.clock.every(INBOX_MS, () => void drainHub($, rt).catch(error => $.ui.log(`${NAME}: ${messageOf(error)}`, { to: 'debug' }))))
+}
+
+/** Registers the `whatsapp` channel, then reports the link's phase to the hub's channel list when it changes. */
+async function syncChannel($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.hub === undefined) return
+  const connection = await read($, connectionAtom)
+  const phase = isConfigured(rt) ? connection.phase : 'unconfigured'
+  if (phase === rt.channelPhase) return
+  const detail = oneLine(connection.detail, 80)
+  try {
+    if (rt.channelPhase === '') {
+      // Pull: a mod that keeps working without the hub cannot answer the hub's push (`mods.deliver`), so it drains.
+      await $.mods.registerChannel({ id: CHANNEL, title: 'WhatsApp', audience: 'me', delivery: 'pull', status: channelStatusOf(phase), ...(detail === '' ? {} : { detail }) })
+    } else {
+      await $.mods.channelStatus({ id: CHANNEL, status: channelStatusOf(phase), ...(detail === '' ? {} : { detail }) })
+    }
+    rt.channelPhase = phase
+  } catch {
+    // Retried on the next heartbeat.
+  }
+}
+
+/** A notification another mod sent through the hub, as one WhatsApp line (the hub already masked its secrets). */
+const hubNoticeText = (notice: ModsNotice): string =>
+  [`${HUB_GLYPH[notice.level] ?? '•'} *${notice.source}*: ${notice.title}`, notice.body ?? '', notice.url ?? ''].filter(line => line !== '').join('\n')
+
+/** The hub's notifications waiting for this channel: each goes out by its level (the hub judged presence and night). */
+async function drainHub($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.hub === undefined || !isConfigured(rt)) return
+  const notices = await $.mods.drain({ channel: CHANNEL })
+  for (const notice of notices) {
+    await emit($, rt, { text: hubNoticeText(notice), priority: HUB_PRIORITY[notice.level] ?? 'normal', kind: 'hub', isRouted: true })
+  }
+}
+
+/** What other mods published since the last look: their test runs (test-watch's own) count as red/green like Bash ones. */
+async function readBus($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.hub === undefined) return
+  let events: ModsEvent[]
+  try {
+    events = await $.mods.recent({ topic: 'test.result', since: rt.hubSeenAt })
+  } catch {
+    return
+  }
+  for (const event of events) {
+    rt.hubSeenAt = Math.max(rt.hubSeenAt, event.at)
+    // The hub's own sensor mirrors the Bash runs this bridge already watches.
+    if (event.source === 'mods-hub' || event.source === NAME) continue
+    const data = (event.data ?? {}) as { outcome?: unknown; runner?: unknown }
+    if (data.outcome === 'passed' || data.outcome === 'failed') await noteTests($, rt, data.outcome === 'passed', `${String(data.runner ?? 'tests')}, ${event.source}`)
+  }
+}
+
+/** Whether a mod on the hub's bus (ci-watch) already reported CI for this branch since `since`: its notice reaches WhatsApp through the hub. */
+async function isCiReported($: EngineInterface, rt: Runtime, since: number): Promise<boolean> {
+  if (rt.hub === undefined) return false
+  try {
+    return (await $.mods.recent({ topic: 'ci.result', since })).some(event => (event.data as { branch?: unknown } | null)?.branch === rt.branch)
+  } catch {
+    return false
+  }
+}
+
+/** What arrives from the phone, on the hub's bus (`channel.inbound`), for mods that act on it (autopilot). */
+async function publishInbound($: EngineInterface, rt: Runtime, entry: InboxEntry, who: 'owner' | 'member'): Promise<void> {
+  if (rt.hub === undefined || entry.kind === 'reaction') return
+  await hubPublish($, { topic: 'channel.inbound', data: { channel: CHANNEL, from: who, text: oneLine(entry.text, 1_000), isOwner: who === 'owner' } })
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────────────────────────
@@ -2070,6 +2245,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   await refreshPane($, rt)
   if (isConfigured(rt)) void checkConnection($, rt).catch(() => undefined)
   if (!isInteractive) return
+  await greetHub($, rt)
   rt.timers.push($.clock.every(HEARTBEAT_MS, () => void heartbeat($, rt).catch(error => $.ui.log(`${NAME}: ${messageOf(error)}`, { to: 'debug' }))))
   rt.timers.push($.clock.every(INBOX_MS, () => void consumeInbox($, rt).catch(() => undefined)))
   rt.timers.push($.clock.every(SCREENSHOT_MS, () => void scanScreenshots($, rt).catch(() => undefined)))
@@ -2094,7 +2270,10 @@ async function heartbeat($: EngineInterface, rt: Runtime): Promise<void> {
   }
   await saveSelf($, rt)
   await tickLease($, rt)
-  if (rt.isPaneOpen) await refreshPane($, rt)
+  await refreshHub($, rt)
+  await syncChannel($, rt)
+  await readBus($, rt)
+  if (rt.isPaneOpen || (rt.hub !== undefined && (await hubTabIs($, TAB.id)))) await refreshPane($, rt)
   if (rt.state === 'idle') await drainPhoneQueue($, rt)
 }
 
@@ -2127,9 +2306,11 @@ const WA_USAGE = [
   '/wa label <name> · /wa test · /wa digest · /wa report · /wa status',
 ].join('\n')
 
+/** The Channels tab of the hub's panel when the hub is installed, the bridge's own pane otherwise. */
 async function openPane($: EngineInterface, rt: Runtime): Promise<void> {
-  rt.isPaneOpen = true
   await refreshPane($, rt)
+  if (rt.hub !== undefined && (await hubShowTab($, TAB.id))) return
+  rt.isPaneOpen = true
   await $.ui.open({ id: PANE, title: 'WhatsApp', columns: PANE_COLUMNS })
 }
 
@@ -2191,7 +2372,7 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
     case 'help':
       return WA_USAGE
     case 'status':
-      return `${(await read($, connectionAtom)).detail}\nInteraction: ${interactionLabel(rt.prefs, rt.settings.interactionOffHours, now)} · presence ${rt.prefs.presence} · ${rt.prefs.paused ? 'paused' : 'notifying'} · ${rt.isLeader ? 'this session polls' : 'another session polls'}`
+      return `${(await read($, connectionAtom)).detail}\nInteraction: ${interactionText(rt, now)} · presence ${rt.hub?.presence ?? rt.prefs.presence} · ${rt.prefs.paused ? 'paused' : 'notifying'} · ${rt.isLeader ? 'this session polls' : 'another session polls'}`
     case 'owner': {
       const number = digitsOnly(arg)
       if (number.length < 6) return 'Usage: /wa owner +39333…  (your own WhatsApp number, with country code)'
@@ -2224,9 +2405,18 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
       return 'Unlinked. Updates for this project go to your direct chat (the group itself is left as it is).'
     case 'away':
     case 'here':
-    case 'auto':
-      await savePrefs($, rt, prefs => ({ ...prefs, presence: verb === 'away' ? 'away' : verb === 'here' ? 'here' : 'auto' }))
+    case 'auto': {
+      const presence = verb === 'away' ? 'away' : verb === 'here' ? 'here' : 'auto'
+      if ((await changeOnHub($, rt, { presence }, 'manual')) !== undefined) {
+        return presence === 'away'
+          ? 'Marked away in every session (mods-hub): updates go to WhatsApp.'
+          : presence === 'here'
+            ? 'Marked here (mods-hub): only critical updates go out.'
+            : 'Presence follows your activity again (mods-hub).'
+      }
+      await savePrefs($, rt, prefs => ({ ...prefs, presence }))
       return verb === 'away' ? 'Marked away: updates go to WhatsApp.' : verb === 'here' ? 'Marked here: only critical updates go out.' : `Presence follows your typing (away after ${rt.prefs.awayMinutes} min).`
+    }
     case 'pause':
     case 'resume':
       await savePrefs($, rt, prefs => ({ ...prefs, paused: verb === 'pause' }))
@@ -2234,13 +2424,20 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
     case 'interact': {
       const mode = arg === 'on' ? 'on' : arg === 'off' ? 'off' : arg === 'auto' ? 'auto' : undefined
       if (mode === undefined) return 'Usage: /wa interact on | off | auto'
+      const onHub = await changeOnHub($, rt, { interaction: mode }, 'manual')
+      if (onHub !== undefined) return `Interaction: ${hubModeLabel(onHub)}.`
       await savePrefs($, rt, prefs => ({ ...prefs, interaction: mode }))
       return `Interaction: ${interactionLabel(rt.prefs, rt.settings.interactionOffHours, now)}.`
     }
     case 'silent':
+      if ((await changeOnHub($, rt, { interaction: 'off' }, 'manual')) !== undefined) {
+        return 'Interaction off in mods-hub: Claude will not ask you anything on any channel until /wa interact on (or /hub interaction).'
+      }
       await savePrefs($, rt, prefs => ({ ...prefs, interaction: 'off' }))
       return 'Silent mode: Claude will not ask you anything on WhatsApp; questions are parked until /wa interact on.'
     case 'night': {
+      const onHub = await changeOnHub($, rt, { night: true }, 'manual')
+      if (onHub !== undefined) return `Night mode on in mods-hub (quiet hours ${onHub.quietHours}): no questions then, only critical messages; the rest waits for the morning digest.`
       const until = windowEnd(rt.settings.interactionOffHours, now)
       await savePrefs($, rt, prefs => ({ ...prefs, interaction: 'night', nightUntil: until }))
       return `Night mode until ${clockTime(until)}: no questions, only the updates you enabled.`
@@ -2341,7 +2538,7 @@ async function previewRedaction($: EngineInterface, rt: Runtime, sample: string)
   await update($, privacyAtom, privacy => ({ ...privacy, sample, redacted: `To you: ${owner}\nTo members: ${member}` }))
 }
 
-async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>): Promise<RenderElement> {
+async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>, isTab = false): Promise<RenderElement> {
   const elements = $.ui.resolve(e)
   const { Box, Text, Button, Link } = elements
   // Fields exist on every surface but mobile; pictures on the terminal alone (Elements in the types).
@@ -2353,6 +2550,8 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>)
   const tab = await read($, tabAtom)
   const now = await $.clock.now()
   const row = (text: string, max = width): string => oneLine(text, max)
+  // With mods-hub installed, presence, interaction and night are its global mode (read reactively).
+  const hub = (await $.state.get({ plugin: 'mods-hub', key: 'mode' })).value
 
   const tabBar = (
     <Box key="tabs" flexDirection="row" flexWrap="wrap" gap={1}>
@@ -2369,7 +2568,8 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>)
     const group = await read($, groupAtom)
     const sessions = await read($, sessionsAtom)
     const prefs = await read($, prefsAtom)
-    const isInteractive = interactionAllowed(prefs, rt.settings.interactionOffHours, now)
+    const isInteractive = hub === undefined ? interactionAllowed(prefs, rt.settings.interactionOffHours, now) : hub.canAsk
+    const isMarkedAway = hub === undefined ? prefs.presence === 'away' : hub.presence === 'away'
     body = (
       <Box flexDirection="column" gap={1}>
         <Box key="connection" flexDirection="column">
@@ -2434,7 +2634,7 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>)
         <Box key="actions" flexDirection="row" gap={1} flexWrap="wrap">
           <Button key="test" label="Send test" hotkey="t" onPress={() => void paneAction($, rt, () => runWa($, rt, 'test'))} />
           <Button key="digest" label="Digest now" onPress={() => void paneAction($, rt, () => runWa($, rt, 'digest'))} />
-          <Button key="presence" label={prefs.presence === 'away' ? 'I am here' : 'I am away'} hotkey="a" onPress={() => void paneAction($, rt, () => runWa($, rt, prefs.presence === 'away' ? 'here' : 'away'))} />
+          <Button key="presence" label={isMarkedAway ? 'I am here' : 'I am away'} hotkey="a" onPress={() => void paneAction($, rt, () => runWa($, rt, isMarkedAway ? 'here' : 'away'))} />
           <Button key="pause" label={prefs.paused ? 'Resume all' : 'Pause all'} onPress={() => void paneAction($, rt, () => runWa($, rt, prefs.paused ? 'resume' : 'pause'))} />
           <Button key="interaction" label={isInteractive ? 'Interaction: ON' : 'Interaction: OFF'} variant={isInteractive ? 'primary' : 'secondary'} hotkey="i" onPress={() => void paneAction($, rt, () => runWa($, rt, `interact ${isInteractive ? 'off' : 'on'}`))} />
           <Button key="night" label="Night mode" hotkey="n" onPress={() => void paneAction($, rt, () => runWa($, rt, 'night'))} />
@@ -2482,16 +2682,24 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>)
     body = (
       <Box flexDirection="column" gap={1}>
         <Box key="interaction" flexDirection="column">
-          <Text bold>Interaction: {interactionLabel(prefs, rt.settings.interactionOffHours, now)}</Text>
+          <Text bold>Interaction: {hub === undefined ? interactionLabel(prefs, rt.settings.interactionOffHours, now) : hubModeLabel(hub)}</Text>
+          {hub !== undefined && <Text dimColor wrap="wrap">Presence, interaction and night follow mods-hub, for every session and channel (/hub).</Text>}
           <Box flexDirection="row" gap={1} flexWrap="wrap">
             {(['on', 'off', 'auto'] as const).map(mode => (
-              <Button key={`interact:${mode}`} label={mode === 'off' ? 'Silent' : mode === 'on' ? 'On' : `Auto (off ${rt.settings.interactionOffHours})`} variant={prefs.interaction === mode ? 'primary' : 'secondary'} onPress={() => void paneAction($, rt, () => runWa($, rt, `interact ${mode}`))} />
+              <Button
+                key={`interact:${mode}`}
+                label={mode === 'off' ? 'Silent' : mode === 'on' ? 'On' : hub === undefined ? `Auto (off ${rt.settings.interactionOffHours})` : 'Auto (while away)'}
+                variant={(hub?.interaction ?? prefs.interaction) === mode ? 'primary' : 'secondary'}
+                onPress={() => void paneAction($, rt, () => runWa($, rt, `interact ${mode}`))}
+              />
             ))}
-            <Button key="interact:night" label="Night" variant={prefs.interaction === 'night' ? 'primary' : 'secondary'} onPress={() => void paneAction($, rt, () => runWa($, rt, 'night'))} />
+            <Button key="interact:night" label="Night" variant={(hub === undefined ? prefs.interaction === 'night' : hub.isNight) ? 'primary' : 'secondary'} onPress={() => void paneAction($, rt, () => runWa($, rt, 'night'))} />
           </Box>
         </Box>
         <Box key="timing" flexDirection="column">
-          {Select !== undefined ? (
+          {hub !== undefined ? (
+            <Text dimColor wrap="wrap">Quiet hours {hub.quietHours} and the away time are mods-hub's (/hub night, the hub's settings).</Text>
+          ) : Select !== undefined ? (
             <Box flexDirection="column">
               <Select key="quiet" label="Quiet hours " value={prefs.quietHours} options={['22-7', '23-8', '0-7', 'off'].map(value => ({ value, label: value }))} onSelect={value => void savePrefs($, rt, current => ({ ...current, quietHours: value }))} />
               <Select key="awayMinutes" label="Away after " value={String(prefs.awayMinutes)} options={[5, 10, 15, 30, 60].map(n => ({ value: String(n), label: `${n} min` }))} onSelect={value => void savePrefs($, rt, current => ({ ...current, awayMinutes: Number(value) }))} />
@@ -2557,9 +2765,11 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>)
     <Box flexDirection="column" gap={1}>
       {tabBar}
       {body}
-      <Box key="footer" flexDirection="row" gap={1}>
-        <Button key="close" label="Close" role="dismiss" onPress={() => void closePane($, rt)} />
-      </Box>
+      {isTab ? null : (
+        <Box key="footer" flexDirection="row" gap={1}>
+          <Button key="close" label="Close" role="dismiss" onPress={() => void closePane($, rt)} />
+        </Box>
+      )}
     </Box>
   )
 }
@@ -2709,4 +2919,76 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawPane($, rt, e))
+
+  // The Channels tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
+  on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
+    if (!(await hubTabIs($, TAB.id))) return next(e)
+    const { Box } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        {await next(e)}
+        {await drawPane($, rt, e, true)}
+      </Box>
+    )
+  })
 }
+
+// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { AgentSpawnInput, ModelCompleteResult, On, TurnUsage } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const SURFACES = ['terminal', 'desktop'] as const
 const MAIN = 'claude-opus-5-5'
 const PANE = {
@@ -366,4 +368,67 @@ test('mobile and vscode draw the pane without Raster, Input or Select', async ($
     expect((await ui.find({ key: 'calls-bar' }))?.text).toContain('█')
     await ui.unmount()
   }
+})
+
+const HUB_PANE = { ...PANE, requestId: 'claude-mods', props: { ...PANE.props, title: 'Claude Mods' } } as const
+
+test('with mods-hub: the Router tab, its policy fact, and agent.routed / agent.finished / cost.update on the bus', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on, {}, w.clock)
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+  await start($)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['agent.routed', 'agent.finished', 'cost.update'], consumes: ['budget.threshold', 'test.result'] }])
+  expect(hub.tabs).toEqual([{ id: 'router', title: 'Router', order: 20, command: 'router' }])
+  expect(hub.facts.get('policy')).toEqual({
+    mode: 'auto',
+    profile: 'balanced',
+    models: { light: 'haiku', standard: 'sonnet', deep: 'opus' },
+    maxParallel: 5,
+    protectDeep: true,
+    budgetBias: 5,
+    opusShare: 0,
+  })
+
+  await spawn($, 'Find where the session cookie is set', { subagentType: 'Explore' })
+  await w.clock.advance(1_000)
+  await finish($, 'agent-1', 'In src/session.ts', usage('claude-haiku-4-5', 100_000))
+  const [routed, finished, cost] = hub.published
+  expect(routed).toMatchObject({ topic: 'agent.routed', data: { agentType: 'Explore', tier: 'light', model: 'haiku', agentId: 'agent-1' } })
+  expect(finished).toEqual({ topic: 'agent.finished', data: { agentType: 'Explore', outcome: 'ok', durationMs: 1_000, agentId: 'agent-1', usd: 0.15 } })
+  expect(cost).toEqual({ topic: 'cost.update', data: { turnUsd: 0.15, sessionUsd: 0.15, model: 'claude-haiku-4-5', tokens: 110_000, isEstimate: false } })
+
+  expect(String((await $.command.run(run('router', 'suggest'))).text)).toContain('Router: suggest')
+  expect(hub.shown).toEqual(['router'])
+  expect((hub.facts.get('policy') as { mode: string }).mode).toBe('suggest')
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...HUB_PANE, surface })
+    expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+    // The hub's tab strip owns the digit hotkeys: the sections keep theirs only in the Router's own pane.
+    expect((await ui.find({ key: 'section-live' }))?.props.hotkey).toBeUndefined()
+    expect((await ui.find({ key: 'section-mix' }))).toBeDefined()
+    await ui.unmount()
+  }
+  const own = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await own.find({ key: 'section-live' }))?.props.hotkey).toBe('1')
+})
+
+test('with mods-hub: a budget alert on the bus moves borderline work down; test-watch\'s failing run counts as a regression', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on, {}, w.clock)
+  await start($)
+  const at = w.clock.now()
+  hub.events.push({ topic: 'budget.threshold', data: { kind: 'usd', scope: 'session', used: 8.5, limit: 10, percent: 85 }, at: at + 1, source: 'token-budget' })
+  await spawn($, 'Update the config')
+  expect(w.spawned[0]?.model).toBe('haiku')
+  expect(hub.published[0]).toMatchObject({ topic: 'agent.routed', data: { tier: 'light', reason: expect.stringContaining('the session dollar budget is 85% used') } })
+
+  hub.events.length = 0
+  hub.events.push({ topic: 'test.result', data: { runner: 'vitest', outcome: 'passed', passed: 4, failed: 0 }, at: at + 2, source: 'test-watch' })
+  hub.events.push({ topic: 'test.result', data: { runner: 'vitest', outcome: 'failed', passed: 3, failed: 1 }, at: at + 3, source: 'test-watch' })
+  // The hub's own sensor mirrors Bash test runs the Router already counts: ignored.
+  hub.events.push({ topic: 'test.result', data: { runner: 'vitest', outcome: 'passed', passed: 4, failed: 0 }, at: at + 4, source: 'mods-hub' })
+  await spawn($, 'Fix the failing slugify test', { description: 'Fix slugify' })
+  expect(w.spawned[1]?.model).toBe('opus')
+  expect(hub.published[1]).toMatchObject({ topic: 'agent.routed', data: { reason: expect.stringContaining('the tests regressed') } })
 })

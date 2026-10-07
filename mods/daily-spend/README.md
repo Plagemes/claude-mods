@@ -19,6 +19,7 @@ Prices every turn from the token usage the engine reports and adds it to a runni
   - Top projects: the five project roots that spent most in those 14 days.
 - **Refresh** (`r`) re-reads the totals, picking up what other sessions spent; **Close** closes the pane.
 - With a daily limit set: `Today's spend $21.30 passed your $20.00 daily limit.` (once a day, across sessions).
+- With [mods-hub](../mods-hub) installed, `/spend` opens the **Cost** tab of the shared Claude Mods panel instead of its own pane (same view, without Close).
 
 ## Configuration
 | Key | Default | Meaning |
@@ -28,4 +29,5 @@ Prices every turn from the token usage the engine reports and adds it to a runni
 ## How it works
 - `turn.complete` prices the turn (main loop and subagents) and adds it to `$.store` under the local date and `$.session.root()`; days older than 120 are dropped at session start.
 - The pane is a `ui.render` hook on `Pane`, drawn from a snapshot in `$.state`: a `Raster` chart on the terminal, text bars on other surfaces.
-- Figures are API list-price estimates (cache writes at the 5-minute rate; unknown models priced as Opus 5.5), not a bill: Bedrock, Vertex and Pro/Max plans are billed differently. Two sessions finishing a turn at the very same moment can overwrite each other's update of that day.
+- With mods-hub installed: the view becomes the panel's **Cost** tab (`registerTab`, drawn by hooking the hub's `claude-mods` pane when that tab is shown); passing the daily limit is published as `budget.threshold` (scope `day`, to every session) and sent as a warning through the hub's notifications, which reach your phone channel while you are away; today's total is shared as the fact `daily-spend.today`. Without the hub, it keeps its own pane and toast.
+- Prices come from the table every Claude Mod shares (`shared/prices.ts`). Figures are API list-price estimates (cache writes at the 5-minute rate; unknown models priced as Opus 5.5), not a bill: Bedrock, Vertex and Pro/Max plans are billed differently. Two sessions finishing a turn at the very same moment can overwrite each other's update of that day.

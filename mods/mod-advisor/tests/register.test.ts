@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { FsEntry, On, RenderPropsOf } from 'claude-code'
 
 import { CATALOG_MODS } from './fixtures'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'mod-advisor'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -545,4 +546,56 @@ test('tellClaude off keeps the note out of the prompt', { options: { tellClaude:
   await w.clock.settle()
   expect(w.contexts).toEqual([undefined])
   expect(w.toasts).toHaveLength(1)
+})
+
+const HUB_PANE_PROPS: RenderPropsOf['Pane'] = { ...PANE_PROPS, title: 'Claude Mods' }
+
+test('with mods-hub: the Advisor is the first tab of the shared panel, opened at start instead of its own pane', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on, {}, w.clock)
+  await start($)
+  await w.clock.settle()
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['mod.recommended'], consumes: ['mod.installed', 'test.result', 'ci.result'] }])
+  expect(hub.tabs).toEqual([{ id: 'advisor', title: 'Advisor', order: 10, command: 'mods-advisor' }])
+  expect(hub.shown).toEqual(['advisor'])
+  expect(w.pane.opens).toEqual([])
+  expect(hub.facts.get('stack')).toEqual({ root: ROOT, stack: ['Next.js', 'Prisma', 'React', 'TypeScript'] })
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: 'claude-mods', props: HUB_PANE_PROPS })
+    expect(await ui.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '🧭 Advisor' })).toBeDefined()
+    expect(await ui.find({ key: 'install:project:next-guard' })).toBeDefined()
+    expect(await ui.find({ key: 'close' })).toBeUndefined()
+    await ui.unmount()
+  }
+  expect((await advisor($)).text).toBe('🧭 Opened the Advisor.')
+  expect(hub.shown).toEqual(['advisor', 'advisor'])
+})
+
+test('with mods-hub: failing tests on the bus bring the test mods, published as mod.recommended and told through the hub', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on, {}, w.clock)
+  await start($)
+  await w.clock.settle()
+  const lists = w.calls.filter(call => call === 'plugin list --json').length
+
+  hub.events.push({ topic: 'test.result', data: { runner: 'vitest', outcome: 'failed', passed: 10, failed: 2 }, at: NOW + 1, source: 'test-watch' })
+  hub.events.push({ topic: 'mod.installed', data: { name: 'secret-shield', version: '1.0.0' }, at: NOW + 2, source: 'mod-store' })
+  await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: false, turnId: 't1', reason: 'answer' })
+  await w.clock.settle()
+
+  expect(w.calls.filter(call => call === 'plugin list --json').length).toBe(lists + 1)
+  const recommended = hub.published.filter(event => event.topic === 'mod.recommended').map(event => event.data)
+  expect(recommended.length).toBeGreaterThan(0)
+  expect(recommended.every(data => (data as { reason: string }).reason === '2 tests failed')).toBe(true)
+  expect(hub.notified.at(-1)).toMatchObject({ level: 'info', audience: 'terminal', topic: 'mod.recommended' })
+  expect(hub.notified.at(-1)?.title).toMatch(/^🧭 /)
+  expect(w.toasts).toEqual([])
+
+  // The same events are not read twice.
+  const published = hub.published.length
+  await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: false, turnId: 't2', reason: 'answer' })
+  await w.clock.settle()
+  expect(hub.published.length).toBe(published)
 })

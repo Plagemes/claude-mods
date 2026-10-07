@@ -3,7 +3,7 @@
 import type { SmartRouterAction, SmartRouterMode, SmartRouterProfile } from '../types'
 import { tierDown, tierRank, tierUp } from './classify'
 import type { Tier, Verdict } from './classify'
-import { modelRank } from './pricing'
+import { modelRank } from './shared/prices'
 
 /** Agent types whose definition leaves the model to the call: the ones routed without `override: always`. */
 export const ROUTABLE_TYPES: ReadonlySet<string> = new Set(['general-purpose', 'Explore', 'Plan'])
@@ -70,6 +70,8 @@ export type RouteHistory = {
   isRegression?: boolean
   /** The project's opus-class share of subagent tokens, 0-1. */
   opusShare?: number
+  /** A budget alert other mods raised on mods-hub's bus (`budget.threshold`), in words: "the session budget is 85% used". */
+  budgetAlert?: string
 }
 
 export type RouteDecision = {
@@ -85,6 +87,17 @@ export type RouteDecision = {
 const money = (usd: number): string => `$${usd.toFixed(2)}`
 
 type Adjusted = { tier: Tier; tag: string; notes: string[]; isRetry: boolean }
+
+/** The share of a budget at which a `budget.threshold` event biases borderline work down. */
+export const BUDGET_ALERT_PERCENT = 80
+
+/** A `budget.threshold` payload in words, or undefined when it is below the alert line or not one. */
+export function budgetAlertOf(data: unknown): string | undefined {
+  const event = (data ?? {}) as { kind?: unknown; scope?: unknown; percent?: unknown }
+  if (typeof event.percent !== 'number' || event.percent < BUDGET_ALERT_PERCENT) return undefined
+  const scope = event.scope === 'day' ? 'daily' : event.scope === 'week' ? 'weekly' : event.scope === 'month' ? 'monthly' : 'session'
+  return `the ${scope} ${event.kind === 'tokens' ? 'token' : 'dollar'} budget is ${Math.round(event.percent)}% used`
+}
 
 /** The tier after the history: retries and trouble go up, easy streaks and spent budgets nudge borderline work down. */
 function adjustTier(verdict: Verdict, settings: RouteSettings, history: RouteHistory): Adjusted {
@@ -111,6 +124,9 @@ function adjustTier(verdict: Verdict, settings: RouteSettings, history: RouteHis
   }
   if (settings.budgetBias > 0 && history.spentUsd >= settings.budgetBias && verdict.isBorderline && verdict.tier !== 'light') {
     return down('budget↓', `session spend ${money(history.spentUsd)} passed the ${money(settings.budgetBias)} budget bias: borderline, one tier down`)
+  }
+  if (settings.budgetBias > 0 && history.budgetAlert !== undefined && verdict.isBorderline && verdict.tier !== 'light') {
+    return down('budget↓', `${history.budgetAlert}: borderline, one tier down`)
   }
   return { tier: verdict.tier, tag: verdict.tag, notes, isRetry: false }
 }

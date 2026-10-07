@@ -3,8 +3,8 @@
 import type { SmartRouterEstimate, SmartRouterPlan, SmartRouterPlanMode, SmartRouterSubtask } from '../types'
 import { TIERS, classify, higherTier } from './classify'
 import type { Tier } from './classify'
-import { costOf, PRICES } from './pricing'
-import type { PriceTable } from './pricing'
+import { costOf, PRICES } from './shared/prices'
+import type { PriceTable } from './shared/prices'
 import { BATCHING, INHERIT, SHARED_OPENING, modelWords } from './routing'
 
 export const MAX_SUBTASKS = 12
@@ -242,15 +242,15 @@ export function forecastOf(subtasks: readonly SmartRouterSubtask[], models: Reco
   for (const subtask of subtasks) {
     const run = RUN_TOKENS[subtask.tier]
     inline += sizeOf(run, INLINE_FACTOR)
-    inlineUsd += costOf(usageOf(run, INLINE_FACTOR), main, prices)
+    inlineUsd += costOf(usageOf(run, INLINE_FACTOR), main, prices).usd
     agents += sizeOf(run) + sizeOf(COORDINATION)
-    agentsUsd += costOf(usageOf(run), modelOf(subtask.tier), prices) + costOf(usageOf(COORDINATION), main, prices)
+    agentsUsd += costOf(usageOf(run), modelOf(subtask.tier), prices).usd + costOf(usageOf(COORDINATION), main, prices).usd
   }
   const estimate = (tokens: number, usd: number): SmartRouterEstimate => ({ tokens: Math.round(tokens), usd })
   return {
     inline: estimate(inline, inlineUsd),
     parallel: estimate(agents, agentsUsd),
-    workflow: estimate(agents + sizeOf(WORKFLOW_SCRIPT), agentsUsd + costOf(usageOf(WORKFLOW_SCRIPT), main, prices)),
+    workflow: estimate(agents + sizeOf(WORKFLOW_SCRIPT), agentsUsd + costOf(usageOf(WORKFLOW_SCRIPT), main, prices).usd),
   }
 }
 

@@ -2,8 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import { classify } from '../hooks/classify'
 import { HALF_LIFE_MS, EMPTY_PROJECT, isUnreliable, mergeDaily, opusShareOf, recordOutcome, scoreNow, TEST_COMMAND, weakSpots } from '../hooks/learning'
-import { costOf, pricesWith } from '../hooks/pricing'
-import { decideRoute, guidanceText, PROFILES, tuningFor, withEffort } from '../hooks/routing'
+import { costOf, pricesWith } from '../hooks/shared/prices'
+import { budgetAlertOf, decideRoute, guidanceText, PROFILES, tuningFor, withEffort } from '../hooks/routing'
 import type { RouteSettings, SpawnFacts } from '../hooks/routing'
 
 const SETTINGS: RouteSettings = { mode: 'auto', override: 'never', protectDeep: true, models: { light: 'haiku', standard: 'sonnet', deep: 'opus' }, budgetBias: 5, opusShare: 0 }
@@ -132,7 +132,21 @@ test('the daily summary adds only what changed since the last write, and starts 
 
 test('prices: the built-in table, and overrides in front of it', () => {
   const usage = { input_tokens: 1_000_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
-  expect(costOf(usage, 'claude-haiku-4-5')).toBe(1)
-  expect(costOf(usage, 'claude-haiku-4-5', pricesWith('{"haiku": {"input": 0.5, "output": 2}}'))).toBe(0.5)
-  expect(costOf(usage, 'claude-sonnet-5', pricesWith('not json'))).toBe(2)
+  expect(costOf(usage, 'claude-haiku-4-5').usd).toBe(1)
+  expect(costOf(usage, 'claude-haiku-4-5', pricesWith('{"haiku": {"input": 0.5, "output": 2}}')).usd).toBe(0.5)
+  expect(costOf(usage, 'claude-sonnet-5', pricesWith('not json')).usd).toBe(2)
+})
+
+test('a budget alert from another mod (budget.threshold) moves borderline work down, unless the bias is off', () => {
+  const alert = budgetAlertOf({ kind: 'usd', scope: 'session', used: 8.5, limit: 10, percent: 85 })
+  expect(alert).toBe('the session dollar budget is 85% used')
+  expect(budgetAlertOf({ kind: 'usd', scope: 'day', used: 5, limit: 10, percent: 50 })).toBeUndefined()
+  expect(budgetAlertOf({ kind: 'tokens', scope: 'day', used: 2e6, limit: 1e6, percent: 200 })).toBe('the daily token budget is 200% used')
+
+  const borderline = verdictOf('Update the config')
+  const biased = decideRoute(borderline, FACTS, SETTINGS, { spentUsd: 0, budgetAlert: alert })
+  expect(biased).toEqual(expect.objectContaining({ tier: 'light', tag: 'budget↓', model: 'haiku' }))
+  expect(biased.reason).toContain('the session dollar budget is 85% used: borderline, one tier down')
+  expect(decideRoute(borderline, FACTS, { ...SETTINGS, budgetBias: 0 }, { spentUsd: 0, budgetAlert: alert }).tier).toBe('standard')
+  expect(decideRoute(verdictOf('Write unit tests for slugify'), FACTS, SETTINGS, { spentUsd: 0, budgetAlert: alert }).tier).toBe('standard')
 })

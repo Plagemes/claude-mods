@@ -28,5 +28,6 @@ Adds up what every turn of the session costs, from the real token usage the engi
 
 ## How it works
 - `turn.complete` adds each turn's usage (main loop and subagents) to a counter in `$.state`; `prompt.submit` drops new prompts once a limit is reached; a `ui.render` hook on `AbovePrompt` draws the band.
-- Prices are API list rates per model family (cache writes at the 5-minute rate); on Bedrock, Vertex or a Pro/Max plan the figure is an API-equivalent estimate, not your bill. Unknown model ids are priced as Opus 5.5.
+- Prices are API list rates per model family from the price table every Claude Mod shares (cache writes at the 5-minute rate); on Bedrock, Vertex or a Pro/Max plan the figure is an API-equivalent estimate, not your bill. Unknown model ids are priced as Opus 5.5.
 - The budget is checked when a prompt is sent, so the turn that crosses it runs to its end. Cache reads count toward dollars but not toward the token limit. The counter lives for the session and is not carried into a resumed one.
+- With [mods-hub](../mods-hub) installed: crossing the warning line or the limit is published as `budget.threshold` (smart-router and autopilot react to it) and announced through the hub's notifications instead of the mod's own toast, as a warning at the warning line and as critical at 100% (so it reaches your phone channel even in Silent or Night mode); the current spend and level are shared as the fact `token-budget.status`. Without the hub, the toasts are as above.

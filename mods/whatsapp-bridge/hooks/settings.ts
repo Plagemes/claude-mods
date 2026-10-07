@@ -1,4 +1,4 @@
-import type { WaEventKey, WaPrefs } from '../types'
+import type { WaEventKey, WaPhase, WaPrefs } from '../types'
 
 /** The userConfig values, cleaned and clamped. */
 export type Settings = {
@@ -219,5 +219,51 @@ export const interactionLabel = (prefs: WaPrefs, offHours: string, now: number):
       return isOn ? 'on (night ended)' : `off (night mode until ${new Date(prefs.nightUntil).toTimeString().slice(0, 5)})`
     case 'auto':
       return isOn ? `on (auto, off ${offHours})` : `off (auto, ${offHours})`
+  }
+}
+
+// ── With mods-hub ──────────────────────────────────────────────────────────────────────────────────
+
+/** The part of mods-hub's global mode the bridge reads (`ModsMode` in types/mods-hub.d.ts). */
+export type HubAttention = { presence: 'here' | 'idle' | 'away'; isNight: boolean; canAsk: boolean; interaction: string; quietHours: string }
+
+/** Quiet around the clock: what the hub's Night, while it lasts, means to the bridge's quiet-hours check. */
+const ALL_DAY = '0-24'
+
+/**
+ * With mods-hub installed its global mode replaces the bridge's own presence, interaction and night, so every
+ * channel obeys one switch: away unless the person is here (the hub sends to channels from idle on), questions
+ * only while the hub says it may ask, quiet while the hub's Night is on. Pause and the update toggles stay the bridge's.
+ */
+export const prefsFromHub = (prefs: WaPrefs, mode: HubAttention): WaPrefs => ({
+  ...prefs,
+  presence: mode.presence === 'here' ? 'here' : 'away',
+  interaction: mode.canAsk ? 'on' : 'off',
+  nightUntil: 0,
+  quietHours: mode.isNight ? ALL_DAY : 'off',
+})
+
+/** One line on the hub's mode, where the bridge used to describe its own interaction setting. */
+export const hubModeLabel = (mode: HubAttention): string =>
+  `${mode.canAsk ? 'on' : 'off'} (mods-hub: ${mode.presence} · interaction ${mode.interaction}${mode.isNight ? ` · night ${mode.quietHours}` : ''})`
+
+/** The link's phase as a mods-hub channel status (the Home tab's Channels list). */
+export const channelStatusOf = (phase: WaPhase): 'connected' | 'connecting' | 'disconnected' | 'error' | 'unconfigured' => {
+  switch (phase) {
+    case 'ready':
+      return 'connected'
+    case 'starting':
+    case 'qr':
+      return 'connecting'
+    case 'disconnected':
+      return 'disconnected'
+    case 'unconfigured':
+    case 'no-key':
+    case 'no-session':
+      return 'unconfigured'
+    case 'unreachable':
+    case 'admin-key':
+    case 'error':
+      return 'error'
   }
 }

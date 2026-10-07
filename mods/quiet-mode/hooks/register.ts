@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Origin, Register, Timer } from 'claude-code'
 
 import type { QuietState } from '../types'
-import { formatMinutes, muteVerdict, parseQuietArgs } from './args'
+import { MAX_MINUTES, formatMinutes, muteVerdict, parseQuietArgs } from './args'
+import type { QuietCommand } from './args'
 
 const quiet = atom({ plugin: 'quiet-mode', key: 'quiet' } as const, { isOn: false, until: null } satisfies QuietState)
 
@@ -52,9 +53,77 @@ const isMuting = async ($: EngineInterface, timers: Timers, origin: Origin): Pro
   return verdict === 'mute'
 }
 
+// ── With mods-hub installed, /quiet is an alias of the hub's Silent mode ─────────────────────────────
+
+type HubMode = NonNullable<Awaited<ReturnType<typeof hubMode>>>
+
+const hubStatusText = (mode: HubMode, now: number): string =>
+  mode.silentUntil === null ? '🔕 quiet' : `🔕 quiet ${formatMinutes(mode.silentUntil - now)}`
+
+/** The status line follows the hub's Silent (set here, by /hub, or in another session) until it ends. */
+const showHubSilent = async ($: EngineInterface, timers: Timers, mode: HubMode): Promise<void> => {
+  timers.tick?.cancel()
+  timers.tick = undefined
+  if (!mode.isSilent) {
+    $.ui.status(undefined)
+    return
+  }
+  $.ui.status(hubStatusText(mode, await $.clock.now()))
+  timers.tick = $.clock.every(TICK_MS, () => {
+    void hubTick($, timers)
+  })
+}
+
+const hubTick = async ($: EngineInterface, timers: Timers): Promise<void> => {
+  const mode = await hubMode($)
+  if (mode === undefined || !mode.isSilent) {
+    // The hub says when Silent is over; this only clears the line.
+    timers.tick?.cancel()
+    timers.tick = undefined
+    $.ui.status(undefined)
+  } else {
+    $.ui.status(hubStatusText(mode, await $.clock.now()))
+  }
+}
+
+/**
+ * `/quiet` when mods-hub is installed: it switches the hub's Silent (every session; the hub holds the toasts
+ * and sounds of every mod in its panel's Recent list). Undefined when there is no hub.
+ */
+const runOnHub = async ($: EngineInterface, timers: Timers, command: Exclude<QuietCommand, { kind: 'error' }>): Promise<string | undefined> => {
+  const mode = await hubMode($)
+  if (mode === undefined) return undefined
+  // Muting is the hub's job now: this mod's own switch stays off so nothing is muted twice.
+  if ((await read($, quiet)).isOn) await update($, quiet, () => OFF)
+  const now = await $.clock.now()
+
+  if (command.kind === 'status') {
+    if (!mode.isSilent) return "Quiet mode (mods-hub's Silent) is off."
+    return mode.silentUntil === null
+      ? "Quiet mode (mods-hub's Silent) is on until you switch it off."
+      : `Quiet mode (mods-hub's Silent) is on, ${formatMinutes(mode.silentUntil - now)} left.`
+  }
+  if (command.kind === 'off' || (command.kind === 'toggle' && mode.isSilent)) {
+    await showHubSilent($, timers, await $.mods.setMode({ silentMinutes: null }))
+    return mode.isSilent ? 'Quiet mode is off in every session: toasts and sounds from your mods are back.' : 'Quiet mode was already off.'
+  }
+
+  // The hub's setMode takes minutes only, so "on until switched off" is the longest quiet period, a day.
+  const minutes = command.kind === 'on' && command.minutes !== null ? command.minutes : MAX_MINUTES
+  await showHubSilent($, timers, await $.mods.setMode({ silentMinutes: minutes }))
+  const length = command.kind === 'on' && command.minutes !== null ? `for ${formatMinutes(minutes * MINUTE_MS)}` : 'until you run /quiet again (at most a day)'
+  return `Quiet mode is on ${length}, in every session (mods-hub's Silent): toasts and sounds from your mods wait in the Claude Mods panel.`
+}
+
 const runQuiet = async ($: EngineInterface, timers: Timers, args: string): Promise<string> => {
   const command = parseQuietArgs(args)
   if (command.kind === 'error') return command.message
+  try {
+    const onHub = await runOnHub($, timers, command)
+    if (onHub !== undefined) return onHub
+  } catch {
+    // The hub refused the change: quiet mode works on its own, as without the hub.
+  }
 
   const state = await read($, quiet)
   const now = await $.clock.now()
@@ -75,6 +144,24 @@ const runQuiet = async ($: EngineInterface, timers: Timers, args: string): Promi
   return `Quiet mode is on ${length}: toasts and sounds from your other mods are muted.`
 }
 
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+const ownVersion = async ($: EngineInterface): Promise<string> => {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello, and the status line shows a Silent already on (from another session or /hub). */
+const greetHub = async ($: EngineInterface, timers: Timers): Promise<void> => {
+  const mode = await hubMode($)
+  if (mode === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: [], consumes: [] })
+  await showHubSilent($, timers, mode)
+}
+
 export const register: Register = on => {
   const timers: Timers = { tick: undefined }
 
@@ -84,6 +171,7 @@ export const register: Register = on => {
       description: 'Mutes the toasts and sounds of your mods while you focus; with minutes it switches itself off.',
       argumentHint: '[minutes | off | status]',
     })
+    await greetHub($, timers)
     return next(e)
   })
 
@@ -95,3 +183,63 @@ export const register: Register = on => {
 
   on('audio.speak', async ($, e, next) => ((await isMuting($, timers, next.origin)) ? { value: { via: 'system' as const } } : next(e)))
 }
+
+// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

@@ -15,6 +15,10 @@ const SHORT_SHA = 7
 const FAILING = new Set(['failure', 'timed_out', 'startup_failure', 'action_required'])
 const CANCELLED = new Set(['cancelled', 'stale'])
 const SOUNDS = { passed: 'assets/pass.wav', failed: 'assets/fail.wav', cancelled: 'assets/fail.wav' } as const
+/** How each verdict is announced through mods-hub's notifications. */
+const LEVELS = { passed: 'success', failed: 'error', cancelled: 'warning' } as const
+/** A push the hub saw this recently is what a bare /ci-watch follows. */
+const RECENT_PUSH_MS = 15 * 60_000
 
 type Run = {
   databaseId: number
@@ -146,12 +150,40 @@ function stop($: EngineInterface, watcher: Watcher): Watch | undefined {
   return watch
 }
 
+/**
+ * Something the person should hear about: through mods-hub's notifications when it is installed (your phone
+ * channel while you are away, held while Silent), this mod's own toast otherwise.
+ */
+async function alert($: EngineInterface, level: 'success' | 'warning' | 'error', title: string, url?: string): Promise<void> {
+  try {
+    await $.mods.notify({ level, title, topic: 'ci.result', ...(url === undefined ? {} : { url }) })
+  } catch {
+    $.ui.toast(title, { timeoutMs: TOAST_MS })
+  }
+}
+
 async function announce($: EngineInterface, watch: Watch, snapshot: Extract<Snapshot, { kind: 'done' }>, settings: Settings): Promise<void> {
   const line = verdictLine(watch.branch, snapshot)
-  const link = (snapshot.culprit ?? snapshot.runs[0])?.url
-  $.ui.toast(line, { timeoutMs: TOAST_MS })
+  const shown = snapshot.culprit ?? snapshot.runs[0]
+  const link = shown?.url
+  const only = snapshot.runs.length === 1 ? snapshot.runs[0] : undefined
+  const workflow = snapshot.culprit ?? only
+  await hubPublish($, {
+    topic: 'ci.result',
+    data: {
+      provider: 'github',
+      workflow: workflow === undefined ? `${snapshot.runs.length} workflows` : workflow.workflowName || workflow.name,
+      outcome: snapshot.verdict,
+      branch: watch.branch,
+      ...(link === undefined ? {} : { url: link }),
+      durationMs: (await $.clock.now()) - watch.startedAt,
+    },
+    scope: 'global',
+  })
+  await alert($, LEVELS[snapshot.verdict], line, link)
   $.ui.log(link ? `${line} · ${link}` : line)
-  if (settings.sound) {
+  const mode = await hubMode($)
+  if (settings.sound && mode?.isSilent !== true && mode?.isNight !== true) {
     await $.audio.play({ asset: SOUNDS[snapshot.verdict] }).catch(() => undefined)
   }
   const culprit = snapshot.culprit
@@ -179,10 +211,10 @@ async function tick($: EngineInterface, watcher: Watcher, watch: Watch, settings
       await announce($, watch, snapshot, settings)
     } else if (snapshot.kind === 'none' && elapsed > WAIT_FOR_RUN_MS) {
       stop($, watcher)
-      $.ui.toast(`${MOD}: no CI run appeared for ${watch.branch}; stopped watching.`, { timeoutMs: TOAST_MS })
+      await alert($, 'warning', `${MOD}: no CI run appeared for ${watch.branch}; stopped watching.`)
     } else if (elapsed > MAX_WATCH_MS) {
       stop($, watcher)
-      $.ui.toast(`${MOD}: CI on ${watch.branch} still running after 3 h; stopped watching.`, { timeoutMs: TOAST_MS })
+      await alert($, 'warning', `${MOD}: CI on ${watch.branch} still running after 3 h; stopped watching.`)
     } else {
       $.ui.status(statusLine(watch, snapshot))
     }
@@ -190,11 +222,38 @@ async function tick($: EngineInterface, watcher: Watcher, watch: Watch, settings
     watch.failures += 1
     if (watch.failures >= MAX_POLL_FAILURES && watcher.current === watch) {
       stop($, watcher)
-      $.ui.toast(`${MOD}: stopped, gh keeps failing: ${messageOf(error)}`, { timeoutMs: TOAST_MS })
+      await alert($, 'warning', `${MOD}: stopped, gh keeps failing: ${messageOf(error)}`)
     }
   } finally {
     watch.isPolling = false
   }
+}
+
+/** The branch of the last `git.push` mods-hub saw in this session, if it was recent; undefined without the hub. */
+async function pushedBranch($: EngineInterface): Promise<string | undefined> {
+  try {
+    const push = await $.mods.latest({ topic: 'git.push' })
+    const branch = (push?.data as { branch?: unknown } | undefined)?.branch
+    return push !== null && typeof branch === 'string' && branch !== '' && (await $.clock.now()) - push.at < RECENT_PUSH_MS ? branch : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['ci.result'], consumes: ['git.push'] })
 }
 
 /** `/ci-watch [branch|stop]`: resolves the line printed as the command's output. */
@@ -207,7 +266,7 @@ async function runCommand($: EngineInterface, args: string, watcher: Watcher, se
   if ((await $.session.repo().catch(() => null)) === null) return `${MOD}: this folder is not a git repository.`
 
   const current = await git($, ['rev-parse', '--abbrev-ref', 'HEAD'])
-  const branch = arg || current
+  const branch = arg || (await pushedBranch($)) || current
   if (!branch || branch === 'HEAD') return `${MOD}: detached HEAD; name a branch: /ci-watch <branch>`
   const sha = (await git($, ['rev-parse', '--verify', '--quiet', `origin/${branch}`])) ?? (await git($, ['rev-parse', '--verify', '--quiet', branch]))
 
@@ -243,9 +302,70 @@ export const register: Register = (on, options) => {
       argumentHint: '[branch|stop]',
       immediate: true,
     })
+    await greetHub($)
 
     return next(e)
   })
 
   on('command.run', { command: 'ci-watch' }, async ($, e) => ({ text: await runCommand($, e.args, watcher, settings) }))
 }
+
+// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

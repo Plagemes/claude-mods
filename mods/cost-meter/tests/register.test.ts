@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 const TYPED = { command: 'cost-reset', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } } as const
 
 /** 128,000 tokens in all: 8k input, 4k output, 100k cache reads, 16k cache writes. */
@@ -43,8 +45,8 @@ test('counts subagent turns, skips turns without usage, and marks unknown models
   await $.turn.complete(turn('claude-haiku-4-5', 'agent-1'))
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't2', reason: 'aborted' })
   await $.turn.complete(turn('some-gateway-model'))
-  // Haiku 4.5: 8k*1 + 4k*5 + 100k*0.1 + 16k*1.25 = $0.058; unknown models are priced as a Sonnet 5 ($0.116)
-  expect(lines).toEqual(['$0.06 · 128k tok', '~$0.17 · 256k tok'])
+  // Haiku 4.5: 8k*1 + 4k*5 + 100k*0.1 + 16k*1.25 = $0.058; unknown models are priced as an Opus 5.5 ($0.212)
+  expect(lines).toEqual(['$0.06 · 128k tok', '~$0.27 · 256k tok'])
 })
 
 test('shows the meter when the session starts, and /cost-reset clears it', async ($, on) => {
@@ -74,4 +76,16 @@ test('showTokens: false leaves just the cost, and a broken override is ignored',
   const lines = engine(on)
   await $.turn.complete(turn('claude-sonnet-5-5'))
   expect(lines).toEqual(['$0.12'])
+})
+
+test('with mods-hub installed: says hello once the session starts, trading nothing (same price table as the hub)', async ($, on) => {
+  const lines = engine(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"9.9.9"}' }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(turn('claude-opus-5-5'))
+  expect(hub.hellos).toEqual([{ version: '9.9.9', publishes: [], consumes: [] }])
+  expect(hub.published).toEqual([])
+  // Opus 5.5: 8k*4 + 4k*20 + 100k*0.2 + 16k*5 = $0.212, as the hub's own cost.update prices it
+  expect(lines).toEqual(['$0.00 · 0 tok', '$0.21 · 128k tok'])
 })

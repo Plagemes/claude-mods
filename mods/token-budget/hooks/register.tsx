@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
-import type { PluginOptions, Register, StateDollar } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register, StateDollar } from 'claude-code'
 
 import type { TokenBudgetLevel, TokenBudgetLimits, TokenBudgetSpend } from '../types'
-import { costOf, tokensOf } from './pricing'
+import { costOf, freshTokensOf } from './shared/prices'
 
 const NAME = 'token-budget'
 const OVERRIDE = /^\s*!override\b\s*/i
@@ -133,6 +133,94 @@ async function raiseLimits($: StateDollar, settings: Settings): Promise<void> {
   )
 }
 
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed, and puts the budget on its blackboard. */
+async function greetHub($: EngineInterface, settings: Settings): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['budget.threshold'], consumes: [] })
+  await shareStatus($, settings)
+}
+
+/** The fact `token-budget.status` other mods read (smart-router, autopilot); nothing happens without the hub. */
+async function shareStatus($: EngineInterface, settings: Settings): Promise<void> {
+  const spent = await read($, spend)
+  const limits = await limitsNow($, settings)
+  const share = shareUsed(spent, limits)
+  try {
+    await $.mods.share({
+      name: 'status',
+      value: { level: levelOf(share, settings.warnShare), percent: Math.round(share * 100), usd: spent.usd, tokens: spent.tokens, turns: spent.turns, limits },
+    })
+  } catch {
+    // No hub: the band and /budget say it all.
+  }
+}
+
+/** The unit closest to its limit, as budget.threshold names it. */
+const thresholdOf = (spent: TokenBudgetSpend, limits: TokenBudgetLimits) => {
+  const usdShare = limits.usd === null ? -1 : spent.usd / limits.usd
+  const tokenShare = limits.tokens === null ? -1 : spent.tokens / limits.tokens
+  return usdShare >= tokenShare && limits.usd !== null
+    ? { kind: 'usd' as const, scope: 'session' as const, used: spent.usd, limit: limits.usd, percent: Math.round(usdShare * 100) }
+    : { kind: 'tokens' as const, scope: 'session' as const, used: spent.tokens, limit: limits.tokens ?? 0, percent: Math.round(tokenShare * 100) }
+}
+
+/**
+ * A threshold crossed: published on the hub's bus as `budget.threshold`, and announced through the hub's
+ * notifications (warning at the warning line, critical at 100%), or with this mod's own toast without the hub.
+ */
+async function announce($: EngineInterface, level: TokenBudgetLevel, spent: TokenBudgetSpend, limits: TokenBudgetLimits): Promise<void> {
+  const share = shareUsed(spent, limits)
+  const toast =
+    level === 'over'
+      ? `Budget reached (${describeSpend(spent, limits)}). New prompts are paused; prefix one with !override to go on.`
+      : `${Math.round(share * 100)}% of the budget used · ${describeLeft(spent, limits)}`
+  await hubPublish($, { topic: 'budget.threshold', data: thresholdOf(spent, limits) })
+  try {
+    await $.mods.notify(
+      level === 'over'
+        ? { level: 'critical', title: 'Session budget reached: prompts are paused', body: `${describeSpend(spent, limits)}. Prefix a prompt with !override to go on, or raise it with /budget set.`, topic: 'budget.threshold' }
+        : { level: 'warning', title: `${Math.round(share * 100)}% of the session budget used`, body: describeLeft(spent, limits), topic: 'budget.threshold' },
+    )
+  } catch {
+    $.ui.toast(toast, { timeoutMs: TOAST_MS })
+  }
+}
+
+/** `/budget [status | set <amount> | off | reset]`. */
+async function runBudget($: EngineInterface, args: string, settings: Settings): Promise<{ text: string }> {
+  const command = parseCommand(args)
+  const limits = await limitsNow($, settings)
+
+  switch (command.kind) {
+    case 'invalid':
+      return { text: command.text }
+    case 'status':
+      return { text: statusText(await read($, spend), limits) }
+    case 'off':
+      await setLimits($, { usd: null, tokens: null }, settings)
+      return { text: 'No budget for the rest of this session.' }
+    case 'reset':
+      await update($, spend, () => NOTHING_SPENT)
+      await setLimits($, limits, settings)
+      return { text: 'Spending counter reset to zero.' }
+    case 'set': {
+      const changed = { ...limits, [command.unit]: command.amount }
+      await setLimits($, changed, settings)
+      return { text: statusText(await read($, spend), changed) }
+    }
+  }
+}
+
 export const register: Register = (on, options: PluginOptions) => {
   const settings: Settings = {
     configured: {
@@ -149,32 +237,16 @@ export const register: Register = (on, options: PluginOptions) => {
       argumentHint: '[set <$ | tokens> | off | reset]',
       immediate: true,
     })
+    await greetHub($, settings)
 
     return next(e)
   })
 
   on('command.run', { command: 'budget' }, async ($, e) => {
-    const command = parseCommand(e.args)
-    const limits = await limitsNow($, settings)
+    const ran = await runBudget($, e.args, settings)
+    await shareStatus($, settings)
 
-    switch (command.kind) {
-      case 'invalid':
-        return { text: command.text }
-      case 'status':
-        return { text: statusText(await read($, spend), limits) }
-      case 'off':
-        await setLimits($, { usd: null, tokens: null }, settings)
-        return { text: 'No budget for the rest of this session.' }
-      case 'reset':
-        await update($, spend, () => NOTHING_SPENT)
-        await setLimits($, limits, settings)
-        return { text: 'Spending counter reset to zero.' }
-      case 'set': {
-        const changed = { ...limits, [command.unit]: command.amount }
-        await setLimits($, changed, settings)
-        return { text: statusText(await read($, spend), changed) }
-      }
-    }
+    return ran
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -182,8 +254,8 @@ export const register: Register = (on, options: PluginOptions) => {
 
     if (usage !== undefined) {
       const spent = await update($, spend, before => ({
-        usd: before.usd + costOf(usage),
-        tokens: before.tokens + tokensOf(usage),
+        usd: before.usd + costOf(usage, usage.model).usd,
+        tokens: before.tokens + freshTokensOf(usage),
         turns: before.turns + (e.agentId === undefined ? 1 : 0),
       }))
       const limits = await limitsNow($, settings)
@@ -193,13 +265,9 @@ export const register: Register = (on, options: PluginOptions) => {
       if (RANK[level] > RANK[await read($, announced)]) {
         await update($, announced, () => level)
         await update($, isBandHidden, () => false)
-        $.ui.toast(
-          level === 'over'
-            ? `Budget reached (${describeSpend(spent, limits)}). New prompts are paused; prefix one with !override to go on.`
-            : `${Math.round(share * 100)}% of the budget used · ${describeLeft(spent, limits)}`,
-          { timeoutMs: TOAST_MS },
-        )
+        await announce($, level, spent, limits)
       }
+      await shareStatus($, settings)
     }
 
     return next(e)
@@ -267,3 +335,63 @@ export const register: Register = (on, options: PluginOptions) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

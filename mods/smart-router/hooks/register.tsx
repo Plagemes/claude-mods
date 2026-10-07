@@ -21,9 +21,9 @@ import { EMPTY_PROJECT, NOTHING_FLUSHED, TEST_COMMAND, dateOf, isUnreliable, mer
 import type { Flushed } from './learning'
 import { PLANNER_SYSTEM, buildPlan, parseSubtasks, planText, plannerPrompt, runPrompt, titleOf, workflowPrompt } from './plan'
 import type { TierResolver } from './plan'
-import { costOf, familyOf, pricesWith, tokensOf } from './pricing'
-import type { PriceTable } from './pricing'
-import { INHERIT, PROFILE_NAMES, ROUTABLE_TYPES, decideRoute, guidanceText, tuningFor, withEffort } from './routing'
+import { costOf, familyOf, freshTokensOf, pricesWith } from './shared/prices'
+import type { PriceTable } from './shared/prices'
+import { INHERIT, PROFILE_NAMES, ROUTABLE_TYPES, budgetAlertOf, decideRoute, guidanceText, tuningFor, withEffort } from './routing'
 import type { Attempt, RouteDecision, RouteSettings, Streak, Tuning } from './routing'
 import {
   FAMILIES,
@@ -50,6 +50,11 @@ import type { Segment } from './view'
 
 const PANE = 'smart-router'
 const PANE_TITLE = 'Router'
+/** The hub's shared panel, and the Router's tab in it (order 20, after the Advisor). */
+const HUB_PANE = 'claude-mods'
+const TAB = { id: 'router', title: 'Router', order: 20, command: 'router' } as const
+/** How much of a decision's reason goes into an `agent.routed` event. */
+const EVENT_REASON_CHARS = 300
 /** The dock width the pane asks for: a sidebar. */
 const PANE_COLUMNS = 52
 /** From this many body columns, a plan's stages sit side by side. */
@@ -141,7 +146,7 @@ type Settings = {
 }
 
 /** One subagent this load saw start, by its id. */
-type Tracked = { decisionId: string; key: string; category: string; tier: Tier; tierRan: Tier; family: SmartRouterFamily; parentModel: string; didEdit: boolean; description: string }
+type Tracked = { decisionId: string; key: string; category: string; tier: Tier; tierRan: Tier; family: SmartRouterFamily; parentModel: string; didEdit: boolean; description: string; agentType: string; startedAt: number }
 type LastRun = Attempt & { prompt: string; finishedAt: number; wasRedo: boolean; category: string }
 
 /** What this load keeps outside `$.state`: nothing here is drawn. */
@@ -168,11 +173,16 @@ type Context = {
   flushTimer: Timer | undefined
   flushed: Flushed
   hasWorkflow: boolean | undefined
+  /** Whether mods-hub answered this session's hello: the Router is then a tab of its panel. */
+  hasHub: boolean
+  /** The newest `test.result` from the hub's bus already counted. */
+  lastTestAt: number
 }
 
 type Spawn = { verdict: Verdict; decision: RouteDecision; key: string; prompt: string; subagentType: string; isRedo: boolean; redone: LastRun | undefined }
 type PaneInput = RenderInput<'Pane'>
-type Common = Pick<ElementTable, 'Box' | 'Text' | 'Button'>
+/** The elements a drawing uses; `isTab` when it is the hub panel's tab, whose strip owns the digit hotkeys. */
+type Common = Pick<ElementTable, 'Box' | 'Text' | 'Button'> & { isTab?: boolean }
 
 const text = (value: unknown, fallback: string): string => (typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback)
 const whole = (value: unknown, fallback: number, low: number, high: number): number =>
@@ -330,6 +340,8 @@ async function planSpawn($: EngineInterface, ctx: Context, settings: Settings, e
   const isRedo = last !== undefined && last.outcome === 'ok' && !last.wasRedo && last.prompt === prompt && now - last.finishedAt <= REDO_WINDOW_MS
   const previous = last !== undefined && (last.outcome === 'failed' || isRedo) ? last : undefined
   const project = await read($, projectAtom)
+  await readTestResults($, ctx)
+  const budgetAlert = await readBudgetAlert($, ctx)
   const route: RouteSettings = { mode: await modeNow($, settings), override: settings.override, models: tuning.models, protectDeep: tuning.protectDeep, budgetBias: tuning.budgetBias, opusShare: tuning.opusShare }
   const decided = decideRoute(
     verdict,
@@ -342,6 +354,7 @@ async function planSpawn($: EngineInterface, ctx: Context, settings: Settings, e
       isUnreliable: isUnreliable(project, verdict.tag, verdict.tier, now),
       isRegression: ctx.isRegression,
       opusShare: opusShareOf(project.tokens),
+      ...(budgetAlert === undefined ? {} : { budgetAlert }),
     },
   )
   const decision = settings.useEffort && ctx.effortCalls.has(e.tool_use_id) ? withEffort(decided, verdict, tuning.models) : decided
@@ -390,13 +403,19 @@ async function recordSpawn($: EngineInterface, ctx: Context, settings: Settings,
   remember(ctx.attempts, spawn.key, { tier: tierRan, failures: last?.failures ?? 0, outcome: 'running', prompt: spawn.prompt, finishedAt: 0, wasRedo: spawn.isRedo, category: verdict.tag }, CACHE_SIZE)
   if (started.agentId !== undefined) {
     const agentId = started.agentId
-    remember(ctx.agents, agentId, { decisionId: id, key: spawn.key, category: verdict.tag, tier: verdict.tier, tierRan, family, parentModel: e.parentModel, didEdit: false, description: entry.description }, TRACKED_AGENTS)
+    remember(ctx.agents, agentId, { decisionId: id, key: spawn.key, category: verdict.tag, tier: verdict.tier, tierRan, family, parentModel: e.parentModel, didEdit: false, description: entry.description, agentType: spawn.subagentType, startedAt: now }, TRACKED_AGENTS)
     const audit = AUDIT_MARK.exec(e.prompt)?.[1]
     if (audit !== undefined) remember(ctx.auditAgents, agentId, audit, CACHE_SIZE)
     await update($, liveAtom, live => ({ ...live, agents: [...live.agents.filter(one => one.agentId !== agentId), { agentId, tier: tierRan, family, description: entry.description, startedAt: now, tools: 0 }] }))
   }
   await showStatus($, settings)
   await ensurePolling($, ctx)
+  if (ctx.hasHub) {
+    await hubPublish($, {
+      topic: 'agent.routed',
+      data: { agentType: spawn.subagentType, tier: decision.tier, model: entry.model, reason: truncate(decision.reason, EVENT_REASON_CHARS), ...(started.agentId === undefined ? {} : { agentId: started.agentId }) },
+    })
+  }
 }
 
 // Accounting and outcomes
@@ -408,7 +427,12 @@ async function finishAudit($: EngineInterface, auditId: string, answer: string):
   const verdict = AUDIT_VERDICT.exec(answer)?.[1]?.toUpperCase()
   if (verdict === undefined) return
   await learnOutcome($, audit.category, audit.tier, verdict === 'PASS')
-  $.ui.toast(`Quality check of “${truncate(audit.description, 40)}”: ${verdict === 'PASS' ? 'pass' : 'issues found'}`)
+  const line = `Quality check of “${truncate(audit.description, 40)}”: ${verdict === 'PASS' ? 'pass' : 'issues found'}`
+  try {
+    await $.mods.notify({ level: verdict === 'PASS' ? 'success' : 'warning', title: line, topic: 'agent.finished' })
+  } catch {
+    $.ui.toast(line)
+  }
 }
 
 /** Sometimes offers a quick review, one tier up, of a light or standard agent that changed files. */
@@ -422,8 +446,10 @@ async function maybeOfferAudit($: EngineInterface, settings: Settings, tracked: 
 
 async function account($: EngineInterface, ctx: Context, settings: Settings, e: TurnCompleteInput): Promise<void> {
   const usage = e.usage
-  const cost = usage === undefined ? 0 : costOf(usage, usage.model, settings.prices)
+  const costed = usage === undefined ? undefined : costOf(usage, usage.model, settings.prices)
+  const cost = costed?.usd ?? 0
   if (e.agentId === undefined) {
+    await readTestResults($, ctx)
     const saved = ctx.pendingSavings
     ctx.pendingSavings = 0
     const totals = await update($, totalsAtom, before => ({ ...before, usd: before.usd + cost, mainModel: usage?.model ?? before.mainModel }))
@@ -438,14 +464,14 @@ async function account($: EngineInterface, ctx: Context, settings: Settings, e: 
   }
   const agentId = e.agentId
   const now = await $.clock.now()
-  const baseline = usage === undefined ? 0 : costOf(usage, tracked.parentModel, settings.prices)
+  const baseline = usage === undefined ? 0 : costOf(usage, tracked.parentModel, settings.prices).usd
   const family = usage === undefined ? tracked.family : familyOf(usage.model)
-  const used = usage === undefined ? 0 : tokensOf(usage)
+  const used = usage === undefined ? 0 : freshTokensOf(usage)
   const input = usage === undefined ? 0 : usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
   const cacheShare = usage === undefined || input === 0 ? undefined : usage.cache_read_input_tokens / input
   const isOk = e.reason === 'answer' && e.answer.trim() !== ''
   ctx.pendingSavings += baseline - cost
-  await update($, totalsAtom, before => ({ ...before, usd: before.usd + cost, subagentUsd: before.subagentUsd + cost, baselineUsd: before.baselineUsd + baseline }))
+  const totals = await update($, totalsAtom, before => ({ ...before, usd: before.usd + cost, subagentUsd: before.subagentUsd + cost, baselineUsd: before.baselineUsd + baseline }))
   await update($, mixAtom, mix => {
     const before = mix.models[family] ?? { calls: 0, tokens: 0, usd: 0, baselineUsd: 0 }
     return {
@@ -476,6 +502,12 @@ async function account($: EngineInterface, ctx: Context, settings: Settings, e: 
   if (!isOk) ctx.streaks.delete(tracked.category)
   else remember(ctx.streaks, tracked.category, streak?.tier === tracked.tier ? { tier: tracked.tier, successes: streak.successes + 1 } : { tier: tracked.tier, successes: 1 }, CACHE_SIZE)
   if (isOk && tracked.didEdit) ctx.lastEditor = { category: tracked.category, tier: tracked.tierRan, at: now, isBlamed: false }
+  if (ctx.hasHub) {
+    await hubPublish($, { topic: 'agent.finished', data: { agentType: tracked.agentType, outcome: isOk ? 'ok' : 'failed', durationMs: now - tracked.startedAt, agentId, usd: cost } })
+    if (usage !== undefined && costed !== undefined) {
+      await hubPublish($, { topic: 'cost.update', data: { turnUsd: cost, sessionUsd: totals.usd, model: usage.model, tokens: costed.tokens, isEstimate: !costed.isKnownModel } })
+    }
+  }
   const auditId = ctx.auditAgents.get(agentId)
   if (auditId !== undefined) await finishAudit($, auditId, e.answer)
   else if (isOk) await maybeOfferAudit($, settings, tracked, agentId)
@@ -496,6 +528,79 @@ async function noteTests($: EngineInterface, ctx: Context, hasPassed: boolean): 
     editor.isBlamed = true
     await learnOutcome($, editor.category, editor.tier, false)
   }
+}
+
+// mods-hub: what other mods publish that routing uses, and what the Router shares
+
+/** Test runs other mods published (test-watch's own runs); the hub's sensor mirrors the Bash runs counted above. */
+async function readTestResults($: EngineInterface, ctx: Context): Promise<void> {
+  if (!ctx.hasHub) return
+  try {
+    const events = (await $.mods.recent({ topic: 'test.result', since: ctx.lastTestAt })).filter(event => event.source !== 'mods-hub' && event.source !== 'smart-router')
+    for (const event of events) {
+      ctx.lastTestAt = Math.max(ctx.lastTestAt, event.at)
+      const outcome = (event.data as { outcome?: unknown } | null)?.outcome
+      if (outcome === 'passed' || outcome === 'failed') await noteTests($, ctx, outcome === 'passed')
+    }
+  } catch {
+    // The hub went away: Bash test runs still count.
+  }
+}
+
+/** The latest budget alert on the hub's bus (token-budget, daily-spend), in words, when it is at the alert line. */
+async function readBudgetAlert($: EngineInterface, ctx: Context): Promise<string | undefined> {
+  if (!ctx.hasHub) return undefined
+  try {
+    return budgetAlertOf((await $.mods.latest({ topic: 'budget.threshold' }))?.data)
+  } catch {
+    return undefined
+  }
+}
+
+/** The fact `smart-router.policy` other mods read (subagent-cap, model-advisor, workflow-studio). */
+async function sharePolicy($: EngineInterface, ctx: Context, settings: Settings): Promise<void> {
+  if (!ctx.hasHub) return
+  const tweaks = await read($, tweaksAtom)
+  const tuning = tuningOf(tweaks, settings)
+  try {
+    await $.mods.share({
+      name: 'policy',
+      value: {
+        mode: await modeNow($, settings),
+        profile: profileOf(tweaks, settings),
+        models: { ...tuning.models },
+        maxParallel: tuning.maxParallel,
+        protectDeep: tuning.protectDeep,
+        budgetBias: tuning.budgetBias,
+        opusShare: tuning.opusShare,
+      },
+    })
+  } catch {
+    // Not shared this time; the next change tries again.
+  }
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello, the Router tab in its panel, and the routing policy on its blackboard. */
+async function greetHub($: EngineInterface, ctx: Context, settings: Settings): Promise<void> {
+  ctx.hasHub = (await hubMode($)) !== undefined
+  if (!ctx.hasHub) return
+  ctx.lastTestAt = await $.clock.now()
+  await hubHello(
+    $,
+    { version: await ownVersion($), publishes: ['agent.routed', 'agent.finished', 'cost.update'], consumes: ['budget.threshold', 'test.result'] },
+    TAB,
+  )
+  await sharePolicy($, ctx, settings)
 }
 
 // The summary files other mods read
@@ -548,23 +653,30 @@ async function flushFiles($: EngineInterface, ctx: Context, settings: Settings):
 
 // The pane: opening, the live poll, the presses
 
+/** The Router tab of the hub's panel when the hub is installed, this mod's own pane otherwise. */
 async function openPane($: EngineInterface, ctx: Context): Promise<boolean> {
-  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS }).catch(() => undefined)
-  if (opened?.isPlaced === true) await ensurePolling($, ctx)
-  return opened?.isPlaced === true
+  const isPlaced = ctx.hasHub
+    ? await hubShowTab($, TAB.id)
+    : (await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS }).catch(() => undefined))?.isPlaced === true
+  if (isPlaced) await ensurePolling($, ctx)
+  return isPlaced
+}
+
+/** Whether the Router is on screen: its own pane, or the hub's panel open on the Router tab. */
+async function isRouterOpen($: EngineInterface): Promise<boolean> {
+  const panes = await $.ui.panes().catch(() => [])
+  return panes.some(pane => pane.id === PANE) || (panes.some(pane => pane.id === HUB_PANE) && (await hubTabIs($, TAB.id)))
 }
 
 /** Polls the running subagents every 2 s, only while the pane is open. */
 async function ensurePolling($: EngineInterface, ctx: Context): Promise<void> {
   if (ctx.poller !== undefined) return
-  const panes = await $.ui.panes().catch(() => [])
-  if (panes.some(pane => pane.id === PANE)) ctx.poller = $.clock.every(POLL_MS, () => void pollLive($, ctx))
+  if (await isRouterOpen($)) ctx.poller = $.clock.every(POLL_MS, () => void pollLive($, ctx))
 }
 
 async function pollLive($: EngineInterface, ctx: Context): Promise<void> {
   try {
-    const panes = await $.ui.panes()
-    if (!panes.some(pane => pane.id === PANE)) {
+    if (!(await isRouterOpen($))) {
       ctx.poller?.cancel()
       ctx.poller = undefined
       return
@@ -586,12 +698,14 @@ async function setMode($: EngineInterface, ctx: Context, settings: Settings, mod
   await update($, modeOverride, () => mode)
   await showStatus($, settings)
   await ensurePolling($, ctx)
+  await sharePolicy($, ctx, settings)
 }
 
 /** A profile chip: its presets replace the pane's toggles. */
-async function setProfile($: EngineInterface, ctx: Context, profile: SmartRouterProfile): Promise<void> {
+async function setProfile($: EngineInterface, ctx: Context, settings: Settings, profile: SmartRouterProfile): Promise<void> {
   await update($, tweaksAtom, () => ({ profile }))
   await ensurePolling($, ctx)
+  await sharePolicy($, ctx, settings)
 }
 
 async function toggleSection($: EngineInterface, ctx: Context, section: SmartRouterSection): Promise<void> {
@@ -599,8 +713,9 @@ async function toggleSection($: EngineInterface, ctx: Context, section: SmartRou
   await ensurePolling($, ctx)
 }
 
-async function changeTweaks($: EngineInterface, change: (tweaks: SmartRouterTweaks) => SmartRouterTweaks): Promise<void> {
+async function changeTweaks($: EngineInterface, ctx: Context, settings: Settings, change: (tweaks: SmartRouterTweaks) => SmartRouterTweaks): Promise<void> {
   await update($, tweaksAtom, change)
+  await sharePolicy($, ctx, settings)
 }
 
 async function copyText($: EngineInterface, value: string, surface: RenderSurface, done: string): Promise<void> {
@@ -717,7 +832,7 @@ function sectionHeader($: EngineInterface, ctx: Context, el: Common, section: (t
     <Button
       key={`section-${section.id}`}
       plain
-      hotkey={section.hotkey}
+      {...(el.isTab === true ? {} : { hotkey: section.hotkey })}
       label={`${isOpen ? '▾' : '▸'} ${section.title}${isOpen && suffix !== '' ? ` · ${suffix}` : ''}`}
       onPress={() => void toggleSection($, ctx, section.id)}
     />
@@ -784,7 +899,7 @@ async function drawHeader($: EngineInterface, ctx: Context, el: Common, settings
             hotkey={PROFILE_HOTKEY[one]}
             dimColor={one !== profile}
             label={`${one === profile ? '●' : '○'} ${PROFILE_LABEL[one]}`}
-            onPress={() => void setProfile($, ctx, one)}
+            onPress={() => void setProfile($, ctx, settings, one)}
           />
         ))}
       </Box>
@@ -1072,18 +1187,18 @@ async function drawRules($: EngineInterface, ctx: Context, el: Common, settings:
       <Box flexDirection="column" paddingLeft={2}>
         <Text dimColor wrap="wrap">{`${PROFILE_LABEL[profileOf(tweaks, settings)]}: ${tuning.models.light} / ${tuning.models.standard} / ${tuning.models.deep} · audits ${tuning.auditRate}% · effort lever ${settings.useEffort ? 'on' : 'off'}`}</Text>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-          <Button key="toggle-protect" hotkey="g" label={`Protect deep: ${tuning.protectDeep ? 'on' : 'off'}`} onPress={() => void changeTweaks($, now => ({ ...now, protectDeep: !tuning.protectDeep }))} />
+          <Button key="toggle-protect" hotkey="g" label={`Protect deep: ${tuning.protectDeep ? 'on' : 'off'}`} onPress={() => void changeTweaks($, ctx, settings, now => ({ ...now, protectDeep: !tuning.protectDeep }))} />
           {preset.budgetBias > 0 ? (
-            <Button key="toggle-budget" hotkey="b" label={`Budget bias ${money(preset.budgetBias)}: ${isBiasOn ? 'on' : 'off'}`} onPress={() => void changeTweaks($, now => ({ ...now, isBudgetBiasOn: !isBiasOn }))} />
+            <Button key="toggle-budget" hotkey="b" label={`Budget bias ${money(preset.budgetBias)}: ${isBiasOn ? 'on' : 'off'}`} onPress={() => void changeTweaks($, ctx, settings, now => ({ ...now, isBudgetBiasOn: !isBiasOn }))} />
           ) : (
             <Text dimColor>Budget bias: off</Text>
           )}
         </Box>
         <Box key="max-parallel" flexDirection="row" columnGap={1}>
           <Text>Max parallel</Text>
-          <Button key="parallel-down" label="−" onPress={() => void changeTweaks($, now => ({ ...now, maxParallel: Math.max(1, tuning.maxParallel - 1) }))} />
+          <Button key="parallel-down" label="−" onPress={() => void changeTweaks($, ctx, settings, now => ({ ...now, maxParallel: Math.max(1, tuning.maxParallel - 1) }))} />
           <Text bold>{String(tuning.maxParallel)}</Text>
-          <Button key="parallel-up" label="+" onPress={() => void changeTweaks($, now => ({ ...now, maxParallel: Math.min(MAX_PARALLEL_LIMIT, tuning.maxParallel + 1) }))} />
+          <Button key="parallel-up" label="+" onPress={() => void changeTweaks($, ctx, settings, now => ({ ...now, maxParallel: Math.min(MAX_PARALLEL_LIMIT, tuning.maxParallel + 1) }))} />
         </Box>
         <Text dimColor>{`Learned rules (${rules.length}), this project`}</Text>
         {rules.length === 0 && <Text dimColor>  None yet: open a decision and press “Should be …”.</Text>}
@@ -1111,8 +1226,8 @@ async function drawRules($: EngineInterface, ctx: Context, el: Common, settings:
   )
 }
 
-async function drawPane($: EngineInterface, ctx: Context, settings: Settings, e: PaneInput): Promise<RenderElement> {
-  const el: Common = $.ui.resolve(e)
+async function drawPane($: EngineInterface, ctx: Context, settings: Settings, e: PaneInput, isTab = false): Promise<RenderElement> {
+  const el: Common = { ...$.ui.resolve(e), isTab }
   const { Box } = el
   const columns = Math.max(24, e.props.bodyColumns)
   const folded = await read($, collapsedAtom)
@@ -1158,6 +1273,8 @@ export const register: Register = (on, options) => {
     flushTimer: undefined,
     flushed: NOTHING_FLUSHED,
     hasWorkflow: undefined,
+    hasHub: false,
+    lastTestAt: 0,
   }
 
   on('session.start', async ($, e, next) => {
@@ -1171,6 +1288,7 @@ export const register: Register = (on, options) => {
       $.ui.log(`smart-router: could not read the main model: ${errorText(error)}`, { to: 'debug' })
     }
     await showStatus($, settings)
+    await greetHub($, ctx, settings)
     if (settings.autoOpen) void openPane($, ctx)
     return next(e)
   })
@@ -1263,4 +1381,76 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, ($, e) => drawPane($, ctx, settings, e))
+
+  // The Router tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
+  on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
+    if (!(await hubTabIs($, TAB.id))) return next(e)
+    const { Box } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        {await next(e)}
+        {await drawPane($, ctx, settings, e, true)}
+      </Box>
+    )
+  })
 }
+
+// #region @vendored shared/hub-client.ts sha256:3ade61508f36: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

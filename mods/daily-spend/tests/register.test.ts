@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, TurnUsage } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 /** Wednesday 7 October 2026, local noon: the week began on Monday the 5th. */
 const NOW = new Date(2026, 9, 7, 12).getTime()
 
@@ -150,4 +152,46 @@ test('session start registers /spend and drops days older than 120', async ($, o
 
   expect(registered).toEqual(['spend'])
   expect([...store.keys()].sort()).toEqual([key(5), 'alertedOn'].sort())
+})
+
+const HUB_PANE = { ...PANE, requestId: 'claude-mods', props: { ...PANE.props, title: 'Claude Mods' } } as const
+
+test('with mods-hub: /spend opens the Cost tab, drawn under the hub strip; the limit is published and notified', { options: { dailyLimit: 5 } }, async ($, on) => {
+  const { toasts } = answerEngine(on, HISTORY)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+
+  await $.session.start({ cwd: '/work/alpha', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['budget.threshold'], consumes: [] }])
+  expect(hub.tabs).toEqual([{ id: 'cost', title: 'Cost', order: 90, command: 'spend' }])
+  expect(hub.facts.get('today')).toEqual({ date: '2026-10-07', usd: 3.5, limit: 5 })
+
+  expect((await $.command.run(RUN)).text).toBe('Today $3.50 · this week $7.50')
+  expect(hub.shown).toEqual(['cost'])
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...HUB_PANE, surface })
+    expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '$3.50' })).toBeDefined()
+    expect(await ui.find({ key: 'refresh' })).toBeDefined()
+    expect(await ui.find({ key: 'close' })).toBeUndefined()
+    await ui.unmount()
+  }
+
+  await $.turn.complete(turn(100_000))
+  expect(hub.published).toEqual([{ topic: 'budget.threshold', data: { kind: 'usd', scope: 'day', used: 5.5, limit: 5, percent: 110 }, scope: 'global' }])
+  expect(hub.notified.map(notice => [notice.level, notice.title])).toEqual([['warning', "Today's spend $5.50 passed your $5.00 daily limit."]])
+  expect(toasts).toEqual([])
+})
+
+test('another tab of the hub panel is left to its owner', async ($, on) => {
+  answerEngine(on, HISTORY)
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB HOME'] }) as never)
+  const ui = await $.ui.mount({ ...HUB_PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'HUB HOME' })).toBeDefined()
+  expect(await ui.find({ key: 'refresh' })).toBeUndefined()
+  await ui.unmount()
 })

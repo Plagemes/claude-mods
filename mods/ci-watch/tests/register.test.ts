@@ -1,6 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { CommandRunInput, On, ProcessRunResult } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const SHA = 'abc1234def5678'
 const OLD_SHA = '0000000aaaaaaa'
 
@@ -169,4 +171,46 @@ test('says so outside a git repository', async ($, on) => {
   world(on, { isRepo: false })
   const result = await $.command.run(typed(''))
   expect(result.text).toBe('ci-watch: this folder is not a git repository.')
+})
+
+test('with mods-hub: follows the branch just pushed, publishes ci.result and notifies instead of toasting', { options: { autoFix: false } }, async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const seen = world(on)
+  const hub = fakeHub(on)
+  hub.events.push({ topic: 'git.push', data: { remote: 'origin', branch: 'feature/cart', isForce: false }, at: 1_000_000 - 60_000, source: 'force-push-guard' })
+  seen.runs = [run(8, 'test', 'in_progress')]
+
+  await $.session.start({ cwd: '/home/me/shop', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['ci.result'], consumes: ['git.push'] }])
+
+  expect((await $.command.run(typed(''))).text).toContain('watching CI on feature/cart')
+  seen.runs = [run(8, 'test', 'completed', 'failure')]
+  await clock.advance(30_000)
+
+  expect(hub.published).toEqual([
+    {
+      topic: 'ci.result',
+      data: { provider: 'github', workflow: 'test', outcome: 'failed', branch: 'feature/cart', url: 'https://github.com/acme/shop/actions/runs/8', durationMs: 30_000 },
+      scope: 'global',
+    },
+  ])
+  expect(hub.notified).toEqual([
+    { level: 'error', title: '❌ CI failed on feature/cart: test (failure)', topic: 'ci.result', url: 'https://github.com/acme/shop/actions/runs/8' },
+  ])
+  expect(seen.toasts).toEqual([])
+  expect(seen.sounds).toEqual(['assets/fail.wav'])
+})
+
+test('with mods-hub in Silent or Night mode: no chime of its own', async ($, on) => {
+  const clock = mock.clock(on)
+  const seen = world(on)
+  const hub = fakeHub(on, { isNight: true })
+  seen.runs = [run(9, 'build', 'in_progress')]
+
+  await $.command.run(typed('main'))
+  seen.runs = [run(9, 'build', 'completed', 'success')]
+  await clock.advance(30_000)
+
+  expect(hub.notified.map(notice => notice.level)).toEqual(['success'])
+  expect(seen.sounds).toEqual([])
 })
