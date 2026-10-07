@@ -1,0 +1,14 @@
+{
+  "name": "pr-describer",
+  "version": "1.0.0",
+  "description": "/pr-desc drafts a pull request title and description from your branch diff.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#pr-describer",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "git", "pull-request", "github"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "model": { "type": "string", "title": "Model", "description": "Model that writes the description: an alias (haiku, sonnet, opus) or a full model id.", "default": "sonnet" }
+  }
+}

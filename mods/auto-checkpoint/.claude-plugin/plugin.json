@@ -1,0 +1,14 @@
+{
+  "name": "auto-checkpoint",
+  "version": "1.0.0",
+  "description": "Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#auto-checkpoint",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "git", "checkpoint", "undo"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "keep": { "type": "number", "title": "Checkpoints to keep", "description": "How many checkpoints to keep per repository; older ones are pruned.", "default": 20 }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "redactor",
+  "version": "1.0.0",
+  "description": "Masks secrets and personal data in tool results before the model ever reads them.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#redactor",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "security", "privacy", "redaction", "secrets"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "secrets": { "type": "boolean", "title": "Mask secrets", "description": "API keys and tokens (AWS, GitHub, Anthropic, OpenAI, Stripe, Slack, Google), JWTs, private keys and high-entropy *_KEY / *_SECRET / *_TOKEN / PASSWORD values.", "default": true },
+    "emails": { "type": "boolean", "title": "Mask email addresses", "description": "Replace email addresses with [REDACTED:email].", "default": true },
+    "phones": { "type": "boolean", "title": "Mask phone numbers", "description": "International (+...) and North American formatted phone numbers.", "default": true },
+    "ibans": { "type": "boolean", "title": "Mask IBANs", "description": "Bank account numbers that pass the IBAN mod-97 checksum.", "default": true },
+    "cards": { "type": "boolean", "title": "Mask payment cards", "description": "Card numbers with a known issuer prefix that pass the Luhn check.", "default": true },
+    "privateIps": { "type": "boolean", "title": "Mask private IPv4 addresses", "description": "10.x, 172.16-31.x and 192.168.x addresses. Off by default: they are rarely sensitive and often useful.", "default": false },
+    "allowlist": { "type": "string", "title": "Allowlist (regex)", "description": "Matches this regular expression are left visible. Empty to mask everything.", "default": "^git@|^noreply@|@users\\.noreply\\.github\\.com$|@example\\.(com|org|net)$" }
+  }
+}
