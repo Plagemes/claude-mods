@@ -198,6 +198,8 @@ export const register: Register = (on, options) => {
 
     const { Box, Button, Text } = $.ui.resolve(e)
     const count = lessons.length > 1 ? ` · 1 of ${lessons.length}` : ''
+    // Other plugins' bands stay below this one instead of being hidden while a lesson waits.
+    const below = await next(e)
 
     return (
       <Box flexDirection="column" width={e.props.bodyColumns}>
@@ -222,6 +224,7 @@ export const register: Register = (on, options) => {
           />
           <Button key="dismiss" label="Dismiss" hotkey="x" role="dismiss" onPress={() => dismissLesson($, lesson.id)} />
         </Box>
+        {below}
       </Box>
     )
   })

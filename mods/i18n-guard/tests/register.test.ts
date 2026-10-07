@@ -1,6 +1,8 @@
 import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { findHardCoded } from '../hooks/scan'
+
 const BUTTON = '/repo/src/Button.tsx'
 
 // Stands for the engine: files that already exist (read by path), and every tool call that reaches it.
@@ -174,4 +176,13 @@ test('the attributes to check can be changed', { options: { mode: 'warn', attrib
   await $.tool.call({ tool: 'Write', file_path: BUTTON, content: 'export const A = () => <Icon tooltip="Delete" title="Ignored now" />\n' })
 
   expect(toasts).toEqual(['i18n-guard: 1 hard-coded string in Button.tsx'])
+})
+
+test('a large file full of generics and comparisons scans in linear time', async () => {
+  const line = 'const m: Map<string, Array<number>> = new Map<string, Array<number>>(); if (a < b) return <p title="Hi">x</p>\n'
+  const source = line.repeat(2000)
+  const startedAt = performance.now()
+  const found = findHardCoded(source, 'jsx', new Set(['title']), true)
+  expect(performance.now() - startedAt).toBeLessThan(500)
+  expect(found).toHaveLength(4000)
 })

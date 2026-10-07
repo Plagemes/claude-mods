@@ -184,3 +184,13 @@ test('/gql-schema shows the schema on terminal and desktop, filters it, and can 
   expect(state.contexts[0]?.[0]).toContain('graphql-context:')
   expect(await ui.find({ type: 'Text', text: '✓ Claude has it in this conversation' })).toBeDefined()
 })
+
+test('a huge root type is cut to maxChars too, naming the fields left out', () => {
+  const fields = Array.from({ length: 2000 }, (_, i) => `  table${i}(where: table${i}_bool_exp, limit: Int, offset: Int): [table${i}!]!`).join('\n')
+  const schema = parseSdl([`type Query {\n${fields}\n}\ninput table0_bool_exp { id: Int }`])
+  const { text, isCut } = compactSchema(schema, 6000)
+  expect(isCut).toBe(true)
+  expect(text.length).toBeLessThan(6000 + 2000)
+  expect(text).toContain('  table0(where: table0_bool_exp, limit: Int, offset: Int): [table0!]!')
+  expect(text).toMatch(/# … \d+ more Query fields: table\d+/)
+})

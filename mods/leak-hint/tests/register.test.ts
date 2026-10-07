@@ -238,3 +238,9 @@ test('introducedLeaks ignores a finding that only moved to another line', () => 
   expect(introducedLeaks(before, after)).toEqual([])
   expect(introducedLeaks([], after)).toHaveLength(1)
 })
+
+test('effects: returning the subscribe call itself returns its unsubscribe, so it is a cleanup', () => {
+  expect(messages('useEffect(() => {\n  return store.subscribe(() => setState(store.getState()))\n}, [])')).toEqual([])
+  expect(messages("useEffect(() => {\n  return navigation.addListener('focus', load)\n}, [navigation])")).toEqual([])
+  expect(messages('useEffect(() => {\n  store.subscribe(render)\n  return () => {}\n}, [])')).toHaveLength(1)
+})

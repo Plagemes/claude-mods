@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptOrigin, Register, ToolCallResult } from 'claude-code'
 
 import type { K8sDryRunApproval as Approval, K8sDryRunObject as K8sObject, K8sDryRunPreview as Preview } from '../types'
-import { approvalKey, findKubectl, parseDeleted, parseDiff, previewArgv } from './kubectl'
+import { approvalKey, findKubectls, parseDeleted, parseDiff, previewArgv } from './kubectl'
 import type { KubectlCall } from './kubectl'
 
 const PANE = 'k8s-diff'
@@ -188,8 +188,14 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const call = findKubectl(e.command)
+    const [call, ...others] = findKubectls(e.command)
     if (call === undefined) return next(e)
+    // One approval stands for one previewed change: a second change in the same command would run unreviewed.
+    if (others.length > 0) {
+      return {
+        deny: `k8s-dry-run: this command makes ${others.length + 1} kubectl changes. Run each kubectl apply, replace or delete as its own command (or pass several -f to one apply), so each change gets its own dry run and approval.`,
+      }
+    }
 
     const cwd = joinPath(await $.session.cwd(), call.cd)
     const context = await contextOf($, call, cwd)

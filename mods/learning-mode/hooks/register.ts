@@ -19,6 +19,16 @@ async function currentText($: EngineInterface, path: string, isRemote: boolean):
   }
 }
 
+/** The path inside the project, so a project folder named `auth-service` does not make every file in it security-critical. */
+async function projectPath($: EngineInterface, path: string): Promise<string> {
+  try {
+    const root = (await $.session.root()).replace(/[\\/]+$/, '')
+    return path.startsWith(`${root}/`) || path.startsWith(`${root}\\`) ? path.slice(root.length + 1) : path
+  } catch {
+    return path
+  }
+}
+
 export const register: Register = (on, options) => {
   const asked = Math.floor(Number(options.maxTodos))
   const maxTodos = Number.isFinite(asked) && asked >= 1 ? asked : DEFAULT_MAX_TODOS
@@ -65,7 +75,7 @@ export const register: Register = (on, options) => {
     const added = addedMarkers(before, after)
     if (added === 0) return next(e)
 
-    if (isSecurityCritical(path)) {
+    if (isSecurityCritical(await projectPath($, path))) {
       return {
         deny:
           `learning-mode: ${path} looks security-critical, so ${MARKER} is not left there. Write that code completely, ` +

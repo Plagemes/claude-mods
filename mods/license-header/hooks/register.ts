@@ -21,6 +21,8 @@ const HAS_NOTICE = /SPDX-License-Identifier|Copyright|\(c\)\s+\d{4}|Licensed und
 const NOTICE_SEARCH_LINES = 15
 // First lines that must stay first: a shebang, PHP's opening tag, an XML declaration.
 const KEEP_FIRST = /^(?:#!|<\?php|<\?xml)/
+// PHP outside `<?php` is output: a template (`welcome.blade.php`, a page that opens with HTML) would print a `//` header.
+const PHP_CODE_FIRST = /^(?:#![^\n]*\n)?<\?php(?![^\n]*\?>)/
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
@@ -60,8 +62,10 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
     const style = styleOf(e.file_path)
+    const isPhpTemplate = /\.php$/i.test(e.file_path) && !PHP_CODE_FIRST.test(e.content)
     const isCandidate =
       style !== undefined &&
+      !isPhpTemplate &&
       !VENDORED.test(e.file_path) &&
       e.content.trim() !== '' &&
       !HAS_NOTICE.test(e.content.split('\n', NOTICE_SEARCH_LINES).join('\n'))

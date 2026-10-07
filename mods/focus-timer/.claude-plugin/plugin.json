@@ -11,7 +11,7 @@
     "focusMinutes": {
       "type": "number",
       "title": "Focus minutes",
-      "description": "Length of a focus round when /focus is run without a number.",
+      "description": "Length of a focus round when /pomodoro is run without a number.",
       "default": 25
     },
     "breakMinutes": {

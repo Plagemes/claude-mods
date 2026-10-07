@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { findKubectl, objectName, parseDiff, previewArgv } from '../hooks/kubectl'
+import { findKubectl, findKubectls, objectName, parseDiff, previewArgv } from '../hooks/kubectl'
 
 const PLUGIN = 'k8s-dry-run'
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 14, bodyColumns: 110, scroll: { offset: 0, bodyRows: 14 }, view: {} } as const
@@ -235,4 +235,20 @@ test('reads kubectl calls, their previews and diff output', () => {
     ['Deployment shop/web', 'update', 1, 1],
     ['Service shop/web-internal', 'create', 4, 0],
   ])
+})
+
+test('a second change in the same command is refused, and wrappers or bash -c do not hide kubectl', async ($, on) => {
+  const w = world(on, 'prod')
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+
+  const chained = await bash($, 'kubectl apply -f unchanged.yaml && kubectl delete deployment web -n shop')
+  expect(chained.deny).toContain('makes 2 kubectl changes')
+  expect(w.executed).toEqual([])
+
+  for (const command of ['bash -c "kubectl delete ns shop"', 'timeout 60 kubectl apply -f k8s/', 'sudo -E kubectl apply -f k8s/', '(cd k8s && kubectl apply -f .)']) {
+    expect(`${command} => ${(await bash($, command)).deny ?? 'RAN'}`).toContain('k8s-dry-run')
+  }
+  expect(w.executed).toEqual([])
+  expect(findKubectls("cd deploy && sh -lc 'kubectl apply -f web.yaml'")).toMatchObject([{ verb: 'apply', words: ['apply', '-f', 'web.yaml'], cd: 'deploy' }])
+  expect(findKubectls('nice -n 5 kubectl delete pod x')[0]?.words).toEqual(['delete', 'pod', 'x'])
 })

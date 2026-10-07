@@ -20,6 +20,8 @@ export type Push = {
 const LEASE = '--force-with-lease'
 const OPTIONS_WITH_VALUE = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec'])
 const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
+const MAX_NESTING = 3
+const SHELLS = /(?:^|\/)(?:ba|z|da|k)?sh$/
 
 /** Splits a command line into simple commands of words; quotes are honoured, redirections dropped. */
 export function lexCommands(input: string): Word[][] {
@@ -49,6 +51,8 @@ export function lexCommands(input: string): Word[][] {
     } else if (ch === '"' || ch === "'") {
       if (start === -1) start = i
       quote = ch
+    } else if (ch === '\\' && input[i + 1] === '\n') {
+      i += 1 // a line continuation joins the two lines
     } else if (/[\n;|&()`]/.test(ch)) {
       endCommand(i)
     } else if (/\s/.test(ch)) {
@@ -102,10 +106,25 @@ function parsePush(words: readonly Word[], pushIndex: number, directory: string 
   return push
 }
 
-/** Every `git push` on the command line, wherever it hides behind `&&`, `;` or a pipe. */
-export function findPushes(command: string): Push[] {
+/** The script of a `bash -c '<script>'` (also sh, zsh, `-lc`, ...) on this simple command, if any. */
+function nestedScript(words: readonly Word[]): string | undefined {
+  const shellIndex = words.findIndex(word => SHELLS.test(word.text))
+  if (shellIndex === -1) return undefined
+  for (let i = shellIndex + 1; i < words.length; i++) {
+    const text = (words[i] as Word).text
+    if (!text.startsWith('-')) return undefined
+    if (/^-[a-z]*c[a-z]*$/.test(text)) return words[i + 1]?.text
+  }
+  return undefined
+}
+
+/** Every `git push` on the command line, wherever it hides behind `&&`, `;`, a pipe or `bash -c`. */
+export function findPushes(command: string, depth = 0): Push[] {
   const pushes: Push[] = []
   for (const words of lexCommands(command)) {
+    const script = depth < MAX_NESTING ? nestedScript(words) : undefined
+    // A nested script's offsets are not the outer command's, so it is checked but never rewritten.
+    if (script !== undefined) pushes.push(...findPushes(script, depth + 1).map(push => ({ ...push, leaseEdits: [] })))
     const gitIndex = words.findIndex(word => word.text === 'git' || word.text.endsWith('/git'))
     if (gitIndex === -1) continue
     let directory: string | undefined

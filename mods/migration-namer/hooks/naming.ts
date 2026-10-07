@@ -25,14 +25,16 @@ const GENERIC_WORDS = new Set([
   'auto', 'generated', 'copy', 'final', 'up', 'down',
 ])
 const STOP_WORDS = new Set(['a', 'an', 'the'])
-const IGNORED_ENTRY = /^(\..*|__init__\.py|__pycache__|env\.py|script\.py\.mako|schema\.rb|index\.[jt]s|migration_lock\.toml|readme.*|.*\.(md|lock|toml|txt|mako))$/i
+// Files that live beside migrations without being one, Flyway's callbacks (beforeMigrate.sql, afterEachMigrate__x.sql) among them.
+const IGNORED_ENTRY = /^(\..*|__init__\.py|__pycache__|env\.py|script\.py\.mako|schema\.rb|index\.[jt]s|migration_lock\.toml|readme.*|.*\.(md|lock|toml|txt|mako)|(?:before|after)(?:each)?(?:migrate|repeatables|undo|clean|info|validate|baseline|repair|versioned|createschema)\w*(?:__[^.]*)?\.sql)$/i
 
 const PREFIXES: ReadonlyArray<{ style: Style; pattern: RegExp }> = [
   { style: 'laravel', pattern: /^(\d{4}_\d{2}_\d{2}_\d{6})([_-])(.*)$/s },
   { style: 'timestamp', pattern: /^(\d{14})([_-])(.*)$/s },
   { style: 'epoch', pattern: /^(\d{13}|\d{10})([_-])(.*)$/s },
   { style: 'date', pattern: /^(\d{8})([_-])(.*)$/s },
-  { style: 'flyway', pattern: /^(V\d+(?:[._]\d+)*)(__)(.*)$/s },
+  // Flyway: versioned V1__, undo U1__ and repeatable R__ (re-run whenever it changes, so it has no number).
+  { style: 'flyway', pattern: /^([VU]\d+(?:[._]\d+)*|R)(__)(.*)$/s },
   { style: 'sequence', pattern: /^(\d{1,6})([_-])(.*)$/s },
   { style: 'hash', pattern: /^([0-9a-f]{12})([_-])(.*)$/s },
 ]
@@ -84,7 +86,7 @@ const casingOf = (rest: string): Casing => {
   return /^[A-Z][a-z0-9]+[A-Z]/.test(rest) ? 'pascal' : 'snake'
 }
 
-const numberOf = (prefix: string): number => Number.parseInt(prefix.replace(/^V/, '').split(/[._]/)[0] ?? '0', 10) || 0
+const numberOf = (prefix: string): number => Number.parseInt(prefix.replace(/^[VUR]/, '').split(/[._]/)[0] ?? '0', 10) || 0
 
 /** The convention the existing entries follow, or undefined when none of them is numbered. */
 export const detectConvention = (entries: readonly Entry[]): Convention | undefined => {

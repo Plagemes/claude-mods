@@ -240,3 +240,19 @@ test('a missing node binary fails the start with what to do', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: 'node (Node.js) is not installed or not on PATH; install it, or set engine to prism' })).toBeDefined()
   expect(state.statuses.at(-1)).toBeUndefined()
 })
+
+test('schemas that link to each other (Stripe-style) make a bounded body, quickly', () => {
+  const schemas: Record<string, unknown> = {}
+  for (let i = 0; i < 40; i += 1) {
+    const properties: Record<string, unknown> = { id: { type: 'string' } }
+    for (let link = 1; link <= 8; link += 1) properties[`link_${link}`] = { $ref: `#/components/schemas/S${(i + link) % 40}` }
+    schemas[`S${i}`] = { type: 'object', properties }
+  }
+  const response = { description: 'ok', content: { 'application/json': { schema: { $ref: '#/components/schemas/S0' } } } }
+  const doc = { openapi: '3.0.0', info: { title: 't', version: '1' }, paths: { '/s': { get: { responses: { '200': response } } } }, components: { schemas } }
+  const startedAt = performance.now()
+  const { routes } = mockSpecOf(JSON.stringify(doc))
+  expect(performance.now() - startedAt).toBeLessThan(1_000)
+  expect(JSON.stringify(routes[0]?.body).length).toBeLessThan(200_000)
+  expect(routes[0]?.body).toMatchObject({ id: 'string' })
+})

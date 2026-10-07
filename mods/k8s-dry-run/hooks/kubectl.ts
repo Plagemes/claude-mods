@@ -17,7 +17,18 @@ export type KubectlCall = {
 }
 
 const SEPARATORS = new Set(['&&', '||', ';', '|', '\n'])
-const WRAPPERS = new Set(['time', 'env', 'command', 'nice', 'nohup', 'sudo'])
+const WRAPPERS = new Set(['time', 'env', 'command', 'nice', 'nohup', 'sudo', 'exec', 'timeout', 'xargs', 'doas'])
+/** Options of those wrappers that take the next word as their value (`sudo -u ops`, `nice -n 5`, `timeout -s KILL`). */
+const WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  sudo: ['-u', '-g', '-h', '-p', '-C', '-D', '-r', '-t', '-U', '-T'],
+  doas: ['-u', '-C'],
+  env: ['-u', '-C', '-S'],
+  nice: ['-n'],
+  timeout: ['-s', '-k'],
+  xargs: ['-I', '-L', '-n', '-P', '-d', '-E', '-s', '-a'],
+}
+const SHELLS = /^(?:ba|z|da|k)?sh$/
+const MAX_NESTING = 3
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const VERBS = new Set(['apply', 'replace', 'delete'])
 /** Flags that take a value in the next word when not written `--flag=value`. */
@@ -123,11 +134,52 @@ const valueOf = (words: readonly string[], names: readonly string[]): string | u
 
 const isDryRun = (word: string): boolean => /^--dry-run(?:=(?:client|server|true))?$/.test(word)
 
+const count = (text: string, char: string): number => text.split(char).length - 1
+
+/** A simple command without what only wraps it: `VAR=x`, `sudo -u ops`, `timeout 60`, `nice -n 5`, a subshell's `(` and `)`. */
+const unwrap = (segment: readonly string[]): string[] => {
+  let words = [...segment]
+  if (words[0]?.startsWith('(') === true) words = [words[0].replace(/^\(+/, ''), ...words.slice(1)].filter((word, i) => i > 0 || word !== '')
+  while (words.at(-1) === ')') words = words.slice(0, -1)
+  const last = words.at(-1)
+  if (last !== undefined && last.endsWith(')') && count(last, ')') > count(last, '(')) words = [...words.slice(0, -1), last.replace(/\)+$/, '')]
+  for (;;) {
+    const head = words[0] ?? ''
+    if (ASSIGNMENT.test(head)) {
+      words = words.slice(1)
+      continue
+    }
+    if (!WRAPPERS.has(head)) return words
+    let i = 1
+    while ((words[i] ?? '').startsWith('-')) i += WRAPPER_VALUE_OPTIONS[head]?.includes(words[i] ?? '') === true ? 2 : 1
+    // `timeout` takes a duration before the command it runs.
+    if (head === 'timeout' && /^\d/.test(words[i] ?? '')) i += 1
+    words = words.slice(i)
+  }
+}
+
+/** The script of `bash -c '<script>'` (also sh, zsh, `-lc`, ...), if this simple command is one. */
+const nestedScript = (words: readonly string[]): string | undefined => {
+  const shell = words[0] ?? ''
+  if (!SHELLS.test(shell.slice(shell.lastIndexOf('/') + 1))) return undefined
+  for (let i = 1; i < words.length && (words[i] ?? '').startsWith('-'); i += 1) {
+    if (/^-[a-z]*c[a-z]*$/.test(words[i] ?? '')) return words[i + 1]
+  }
+  return undefined
+}
+
 /**
  * The first kubectl apply, replace or delete in a Bash command that is not a
  * dry run already, with what its dry run needs; undefined when there is none.
  */
-export const findKubectl = (command: string): KubectlCall | undefined => {
+export const findKubectl = (command: string): KubectlCall | undefined => findKubectls(command)[0]
+
+/**
+ * Every kubectl apply, replace or delete in a Bash command that is not a dry
+ * run already (also inside `bash -c '…'`), each with what its dry run needs.
+ */
+export const findKubectls = (command: string, depth = 0): KubectlCall[] => {
+  const calls: KubectlCall[] = []
   const { command: plain, bodies } = extractHeredocs(command)
   const segments: { words: string[]; isPiped: boolean }[] = [{ words: [], isPiped: false }]
   for (const token of tokenize(plain)) {
@@ -140,10 +192,15 @@ export const findKubectl = (command: string): KubectlCall | undefined => {
   /** What the segment before fed into a pipe: `cat` of a heredoc or of one file. */
   let feed: { heredoc?: number; file?: string } = {}
   for (const segment of segments) {
-    let words = segment.words
-    const heredoc = words.includes(HEREDOC_MARK) ? heredocs++ : undefined
+    const words = unwrap(segment.words)
+    const heredoc = segment.words.includes(HEREDOC_MARK) ? heredocs++ : undefined
     const piped = segment.isPiped ? feed : {}
-    while (words.length > 0 && (ASSIGNMENT.test(words[0] ?? '') || WRAPPERS.has(words[0] ?? ''))) words = words.slice(1)
+    const script = depth < MAX_NESTING ? nestedScript(words) : undefined
+    if (script !== undefined) {
+      const outer = cd
+      calls.push(...findKubectls(script, depth + 1).map(call => ({ ...call, cd: outer === undefined || call.cd?.startsWith('/') === true ? call.cd : call.cd === undefined ? outer : `${outer}/${call.cd}` })))
+      continue
+    }
     const head = words[0]
     feed = head === 'cat' && words.length === 2 ? (heredoc !== undefined ? { heredoc } : { file: words[1] }) : {}
     if (head === 'cd' && words[1] !== undefined) cd = cd === undefined || words[1].startsWith('/') ? words[1] : `${cd}/${words[1]}`
@@ -173,7 +230,7 @@ export const findKubectl = (command: string): KubectlCall | undefined => {
         ? args.map(word => (word === '-' ? fromFile : word.replace(/^(--filename=)-$/, `$1${fromFile}`)))
         : args
 
-    return {
+    calls.push({
       verb: verb as KubectlCall['verb'],
       words: sourced,
       context: valueOf(sourced, ['--context']),
@@ -182,9 +239,9 @@ export const findKubectl = (command: string): KubectlCall | undefined => {
       cd,
       stdin,
       unpreviewable: readsStdin && stdin === undefined && fromFile === undefined ? 'its manifests come from another command' : undefined,
-    }
+    })
   }
-  return undefined
+  return calls
 }
 
 /** The command that previews a call without changing anything: `kubectl diff`, or a server-side dry-run delete. */

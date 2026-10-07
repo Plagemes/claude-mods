@@ -21,6 +21,10 @@ type Json = Record<string, unknown>
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'] as const
 const MAX_DEPTH = 6
 const MAX_PROPERTIES = 40
+/** Values one made-up body may hold: objects that link to others (Stripe- or GitHub-style specs) would otherwise grow without end. */
+const MAX_SAMPLED_VALUES = 1_000
+
+type Budget = { left: number }
 
 const isObject = (value: unknown): value is Json => value !== null && typeof value === 'object' && !Array.isArray(value)
 
@@ -53,7 +57,9 @@ const STRING_FORMATS: Record<string, string> = {
 }
 
 /** A value that fits `schema`: its example, default, first enum value, or one made up from its type. */
-export const sampleOf = (doc: Json, schemaOrRef: unknown, depth = 0, seen: ReadonlySet<string> = new Set()): unknown => {
+export const sampleOf = (doc: Json, schemaOrRef: unknown, depth = 0, seen: ReadonlySet<string> = new Set(), budget: Budget = { left: MAX_SAMPLED_VALUES }): unknown => {
+  if (budget.left <= 0) return null
+  budget.left -= 1
   const ref = isObject(schemaOrRef) && typeof schemaOrRef.$ref === 'string' ? schemaOrRef.$ref : undefined
   if (ref !== undefined && seen.has(ref)) return null
   const nextSeen = ref === undefined ? seen : new Set([...seen, ref])
@@ -66,21 +72,21 @@ export const sampleOf = (doc: Json, schemaOrRef: unknown, depth = 0, seen: Reado
   if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0]
   if (Array.isArray(schema.allOf)) {
     return schema.allOf.reduce<unknown>((merged, part) => {
-      const value = sampleOf(doc, part, depth + 1, nextSeen)
+      const value = sampleOf(doc, part, depth + 1, nextSeen, budget)
       return isObject(merged) && isObject(value) ? { ...merged, ...value } : (value ?? merged)
     }, {})
   }
   const choice = Array.isArray(schema.oneOf) ? schema.oneOf[0] : Array.isArray(schema.anyOf) ? schema.anyOf[0] : undefined
-  if (choice !== undefined) return sampleOf(doc, choice, depth + 1, nextSeen)
+  if (choice !== undefined) return sampleOf(doc, choice, depth + 1, nextSeen, budget)
   const type = Array.isArray(schema.type) ? schema.type.find(one => one !== 'null') : schema.type
   if (type === 'object' || (type === undefined && isObject(schema.properties))) {
     const properties = isObject(schema.properties) ? Object.entries(schema.properties).slice(0, MAX_PROPERTIES) : []
     const sample: Json = {}
-    for (const [name, property] of properties) sample[name] = sampleOf(doc, property, depth + 1, nextSeen)
-    if (properties.length === 0 && isObject(schema.additionalProperties)) sample.key = sampleOf(doc, schema.additionalProperties, depth + 1, nextSeen)
+    for (const [name, property] of properties) sample[name] = sampleOf(doc, property, depth + 1, nextSeen, budget)
+    if (properties.length === 0 && isObject(schema.additionalProperties)) sample.key = sampleOf(doc, schema.additionalProperties, depth + 1, nextSeen, budget)
     return sample
   }
-  if (type === 'array') return schema.items === undefined ? [] : [sampleOf(doc, schema.items, depth + 1, nextSeen)]
+  if (type === 'array') return schema.items === undefined ? [] : [sampleOf(doc, schema.items, depth + 1, nextSeen, budget)]
   if (type === 'integer') return typeof schema.minimum === 'number' ? Math.ceil(schema.minimum) : 0
   if (type === 'number') return typeof schema.minimum === 'number' ? schema.minimum : 0
   if (type === 'boolean') return true

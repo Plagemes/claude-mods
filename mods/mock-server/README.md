@@ -27,4 +27,4 @@
 ## How it works
 - `command.run` reads the spec (a small YAML reader built in, JSON too), turns each operation's first 2xx response into a canned body, and starts `node -e <built-in server>` with those routes on stdin through `$.process.spawn`, bound to `127.0.0.1`. The server prints one JSON line per request, which the pane reads; Prism's log lines are read the same way.
 - The child lives as long as the stream is read: `/mock stop`, a new `/mock`, `session.end` or unloading the mod ends it.
-- Limits: the built-in mock needs Node.js on `PATH`, answers one response per operation (no `Prefer` header, no request validation; use Prism for those), and resolves only local `$ref`s; YAML anchors and aliases are not expanded.
+- Limits: the built-in mock needs Node.js on `PATH`, answers one response per operation (no `Prefer` header, no request validation; use Prism for those), and resolves only local `$ref`s; YAML anchors and aliases are not expanded. A body made up from schemas holds at most 1,000 values, so deeply linked schemas end in `null`s.

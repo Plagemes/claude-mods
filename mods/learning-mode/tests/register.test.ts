@@ -205,3 +205,12 @@ test('pure helpers: markers added, security paths, wording', () => {
   expect(summary(new Map([['a', 1], ['b', 1], ['c', 1], ['d', 1]]), 9)).toBe('🎓 4 TODO(you) left for you: a, b, c +1 more')
   expect(instructions(2)).toContain('up to 2 small')
 })
+
+test('only the path inside the project counts: a project folder named auth-service is not security code', async ($, on) => {
+  const seen = world(on)
+  on('session.root', () => ({ value: '/home/ada/auth-service' }))
+  await learning($, 'on')
+  expect((await edit($, '/home/ada/auth-service/src/slug.ts', '// TODO(you): handle accents')).deny).toBeUndefined()
+  expect((await edit($, '/home/ada/auth-service/src/session/store.ts', '// TODO(you): expire it')).deny).toContain('security-critical')
+  expect(seen.reached).toBe(1)
+})

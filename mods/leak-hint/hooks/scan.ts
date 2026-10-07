@@ -55,6 +55,10 @@ const callbackExpression = (names: string): RegExp => new RegExp(String.raw`\b($
 const CLEANUP_RETURN =
   /\breturn\s+(?:\([^()]*\)(?:\s*:\s*[\w<>[\]|.]+)?\s*=>|[\w$]+\s*=>|function\b|async\b|[\w$.]*(?:unsub|cleanup|clean|dispose|stop|off|remove|cancel|teardown|close|abort|clear|destroy|disconnect)[\w$.]*\s*(?:[;}\n]|$))/i
 
+/** `return store.subscribe(fn)`: the call's own result (an unsubscribe function) is what the effect returns. */
+const RETURNED_CALL = /\breturn\s+[\w$]+(?:\??\.[\w$]+)*\s*$/
+const RETURNS_ITS_STOP: ReadonlySet<KindId> = new Set(['subscription', 'emitter'])
+
 const CLASS_HEAD = /\bclass\s+([\w$]+)?[^{;]*\{/g
 const METHOD_HEAD =
   /^[ \t]*(?:(?:public|private|protected|static|async|override|readonly)\s+)*(?:get\s+|set\s+)?(\[Symbol\.(?:async)?[dD]ispose\]|[\w$]+)\s*(?:<[^>]*>)?\s*\([^)]*\)\s*(?::\s*[^{;=]+)?\{/gm
@@ -156,6 +160,7 @@ const effectLeaks = (source: Source): Leak[] => {
     const cleanupText = cleanup === null ? undefined : body.slice(cleanup.index)
 
     for (const { kind, event, index } of hits) {
+      if (RETURNS_ITS_STOP.has(kind.id) && RETURNED_CALL.test(body.slice(Math.max(0, index - 80), index))) continue
       const noun = kind.noun(event)
       if (cleanupText === undefined) {
         leaks.push(source.leak('effect', open + 1 + index, `${hook} adds ${noun} but returns no cleanup function; it should ${kind.fix} when the effect ends.`))

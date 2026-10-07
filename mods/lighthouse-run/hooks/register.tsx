@@ -35,15 +35,16 @@ async function projectRoot($: EngineInterface): Promise<string> {
 async function findDevServer($: EngineInterface, root: string): Promise<string | undefined> {
   const packageJson = await $.fs.read(`${root}/package.json`).catch(() => undefined)
   const ports = candidatePorts(portsFromPackage(typeof packageJson === 'string' ? packageJson : undefined))
-  const probe = async (port: number): Promise<boolean> => {
-    try {
-      await $.http.fetch(`http://localhost:${port}/`)
-      return true
-    } catch {
-      return false
-    }
-  }
-  const answers = await Promise.race([Promise.all(ports.map(probe)), $.clock.sleep(PROBE_TIMEOUT_MS).then(() => [] as boolean[])])
+  // Each port gets its own deadline: one port that accepts and never answers must not hide the server on another.
+  const probe = (port: number): Promise<boolean> =>
+    Promise.race([
+      $.http.fetch(`http://localhost:${port}/`).then(
+        () => true,
+        () => false,
+      ),
+      $.clock.sleep(PROBE_TIMEOUT_MS).then(() => false),
+    ])
+  const answers = await Promise.all(ports.map(probe))
   const index = answers.indexOf(true)
   return index === -1 ? undefined : `http://localhost:${ports[index]}/`
 }

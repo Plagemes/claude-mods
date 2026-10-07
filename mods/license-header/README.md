@@ -31,5 +31,5 @@ A shebang, `<?php` or `<?xml` first line stays first; the header goes right afte
 
 ## How it works
 - Hooks `tool.call` for Write. If the target has a supported source extension, does not exist yet (`$.fs.exists`), is not empty and shows no notice in its first 15 lines, the hook calls `next({ ...e, content })` with the header prepended.
-- If the existence check fails, the write goes through untouched. Only Write is handled: files created with shell redirects, and edits to existing files, are not.
+- If the existence check fails, the write goes through untouched. A PHP file that does not open with `<?php` (a Blade or HTML template) is left alone, since text outside the tag is output. Only Write is handled: files created with shell redirects, and edits to existing files, are not.
 - Supported: JS/TS, Java, Kotlin, Go, Rust, C/C++/C#, Swift, PHP, Python, Ruby, shell, YAML, TOML, Terraform, SQL, Lua, CSS/SCSS, HTML/XML/Vue/Svelte, TeX and a few more.

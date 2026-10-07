@@ -33,28 +33,37 @@ const WEAK: ReadonlyArray<readonly [RegExp, Junk]> = [
   [/\.pyc$/, { reason: 'Python bytecode', ignoreLine: '*.pyc' }],
 ]
 
-/** The `git add` of a command, or undefined when this is not one that needs a look. */
-export function parseGitAdd(commands: readonly ShellCommand[]): GitAdd | undefined {
-  for (const { words } of commands) {
-    const gitIndex = words.findIndex(word => baseName(word) === 'git')
-    if (gitIndex === -1) continue
-    let i = gitIndex + 1
-    while (i < words.length && (words[i] as string).startsWith('-')) i += GIT_OPTIONS_WITH_VALUE.has(words[i] as string) ? 2 : 1
-    if (words[i] !== 'add') continue
+/** One simple command's `git add`, or undefined when it is not one that needs a look. */
+function parseOneAdd(words: readonly string[]): GitAdd | undefined {
+  const gitIndex = words.findIndex(word => baseName(word) === 'git')
+  if (gitIndex === -1) return undefined
+  let i = gitIndex + 1
+  while (i < words.length && (words[i] as string).startsWith('-')) i += GIT_OPTIONS_WITH_VALUE.has(words[i] as string) ? 2 : 1
+  if (words[i] !== 'add') return undefined
 
-    const args = words.slice(i + 1)
-    const flags = args.filter(arg => arg.startsWith('-') && arg !== '--')
-    if (flags.some(flag => SKIPPED_FLAGS.has(flag))) return undefined
-    const isBroadFlag = flags.some(flag => flag === '--all' || (!flag.startsWith('--') && flag.includes('A')))
-    const paths = args.filter(arg => !arg.startsWith('-') || arg === '-')
-    const everything = paths.filter(path => ['.', './', '*', ':/', ':/*'].includes(path))
-    return {
-      isBroad: isBroadFlag || everything.length > 0,
-      paths: paths.filter(path => !everything.includes(path)),
-      isCurrentDirectoryOnly: !isBroadFlag && everything.every(path => path === '.' || path === './'),
-    }
+  const args = words.slice(i + 1)
+  const flags = args.filter(arg => arg.startsWith('-') && arg !== '--')
+  if (flags.some(flag => SKIPPED_FLAGS.has(flag))) return undefined
+  const isBroadFlag = flags.some(flag => flag === '--all' || (!flag.startsWith('--') && flag.includes('A')))
+  const paths = args.filter(arg => !arg.startsWith('-') || arg === '-')
+  const everything = paths.filter(path => ['.', './', '*', ':/', ':/*'].includes(path))
+  return {
+    isBroad: isBroadFlag || everything.length > 0,
+    paths: paths.filter(path => !everything.includes(path)),
+    isCurrentDirectoryOnly: !isBroadFlag && everything.every(path => path === '.' || path === './'),
   }
-  return undefined
+}
+
+/** Every `git add` of a command line merged into one, or undefined when none needs a look. */
+export function parseGitAdd(commands: readonly ShellCommand[]): GitAdd | undefined {
+  const adds = commands.flatMap(({ words }) => parseOneAdd(words) ?? [])
+  if (adds.length === 0) return undefined
+  const broad = adds.filter(add => add.isBroad)
+  return {
+    isBroad: broad.length > 0,
+    paths: adds.flatMap(add => add.paths),
+    isCurrentDirectoryOnly: broad.every(add => add.isCurrentDirectoryOnly),
+  }
 }
 
 /** `git status --porcelain=v1 -z` into entries; the cut-off last entry of a truncated output is dropped. */

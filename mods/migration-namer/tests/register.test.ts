@@ -183,3 +183,13 @@ test('the content tells what a migration does in a few words', () => {
   expect(describeContent('exports.up = k => k.schema.createTable("accounts", t => {})')?.join('_')).toBe('create_accounts_table')
   expect(describeContent('SELECT 1')).toBeUndefined()
 })
+
+test('Flyway repeatable, undo and callback scripts are not refused', async ($, on) => {
+  const folder = `${ROOT}/src/main/resources/db/migration`
+  const { reached } = project(on, [`${folder}/V1__init.sql`, `${folder}/V2__add_orders.sql`])
+  for (const name of ['R__create_views.sql', 'U2__drop_orders.sql', 'afterMigrate.sql', 'beforeEachMigrate__grants.sql']) {
+    expect((await write($, `${folder}/${name}`, 'select 1;')).deny).toBeUndefined()
+  }
+  expect(reached).toHaveLength(4)
+  expect((await write($, `${folder}/views.sql`, 'select 1;')).deny).toContain('V3__')
+})

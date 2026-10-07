@@ -86,7 +86,8 @@ export type Token = {
 
 /** Reads a token out of text: the first piece that looks like `header.payload.signature` and whose header is JSON. */
 export const parseToken = (text: string): Token | undefined => {
-  const pieces = text.match(/eyJ[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*){1,4}/g) ?? text.match(/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]*){2}/g) ?? []
+  // Each match starts where a run of token characters starts, so a long text without dots is read once, not once per character.
+  const pieces = text.match(/(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*){1,4}/g) ?? text.match(/(?<![A-Za-z0-9_-])[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]*){2}/g) ?? []
   for (const piece of pieces) {
     const parts = piece.split('.')
     const header = parseObject(utf8Text(decodeBase64Url(parts[0] ?? '') ?? []))

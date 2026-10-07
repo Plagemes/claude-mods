@@ -50,7 +50,7 @@ const report = (scores: [number, number, number, number], formFactor = 'mobile')
 
 type World = { runs: { argv: readonly string[]; env: Record<string, string> }[]; submitted: string[]; store: Map<string, unknown>; clock: ReturnType<typeof mock.clock> }
 
-const world = (on: On, outputs: { exitCode: number; stdout: string; stderr?: string }[], options: { openPorts?: number[]; env?: Record<string, string> } = {}): World => {
+const world = (on: On, outputs: { exitCode: number; stdout: string; stderr?: string }[], options: { openPorts?: number[]; hangingPorts?: number[]; env?: Record<string, string> } = {}): World => {
   const state: World = { runs: [], submitted: [], store: new Map(), clock: mock.clock(on, { now: 1_000_000 }) }
   mock.env(on, options.env ?? { HOME: '/home/dev', USER: 'dev' })
   on('session.cwd', () => ({ value: '/work/site' }))
@@ -63,6 +63,7 @@ const world = (on: On, outputs: { exitCode: number; stdout: string; stderr?: str
   )
   on('http.fetch', ($, e) => {
     const port = Number(new URL(e.url).port)
+    if (options.hangingPorts?.includes(port) === true) return new Promise<never>(() => undefined)
     return (options.openPorts ?? [5173]).includes(port) ? { value: { status: 200, ok: true, headers: {}, text: '<html>' } } : { deny: 'ECONNREFUSED' }
   })
   on('process.run', ($, e) => {
@@ -179,4 +180,11 @@ test("the project's own port comes first", async ($, on) => {
   const state = world(on, [{ exitCode: 0, stdout: report([1, 1, 1, 1]) }], { openPorts: [5173, 5199] })
   expect((await lighthouse($, '/about')).text).toContain('on http://localhost:5199/about')
   expect(state.runs).toHaveLength(0)
+})
+
+test('a port that never answers does not hide the dev server on another one', async ($, on) => {
+  const state = world(on, [{ exitCode: 0, stdout: report([1, 1, 1, 1]) }], { openPorts: [5173], hangingPorts: [8080] })
+  const pending = lighthouse($, '/about')
+  await state.clock.advance(2_000)
+  expect((await pending).text).toContain('on http://localhost:5173/about')
 })

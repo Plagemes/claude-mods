@@ -351,13 +351,35 @@ export const countsOf = (schema: Schema): Counts => {
   }
 }
 
+/** How many names of root fields left out are still listed. */
+const ROOT_NAMES_LISTED = 40
+
 /** The compact schema: root operations one per line, then the types they reach, capped at `maxChars`. */
 export const compactSchema = (schema: Schema, maxChars: number): { text: string; isCut: boolean } => {
   const byName = new Map(schema.types.map(type => [type.name, type]))
   const rootNames = [schema.roots.query, schema.roots.mutation, schema.roots.subscription]
+  // Root fields one per line, but within the budget too: a generated schema (Hasura, say) can have thousands of them.
   const parts: string[] = []
+  let cutFields = 0
   for (const root of rootNames.map(name => byName.get(name)).filter((type): type is GqlType => type !== undefined)) {
-    parts.push(fullText(root))
+    const implemented = root.implements.length === 0 ? '' : ` implements ${root.implements.join(' & ')}`
+    const header = `${root.kind} ${root.name}${implemented} {`
+    const lines = [header]
+    let used = parts.reduce((sum, part) => sum + part.length + 2, 0) + header.length + 2
+    let kept = 0
+    for (const field of root.fields) {
+      const line = `  ${field.name}${field.args}: ${field.type}`
+      if (used + line.length + 1 > maxChars) break
+      lines.push(line)
+      used += line.length + 1
+      kept += 1
+    }
+    const omitted = root.fields.slice(kept).map(field => field.name)
+    if (omitted.length > 0) {
+      cutFields += omitted.length
+      lines.push(`  # … ${omitted.length} more ${root.name} fields: ${omitted.slice(0, ROOT_NAMES_LISTED).join(', ')}${omitted.length > ROOT_NAMES_LISTED ? ', …' : ''}`)
+    }
+    parts.push([...lines, '}'].join('\n'))
   }
   // Breadth first from the root fields' types and arguments: the types an operation touches come first.
   const queue: string[] = []
@@ -387,7 +409,7 @@ export const compactSchema = (schema: Schema, maxChars: number): { text: string;
     shown += 1
   }
   const left = ordered.slice(shown).map(type => baseName(type.name))
-  if (left.length === 0) return { text, isCut: false }
+  if (left.length === 0) return { text, isCut: cutFields > 0 }
   const tail = `\n# … ${left.length} more types: ${left.slice(0, 40).join(', ')}${left.length > 40 ? ', …' : ''}`
   return { text: `${text}${tail}`, isCut: true }
 }

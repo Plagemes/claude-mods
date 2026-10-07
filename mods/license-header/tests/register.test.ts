@@ -96,3 +96,13 @@ test('does nothing when it cannot tell whether the file exists', async ($, on) =
 
   expect(written).toEqual(['export {}\n'])
 })
+
+test('a PHP template, whose text outside <?php is output, gets no header', async ($, on) => {
+  const { written } = engine(on)
+  const templates = [
+    ['/repo/resources/views/welcome.blade.php', '<!DOCTYPE html>\n<html>{{ $title }}</html>\n'],
+    ['/repo/page.php', '<?php include "head.php"; ?>\n<h1>Hi</h1>\n'],
+  ] as const
+  for (const [file_path, content] of templates) await $.tool.call({ tool: 'Write', file_path, content })
+  expect(written.map(w => w.content)).toEqual(templates.map(([, content]) => content))
+})

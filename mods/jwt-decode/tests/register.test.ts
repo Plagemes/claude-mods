@@ -189,3 +189,11 @@ test('spans are written for people', () => {
   const parsed = parseToken(SAMPLE)
   expect(parsed === undefined ? '' : describeToken(parsed, NOW)).toContain('John Doe')
 })
+
+test('a long text without a token is searched in linear time', () => {
+  const startedAt = performance.now()
+  expect(parseToken('A'.repeat(200_000))).toBeUndefined()
+  expect(parseToken('eyJ'.repeat(60_000))).toBeUndefined()
+  expect(performance.now() - startedAt).toBeLessThan(500)
+  expect(parseToken(`see ${SAMPLE} here`)?.claims?.sub).toBe('1234567890')
+})

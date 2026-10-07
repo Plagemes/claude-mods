@@ -21,6 +21,8 @@ const ATTRIBUTE_NAME = /[^\s=/>{]+/y
 const BARE_VALUE = /[^\s>]+/y
 const BOUND_PREFIX = /^(?::|v-bind:)/
 const KEYWORD_BEFORE_JSX = /(?:^|[^\w$])(?:return|default|else|case|yield|await)$/
+// The longest keyword above, so the character before it is in view too.
+const KEYWORD_LOOKBACK = 'default'.length
 
 export const fileKindOf = (path: string): FileKind | undefined => {
   const extension = path.split('.').at(-1)?.toLowerCase() ?? ''
@@ -177,8 +179,10 @@ const isTagStart = (source: string, i: number, isChildren: boolean): boolean => 
   if (isChildren) return /[A-Za-z>/]/.test(next)
   if (!/[A-Za-z>]/.test(next)) return false
   // In plain code "a < b" and "Array<T>" are not tags; "return <div>" and "(<div>" are.
-  const before = source.slice(0, i).trimEnd()
-  return before === '' || !/[\w$)\]]$/.test(before) || KEYWORD_BEFORE_JSX.test(before)
+  // Only the last non-blank character (and a keyword ending there) matters: looking back, not slicing, keeps big files linear.
+  let last = i - 1
+  while (last >= 0 && /\s/.test(source.charAt(last))) last -= 1
+  return last < 0 || !/[\w$)\]]/.test(source.charAt(last)) || KEYWORD_BEFORE_JSX.test(source.slice(Math.max(0, last - KEYWORD_LOOKBACK), last + 1))
 }
 
 // Walks `scan.source`. In code, JSX elements are looked for; inside an element (or anywhere in markup) text is read.

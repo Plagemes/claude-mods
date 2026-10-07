@@ -32,7 +32,7 @@ When Claude runs `kubectl apply`, `replace` or `delete`, this mod first runs a s
 | `timeoutSeconds` | number | `30` | How long the dry run may take. |
 
 ## How it works
-- A guard on `tool.call` (Bash) finds kubectl `apply` / `replace` / `delete`. It skips commands that already use `--dry-run`, and reads `--context`, `-n`, `-f`, `-k` and `-R`. Without `--context`, it reads the current context (`kubectl config current-context`).
+- A guard on `tool.call` (Bash) finds kubectl `apply` / `replace` / `delete`, also behind `sudo`, `timeout`, `env`, a subshell or `bash -c '…'`. It skips commands that already use `--dry-run`, and reads `--context`, `-n`, `-f`, `-k` and `-R`. A command that makes two kubectl changes is refused, so each gets its own dry run. Without `--context`, it reads the current context (`kubectl config current-context`).
 - The dry run:
   - apply and replace: `kubectl diff` with the same sources and connection flags, using `KUBECTL_EXTERNAL_DIFF="diff -u -N"`
   - delete: the same command with `--dry-run=server -o name`

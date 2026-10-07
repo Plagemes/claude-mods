@@ -91,3 +91,17 @@ test('protectedBranches is configurable', { options: { protectedBranches: 'prod,
   await $.tool.call({ tool: 'Bash', command: 'git push -f origin main' })
   expect(ran).toEqual(['git push --force-with-lease origin main'])
 })
+
+test('sees pushes behind bash -c and line continuations', async ($, on) => {
+  const ran = engine(on, 'main')
+  const blocked = [
+    'bash -c "git push -f origin main"',
+    "sh -lc 'cd app && git push --force origin master'",
+    'git push --force \\\n  origin',
+  ]
+  for (const command of blocked) {
+    const result = await $.tool.call({ tool: 'Bash', command })
+    expect(`${command} => ${result.deny ?? 'ALLOWED'}`).toContain('force-push-guard')
+  }
+  expect(ran).toHaveLength(0)
+})
