@@ -57,6 +57,30 @@ const entries = (store: Map<string, unknown>) => (store.get(KEY) as { entries: {
 const mount = ($: Engine, surface: (typeof SURFACES)[number] = 'terminal') =>
   $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
 
+
+/** Box props that size a box: the engine refuses its own nodes under any of them, and the band then disappears. */
+const SIZE_PROPS = ['width', 'minWidth', 'maxWidth', 'height', 'minHeight', 'maxHeight', 'flexBasis']
+type DrawnNode = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+
+/** The elements above the first Text showing `text`, outermost first; undefined when the tree draws no such Text. */
+const ancestorsOf = (node: unknown, text: string, above: DrawnNode[] = []): DrawnNode[] | undefined => {
+  if (typeof node !== 'object' || node === null) return undefined
+  const element = node as DrawnNode
+  const children = element.children ?? []
+  if (element.type === 'Text' && children.includes(text)) return above
+  for (const child of children) {
+    const found = ancestorsOf(child, text, [...above, element])
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+/** The size props set on any Box above the engine's band; a line says so when the band is not drawn at all. */
+const sizedAbove = (tree: unknown): string[] => {
+  const above = ancestorsOf(tree, 'engine band')
+  if (above === undefined) return ['no engine band drawn']
+  return above.flatMap(box => (box.type === 'Box' ? SIZE_PROPS.filter(prop => box.props?.[prop] !== undefined).map(prop => `Box ${prop}`) : []))
+}
+
 test('/daily-goal sets the goal, the band keeps it in view and Done marks it reached', async ($, on) => {
   const w = world(on)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
@@ -144,4 +168,26 @@ test('Edit puts the goal back in the prompt box; Hide hides the band until /dail
   expect((await goal($, 'clear')).text).toBe("Cleared today's goal (Ship the login fix).")
   expect(await band.find({ key: 'goal' })).toBeUndefined()
   expect((await goal($, 'done')).text).toBe('No goal set for today. /daily-goal <goal> sets one.')
+})
+
+test('the engine band is not drawn under a Box with a size prop while the goal shows', async ($, on) => {
+  world(on)
+  await goal($, 'Ship the login fix')
+  for (const surface of SURFACES) {
+    const band = await mount($, surface)
+    expect(await band.find({ key: 'goal' })).toBeDefined()
+    expect(sizedAbove(await band.drawn())).toEqual([])
+    await band.unmount()
+  }
+})
+
+test('the engine band is not drawn under a Box with a size prop while the evening question shows', async ($, on) => {
+  world(on, { now: MORNING + 9 * HOUR })
+  await goal($, 'Ship the login fix')
+  for (const surface of SURFACES) {
+    const band = await mount($, surface)
+    expect(await band.find({ key: 'question' })).toBeDefined()
+    expect(sizedAbove(await band.drawn())).toEqual([])
+    await band.unmount()
+  }
 })

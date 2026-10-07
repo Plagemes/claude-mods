@@ -189,8 +189,8 @@ export const register: Register = (on, options) => {
     const hidden = regressions.length - shown.length
 
     return (
-      <Box flexDirection="column" width={e.props.bodyColumns}>
-        <Box key="regressions" flexDirection="column">
+      <Box flexDirection="column">
+        <Box key="regressions" flexDirection="column" width={e.props.bodyColumns}>
           <Text wrap="truncate-end">
             <Text bold color="warning">⚠ Regressions: {regressions.length}</Text>
             <Text dimColor> · passed earlier this session, failing now</Text>

@@ -205,26 +205,28 @@ export const register: Register = (on, options) => {
     ].filter(Boolean)
 
     return (
-      <Box flexDirection="column" width={e.props.bodyColumns}>
-        <Text wrap="truncate-end">
-          <Text bold>↩ Last session</Text>
-          <Text dimColor>
-            {' '}
-            · {when}
-            {brief.branch ? ` · ${brief.branch}` : ''}
+      <Box flexDirection="column">
+        <Box key="brief" flexDirection="column" width={e.props.bodyColumns}>
+          <Text wrap="truncate-end">
+            <Text bold>↩ Last session</Text>
+            <Text dimColor>
+              {' '}
+              · {when}
+              {brief.branch ? ` · ${brief.branch}` : ''}
+            </Text>
           </Text>
-        </Text>
-        <Text wrap="truncate-end">
-          You asked: “{brief.prompts.at(-1) ?? ''}”
-        </Text>
-        {facts.length > 0 && (
-          <Text dimColor wrap="truncate-end">
-            {facts.join(' · ')}
+          <Text wrap="truncate-end">
+            You asked: “{brief.prompts.at(-1) ?? ''}”
           </Text>
-        )}
-        <Box flexDirection="row" gap={1}>
-          <Button key="continue" label="Continue" hotkey="c" variant="primary" onPress={() => continueWork($)} />
-          <Button key="dismiss" label="Dismiss" hotkey="x" role="dismiss" onPress={() => hide($)} />
+          {facts.length > 0 && (
+            <Text dimColor wrap="truncate-end">
+              {facts.join(' · ')}
+            </Text>
+          )}
+          <Box flexDirection="row" gap={1}>
+            <Button key="continue" label="Continue" hotkey="c" variant="primary" onPress={() => continueWork($)} />
+            <Button key="dismiss" label="Dismiss" hotkey="x" role="dismiss" onPress={() => hide($)} />
+          </Box>
         </Box>
         {below}
       </Box>

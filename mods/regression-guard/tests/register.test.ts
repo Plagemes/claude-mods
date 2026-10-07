@@ -83,6 +83,29 @@ function world(on: On) {
 const baseline = ($: Engine, args = '') =>
   $.command.run({ command: 'baseline', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
 
+/** Box props that size a box: the engine refuses its own nodes under any of them, and the band then disappears. */
+const SIZE_PROPS = ['width', 'minWidth', 'maxWidth', 'height', 'minHeight', 'maxHeight', 'flexBasis']
+type DrawnNode = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+
+/** The elements above the first Text showing `text`, outermost first; undefined when the tree draws no such Text. */
+const ancestorsOf = (node: unknown, text: string, above: DrawnNode[] = []): DrawnNode[] | undefined => {
+  if (typeof node !== 'object' || node === null) return undefined
+  const element = node as DrawnNode
+  const children = element.children ?? []
+  if (element.type === 'Text' && children.includes(text)) return above
+  for (const child of children) {
+    const found = ancestorsOf(child, text, [...above, element])
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+/** The size props set on any Box above the engine's band; a line says so when the band is not drawn at all. */
+const sizedAbove = (tree: unknown): string[] => {
+  const above = ancestorsOf(tree, 'engine band')
+  if (above === undefined) return ['no engine band drawn']
+  return above.flatMap(box => (box.type === 'Box' ? SIZE_PROPS.filter(prop => box.props?.[prop] !== undefined).map(prop => `Box ${prop}`) : []))
+}
+
 test('a test that passed at the session start and fails later raises the band, the status and a note for Claude', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -189,4 +212,17 @@ test('with tellClaude off the test result is left as the runner printed it', { o
   const run = await $.tool.call({ tool: 'Bash', command: 'npm test' })
   expect(run.context).toBeUndefined()
   expect(seen.statuses.at(-1)).toBe('⚠ 2 regressions')
+})
+
+test('the engine band is not drawn under a Box with a size prop', async ($, on) => {
+  const { seen } = world(on)
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  seen.output = BROKEN
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  for (const surface of SURFACES) {
+    const band = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'fix' })).toBeDefined()
+    expect(sizedAbove(await band.drawn())).toEqual([])
+    await band.unmount()
+  }
 })

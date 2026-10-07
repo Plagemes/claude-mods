@@ -79,6 +79,29 @@ const typed: CommandRunInput = {
   presentation: { isFullscreen: false, columns: 120 },
 }
 
+/** Box props that size a box: the engine refuses its own nodes under any of them, and the band then disappears. */
+const SIZE_PROPS = ['width', 'minWidth', 'maxWidth', 'height', 'minHeight', 'maxHeight', 'flexBasis']
+type DrawnNode = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+
+/** The elements above the first Text showing `text`, outermost first; undefined when the tree draws no such Text. */
+const ancestorsOf = (node: unknown, text: string, above: DrawnNode[] = []): DrawnNode[] | undefined => {
+  if (typeof node !== 'object' || node === null) return undefined
+  const element = node as DrawnNode
+  const children = element.children ?? []
+  if (element.type === 'Text' && children.includes(text)) return above
+  for (const child of children) {
+    const found = ancestorsOf(child, text, [...above, element])
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+/** The size props set on any Box above the engine's band; a line says so when the band is not drawn at all. */
+const sizedAbove = (tree: unknown): string[] => {
+  const above = ancestorsOf(tree, 'engine band')
+  if (above === undefined) return ['no engine band drawn']
+  return above.flatMap(box => (box.type === 'Box' ? SIZE_PROPS.filter(prop => box.props?.[prop] !== undefined).map(prop => `Box ${prop}`) : []))
+}
+
 test('shows the last session above the prompt and Continue resumes it', async ($, on) => {
   const seen = world(on, { [KEY]: PREVIOUS })
   await start($)
@@ -161,6 +184,17 @@ test('regression: the brief band keeps the bands beneath it on screen', async ($
     const band = await $.ui.mount({ plugin: 'resume-brief', surface, component: 'AbovePrompt', props: BAND })
     expect(await band.find({ key: 'continue' })).toBeDefined()
     expect(await band.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    await band.unmount()
+  }
+})
+
+test('the engine band is not drawn under a Box with a size prop', async ($, on) => {
+  world(on, { [KEY]: PREVIOUS })
+  await start($)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const band = await $.ui.mount({ plugin: 'resume-brief', surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'continue' })).toBeDefined()
+    expect(sizedAbove(await band.drawn())).toEqual([])
     await band.unmount()
   }
 })

@@ -60,6 +60,30 @@ async function fixCycle($: Engine, seen: World, failing = 'npm run test -- cart'
   await seen.clock.advance(0)
 }
 
+
+/** Box props that size a box: the engine refuses its own nodes under any of them, and the band then disappears. */
+const SIZE_PROPS = ['width', 'minWidth', 'maxWidth', 'height', 'minHeight', 'maxHeight', 'flexBasis']
+type DrawnNode = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+
+/** The elements above the first Text showing `text`, outermost first; undefined when the tree draws no such Text. */
+const ancestorsOf = (node: unknown, text: string, above: DrawnNode[] = []): DrawnNode[] | undefined => {
+  if (typeof node !== 'object' || node === null) return undefined
+  const element = node as DrawnNode
+  const children = element.children ?? []
+  if (element.type === 'Text' && children.includes(text)) return above
+  for (const child of children) {
+    const found = ancestorsOf(child, text, [...above, element])
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+/** The size props set on any Box above the engine's band; a line says so when the band is not drawn at all. */
+const sizedAbove = (tree: unknown): string[] => {
+  const above = ancestorsOf(tree, 'engine band')
+  if (above === undefined) return ['no engine band drawn']
+  return above.flatMap(box => (box.type === 'Box' ? SIZE_PROPS.filter(prop => box.props?.[prop] !== undefined).map(prop => `Box ${prop}`) : []))
+}
+
 test('after a fail, edit, pass cycle it offers the lesson and saves it under Lessons learned', async ($, on) => {
   const seen = world(on, `- ${LESSON}`, { [CLAUDE_MD]: '# Shop\n\n## Lessons learned\n\n- Use pnpm, not npm.\n\n## Style\n\nTabs.\n' })
   await fixCycle($, seen)
@@ -148,4 +172,15 @@ test('regression: a failing command that only names a check does not start a fix
   await fixCycle($, seen, 'cd web && npx jest cart', 'cd web && npx jest')
   expect(seen.asked).toHaveLength(1)
   expect(seen.asked[0]).toContain('Failed command: cd web && npx jest cart')
+})
+
+test('the engine band is not drawn under a Box with a size prop', async ($, on) => {
+  const seen = world(on, `- ${LESSON}`)
+  await fixCycle($, seen)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const band = await $.ui.mount({ plugin: 'lessons-learned', surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'save' })).toBeDefined()
+    expect(sizedAbove(await band.drawn())).toEqual([])
+    await band.unmount()
+  }
 })

@@ -212,27 +212,29 @@ export const register: Register = (on, options) => {
     const below = await next(e)
 
     return (
-      <Box flexDirection="column" width={e.props.bodyColumns}>
-        <Text wrap="truncate-end">
-          <Text bold color="claude">
-            💡 Lesson learned
+      <Box flexDirection="column">
+        <Box key="lesson" flexDirection="column" width={e.props.bodyColumns}>
+          <Text wrap="truncate-end">
+            <Text bold color="claude">
+              💡 Lesson learned
+            </Text>
+            <Text dimColor>
+              {' '}
+              from fixing {lesson.check}
+              {count}
+            </Text>
           </Text>
-          <Text dimColor>
-            {' '}
-            from fixing {lesson.check}
-            {count}
-          </Text>
-        </Text>
-        <Text>{lesson.text}</Text>
-        <Box flexDirection="row" gap={1}>
-          <Button
-            key="save"
-            label={`Save to ${settings.file}`}
-            hotkey="s"
-            variant="primary"
-            onPress={() => saveLesson($, lesson.id, settings)}
-          />
-          <Button key="dismiss" label="Dismiss" hotkey="x" role="dismiss" onPress={() => dismissLesson($, lesson.id)} />
+          <Text>{lesson.text}</Text>
+          <Box flexDirection="row" gap={1}>
+            <Button
+              key="save"
+              label={`Save to ${settings.file}`}
+              hotkey="s"
+              variant="primary"
+              onPress={() => saveLesson($, lesson.id, settings)}
+            />
+            <Button key="dismiss" label="Dismiss" hotkey="x" role="dismiss" onPress={() => dismissLesson($, lesson.id)} />
+          </Box>
         </Box>
         {below}
       </Box>

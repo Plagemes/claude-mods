@@ -160,8 +160,8 @@ export const register: Register = (on, options) => {
     if (question !== null) {
       const when = question.isToday ? "today's goal" : question.date === daysBefore(localDate(now), 1) ? "yesterday's goal" : `your goal from ${dayLabel(question.date)}`
       return (
-        <Box flexDirection="column" width={e.props.bodyColumns}>
-          <Box key="question" flexDirection="column">
+        <Box flexDirection="column">
+          <Box key="question" flexDirection="column" width={e.props.bodyColumns}>
             <Text wrap="truncate-end">
               <Text bold color="claude">🎯 Did you reach {when}? </Text>
               <Text>“{question.text}”</Text>
@@ -181,8 +181,8 @@ export const register: Register = (on, options) => {
     if (goal === null) return below
 
     return (
-      <Box flexDirection="column" width={e.props.bodyColumns}>
-        <Box key="goal" flexDirection="column">
+      <Box flexDirection="column">
+        <Box key="goal" flexDirection="column" width={e.props.bodyColumns}>
           <Text wrap="truncate-end">
             <Text bold color="claude">🎯 Goal: </Text>
             <Text>{goal.text}</Text>
