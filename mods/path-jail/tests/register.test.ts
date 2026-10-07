@@ -43,8 +43,8 @@ const realPathOf = (path: string, depth = 0): string | undefined => {
 }
 
 /** Answers what the jail asks of the engine: the project, the file system, settings and tools. */
-const world = (on: On): void => {
-  mock.env(on, { HOME: '/home/me' })
+const world = (on: On, env: Record<string, string> = { HOME: '/home/me' }): void => {
+  mock.env(on, env)
   on('session.root', () => ({ value: '/proj' }))
   on('session.cwd', () => ({ value: '/proj' }))
   on('settings.read', () => ({ value: {} }))
@@ -114,6 +114,14 @@ test('lets uncheckable shell writes through when blockUncheckable is off', { opt
 test('extra allowed roots come from the configuration', { options: { allowedRoots: '/tmp, ~' } }, async ($, on) => {
   world(on)
   expect(denial(await $.tool.call({ tool: 'Write', file_path: '/home/me/notes.md', content: 'x' }))).toBeUndefined()
+})
+
+test('on Windows, where HOME is unset, ~ expands from USERPROFILE', { options: { allowedRoots: '~/notes' } }, async ($, on) => {
+  world(on, { USERPROFILE: '/home/me' })
+  FILES['/home/me/notes'] = { kind: 'dir' }
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: '/home/me/notes/today.md', content: 'x' }))).toBeUndefined()
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: '/home/me/other.md', content: 'x' }))).toContain('/home/me/other.md')
+  delete FILES['/home/me/notes']
 })
 
 test('/jail lists the allowed folders', async ($, on) => {
