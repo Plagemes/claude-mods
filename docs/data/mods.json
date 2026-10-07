@@ -1,0 +1,1286 @@
+{
+  "repository": "plagemes/claude-mods",
+  "marketplace": "claude-mods",
+  "categories": [
+    {
+      "id": "core",
+      "title": "Core",
+      "tagline": "The mod store and essentials.",
+      "count": 1
+    },
+    {
+      "id": "security",
+      "title": "Security & Guardrails",
+      "tagline": "Stop dangerous actions before they happen.",
+      "count": 10
+    },
+    {
+      "id": "git",
+      "title": "Git & Versioning",
+      "tagline": "Branches, commits and PRs without friction.",
+      "count": 10
+    },
+    {
+      "id": "cost",
+      "title": "Cost, Tokens & Context",
+      "tagline": "Know what every turn costs and keep context lean.",
+      "count": 10
+    },
+    {
+      "id": "productivity",
+      "title": "Productivity",
+      "tagline": "Shortcuts, panes and timers for a faster flow.",
+      "count": 10
+    },
+    {
+      "id": "quality",
+      "title": "Code Quality & Tests",
+      "tagline": "Formatting, linting and tests on autopilot.",
+      "count": 10
+    },
+    {
+      "id": "observability",
+      "title": "Panes & Dashboards",
+      "tagline": "See what Claude is doing, live.",
+      "count": 10
+    },
+    {
+      "id": "prompting",
+      "title": "Prompt & System Prompt",
+      "tagline": "Shape how Claude thinks and answers.",
+      "count": 10
+    },
+    {
+      "id": "notifications",
+      "title": "Notifications & Audio",
+      "tagline": "Know when it is done, wherever you are.",
+      "count": 10
+    },
+    {
+      "id": "memory",
+      "title": "Memory & Knowledge",
+      "tagline": "Remember decisions, notes and context across sessions.",
+      "count": 10
+    },
+    {
+      "id": "team",
+      "title": "Team & Docs",
+      "tagline": "Changelogs, standups, reviews and handoffs.",
+      "count": 10
+    }
+  ],
+  "mods": [
+    {
+      "name": "mod-store",
+      "category": "core",
+      "tier": "complex",
+      "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "core"
+      ],
+      "commands": []
+    },
+    {
+      "name": "secret-shield",
+      "category": "security",
+      "tier": "simple",
+      "description": "Blocks edits and writes that would commit API keys, tokens or private keys.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "env-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Protects .env files, SSH keys and credential stores from being read or modified.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "rm-rf-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Blocks catastrophic shell commands like rm -rf /, mkfs, dd to disks and chmod -R 777.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "force-push-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Forbids force-pushing to protected branches and suggests --force-with-lease.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "prod-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Stops production-affecting commands (terraform apply, kubectl on prod, DROP TABLE) unless explicitly allowed.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "redactor",
+      "category": "security",
+      "tier": "complex",
+      "description": "Masks secrets and personal data in tool results before the model ever reads them.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "path-jail",
+      "category": "security",
+      "tier": "complex",
+      "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "curl-pipe-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Blocks piping downloaded scripts straight into a shell.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "dependency-sentinel",
+      "category": "security",
+      "tier": "complex",
+      "description": "Flags typosquatted or brand-new packages before npm, pip or cargo installs them.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "lockfile-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Prevents hand-editing lockfiles; they must change through the package manager.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security"
+      ],
+      "commands": []
+    },
+    {
+      "name": "git-status-line",
+      "category": "git",
+      "tier": "simple",
+      "description": "Shows the current branch, ahead/behind and dirty file count in the status line.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "auto-checkpoint",
+      "category": "git",
+      "tier": "complex",
+      "description": "Snapshots your work tree before every editing turn and lets you /rewind to any checkpoint.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "commit-composer",
+      "category": "git",
+      "tier": "complex",
+      "description": "/commit writes a Conventional Commit message from your staged diff and commits it.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "branch-namer",
+      "category": "git",
+      "tier": "simple",
+      "description": "/branch creates a well-named git branch from a short task description.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "main-branch-warn",
+      "category": "git",
+      "tier": "simple",
+      "description": "Warns you the moment Claude starts editing files directly on main or master.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "diff-pane",
+      "category": "git",
+      "tier": "complex",
+      "description": "A live pane listing changed files with +/- line counts, updated after every edit.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "pr-describer",
+      "category": "git",
+      "tier": "complex",
+      "description": "/pr-desc drafts a pull request title and description from your branch diff.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "conflict-helper",
+      "category": "git",
+      "tier": "complex",
+      "description": "Detects merge-conflict markers and walks you through resolving each one.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "co-author-stamp",
+      "category": "git",
+      "tier": "simple",
+      "description": "Adds configurable Co-authored-by trailers to commits Claude makes.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "gitignore-guard",
+      "category": "git",
+      "tier": "simple",
+      "description": "Warns before node_modules, build output, OS junk or huge files get staged.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "git"
+      ],
+      "commands": []
+    },
+    {
+      "name": "cost-meter",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Live session cost estimate in the status line, from real token usage.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "token-budget",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Set a token or dollar budget per session; get warned at 80% and stopped at 100%.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "context-gauge",
+      "category": "cost",
+      "tier": "simple",
+      "description": "A slim band above the prompt showing how full the context window is.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "cache-hit-meter",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Shows what share of input tokens came from the prompt cache.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "turn-timer",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Times every turn and tells you when one runs long.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "big-read-guard",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Stops full reads of huge files and nudges toward offset/limit or grep.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "output-trimmer",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Trims huge command outputs to head, tail and error lines before they flood the context.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "daily-spend",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Tracks spend per day and week across sessions with a /spend report.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "model-advisor",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Suggests a cheaper model when your prompt is simple, and a stronger one when it is hard.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "compact-coach",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Suggests /compact at natural breakpoints, before the context gets tight.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost"
+      ],
+      "commands": []
+    },
+    {
+      "name": "quote-selection",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "/quote pastes your mouse selection into the prompt as a Markdown quote.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "prompt-snippets",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "Type :review:, :tests: or your own shortcodes and they expand into full prompts.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "todo-pane",
+      "category": "productivity",
+      "tier": "complex",
+      "description": "A live pane of Claude's current task list with progress.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "focus-timer",
+      "category": "productivity",
+      "tier": "complex",
+      "description": "A Pomodoro timer in the status line with focus and break cycles.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "scratchpad",
+      "category": "productivity",
+      "tier": "complex",
+      "description": "A persistent per-project notes pane you can type into without leaving Claude Code.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "recent-files",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "/recent lists the files read and edited in this session, newest first.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "copy-last",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "/copy-last copies Claude's last answer (or its last code block) to the clipboard.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "prompt-history",
+      "category": "productivity",
+      "tier": "complex",
+      "description": "/history searches every prompt you have sent across sessions and reuses one.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "quick-commands",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "Short aliases like /t, /l and /b that run your test, lint and build commands.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "idle-nudge",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "Reminds you about uncommitted changes after a stretch of inactivity.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity"
+      ],
+      "commands": []
+    },
+    {
+      "name": "auto-format",
+      "category": "quality",
+      "tier": "complex",
+      "description": "Formats every file Claude edits with the right formatter for its language.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "lint-on-save",
+      "category": "quality",
+      "tier": "complex",
+      "description": "Runs the linter on each edited file and hands the errors straight back to Claude.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "test-watch",
+      "category": "quality",
+      "tier": "complex",
+      "description": "Runs the tests related to what changed and shows pass/fail in the status line.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "typecheck-gate",
+      "category": "quality",
+      "tier": "complex",
+      "description": "Type-checks the project at the end of every editing turn so errors never slip by.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "no-skip-tests",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Blocks Claude from silencing tests with .skip, .only, xit or skip markers.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "todo-tracker",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Notices every TODO, FIXME and HACK Claude adds and lists them at turn end.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "debug-catcher",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Warns when console.log, print, debugger or dbg! statements are left in code.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "no-any",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Flags new any types, @ts-ignore and eslint-disable comments as Claude writes them.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "file-size-watch",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Warns when an edited file grows past a size that hurts readability.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "test-first",
+      "category": "quality",
+      "tier": "complex",
+      "description": "A TDD mode: no production code changes until a test has been written or changed.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "quality"
+      ],
+      "commands": []
+    },
+    {
+      "name": "tool-timeline",
+      "category": "observability",
+      "tier": "complex",
+      "description": "A timeline pane of every tool call with duration, status and input summary.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "files-touched",
+      "category": "observability",
+      "tier": "complex",
+      "description": "A pane of every file read, edited or created in the session, with counts.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "session-stats",
+      "category": "observability",
+      "tier": "complex",
+      "description": "/stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "subagent-monitor",
+      "category": "observability",
+      "tier": "complex",
+      "description": "Watch running subagents live: type, status, duration and last activity.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "error-feed",
+      "category": "observability",
+      "tier": "complex",
+      "description": "Collects every failed command and tool error in one pane.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "activity-heatmap",
+      "category": "observability",
+      "tier": "complex",
+      "description": "A heat map of when you use Claude Code, by hour and weekday.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "bash-history",
+      "category": "observability",
+      "tier": "simple",
+      "description": "/bash-history lists recent shell commands Claude ran, with exit status and duration.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "web-trail",
+      "category": "observability",
+      "tier": "simple",
+      "description": "/sources lists every page Claude fetched or searched this session.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "permission-log",
+      "category": "observability",
+      "tier": "simple",
+      "description": "Keeps a log of every tool call that was denied, and why.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "token-sparkline",
+      "category": "observability",
+      "tier": "complex",
+      "description": "A sparkline of tokens per turn right above the prompt.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability"
+      ],
+      "commands": []
+    },
+    {
+      "name": "house-style",
+      "category": "prompting",
+      "tier": "complex",
+      "description": "Injects your team's style guide (STYLE.md) into the system prompt automatically.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "language-lock",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "Makes Claude always answer in your language while keeping code in English.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "concise-mode",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "/concise toggles short, to-the-point answers.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "prompt-enhancer",
+      "category": "prompting",
+      "tier": "complex",
+      "description": "/enhance rewrites your draft prompt into a precise, well-scoped request.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "ticket-linker",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "Turns ticket references like ABC-123 or #42 into links and context for Claude.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "date-context",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "Gives Claude the current date, time zone, branch and OS on every prompt.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "persona-switch",
+      "category": "prompting",
+      "tier": "complex",
+      "description": "/persona switches Claude between reviewer, architect, teacher and other roles.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "explain-level",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "/eli5, /normal and /expert set how deep Claude's explanations go.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "stack-detector",
+      "category": "prompting",
+      "tier": "complex",
+      "description": "Detects your stack and gives Claude the right conventions for it.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "prompt-lint",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "Gently flags vague prompts like 'fix it' and suggests what to add.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "prompting"
+      ],
+      "commands": []
+    },
+    {
+      "name": "done-chime",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Plays a chime when a long turn finishes.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "speak-summary",
+      "category": "notifications",
+      "tier": "complex",
+      "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "permission-ping",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Pings you with a sound and toast when Claude is waiting on your approval.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "error-buzz",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "A short buzz when a command or test run fails.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "webhook-notify",
+      "category": "notifications",
+      "tier": "complex",
+      "description": "Posts to Slack, Discord, Teams or ntfy when a long task finishes.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "desktop-notify",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Native desktop notifications when Claude finishes or needs you.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "long-run-alert",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Alerts you when a single command has been running too long.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "ci-watch",
+      "category": "notifications",
+      "tier": "complex",
+      "description": "/ci-watch follows your GitHub Actions run and tells you the moment it passes or fails.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "break-reminder",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Reminds you to stand up and stretch every 50 minutes of active work.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "celebrate",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Celebrates when failing tests go green again.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications"
+      ],
+      "commands": []
+    },
+    {
+      "name": "decision-log",
+      "category": "memory",
+      "tier": "complex",
+      "description": "/decide records an Architecture Decision Record in docs/decisions.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "session-journal",
+      "category": "memory",
+      "tier": "complex",
+      "description": "Writes a dated journal entry of what was done when the session ends.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "glossary",
+      "category": "memory",
+      "tier": "complex",
+      "description": "Teaches Claude your project's vocabulary and injects definitions when you use the terms.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "bookmark",
+      "category": "memory",
+      "tier": "simple",
+      "description": "/bookmark saves the last answer; /bookmarks lists and reuses them.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "resume-brief",
+      "category": "memory",
+      "tier": "complex",
+      "description": "Shows what you were working on last time when a new session starts.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "lessons-learned",
+      "category": "memory",
+      "tier": "complex",
+      "description": "When Claude fixes a mistake, offers to save the lesson to CLAUDE.md.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "codebase-map",
+      "category": "memory",
+      "tier": "complex",
+      "description": "/map builds a compact map of your repository and gives it to Claude.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "snippet-vault",
+      "category": "memory",
+      "tier": "simple",
+      "description": "Save and reuse code snippets across projects with /save-snippet and /snippet.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "link-vault",
+      "category": "memory",
+      "tier": "simple",
+      "description": "Collects every URL from the conversation into one list.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "recall",
+      "category": "memory",
+      "tier": "complex",
+      "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory"
+      ],
+      "commands": []
+    },
+    {
+      "name": "changelog-keeper",
+      "category": "team",
+      "tier": "complex",
+      "description": "Keeps CHANGELOG.md's Unreleased section up to date as you commit.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "readme-sync",
+      "category": "team",
+      "tier": "complex",
+      "description": "Warns when public APIs, CLI flags or env vars change but the docs do not.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "standup",
+      "category": "team",
+      "tier": "complex",
+      "description": "/standup summarises what you did yesterday, from git history, ready to paste.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "review-agent",
+      "category": "team",
+      "tier": "complex",
+      "description": "Adds a dedicated code-reviewer subagent and a /review command.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "license-header",
+      "category": "team",
+      "tier": "simple",
+      "description": "Adds your license header to every new source file Claude creates.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "issue-drafter",
+      "category": "team",
+      "tier": "complex",
+      "description": "/issue turns the current conversation into a well-structured GitHub issue.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "handoff",
+      "category": "team",
+      "tier": "complex",
+      "description": "/handoff writes a handoff note so a teammate can pick up exactly where you left off.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "i18n-guard",
+      "category": "team",
+      "tier": "simple",
+      "description": "Flags hard-coded user-facing strings in UI components.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "migration-guard",
+      "category": "team",
+      "tier": "simple",
+      "description": "Prevents editing database migrations that already exist; write a new one instead.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    },
+    {
+      "name": "codeowners-hint",
+      "category": "team",
+      "tier": "simple",
+      "description": "Shows who owns a file (from CODEOWNERS) as Claude edits it.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team"
+      ],
+      "commands": []
+    }
+  ]
+}

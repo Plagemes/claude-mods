@@ -1,0 +1,768 @@
+{
+  "categories": [
+    {
+      "id": "core",
+      "title": "Core",
+      "tagline": "The mod store and essentials."
+    },
+    {
+      "id": "security",
+      "title": "Security & Guardrails",
+      "tagline": "Stop dangerous actions before they happen."
+    },
+    {
+      "id": "git",
+      "title": "Git & Versioning",
+      "tagline": "Branches, commits and PRs without friction."
+    },
+    {
+      "id": "cost",
+      "title": "Cost, Tokens & Context",
+      "tagline": "Know what every turn costs and keep context lean."
+    },
+    {
+      "id": "productivity",
+      "title": "Productivity",
+      "tagline": "Shortcuts, panes and timers for a faster flow."
+    },
+    {
+      "id": "quality",
+      "title": "Code Quality & Tests",
+      "tagline": "Formatting, linting and tests on autopilot."
+    },
+    {
+      "id": "observability",
+      "title": "Panes & Dashboards",
+      "tagline": "See what Claude is doing, live."
+    },
+    {
+      "id": "prompting",
+      "title": "Prompt & System Prompt",
+      "tagline": "Shape how Claude thinks and answers."
+    },
+    {
+      "id": "notifications",
+      "title": "Notifications & Audio",
+      "tagline": "Know when it is done, wherever you are."
+    },
+    {
+      "id": "memory",
+      "title": "Memory & Knowledge",
+      "tagline": "Remember decisions, notes and context across sessions."
+    },
+    {
+      "id": "team",
+      "title": "Team & Docs",
+      "tagline": "Changelogs, standups, reviews and handoffs."
+    }
+  ],
+  "mods": [
+    {
+      "name": "mod-store",
+      "category": "core",
+      "tier": "complex",
+      "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
+      "spec": "Slash command /mods opens a Pane. Fetch https://raw.githubusercontent.com/plagemes/claude-mods/main/.claude-plugin/marketplace.json (repo configurable via userConfig 'repository', default 'plagemes/claude-mods', branch 'main') with $.http.fetch, cache it in $.store with a timestamp. List mods grouped by category with search (Input), filter by category (Select), detail view (description, version, category, install line). Show which mods are installed and which have updates by running `claude plugin list --json` (or the equivalent $ API if one exists; inspect the types for $.plugin / plugins) via $.process.run. Buttons: Install (`claude plugin install <name>@claude-mods` after ensuring the marketplace is added with `claude plugin marketplace add plagemes/claude-mods`), Update, Uninstall, Open README (copy URL). After install/update toast 'run /reload-plugins'. Also /mods update-all. Graceful offline mode from cache. Works on terminal and desktop surfaces."
+    },
+    {
+      "name": "secret-shield",
+      "category": "security",
+      "tier": "simple",
+      "description": "Blocks edits and writes that would commit API keys, tokens or private keys.",
+      "spec": "tool.call guard on Edit/Write/MultiEdit/NotebookEdit: scan new content for AWS (AKIA...), GitHub (ghp_/github_pat_), Anthropic (sk-ant-), OpenAI (sk-), Stripe (sk_live_), Slack (xox), Google API (AIza), private key PEM headers, generic high-entropy assignments to *_KEY/*_SECRET/*_TOKEN. Deny with which pattern matched and the line. .catch denies. userConfig allowlist regex."
+    },
+    {
+      "name": "env-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Protects .env files, SSH keys and credential stores from being read or modified.",
+      "spec": "tool.call guard on Read/Edit/Write/Bash(cat/less/grep on those paths): .env*, except .env.example/.env.sample; ~/.ssh/*, *.pem, *.key, id_rsa*, .aws/credentials, .npmrc with tokens, .netrc, kubeconfig. Deny with reason. .catch denies."
+    },
+    {
+      "name": "rm-rf-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Blocks catastrophic shell commands like rm -rf /, mkfs, dd to disks and chmod -R 777.",
+      "spec": "tool.call guard on Bash: normalise whitespace, detect rm -rf on /, ~, $HOME, *, .., system dirs; git reset --hard and git clean -fdx (deny unless userConfig allowGitReset); mkfs, dd of=/dev/, chmod -R 777, chown -R on /, :(){ :|:& };:, > /dev/sda. Deny with explanation and safer alternative."
+    },
+    {
+      "name": "force-push-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Forbids force-pushing to protected branches and suggests --force-with-lease.",
+      "spec": "tool.call guard on Bash: detect git push with -f/--force/+refspec targeting main/master/develop/release/* (userConfig list). Deny; for other branches rewrite --force to --force-with-lease via next({...e, command})."
+    },
+    {
+      "name": "prod-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Stops production-affecting commands (terraform apply, kubectl on prod, DROP TABLE) unless explicitly allowed.",
+      "spec": "tool.call guard on Bash: terraform apply/destroy, pulumi up/destroy, kubectl with --context/namespace matching prod regex (userConfig), helm upgrade on prod, DROP/TRUNCATE TABLE, DELETE FROM without WHERE in psql/mysql commands, aws ... delete-*. Deny unless the latest user prompt contains the word 'PROD-OK'. Track the latest prompt via prompt.submit."
+    },
+    {
+      "name": "redactor",
+      "category": "security",
+      "tier": "complex",
+      "description": "Masks secrets and personal data in tool results before the model ever reads them.",
+      "spec": "Hook session.append for tool-result rows (door 'tool-result'): replace secrets (same patterns as secret-shield), emails, phone numbers, IBANs, credit cards (Luhn check), IPv4 private addresses optional, with [REDACTED:<kind>]. userConfig toggles per kind. .catch replaces content with a placeholder. Status line shows count redacted this session. Read reference.md section on session.append carefully."
+    },
+    {
+      "name": "path-jail",
+      "category": "security",
+      "tier": "complex",
+      "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
+      "spec": "tool.call guard on Edit/Write/MultiEdit/NotebookEdit and Bash commands with redirection (>, >>, tee, mv, cp, rm targets) : resolve target with $.fs.stat(path,{resolve:true}).realPath and allow only under project root realPath (+ userConfig extra roots, default includes /tmp). Deny otherwise. .catch denies."
+    },
+    {
+      "name": "curl-pipe-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Blocks piping downloaded scripts straight into a shell.",
+      "spec": "tool.call guard on Bash: detect curl|wget|iwr ... | (sh|bash|zsh|python|node|iex), bash <(curl ...), sh -c \"$(curl ...)\". Deny and suggest downloading, inspecting, then running."
+    },
+    {
+      "name": "dependency-sentinel",
+      "category": "security",
+      "tier": "complex",
+      "description": "Flags typosquatted or brand-new packages before npm, pip or cargo installs them.",
+      "spec": "tool.call hook on Bash for npm/pnpm/yarn/bun add|install <pkgs>, pip install, cargo add, go get. For each package name: compare against embedded list of ~200 popular packages with Levenshtein distance 1-2 (typosquat), and query registry (registry.npmjs.org/<pkg>, pypi.org/pypi/<pkg>/json, crates.io api) via $.http.fetch: missing package, created < 30 days ago, or very few versions -> deny with details, unless prompt contains 'DEPS-OK'. Timeouts fail open with a toast."
+    },
+    {
+      "name": "lockfile-guard",
+      "category": "security",
+      "tier": "simple",
+      "description": "Prevents hand-editing lockfiles; they must change through the package manager.",
+      "spec": "tool.call guard on Edit/Write/MultiEdit for package-lock.json, pnpm-lock.yaml, yarn.lock, bun.lockb, Cargo.lock, poetry.lock, uv.lock, Gemfile.lock, composer.lock, go.sum. Deny with the right command to regenerate."
+    },
+    {
+      "name": "git-status-line",
+      "category": "git",
+      "tier": "simple",
+      "description": "Shows the current branch, ahead/behind and dirty file count in the status line.",
+      "spec": "On session.start and after each tool.call that may change git state (Bash/Edit/Write), run `git status --porcelain=v2 --branch` via $.process.run, show e.g. '⎇ feat/x ↑2 ↓0 ●3'. Debounce with $.clock. Silent when not a repo."
+    },
+    {
+      "name": "auto-checkpoint",
+      "category": "git",
+      "tier": "complex",
+      "description": "Snapshots your work tree before every editing turn and lets you /rewind to any checkpoint.",
+      "spec": "On first Edit/Write/Bash of a turn, create a snapshot without touching the index or branch: `git stash create` (or write-tree with a temp index) and store the commit under refs/claude-checkpoints/<n> via git update-ref. Keep last N (userConfig, default 20) in $.store with timestamp and the prompt text. /checkpoints lists them in a pane; /rewind <n> restores with confirmation (git checkout <sha> -- . after stashing current state). Silent outside git repos."
+    },
+    {
+      "name": "commit-composer",
+      "category": "git",
+      "tier": "complex",
+      "description": "/commit writes a Conventional Commit message from your staged diff and commits it.",
+      "spec": "Register /commit. Read `git diff --cached` (if empty, offer to stage all via argument 'all'). Ask $.model.complete (small fast model, configurable) for a Conventional Commits message (type(scope): subject <=72 chars + body bullets). Show it in a Pane with Buttons Commit / Regenerate / Edit (Input) / Cancel. Commit via $.process.run(['git','commit','-m',msg]). Respect commitlint config if present."
+    },
+    {
+      "name": "branch-namer",
+      "category": "git",
+      "tier": "simple",
+      "description": "/branch creates a well-named git branch from a short task description.",
+      "spec": "Register /branch <description>. Slugify the description into <type>/<kebab-slug> (type inferred from keywords: fix, feat, chore, docs, refactor, test; userConfig prefix e.g. initials). Run git switch -c. If no description, use the last user prompt (track via prompt.submit). Return text with the branch name."
+    },
+    {
+      "name": "main-branch-warn",
+      "category": "git",
+      "tier": "simple",
+      "description": "Warns you the moment Claude starts editing files directly on main or master.",
+      "spec": "On first Edit/Write of a session while current branch is main/master/trunk (userConfig list), show a toast and status warning once; optional userConfig 'block' denies edits with suggestion to /branch."
+    },
+    {
+      "name": "diff-pane",
+      "category": "git",
+      "tier": "complex",
+      "description": "A live pane listing changed files with +/- line counts, updated after every edit.",
+      "spec": "Command /diff opens a Pane; after each Edit/Write/Bash tool call refresh `git diff --numstat` + untracked files and store in $.state. Render a table: status glyph, path, +adds -dels bars (Raster or text bars), totals. Button per file to copy path; Button 'Show diff' renders Code format diff for the selected file."
+    },
+    {
+      "name": "pr-describer",
+      "category": "git",
+      "tier": "complex",
+      "description": "/pr-desc drafts a pull request title and description from your branch diff.",
+      "spec": "Register /pr-desc [base]. Determine base (origin/HEAD or main). Collect git log base..HEAD and diff --stat plus truncated diff. $.model.complete to produce Title, Summary, Changes, Testing, Risks sections; honour .github/pull_request_template.md if present. Show in a Pane with Copy buttons ($.ui.copy) and 'Insert into prompt' ($.prompt.fill)."
+    },
+    {
+      "name": "conflict-helper",
+      "category": "git",
+      "tier": "complex",
+      "description": "Detects merge-conflict markers and walks you through resolving each one.",
+      "spec": "After git merge/rebase/pull Bash calls or on /conflicts, run git diff --name-only --diff-filter=U and grep for <<<<<<< markers. Pane lists files and hunk counts; per file buttons: 'Ask Claude to resolve' ($.prompt.submit with a precise instruction including both sides), 'Take ours', 'Take theirs' (git checkout --ours/--theirs). Also prompt.compose section reminding the model never to leave markers while conflicts exist. tool.call guard denies Write/Edit leaving <<<<<<< in content."
+    },
+    {
+      "name": "co-author-stamp",
+      "category": "git",
+      "tier": "simple",
+      "description": "Adds configurable Co-authored-by trailers to commits Claude makes.",
+      "spec": "tool.call hook on Bash `git commit` with -m: append trailers from userConfig 'coAuthors' (comma separated 'Name <email>') if missing, via next({...e, command}). Also inspect the attribution event in the types and use it if appropriate."
+    },
+    {
+      "name": "gitignore-guard",
+      "category": "git",
+      "tier": "simple",
+      "description": "Warns before node_modules, build output, OS junk or huge files get staged.",
+      "spec": "tool.call hook on Bash `git add`: for `git add -A/.`, run git status --porcelain to list what would be staged; deny if it includes node_modules/, dist/, build/, .DS_Store, *.log, .env, or files > 5MB (userConfig) that are not ignored, suggesting .gitignore lines."
+    },
+    {
+      "name": "cost-meter",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Live session cost estimate in the status line, from real token usage.",
+      "spec": "On turn.complete read usage (input, output, cache read, cache creation) and model; price table per model family in code (per million tokens; userConfig override JSON). Accumulate in $.state, status '$0.42 · 128k tok'. /cost-reset command."
+    },
+    {
+      "name": "token-budget",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Set a token or dollar budget per session; get warned at 80% and stopped at 100%.",
+      "spec": "userConfig budgetUsd and/or budgetTokens. Track usage from turn.complete. At 80% toast + band warning (AbovePrompt) with remaining budget; at 100% prompt.submit drop with message unless prompt starts with '!override'. /budget shows status and /budget set <n> changes it for the session ($.state)."
+    },
+    {
+      "name": "context-gauge",
+      "category": "cost",
+      "tier": "simple",
+      "description": "A slim band above the prompt showing how full the context window is.",
+      "spec": "Read context usage from turn.complete usage (input + cache tokens vs model context window; inspect the types for a context breakdown API). AbovePrompt band with a 20-cell bar, percentage, colour green/yellow/red, hint '/compact' over 75%. Hide button."
+    },
+    {
+      "name": "cache-hit-meter",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Shows what share of input tokens came from the prompt cache.",
+      "spec": "From turn.complete usage compute cache_read/(input+cache_read+cache_creation) per turn and for the session; status line 'cache 87%'. Toast once if session cache ratio drops under 30% after 5 turns."
+    },
+    {
+      "name": "turn-timer",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Times every turn and tells you when one runs long.",
+      "spec": "prompt.submit records start ($.clock.now), turn.complete computes duration; status line 'last 34s · avg 21s'; toast when over userConfig threshold (default 120s)."
+    },
+    {
+      "name": "big-read-guard",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Stops full reads of huge files and nudges toward offset/limit or grep.",
+      "spec": "tool.call on Read without limit: $.fs.stat the file; if size > userConfig (default 256KB) or the file is a minified/bundled/lock file, deny with a message telling the model to use offset/limit or Grep. Allow if limit set."
+    },
+    {
+      "name": "output-trimmer",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Trims huge command outputs to head, tail and error lines before they flood the context.",
+      "spec": "tool.call on Bash: await next(e); if result text exceeds userConfig maxChars (default 12000), return a rewritten result keeping first 60 lines, last 80 lines and every line matching error|fail|warn|exception|traceback (deduped, capped), with a note of how many lines were cut. Must respect ToolCallResult rules (study the types: returning a modified result for a built-in tool). Status shows tokens saved."
+    },
+    {
+      "name": "daily-spend",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Tracks spend per day and week across sessions with a /spend report.",
+      "spec": "On turn.complete compute cost (price table like cost-meter) and add to $.store keyed by date and project. /spend opens a pane: today, this week, last 14 days sparkline (Raster on terminal, Text bars elsewhere), top projects. userConfig dailyLimit -> toast when exceeded."
+    },
+    {
+      "name": "model-advisor",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Suggests a cheaper model when your prompt is simple, and a stronger one when it is hard.",
+      "spec": "On prompt.submit, classify prompt locally with heuristics (length, keywords like rename/typo/format vs architecture/debug/design) and optionally with $.model.complete on a haiku-class model (userConfig). Show a non-blocking toast/band hint like 'Simple task: /model haiku would do'. Never blocks or changes the model."
+    },
+    {
+      "name": "compact-coach",
+      "category": "cost",
+      "tier": "simple",
+      "description": "Suggests /compact at natural breakpoints, before the context gets tight.",
+      "spec": "Track context fill from turn.complete usage; when above 60% and the last turn ended a task (no pending todos, last tool was a commit or tests passed), toast 'Good moment to /compact'. At most once per 10 turns."
+    },
+    {
+      "name": "quote-selection",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "/quote pastes your mouse selection into the prompt as a Markdown quote.",
+      "spec": "Exactly the /quote example from reference.md, plus /quote-code which wraps it in a fenced code block."
+    },
+    {
+      "name": "prompt-snippets",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "Type :review:, :tests: or your own shortcodes and they expand into full prompts.",
+      "spec": "prompt.submit: replace :name: tokens with snippets from built-in defaults (review, tests, explain, refactor, docs, perf, security) merged with userConfig JSON map and $.store custom ones. /snippets list, /snippet-add name text."
+    },
+    {
+      "name": "todo-pane",
+      "category": "productivity",
+      "tier": "complex",
+      "description": "A live pane of Claude's current task list with progress.",
+      "spec": "Hook tool.call for TodoWrite (inspect its input shape in the built-in tool types) and keep the latest todos in $.state. /todos opens a Pane: progress bar, items with ☐/◐/☑ by status. Auto-open from session.start only when viewport is wide (follow pane rules)."
+    },
+    {
+      "name": "focus-timer",
+      "category": "productivity",
+      "tier": "complex",
+      "description": "A Pomodoro timer in the status line with focus and break cycles.",
+      "spec": "/focus [minutes] starts, /focus stop, /focus status. $.clock.every(1000) updates status '🍅 18:42'. At end toast + optional sound; break timer follows. State in $.state; survives reload via $.store with end timestamp."
+    },
+    {
+      "name": "scratchpad",
+      "category": "productivity",
+      "tier": "complex",
+      "description": "A persistent per-project notes pane you can type into without leaving Claude Code.",
+      "spec": "/notes opens a Pane with an Input to add a note, list of notes with delete Buttons and 'send to prompt' ($.prompt.fill). Stored in $.store keyed by project root. /note <text> adds quickly."
+    },
+    {
+      "name": "recent-files",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "/recent lists the files read and edited in this session, newest first.",
+      "spec": "Track file paths from Read/Edit/Write/MultiEdit/NotebookEdit tool calls into $.state (dedup, cap 50). /recent returns a text list with R/E markers and relative paths."
+    },
+    {
+      "name": "copy-last",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "/copy-last copies Claude's last answer (or its last code block) to the clipboard.",
+      "spec": "Use $.session.messages() to find the last assistant text. /copy-last copies all, /copy-code copies the last fenced code block. $.ui.copy and report result."
+    },
+    {
+      "name": "prompt-history",
+      "category": "productivity",
+      "tier": "complex",
+      "description": "/history searches every prompt you have sent across sessions and reuses one.",
+      "spec": "prompt.submit stores prompt text with timestamp and project in $.store (cap 1000). /history opens a Pane with search Input and results; Button 'Use' fills the prompt via $.prompt.fill."
+    },
+    {
+      "name": "quick-commands",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "Short aliases like /t, /l and /b that run your test, lint and build commands.",
+      "spec": "Register /t /l /b /tc (typecheck) commands; each submits a prompt via $.prompt.submit like 'Run the test suite with <cmd> and fix failures' where cmd comes from userConfig or detection (package.json scripts, Makefile, pyproject, Cargo)."
+    },
+    {
+      "name": "idle-nudge",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "Reminds you about uncommitted changes after a stretch of inactivity.",
+      "spec": "$.clock.every(60s): if no prompt for userConfig minutes (default 20) and git status shows changes, toast once 'You have N uncommitted files'. Reset on prompt.submit."
+    },
+    {
+      "name": "auto-format",
+      "category": "quality",
+      "tier": "complex",
+      "description": "Formats every file Claude edits with the right formatter for its language.",
+      "spec": "After Edit/Write/MultiEdit succeed (await next), detect formatter by extension and project config: prettier (js/ts/css/json/md if prettier in package.json or config), biome, black/ruff format (py), gofmt, rustfmt, shfmt, clang-format, php-cs-fixer. Run via $.process.run with timeout; on change, add context telling the model the file was reformatted. userConfig disable list."
+    },
+    {
+      "name": "lint-on-save",
+      "category": "quality",
+      "tier": "complex",
+      "description": "Runs the linter on each edited file and hands the errors straight back to Claude.",
+      "spec": "After edit tool calls succeed, run eslint/ruff/golangci-lint/clippy (detected) on the file, parse output, if errors return the result with context lines listing them (cap 30). Status shows lint error count."
+    },
+    {
+      "name": "test-watch",
+      "category": "quality",
+      "tier": "complex",
+      "description": "Runs the tests related to what changed and shows pass/fail in the status line.",
+      "spec": "After edits, debounce 3s with $.clock, map changed file to tests (same name .test/.spec/_test, tests/ mirror) and run detected runner (vitest/jest/pytest/go test/cargo test) only for those files. Status '✓ 12 passed' or '✗ 2 failed'. /tests-last shows the last output in a Pane."
+    },
+    {
+      "name": "typecheck-gate",
+      "category": "quality",
+      "tier": "complex",
+      "description": "Type-checks the project at the end of every editing turn so errors never slip by.",
+      "spec": "On turn.complete when the turn edited .ts/.tsx/.py files, run tsc --noEmit (or pyright/mypy) with timeout; if errors, $.session.append a user-role note with the first 20 errors or $.prompt.submit a follow-up asking to fix (userConfig mode 'notify'|'autofix', default notify toast + status)."
+    },
+    {
+      "name": "no-skip-tests",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Blocks Claude from silencing tests with .skip, .only, xit or skip markers.",
+      "spec": "tool.call guard on Edit/Write/MultiEdit for test files: deny when new content adds it.skip/describe.skip/test.only/fit/xit/xdescribe/@pytest.mark.skip/@unittest.skip/t.Skip(/#[ignore] that were not in old content."
+    },
+    {
+      "name": "todo-tracker",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Notices every TODO, FIXME and HACK Claude adds and lists them at turn end.",
+      "spec": "Track added TODO|FIXME|HACK|XXX lines from Edit/Write new content in a turn; on turn.complete toast count and /todos-added lists file:line items."
+    },
+    {
+      "name": "debug-catcher",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Warns when console.log, print, debugger or dbg! statements are left in code.",
+      "spec": "After edits to source files (not tests/scripts), detect added console.log/debugger/print(/pp/var_dump/dbg!/fmt.Println debug patterns; add context note to the result asking to remove them before finishing, and status count."
+    },
+    {
+      "name": "no-any",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Flags new any types, @ts-ignore and eslint-disable comments as Claude writes them.",
+      "spec": "Edit/Write hook on ts/tsx: count added ': any', 'as any', '<any>', @ts-ignore, @ts-nocheck, eslint-disable. userConfig mode warn (context note) or block (deny)."
+    },
+    {
+      "name": "file-size-watch",
+      "category": "quality",
+      "tier": "simple",
+      "description": "Warns when an edited file grows past a size that hurts readability.",
+      "spec": "After edits, count lines of the file via $.fs.read; if > userConfig (default 500) and grew this edit, add context suggesting splitting it, toast once per file."
+    },
+    {
+      "name": "test-first",
+      "category": "quality",
+      "tier": "complex",
+      "description": "A TDD mode: no production code changes until a test has been written or changed.",
+      "spec": "/tdd on|off. When on, per turn track if a test file was edited; deny Edit/Write on non-test source files until then, with message explaining TDD flow. Band shows 'TDD: red → green → refactor' phase guess based on last test run result (Bash test command exit status)."
+    },
+    {
+      "name": "tool-timeline",
+      "category": "observability",
+      "tier": "complex",
+      "description": "A timeline pane of every tool call with duration, status and input summary.",
+      "spec": "Record each tool.call start/end ($.clock.now) with tool, short summary of input (command, path, pattern), isError. /timeline opens Pane with rows and duration bars, scrolling to latest. Keep 300."
+    },
+    {
+      "name": "files-touched",
+      "category": "observability",
+      "tier": "complex",
+      "description": "A pane of every file read, edited or created in the session, with counts.",
+      "spec": "Track per file reads/edits/creates. /files opens Pane grouped by directory with counts and Buttons to copy path or insert @path into prompt."
+    },
+    {
+      "name": "session-stats",
+      "category": "observability",
+      "tier": "complex",
+      "description": "/stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
+      "spec": "Aggregate from prompt.submit, tool.call, turn.complete. /stats Pane with tiles (turns, tool calls by type top 5, tokens in/out/cache, est cost, wall time, files edited), tool histogram as text bars."
+    },
+    {
+      "name": "subagent-monitor",
+      "category": "observability",
+      "tier": "complex",
+      "description": "Watch running subagents live: type, status, duration and last activity.",
+      "spec": "Use $.agent.list() polled with $.clock.every(2000) while the pane is open, and agent-related events (inspect types). /agents-live opens Pane listing agents with status, runtime, description."
+    },
+    {
+      "name": "error-feed",
+      "category": "observability",
+      "tier": "complex",
+      "description": "Collects every failed command and tool error in one pane.",
+      "spec": "On tool.call results with isError or Bash non-zero, store tool, summary, first 300 chars of error, time. /errors Pane with list and Button 'Ask Claude to fix' ($.prompt.submit with error). Status '⚠ 3 errors'."
+    },
+    {
+      "name": "activity-heatmap",
+      "category": "observability",
+      "tier": "complex",
+      "description": "A heat map of when you use Claude Code, by hour and weekday.",
+      "spec": "Record prompt counts per weekday×hour in $.store. /heatmap Pane draws 7×24 Raster heat map on terminal (Text grid elsewhere) with legend and totals."
+    },
+    {
+      "name": "bash-history",
+      "category": "observability",
+      "tier": "simple",
+      "description": "/bash-history lists recent shell commands Claude ran, with exit status and duration.",
+      "spec": "Record Bash tool calls (command, ok/error, duration). /bash-history returns the last 30 as text."
+    },
+    {
+      "name": "web-trail",
+      "category": "observability",
+      "tier": "simple",
+      "description": "/sources lists every page Claude fetched or searched this session.",
+      "spec": "Record WebFetch urls and WebSearch queries. /sources returns them as a Markdown list with timestamps."
+    },
+    {
+      "name": "permission-log",
+      "category": "observability",
+      "tier": "simple",
+      "description": "Keeps a log of every tool call that was denied, and why.",
+      "spec": "await next on every tool.call; if result.deny record tool, summary, reason. /denied lists them. Status shows count."
+    },
+    {
+      "name": "token-sparkline",
+      "category": "observability",
+      "tier": "complex",
+      "description": "A sparkline of tokens per turn right above the prompt.",
+      "spec": "On turn.complete push total tokens to $.state (last 40). AbovePrompt band: Raster sparkline on terminal, unicode ▁▂▃▅▇ Text on other surfaces, plus last and max values. Hide button."
+    },
+    {
+      "name": "house-style",
+      "category": "prompting",
+      "tier": "complex",
+      "description": "Injects your team's style guide (STYLE.md) into the system prompt automatically.",
+      "spec": "prompt.compose: read STYLE.md / .claude/style.md / CONTRIBUTING.md style section from project root via $.fs (cache by mtime), add a section 'Project house style' (scope session). Cap length. /style shows what is injected."
+    },
+    {
+      "name": "language-lock",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "Makes Claude always answer in your language while keeping code in English.",
+      "spec": "userConfig language (default 'English'). prompt.compose adds a section: answer in <language>; keep code, identifiers and commit messages in English unless asked."
+    },
+    {
+      "name": "concise-mode",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "/concise toggles short, to-the-point answers.",
+      "spec": "/concise toggles $.state flag; prompt.compose adds brevity instruction when on; status shows 'concise'."
+    },
+    {
+      "name": "prompt-enhancer",
+      "category": "prompting",
+      "tier": "complex",
+      "description": "/enhance rewrites your draft prompt into a precise, well-scoped request.",
+      "spec": "/enhance <draft>: $.model.complete with a rewriting system prompt including project context (stack detected from files) -> show original vs enhanced in a Pane with Buttons 'Use' ($.prompt.fill replace) and 'Send' ($.prompt.submit)."
+    },
+    {
+      "name": "ticket-linker",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "Turns ticket references like ABC-123 or #42 into links and context for Claude.",
+      "spec": "prompt.submit: detect JIRA-style keys and #123; using userConfig jiraBaseUrl and GitHub repo from git remote, append a 'Referenced tickets' line with URLs to the prompt text."
+    },
+    {
+      "name": "date-context",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "Gives Claude the current date, time zone, branch and OS on every prompt.",
+      "spec": "prompt.compose adds a short section with ISO date/time ($.clock.now), time zone (Intl), current git branch and platform. Keep tiny."
+    },
+    {
+      "name": "persona-switch",
+      "category": "prompting",
+      "tier": "complex",
+      "description": "/persona switches Claude between reviewer, architect, teacher and other roles.",
+      "spec": "Built-in personas (reviewer, architect, teacher, pair-programmer, security-auditor, product-minded) plus userConfig custom JSON. /persona <name>|off, /personas lists. prompt.compose section; band or status shows active persona; persisted per project in $.store."
+    },
+    {
+      "name": "explain-level",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "/eli5, /normal and /expert set how deep Claude's explanations go.",
+      "spec": "Commands set level in $.state; prompt.compose adds corresponding instruction; status shows level when not normal."
+    },
+    {
+      "name": "stack-detector",
+      "category": "prompting",
+      "tier": "complex",
+      "description": "Detects your stack and gives Claude the right conventions for it.",
+      "spec": "On session.start scan root files (package.json deps: react/next/vue/svelte/express/nest; pyproject/requirements: django/fastapi/flask; go.mod; Cargo.toml; Gemfile/rails; composer laravel; pom/gradle spring; Dockerfile; terraform). prompt.compose adds concise conventions per detected tech (embedded short guides). /stack shows detection."
+    },
+    {
+      "name": "prompt-lint",
+      "category": "prompting",
+      "tier": "simple",
+      "description": "Gently flags vague prompts like 'fix it' and suggests what to add.",
+      "spec": "prompt.submit: heuristics (very short, only pronouns, no file/target, 'fix it', 'doesn't work'); show toast with a tip; never blocks unless userConfig strict, where it drops with tips. Skip slash commands."
+    },
+    {
+      "name": "done-chime",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Plays a chime when a long turn finishes.",
+      "spec": "On turn.complete if duration > userConfig seconds (default 20) $.audio.play a bundled short wav asset (generate a tiny valid WAV file programmatically and commit it in assets/). Inspect $.audio types for asset paths."
+    },
+    {
+      "name": "speak-summary",
+      "category": "notifications",
+      "tier": "complex",
+      "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
+      "spec": "On turn.complete (duration > threshold), take the last assistant text, $.model.complete a <=15 word spoken summary with a small model, $.audio.speak it. /speak on|off toggle; userConfig voice/rate if available."
+    },
+    {
+      "name": "permission-ping",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Pings you with a sound and toast when Claude is waiting on your approval.",
+      "spec": "Find the event raised when a permission dialog appears (inspect types: tool.check, classic.Notification, ui.render of the permission dialog component). Play sound + toast once per request."
+    },
+    {
+      "name": "error-buzz",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "A short buzz when a command or test run fails.",
+      "spec": "After Bash tool call with isError or test-runner commands failing, $.audio.play a bundled wav (generate tiny WAV). Rate-limit to one per 10s."
+    },
+    {
+      "name": "webhook-notify",
+      "category": "notifications",
+      "tier": "complex",
+      "description": "Posts to Slack, Discord, Teams or ntfy when a long task finishes.",
+      "spec": "userConfig webhookUrl (secret), kind (slack|discord|ntfy|generic), minDurationSec. On turn.complete over threshold POST with $.http.fetch formatted payload: project, duration, short summary (first 200 chars of last assistant text), tool counts. /notify-test."
+    },
+    {
+      "name": "desktop-notify",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Native desktop notifications when Claude finishes or needs you.",
+      "spec": "On turn.complete over threshold run osascript (macOS), notify-send (Linux) or powershell toast (Windows) via $.process.run, detecting platform via $.env/ process. Fail silently."
+    },
+    {
+      "name": "long-run-alert",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Alerts you when a single command has been running too long.",
+      "spec": "On Bash tool.call start a $.clock.after(userConfig seconds, default 60) timer that toasts 'still running: <cmd>'; cancel when next resolves."
+    },
+    {
+      "name": "ci-watch",
+      "category": "notifications",
+      "tier": "complex",
+      "description": "/ci-watch follows your GitHub Actions run and tells you the moment it passes or fails.",
+      "spec": "/ci-watch [branch]: poll `gh run list --branch <b> --limit 1 --json status,conclusion,name,url` every 30s with $.clock.every via $.process.run; status '⏳ CI running'; on completion toast + sound + optional $.prompt.submit 'CI failed: investigate' if userConfig autoFix. /ci-watch stop."
+    },
+    {
+      "name": "break-reminder",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Reminds you to stand up and stretch every 50 minutes of active work.",
+      "spec": "Track active time (prompts within last 5 min count as active); every userConfig minutes (default 50) toast a rotating friendly reminder."
+    },
+    {
+      "name": "celebrate",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Celebrates when failing tests go green again.",
+      "spec": "Track test-runner Bash calls (jest/vitest/pytest/go test/cargo test/npm test); when a previously failing run now succeeds, toast '🎉 All green' and play a bundled sound (generate tiny WAV)."
+    },
+    {
+      "name": "decision-log",
+      "category": "memory",
+      "tier": "complex",
+      "description": "/decide records an Architecture Decision Record in docs/decisions.",
+      "spec": "/decide <title>: $.model.fork to draft an ADR (Context, Decision, Consequences, Alternatives) from the conversation; preview in Pane; Save writes docs/decisions/NNNN-slug.md via $.fs (next number). /decisions lists existing ADR titles."
+    },
+    {
+      "name": "session-journal",
+      "category": "memory",
+      "tier": "complex",
+      "description": "Writes a dated journal entry of what was done when the session ends.",
+      "spec": "On session.end (not for 'clear' unless userConfig) use $.model.fork to summarise work done, files changed, open questions; append to .claude/journal/YYYY-MM-DD.md. /journal writes one now."
+    },
+    {
+      "name": "glossary",
+      "category": "memory",
+      "tier": "complex",
+      "description": "Teaches Claude your project's vocabulary and injects definitions when you use the terms.",
+      "spec": "Load GLOSSARY.md or .claude/glossary.json plus $.store entries. /define term = meaning adds. On prompt.submit detect terms (case-insensitive word match) and add a context note with their definitions (use prompt.submit's context if available, else prompt.compose session section)."
+    },
+    {
+      "name": "bookmark",
+      "category": "memory",
+      "tier": "simple",
+      "description": "/bookmark saves the last answer; /bookmarks lists and reuses them.",
+      "spec": "/bookmark [label] stores last assistant text (first 2000 chars) with label/time in $.store per project; /bookmarks lists; /bookmark-insert <n> fills prompt."
+    },
+    {
+      "name": "resume-brief",
+      "category": "memory",
+      "tier": "complex",
+      "description": "Shows what you were working on last time when a new session starts.",
+      "spec": "On session.end store a brief (last prompts, files edited, branch, todos) in $.store per project; on session.start show it in a toast/AbovePrompt band with Button 'Continue' that submits 'Continue where we left off: ...'."
+    },
+    {
+      "name": "lessons-learned",
+      "category": "memory",
+      "tier": "complex",
+      "description": "When Claude fixes a mistake, offers to save the lesson to CLAUDE.md.",
+      "spec": "Detect fix cycles: a Bash test/build failure followed later by success after edits. On turn.complete in that case, $.model.complete a one-line lesson and show band with Buttons 'Save to CLAUDE.md' (append under '## Lessons learned' via $.fs) / 'Dismiss'."
+    },
+    {
+      "name": "codebase-map",
+      "category": "memory",
+      "tier": "complex",
+      "description": "/map builds a compact map of your repository and gives it to Claude.",
+      "spec": "/map: list files via `git ls-files` (fallback $.fs.list recursion with ignores), build a tree with dir counts and key files (entry points, configs), cap size; store in .claude/codebase-map.md and add as prompt.compose section when userConfig autoInject is on. Pane to view."
+    },
+    {
+      "name": "snippet-vault",
+      "category": "memory",
+      "tier": "simple",
+      "description": "Save and reuse code snippets across projects with /save-snippet and /snippet.",
+      "spec": "/save-snippet <name> saves the last fenced code block from assistant output (or $.ui.selection) to $.store; /snippet <name> fills prompt with it; /snippets lists."
+    },
+    {
+      "name": "link-vault",
+      "category": "memory",
+      "tier": "simple",
+      "description": "Collects every URL from the conversation into one list.",
+      "spec": "Scan prompts and assistant messages (via session.append or $.session.messages on demand) for URLs; /links lists unique ones with source; /links-copy copies all."
+    },
+    {
+      "name": "recall",
+      "category": "memory",
+      "tier": "complex",
+      "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
+      "spec": "$.tool.register a tool 'search' (listed mcp__recall__search) with input {query}. Search across .claude/journal, docs/decisions, CLAUDE.md, scratchpad/bookmark stores in $.store if accessible (only own store), returning top matches with simple BM25-ish scoring. Also /remember <text> to add memories to its own store."
+    },
+    {
+      "name": "changelog-keeper",
+      "category": "team",
+      "tier": "complex",
+      "description": "Keeps CHANGELOG.md's Unreleased section up to date as you commit.",
+      "spec": "After a successful git commit Bash call, parse the commit subject (Conventional Commits) and add a bullet under ## [Unreleased] in the right Keep a Changelog subsection (Added/Changed/Fixed/...) via $.fs; create the file if missing (userConfig). /changelog shows Unreleased."
+    },
+    {
+      "name": "readme-sync",
+      "category": "team",
+      "tier": "complex",
+      "description": "Warns when public APIs, CLI flags or env vars change but the docs do not.",
+      "spec": "Track edits within the turn: exported symbols changes in src (regex on export lines), CLI option definitions, process.env/os.environ names. On turn.complete if such changes and no README/docs edits, band with 'Ask Claude to update docs' Button ($.prompt.submit)."
+    },
+    {
+      "name": "standup",
+      "category": "team",
+      "tier": "complex",
+      "description": "/standup summarises what you did yesterday, from git history, ready to paste.",
+      "spec": "/standup [days]: git log --author=<git config user.email> --since, plus journal if present; $.model.complete into Yesterday / Today / Blockers bullets; Pane with Copy button."
+    },
+    {
+      "name": "review-agent",
+      "category": "team",
+      "tier": "complex",
+      "description": "Adds a dedicated code-reviewer subagent and a /review command.",
+      "spec": "$.agent.register a 'reviewer' agent type (read-only tools: Read, Grep, Glob, Bash for git diff) with a strong review prompt (correctness, security, tests, readability, severity labels). /review [base] spawns it via $.agent.spawn on the current diff and shows findings in a Pane."
+    },
+    {
+      "name": "license-header",
+      "category": "team",
+      "tier": "simple",
+      "description": "Adds your license header to every new source file Claude creates.",
+      "spec": "tool.call on Write for new files (check $.fs.stat not exists) with source extensions: prepend header from userConfig (default SPDX-License-Identifier: MIT line, plus copyright holder and year) in the right comment syntax, via next({...e, content})."
+    },
+    {
+      "name": "issue-drafter",
+      "category": "team",
+      "tier": "complex",
+      "description": "/issue turns the current conversation into a well-structured GitHub issue.",
+      "spec": "/issue [bug|feature]: $.model.fork to draft title + body (Summary, Steps/Proposal, Expected, Actual, Context). Pane preview with 'Create with gh' Button (gh issue create --title --body-file via temp file in /tmp written with $.fs) and Copy."
+    },
+    {
+      "name": "handoff",
+      "category": "team",
+      "tier": "complex",
+      "description": "/handoff writes a handoff note so a teammate can pick up exactly where you left off.",
+      "spec": "/handoff: $.model.fork for Goal, Status, What changed (files), Next steps, Gotchas, How to verify; write .claude/handoff/YYYY-MM-DD-HHMM.md and copy to clipboard."
+    },
+    {
+      "name": "i18n-guard",
+      "category": "team",
+      "tier": "simple",
+      "description": "Flags hard-coded user-facing strings in UI components.",
+      "spec": "Edit/Write hook on .jsx/.tsx/.vue/.svelte: detect added JSX text nodes or string literal props (title, placeholder, aria-label, alt) with letters that are not wrapped in t()/i18n calls; add context note listing them (warn mode) or deny (block mode, userConfig)."
+    },
+    {
+      "name": "migration-guard",
+      "category": "team",
+      "tier": "simple",
+      "description": "Prevents editing database migrations that already exist; write a new one instead.",
+      "spec": "Edit/MultiEdit/Write on existing files under migrations/, db/migrate/, prisma/migrations/, alembic/versions/, supabase/migrations/: deny if the file existed at session start or is tracked in git (git ls-files). New files allowed."
+    },
+    {
+      "name": "codeowners-hint",
+      "category": "team",
+      "tier": "simple",
+      "description": "Shows who owns a file (from CODEOWNERS) as Claude edits it.",
+      "spec": "Parse CODEOWNERS (root, .github/, docs/) with gitignore-style patterns, last match wins. On Edit/Write show status 'owners: @team-x' for the file, and /owners <path>."
+    }
+  ]
+}
