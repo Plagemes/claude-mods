@@ -1,0 +1,31 @@
+{
+  "name": "mod-store",
+  "version": "1.0.0",
+  "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#mod-store",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "core", "store", "marketplace"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "repository": {
+      "type": "string",
+      "title": "Repository",
+      "description": "GitHub owner/repo whose .claude-plugin/marketplace.json the store reads.",
+      "default": "plagemes/claude-mods"
+    },
+    "branch": {
+      "type": "string",
+      "title": "Branch",
+      "description": "Branch the catalog is read from.",
+      "default": "main"
+    },
+    "checkForUpdates": {
+      "type": "boolean",
+      "title": "Check for updates",
+      "description": "At session start, check the installed mods against the catalog and toast once per new update.",
+      "default": true
+    }
+  }
+}

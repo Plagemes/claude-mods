@@ -1,0 +1,39 @@
+# mod-store
+> An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.
+
+**Category:** Core · **Version:** 1.0.0
+
+## What it does
+`/mods` opens a store pane listing every mod of the collection, grouped by category, with what you already have installed and what has an update. Search as you type, filter by category (or by *Installed* / *Updates*), open a mod to read its README, then install, update or uninstall it with one key. The catalog is cached, so the store still opens offline, and a session start tells you once when a new update is out.
+
+## Install
+```
+/plugin install mod-store --marketplace plagemes/claude-mods
+```
+
+## Usage
+| Command | What it does |
+| --- | --- |
+| `/mods` | Open the store. |
+| `/mods search <words>` | Open the store with a search (`/mods <words>` works too). |
+| `/mods refresh` | Fetch the catalog again and report counts. |
+| `/mods update-all` | Update every installed mod that has a newer version. |
+| `/mods install <mod>` · `update <mod>` · `uninstall <mod>` | Do it without opening the pane. |
+
+In the pane (keys work while it has the keyboard; Tab walks the controls, Esc closes it):
+
+- **List:** `1`–`9` open the mod on that row · `n` / `p` next / previous page · `u` update all · `r` refresh · `q` close. Badges: `✓ installed`, `↑ 1.2.0` (update available), `v1.0.0` (not installed).
+- **Mod page:** `i` install · `u` update · `x` uninstall · `c` copy the install line · `o` copy the README link · `b` back. The README is shown below.
+- After a change: `l` runs `/reload-plugins` for you (or type it), `d` dismisses the message.
+
+## Configuration
+| Key | Default | Description |
+| --- | --- | --- |
+| `repository` | `plagemes/claude-mods` | GitHub `owner/repo` whose `.claude-plugin/marketplace.json` the store reads. |
+| `branch` | `main` | Branch the catalog and READMEs are read from. |
+| `checkForUpdates` | `true` | At session start, compare installed mods with the catalog and toast once per new update. |
+
+## How it works
+- Fetches `.claude-plugin/marketplace.json` (and `catalog.json` for category titles, when present) raw from GitHub with `$.http.fetch`, caches it in `$.store` with its timestamp, and falls back to that cache when GitHub cannot be reached.
+- Installed versions and every change go through the `claude plugin` CLI (`list`, `marketplace add/update`, `install`, `update`, `uninstall`, all with `--json`) via `$.process.run`; there is no `$` API for plugins. The marketplace is added on first install.
+- Changes take effect after `/reload-plugins`. Installs come from the marketplace's default branch whatever `branch` says, and the install step needs the `claude` CLI on this machine (the session's own binary is used when known).
