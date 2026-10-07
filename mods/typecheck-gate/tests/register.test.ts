@@ -25,7 +25,7 @@ const TSC_ERRORS = {
  * A project on a virtual disk, a checker printing `answer`, and the engine's
  * side of a turn. `notes` collects the context riding on submitted prompts.
  */
-const world = (on: On, answer: (argv: readonly string[]) => Partial<ProcessRunResult>) => {
+const world = (on: On, answer: (argv: readonly string[]) => Partial<ProcessRunResult>, files: Record<string, string> = PROJECT) => {
   const runs: Run[] = []
   const statuses: string[] = []
   const toasts: string[] = []
@@ -37,12 +37,12 @@ const world = (on: On, answer: (argv: readonly string[]) => Partial<ProcessRunRe
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('fs.list', ($, e) => {
     const prefix = e.path.endsWith('/') ? e.path : `${e.path}/`
-    const names = new Set(Object.keys(PROJECT).filter(path => path.startsWith(prefix)).map(path => path.slice(prefix.length).split('/')[0] ?? ''))
+    const names = new Set(Object.keys(files).filter(path => path.startsWith(prefix)).map(path => path.slice(prefix.length).split('/')[0] ?? ''))
     return { value: [...names].map(name => ({ name, kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })) }
   })
-  on('fs.exists', ($, e) => ({ value: e.path in PROJECT }))
+  on('fs.exists', ($, e) => ({ value: e.path in files }))
   on('fs.read', ($, e) => {
-    const text = (PROJECT as Record<string, string>)[e.path]
+    const text = files[e.path]
     return text === undefined ? { deny: 'ENOENT' } : { value: text }
   })
   on('process.run', ($, e) => {
@@ -171,4 +171,25 @@ test('lists the first 20 errors and says how many more there are', async ($, on)
   const lines = notes[0]?.split('\n') ?? []
   expect(lines).toHaveLength(22)
   expect(lines.at(-1)).toBe('  … and 6 more')
+})
+
+test('regression: a solution-style tsconfig (Vite) is checked through the projects it references', async ($, on) => {
+  const clock = mock.clock(on)
+  const vite = {
+    '/repo/.git/HEAD': '',
+    '/repo/tsconfig.json': '{\n  // solution\n  "files": [],\n  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" },],\n}',
+    '/repo/tsconfig.app.json': '{ "include": ["src"] }',
+    '/repo/tsconfig.node.json': '{ "include": ["vite.config.ts"] }',
+    '/repo/node_modules/.bin/tsc': '',
+    '/repo/src/a.ts': '',
+  }
+  // tsc on the solution file itself checks nothing and passes; the app project has the error.
+  const { runs, statuses } = world(on, argv => (argv.at(-1) === '/repo/tsconfig.app.json' ? TSC_ERRORS : {}), vite)
+
+  await $.tool.call(edit('/repo/src/a.ts'))
+  await $.turn.complete(TURN_END)
+  await clock.settle()
+
+  expect(runs.map(run => run.argv.at(-1))).toEqual(['/repo/tsconfig.app.json', '/repo/tsconfig.node.json'])
+  expect(statuses.at(-1)).toBe('✗ types: 2 type errors (tsc)')
 })

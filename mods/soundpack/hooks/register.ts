@@ -21,10 +21,15 @@ const MAX_VOLUME = 4
 /** The longest clip is 1.55 s: previews start each sound this far after the last, so they never overlap. */
 const PREVIEW_SPACING_MS = 1700
 
+/** A test runner at the start of one part of a command line (after variables and `npx`, `poetry run`, `python -m`...), not just named in it. */
 const TEST_RUNNER =
-  /\b(jest|vitest|pytest|mocha|rspec|phpunit|tox|ctest|go test|cargo (?:test|nextest)|deno test|bun test|dotnet test|mvn test|gradle test|(?:npm|yarn|pnpm)(?: run)? test)\b/
+  /^(?:\w+=\S*\s+)*(?:(?:sudo|time|npx|bunx|pnpx|exec|(?:bundle|pnpm|yarn|npm) exec|(?:poetry|uv|pipenv|pdm|hatch) run|python[\d.]* -m)\s+)*(?:\S*\/)?(?:jest|vitest|pytest|mocha|rspec|phpunit|tox|ctest|go test|cargo (?:test|nextest)|deno test|bun test|dotnet test|mvn test|gradlew? test|(?:npm|yarn|pnpm|bun)(?: run)? test(?::[\w:-]+)?|npm t)(?=\s|$)/
+const COMMAND_PARTS = /&&|\|\||[;|&\n()]/
 // A runner that printed failures but still exited 0 (for example `npm test || true`).
 const FAILURE_REPORT = /\b[1-9]\d* (?:failed|failing|failures?)\b|^FAIL\b|\bFAILED\b/m
+
+/** Whether the command runs tests (`npm test`, `cd web && npx vitest run`), rather than merely naming a runner (`cat jest.config.js`). */
+const isTestCommand = (command: string): boolean => command.split(COMMAND_PARTS).some(part => TEST_RUNNER.test(part.trim()))
 
 const numberOr = (value: unknown, fallback: number): number => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
 
@@ -121,7 +126,7 @@ export const register: Register = (on, options) => {
     const ran = await next(e)
     if (ran.deny !== undefined) return ran
 
-    const isTestRun = TEST_RUNNER.test(e.command)
+    const isTestRun = isTestCommand(e.command)
     const hasFailed = ran.isError === true || (isTestRun && FAILURE_REPORT.test(ran.text ?? ''))
     if (hasFailed) await play($, player, settings, 'error')
     else if (isTestRun && e.run_in_background !== true) await play($, player, settings, 'green')

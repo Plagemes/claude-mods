@@ -107,3 +107,12 @@ test('adds nothing when it recognises nothing', async ($, on) => {
   expect(await conventions($)).toBeUndefined()
   expect((await stack($, 'rescan')).text).toContain('nothing recognised')
 })
+
+test('regression: with bun the test script runs with `bun run test`, since `bun test` is Bun\'s own runner', async ($, on) => {
+  project(on, { 'package.json': JSON.stringify({ scripts: { test: 'vitest run' } }), 'bun.lock': '{}' })
+  await start($)
+
+  const text = (await conventions($))?.text ?? ''
+  expect(text).toContain('Run the tests with `bun run test` (`vitest run`).')
+  expect(text).not.toContain('`bun test`')
+})

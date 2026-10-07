@@ -120,3 +120,21 @@ test('fails closed for a pip command when its own check throws, and leaves other
   expect((await $.tool.call({ tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
   expect(ran).toEqual(['ls'])
 })
+
+test('regression: sudo pip and pip --user are refused even with a virtualenv active', async ($, on) => {
+  const ran = engine(on, { VIRTUAL_ENV: '/repo/.venv' })
+  for (const command of ['sudo pip install httpx', 'source .venv/bin/activate && sudo pip install httpx', 'pip install --user black']) {
+    const result = await $.tool.call({ tool: 'Bash', command })
+    expect(`${command} => ${result.deny ?? 'ALLOWED'}`).toContain('installs into the system Python even with a virtualenv active')
+  }
+  expect((await $.tool.call({ tool: 'Bash', command: 'pip install httpx' })).deny).toBeUndefined()
+  expect(ran).toEqual(['pip install httpx'])
+})
+
+test('regression: here-document bodies are text, not commands', async ($, on) => {
+  const ran = engine(on)
+  const readme = "cat > README.md <<'EOF'\n## Install\npip install mypkg\nEOF"
+  expect((await $.tool.call({ tool: 'Bash', command: readme })).deny).toBeUndefined()
+  expect((await $.tool.call({ tool: 'Bash', command: 'cat > x <<EOF\npip install a\nEOF\npip install b' })).deny).toContain('"pip install b"')
+  expect(ran).toEqual([readme])
+})

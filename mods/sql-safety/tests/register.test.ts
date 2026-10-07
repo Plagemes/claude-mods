@@ -2,6 +2,8 @@ import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { findSql } from '../hooks/sql'
+
 const FILE = '/repo/src/users.ts'
 
 /** Stands in for the engine: files on disk by path (any other file holds just PLACEHOLDER), what reaches the tool, and the toasts. */
@@ -130,4 +132,17 @@ test('only counts what the change adds: existing statements stay quiet, a remove
 
   const rewrite = await $.tool.call({ tool: 'Write', file_path: FILE, content: existing.replace('keep = 1', 'keep = 3') })
   expect(rewrite.context).toBeUndefined()
+})
+
+test('regression: big files with thousands of strings or statements scan fast, with the right line numbers', () => {
+  const messages = Array.from({ length: 8000 }, (_, i) => `  key${i}: { label: 'Label ${i}', hint: "Hint ${i}" },`).join('\n')
+  const code = `export const messages = {\n${messages}\n}\nconst purge = "DELETE FROM sessions"\n`
+  const seed = `${Array.from({ length: 10000 }, (_, i) => `INSERT INTO users (id) VALUES (${i});`).join('\n')}\nDELETE FROM users;\n`
+
+  const startedAt = performance.now()
+  const inCode = findSql(code, 'ts')
+  const inSql = findSql(seed, 'sql')
+  expect(performance.now() - startedAt).toBeLessThan(1000)
+  expect(inCode).toEqual([{ rule: 'delete-without-where', statement: 'DELETE FROM sessions', line: 8003 }])
+  expect(inSql).toEqual([{ rule: 'delete-without-where', statement: 'DELETE FROM users', line: 10001 }])
 })

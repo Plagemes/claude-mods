@@ -23,8 +23,10 @@ async function projectEnvironment($: EngineInterface): Promise<string | undefine
   }
 }
 
+const shorten = (command: string): string => (command.length > MAX_SHOWN ? `${command.slice(0, MAX_SHOWN)}...` : command)
+
 function refusal(offender: string, folder: string | undefined): string {
-  const shown = offender.length > MAX_SHOWN ? `${offender.slice(0, MAX_SHOWN)}...` : offender
+  const shown = shorten(offender)
   const how =
     folder === undefined
       ? 'Create one first: python3 -m venv .venv && source .venv/bin/activate && pip install ... (or: uv venv && uv pip install ...).'
@@ -38,8 +40,16 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (isAllowed) return next(e)
     const offender = findGlobalInstall(e.command)
-    if (offender === undefined || (await isEnvironmentActive($))) return next(e)
-    return { deny: refusal(offender, await projectEnvironment($)) }
+    if (offender === undefined) return next(e)
+    if (offender.isSystemWide) {
+      return {
+        deny:
+          `venv-guard: "${shorten(offender.command)}" installs into the system Python even with a virtualenv active ` +
+          '(sudo runs the system pip; --user writes to ~/.local). Drop sudo and --user and install into the project environment instead.',
+      }
+    }
+    if (await isEnvironmentActive($)) return next(e)
+    return { deny: refusal(offender.command, await projectEnvironment($)) }
   }).catch(($, e, next) =>
     next.called || isAllowed || !PIP_WORDS.test(e.command) ? next(e) : { deny: 'venv-guard: its check failed, so the pip command was blocked.' },
   )

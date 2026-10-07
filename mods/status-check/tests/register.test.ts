@@ -231,3 +231,11 @@ test('Statuspage answers, extra entries and failure texts are read', () => {
   expect(suspectedServices('npm install', 'added 3 packages')).toEqual([])
   expect(suspectedServices('make', 'Service Unavailable')).toEqual([])
 })
+
+test('regression: long output without spaces is scanned in linear time, and HTTP status lines are still read', () => {
+  const startedAt = performance.now()
+  expect(suspectedServices('curl https://registry.npmjs.org/x', `"${'http://a/'.repeat(20000)}"`)).toEqual([])
+  expect(performance.now() - startedAt).toBeLessThan(500)
+  expect(suspectedServices('npm install', 'HTTP/1.1 503 Service Unavailable')).toEqual(['npm'])
+  expect(suspectedServices('npm install', 'npm error HTTP error 504')).toEqual(['npm'])
+})

@@ -65,12 +65,15 @@ const dependenciesOf = (pkg: Record<string, unknown>, ...fields: string[]): Reco
 
 const activeFindings = (found: Detection): Finding[] => found.findings.filter(finding => !settings.skip.has(finding.id))
 
+/** The command that runs the package.json `test` script: `bun test` would start Bun's own test runner instead. */
+const testCommandOf = (manager: string): string => (manager === 'bun' ? 'bun run test' : `${manager} test`)
+
 const rulesFor = (finding: Finding, found: Detection): readonly string[] => {
   if (finding.id !== 'node' || found.packageManager === undefined) return GUIDES[finding.id].rules
   const { name, evidence } = found.packageManager
   return [
     `Use ${name} for installs and scripts (${evidence}); never add a second lockfile.`,
-    ...(found.testScript === undefined ? [] : [`Run the tests with \`${name} test\` (\`${found.testScript}\`).`]),
+    ...(found.testScript === undefined ? [] : [`Run the tests with \`${testCommandOf(name)}\` (\`${found.testScript}\`).`]),
   ]
 }
 

@@ -92,7 +92,7 @@ const NETWORK_FAILURE = new RegExp(
   [
     'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ESOCKETTIMEDOUT', 'socket hang up', 'getaddrinfo', 'Could not resolve host', 'Connection timed out', 'Operation timed out',
     'Temporary failure in name resolution', 'network is unreachable', 'fetch failed', 'TLS handshake timeout', 'Read timed out', 'ReadTimeoutError', 'ConnectTimeoutError', 'Max retries exceeded',
-    'HTTPSConnectionPool', 'npm ERR! network', 'RPC failed', 'remote end hung up', 'Service Unavailable', 'Bad Gateway', 'Gateway Time-?out', 'returned error: 50[0234]', 'HTTP[/ ]\\S* ?50[0234]\\b',
+    'HTTPSConnectionPool', 'npm ERR! network', 'RPC failed', 'remote end hung up', 'Service Unavailable', 'Bad Gateway', 'Gateway Time-?out', 'returned error: 50[0234]', 'HTTP[/ ]\\S{0,16} ?50[0234]\\b',
     '(?:status|code|error)[: =]+E?50[0234]\\b', '\\bE50[0234]\\b', '\\b50[0234] (?:Server Error|Internal)',
   ].join('|'),
   'i',

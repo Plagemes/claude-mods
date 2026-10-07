@@ -67,6 +67,8 @@ const operandsOf = (args: readonly string[], valued: ReadonlySet<string>): strin
 
 const NPM_INSTALL = new Set(['install', 'i', 'add'])
 const NPM_VALUED = new Set(['--registry', '--tag', '--prefix', '-w', '--workspace', '--filter', '-F', '-C', '--dir', '--cwd'])
+/** In pnpm `-w` is `--workspace-root`, a switch: `pnpm add -w posthog-js` adds posthog-js. */
+const PNPM_VALUED = new Set([...NPM_VALUED].filter(option => option !== '-w'))
 const PIP_VALUED = new Set([
   '-r', '--requirement', '-c', '--constraint', '-e', '--editable', '-i', '--index-url', '--extra-index-url', '-f', '--find-links',
   '-t', '--target', '--prefix', '--root', '--python', '-p', '--group', '--extra', '--optional', '--source',
@@ -97,8 +99,15 @@ const packagesOf = (argv: readonly string[]): string[] => {
     specs.flatMap(spec => nameOf(spec) ?? [])
 
   if (name === 'npm' || name === 'pnpm' || name === 'bun' || name === 'yarn') {
-    const isAdd = name === 'yarn' ? sub === 'add' : NPM_INSTALL.has(sub) || (name === 'bun' && sub === 'a')
-    return isAdd ? names(operandsOf(afterSub, NPM_VALUED), npmName) : []
+    const valued = name === 'pnpm' ? PNPM_VALUED : NPM_VALUED
+    // Options may come before the subcommand: `pnpm --filter web add x`, `npm -w web install x`, `yarn workspace web add x`.
+    const args = argv.slice(start + 1)
+    let at = 0
+    while (at < args.length && (args[at] as string).startsWith('-')) at += valued.has(args[at] as string) ? 2 : 1
+    if (name === 'yarn' && args[at] === 'workspace') at += 2
+    const command = args[at] ?? ''
+    const isAdd = name === 'yarn' ? command === 'add' : NPM_INSTALL.has(command) || (name === 'bun' && command === 'a')
+    return isAdd ? names(operandsOf(args.slice(at + 1), valued), npmName) : []
   }
   if (/^pip3?(?:\.\d+)?$/.test(name) && sub === 'install') return names(operandsOf(afterSub, PIP_VALUED), pypiName)
   if (/^python3?(?:\.\d+)?$/.test(name) && sub === '-m' && /^pip3?$/.test(third) && rest[0] === 'install') {

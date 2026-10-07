@@ -2,7 +2,7 @@ import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'c
 
 import { PY_EXTENSIONS, TS_EXTENSIONS, listFindings, parseMypy, parsePyright, parseTsc } from './checkers'
 import type { CheckResult, Checker, Finding } from './checkers'
-import { dirname, extension, isAbsolute, isNotInstalled, join, relativeTo } from './project'
+import { dirname, extension, isAbsolute, isNotInstalled, join, referencedConfigs, relativeTo } from './project'
 import type { Level, Project } from './project'
 
 const COMMAND = 'typecheck'
@@ -84,7 +84,7 @@ export const register: Register = (on, options) => {
     const root = await $.session.cwd().catch(() => '/')
     let jobs = await planJobs($, [...touched])
     if (jobs.length === 0 && (await $.fs.exists(join(root, TSCONFIG)).catch(() => false))) {
-      jobs = [await tscJob($, await scanProject($, join(root, TSCONFIG)), root)]
+      jobs = await tscJobs($, await scanProject($, join(root, TSCONFIG)), root)
     }
     if (jobs.length === 0) {
       return { text: 'typecheck-gate: nothing to check (no tsconfig.json, and no pyright or mypy config for the files edited so far).' }
@@ -156,7 +156,9 @@ const planJobs = async ($: EngineInterface, files: readonly string[]): Promise<J
     const project = await scanProject($, file)
     if (TS_EXTENSIONS.has(ext)) {
       const dir = project.find(TSCONFIG)
-      if (dir !== undefined && !jobs.has(`tsc:${dir}`)) jobs.set(`tsc:${dir}`, await tscJob($, project, dir))
+      if (dir !== undefined && !jobs.has(`tsc:${dir}`)) {
+        for (const [index, job] of (await tscJobs($, project, dir)).entries()) jobs.set(index === 0 ? `tsc:${dir}` : `tsc:${dir}:${index}`, job)
+      }
     } else if (PY_EXTENSIONS.has(ext)) {
       const choice = await pythonChecker(project)
       if (choice === undefined) continue
@@ -169,11 +171,13 @@ const planJobs = async ($: EngineInterface, files: readonly string[]): Promise<J
   return [...jobs.values()]
 }
 
-const tscJob = async ($: EngineInterface, project: Project, dir: string): Promise<Job> => ({
-  checker: 'tsc',
-  cwd: dir,
-  argv: [await resolveExecutable($, project, 'tsc', NODE_BIN), '--noEmit', '--pretty', 'false', '-p', join(dir, TSCONFIG)],
-})
+/** One `tsc --noEmit` per project: the tsconfig in `dir`, or each project a solution-style tsconfig references (Vite's layout). */
+const tscJobs = async ($: EngineInterface, project: Project, dir: string): Promise<Job[]> => {
+  const tsc = await resolveExecutable($, project, 'tsc', NODE_BIN)
+  const text = await $.fs.read(join(dir, TSCONFIG)).catch(() => undefined)
+  const configs = (text === undefined ? undefined : referencedConfigs(text, dir)) ?? [join(dir, TSCONFIG)]
+  return configs.map(config => ({ checker: 'tsc', cwd: dir, argv: [tsc, '--noEmit', '--pretty', 'false', '-p', config] }))
+}
 
 const pythonJob = async ($: EngineInterface, project: Project, checker: Checker, cwd: string): Promise<Job> =>
   checker === 'pyright'

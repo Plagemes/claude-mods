@@ -37,7 +37,7 @@ What it knows (28 trackers, matched by package, import and script URL):
 | `blockErrorTracking` | boolean | `false` | Also block Sentry, Bugsnag and Rollbar. |
 
 ## How it works
-- A `tool.call` guard on `Bash` parses install commands (global installs, paths and URLs are skipped); another on `Edit`, `MultiEdit`, `Write` and `NotebookEdit` looks at what an edit adds to a manifest, a page or a source file. Only trackers the edit adds count: a file that already had one is not a new decision (for a `Write`, the file on disk is the "before").
+- A `tool.call` guard on `Bash` parses install commands, options before the subcommand included (`pnpm --filter web add x`; local paths and URLs are skipped); another on `Edit`, `MultiEdit`, `Write` and `NotebookEdit` looks at what an edit adds to a manifest, a page or a source file. Only trackers the edit adds count: a file that already had one is not a new decision (for a `Write`, the file on disk is the "before").
 - Docs and data files (`.md`, `.txt`, `.json` other than `package.json`, lockfiles) are never scanned, so a README that links to a vendor's site is fine.
 - It fails closed for installs and for edits that mention tracking-like words; an unrelated call is never blocked by a hook failure.
 - Limits: it knows 28 vendors, not every tracker; a tracker loaded from a first-party proxy or a URL assembled at run time is not recognised; it checks what a tool call adds, not what is already in the project.

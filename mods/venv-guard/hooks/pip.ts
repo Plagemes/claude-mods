@@ -13,20 +13,30 @@ const CONDA_LIKE = new Set(['conda', 'mamba', 'micromamba'])
 /** Flags that mean nothing gets installed, or that it goes to a folder of its own. */
 const HARMLESS_FLAGS = /^(?:--dry-run|--help|-h|--require-virtualenv|--target(?:=.*)?|-t)$/
 
-type Words = { assignments: string[]; words: string[] }
+type Words = { assignments: string[]; words: string[]; isSudo: boolean }
 
 /** Separates the leading `NAME=value` words and wrappers (`sudo`, `env`) from the command itself. */
 function splitPrefix(all: readonly string[]): Words {
   const assignments: string[] = []
   let index = 0
   let isAfterWrapper = false
+  let isSudo = false
   for (; index < all.length; index += 1) {
     const word = all[index] as string
     if (ASSIGNMENT.test(word)) assignments.push(word)
-    else if (WRAPPERS.has(baseName(word))) isAfterWrapper = true
-    else if (!(isAfterWrapper && word.startsWith('-'))) break
+    else if (WRAPPERS.has(baseName(word))) {
+      isAfterWrapper = true
+      isSudo ||= baseName(word) === 'sudo'
+    } else if (!(isAfterWrapper && word.startsWith('-'))) break
   }
-  return { assignments, words: all.slice(index) }
+  return { assignments, words: all.slice(index), isSudo }
+}
+
+/** A `pip install` found in a command line, and whether it reaches the system Python even inside a virtualenv. */
+export type GlobalInstall = {
+  command: string
+  /** `sudo pip install` (sudo runs the system pip, not the virtualenv's) or `pip install --user` (it writes to ~/.local). */
+  isSystemWide: boolean
 }
 
 /** What follows `pip` (or `python -m pip`), or undefined when the words are some other command. */
@@ -52,7 +62,7 @@ function activatesEnvironment({ words }: Words): boolean {
  * The first `pip install` of the command line that would reach the system Python,
  * as the words were typed, or undefined when there is none. Reads text; runs nothing.
  */
-export function findGlobalInstall(command: string): string | undefined {
+export function findGlobalInstall(command: string): GlobalInstall | undefined {
   let isActivated = false
   for (const segment of parseShell(command)) {
     const prefix = splitPrefix(segment.words)
@@ -61,13 +71,12 @@ export function findGlobalInstall(command: string): string | undefined {
       continue
     }
     const args = pipArguments(prefix.words)
-    if (args === undefined || !args.includes('install')) continue
+    if (args === undefined || !args.includes('install') || args.some(arg => HARMLESS_FLAGS.test(arg))) continue
+    const isNamedEnvironment = ENVIRONMENT_EXECUTABLE.test(prefix.words[0] ?? '')
+    const isSystemWide = (prefix.isSudo && !isNamedEnvironment) || args.includes('--user')
     const isIsolated =
-      isActivated ||
-      prefix.assignments.some(assignment => ISOLATING_ASSIGNMENT.test(assignment)) ||
-      ENVIRONMENT_EXECUTABLE.test(prefix.words[0] ?? '') ||
-      args.some(arg => HARMLESS_FLAGS.test(arg))
-    if (!isIsolated) return prefix.words.join(' ')
+      isActivated || prefix.assignments.some(assignment => ISOLATING_ASSIGNMENT.test(assignment)) || isNamedEnvironment
+    if (isSystemWide || !isIsolated) return { command: [...(prefix.isSudo ? ['sudo'] : []), ...prefix.words].join(' '), isSystemWide }
   }
   return undefined
 }

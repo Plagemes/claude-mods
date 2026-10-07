@@ -4,6 +4,8 @@ import { BACKGROUND_ONLY, findNeverEnding } from './detect'
 import type { Verdict } from './detect'
 
 const MAX_COMMAND_LENGTH = 80
+/** A Bash call whose own `timeout` is this short is bounded, like `timeout 60 npm run dev`: it cannot hang the turn for long. */
+const MAX_BOUNDED_TIMEOUT_MS = 60_000
 
 const compile = (source: string): RegExp | undefined => {
   try {
@@ -23,7 +25,8 @@ export const register: Register = (on, options) => {
   const allow = compile(String(options.allow ?? ''))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (e.run_in_background === true || allow?.test(e.command) === true) return next(e)
+    const isBounded = typeof e.timeout === 'number' && e.timeout > 0 && e.timeout <= MAX_BOUNDED_TIMEOUT_MS
+    if (e.run_in_background === true || isBounded || allow?.test(e.command) === true) return next(e)
 
     const ci = await $.env.get('CI')
     const verdict = findNeverEnding(e.command, ci !== undefined && ci !== '' && ci !== '0' && ci.toLowerCase() !== 'false')

@@ -214,3 +214,15 @@ test('/soundpack says plainly that nothing is heard where afplay does not exist'
 
   expect(shown.text).toContain('which only macOS has, so nothing is heard on this Linux machine.')
 })
+
+test('regression: a command that only names a test runner is not a test run', async ($, on) => {
+  const { clock, played } = world(on, { text: 'ok' })
+
+  for (const command of ['cat jest.config.js', 'npm install -D vitest', 'grep -rn pytest .', 'git commit -m "add jest"', 'echo pytest']) {
+    await bash($, clock, command)
+  }
+  expect(played).toEqual([])
+
+  await bash($, clock, 'cd web && CI=1 npx vitest run 2>&1 | tail -20')
+  expect(played.map(clip => clip.asset)).toEqual(['assets/minimal/green.wav'])
+})

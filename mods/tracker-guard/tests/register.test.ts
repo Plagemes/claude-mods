@@ -184,3 +184,13 @@ test('every tracker has a unique id, a name and some way to be recognised', () =
     expect((tracker.packages ?? []).length + (tracker.urls ?? []).length, tracker.id).toBeGreaterThan(0)
   }
 })
+
+test('regression: options before the subcommand and pnpm -w do not hide an install', async ($, on) => {
+  const seen = engine(on)
+  const blocked = ['pnpm --filter web add posthog-js', 'pnpm -F web add posthog-js', 'pnpm add -w posthog-js', 'npm -w web install posthog-js', 'yarn workspace web add posthog-js']
+  for (const command of blocked) expect((await bash($, command)).deny, command).toContain('tracker-guard: blocked')
+  expect(seen.reached).toBe(0)
+
+  for (const command of ['pnpm --filter web add react', 'pnpm -r build', 'yarn workspace web add zod']) expect((await bash($, command)).deny, command).toBeUndefined()
+  expect(seen.reached).toBe(3)
+})

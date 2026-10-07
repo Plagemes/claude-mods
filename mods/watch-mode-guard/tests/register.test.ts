@@ -215,3 +215,47 @@ test('segmentsOf splits at connectors outside quotes and marks what is sent to t
   ])
   expect(segmentsOf('npm start > out.log 2>&1')).toEqual([{ words: ['npm', 'start', '>', 'out.log', '2>&1'], isBackground: false }])
 })
+
+test('regression: explicit one-shot flags, build scripts, help output and look-alikes are not refused', () => {
+  const fine = [
+    'npm test -- --watchAll=false',
+    'jest --watch=false',
+    'npm run storybook:build',
+    'npm run dev:build',
+    'yarn preview:build',
+    'vite --help',
+    'nodemon --version',
+    'next dev --help',
+    'docker compose up --help',
+    'kubectl get pods -owide',
+    'docker compose -f docker-compose.yml logs web',
+    'docker compose up --abort-on-container-exit',
+    'docker compose up --exit-code-from tests',
+    'top -l 1',
+    'ping -n 3 example.com',
+  ]
+  expect(fine.filter(command => blocked(command) !== undefined)).toEqual([])
+  expect(blocked('docker compose -f docker-compose.dev.yml up')).toBe('docker compose -f docker-compose.dev.yml up')
+  expect(blocked('kubectl -n web logs -f api')).toBe('kubectl -n web logs -f api')
+  expect(blocked('kubectl get pods -Aw')).toBe('kubectl get pods -Aw')
+})
+
+test('regression: here-document bodies are text, not commands', () => {
+  expect(blocked("python3 - <<'EOF'\nimport json\ntop = 5\nwatch = True\nprint(top)\nEOF")).toBeUndefined()
+  expect(blocked('cat > NOTES.md <<EOF\n## Dev\nnpm run dev\ntail -f app.log\nEOF\nnpm run build')).toBeUndefined()
+  expect(blocked("cat > x <<-'END'\n\tnpm run dev\n\tEND\nnpm run dev")).toBe('npm run dev')
+  expect(blocked("cat <<< 'npm run dev'")).toBeUndefined()
+  expect(blocked('npm run \\\n  dev')).toBe('npm run dev')
+})
+
+test('regression: a Bash call with a short timeout of its own is bounded and let through; a long one is not', async ($, on) => {
+  const ran = engine(on)
+  mock.env(on, {})
+
+  const short = await $.tool.call({ tool: 'Bash', command: 'npm run dev', timeout: 15_000 })
+  const long = await $.tool.call({ tool: 'Bash', command: 'npm run dev', timeout: 600_000 })
+
+  expect(short.deny).toBeUndefined()
+  expect(long.deny).toContain('npm run dev')
+  expect(ran).toEqual(['npm run dev'])
+})

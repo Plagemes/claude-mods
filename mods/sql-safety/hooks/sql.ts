@@ -52,11 +52,11 @@ const countLines = (text: string): number => text.split('\n').length - 1
 /** Splits one piece of text on `;` into statements, with the line each starts on. */
 function statementsOf({ text, line, isDynamic, isCode }: Piece): Finding[] {
   const findings: Finding[] = []
-  let partStart = 0
+  let partLine = line
   for (const part of text.split(';')) {
     const lead = part.length - part.trimStart().length
-    const statementLine = line + countLines(text.slice(0, partStart + lead))
-    partStart += part.length + 1
+    const statementLine = partLine + countLines(part.slice(0, lead))
+    partLine += countLines(part)
     const statement = part.replace(/\s+/g, ' ').trim().replace(/^\(\s*/, '')
     if (statement === '' || (isCode && SENTENCE_CASE.test(statement))) continue
     const rule = classify(statement, isDynamic)
@@ -121,9 +121,14 @@ export function findSql(source: string, extension: string): Finding[] {
   if (extension === SQL_FILE) return statementsOf(sqlPiece(source))
   const lang = LANGUAGES[extension]
   if (lang === undefined) return []
+  // Lines are counted from one literal to the next, not from the top each time, so a file with thousands of strings stays fast.
+  let line = 1
+  let counted = 0
   return literalsOf(source, lang).flatMap(literal => {
+    line += countLines(source.slice(counted, literal.start))
+    counted = literal.start
     const isDynamic = /^\s*(?:\+|\.\s*[$\w(])/.test(source.slice(literal.end, literal.end + 40))
-    return statementsOf({ text: literal.content, line: 1 + countLines(source.slice(0, literal.start)), isDynamic, isCode: true })
+    return statementsOf({ text: literal.content, line, isDynamic, isCode: true })
   })
 }
 
