@@ -230,6 +230,10 @@ test('in a narrow terminal the band announces the fit once, composes with other 
   await start($)
   await w.clock.settle()
   expect(await band.find({ key: 'advisor-band' })).toBeUndefined()
+  // Snoozed means no tips either, even for a mod you have.
+  await ask($, 'scrivi il messaggio di commit per queste modifiche')
+  await w.clock.settle()
+  expect(w.toasts.filter(text => text.startsWith('Tip:'))).toEqual([])
 })
 
 test('the band\'s Show opens the pane where it fits, and the band steps aside', async ($, on) => {

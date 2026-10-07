@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock, Plugin } from 'claude-code/testing'
-import type { On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
+import type { EngineInterface, On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
 
 import type { AutopilotRun } from '../types'
 
@@ -21,6 +21,8 @@ type World = {
   /** Each command's queued outcomes (exit code, output); the last one repeats. */
   outcomes: Map<string, [number, string][]>
   ran: string[]
+  /** Called on every save of the run, as the engine stores it. */
+  onSave?: ($: EngineInterface, value: unknown) => Promise<void>
 }
 
 /** A Node project at noon, and an engine that records what autopilot sends, runs and shows. */
@@ -29,8 +31,9 @@ function world(on: On, store: Record<string, unknown> = {}, env: Record<string, 
   seen.files.set(`${ROOT}/package.json`, JSON.stringify({ scripts: { test: 'vitest run', lint: 'eslint .' } }))
   const kept = new Map(Object.entries(store))
   on('store.get', ($, e) => ({ value: kept.get(e.key) }))
-  on('store.set', ($, e) => {
+  on('store.set', async ($, e) => {
     kept.set(e.key, e.value)
+    await seen.onSave?.($, e.value)
     return { value: undefined }
   })
   mock.env(on, { HOME, ...env })
@@ -127,7 +130,8 @@ const hub: Plugin = {
       },
     }))
     on('mods.mode', async $ => {
-      const interaction = (await $.env.get('HUB_INTERACTION')) === 'off' ? 'off' : 'auto'
+      const switched = await $.fs.read('/hub/interaction').catch(() => '')
+      const interaction = switched === 'off' || (switched === '' && (await $.env.get('HUB_INTERACTION')) === 'off') ? 'off' : 'auto'
       return { value: { ...MODE, interaction, canAsk: interaction !== 'off' } }
     })
     on('mods.publish', ($, e) => {
@@ -397,4 +401,58 @@ test('resumes a run saved by a session that closed mid-turn', async ($, on) => {
   await seen.clock.advance(2_500)
   expect(seen.prompts[0]).toContain('[Autopilot] Step 2/2: Add VAT')
   expect(seen.prompts[0]).toContain('Done so far: steps 1–1.')
+})
+
+test('typing while autopilot saves its next prompt: the prompt is held back, nothing is sent behind your turn', async ($, on) => {
+  let typeNow = false
+  const seen = world(on)
+  seen.onSave = async (_, value) => {
+    const run = value as AutopilotRun | null
+    if (typeNow && run !== null && run.awaiting !== null && run.status === 'running') {
+      typeNow = false
+      await $.prompt.submit({ text: 'actually, wait', wait: false, origin: { kind: 'composer' } })
+    }
+  }
+  const ours = (): string[] => seen.prompts.filter(prompt => prompt.startsWith('[Autopilot]'))
+  await start($)
+  await pilot($, 'make the cart total include VAT')
+  await pilot($, 'go')
+  await seen.clock.settle()
+  await answerLast($, seen, 't1', '1. Add VAT\n2. Add a test')
+  expect(ours()).toHaveLength(2)
+  seen.outcomes.set('npm test', [[1, FAIL]])
+  await $.turn.start({ text: ours().at(-1) ?? '', turnId: 't2' })
+  typeNow = true
+  await $.turn.complete(ended('t2', 'Added VAT.'))
+  await seen.clock.advance(30_000)
+  expect(ours()).toHaveLength(2)
+  const status = await pilot($, 'status')
+  expect(status).toContain('✈ paused')
+  expect(status).toContain('turns 2/30')
+  expect(await pilot($, 'resume')).toBe('Resumed.')
+  await seen.clock.advance(2_500)
+  expect(ours()[2]).toContain('Step 2/2: Add a test')
+})
+
+test('with the hub: control.resume lifts a pause but never answers a blocked question', { plugins: [hub] }, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await pilot($, 'add a database')
+  await pilot($, 'go')
+  await seen.clock.settle()
+  await answerLast($, seen, 't1', '1. Pick a database\nBLOCKED: Postgres or SQLite?')
+  seen.files.set('/hub/events.json', JSON.stringify([{ id: 'r1', topic: 'control.resume', data: { id: 'c1', scope: 'all', reason: 'back', by: 'owner', session: 'other' }, source: 'mods-hub', at: NOON + 60_000, session: 'other', scope: 'session' }]))
+  await seen.clock.advance(65_000)
+  expect(seen.prompts).toHaveLength(1)
+  expect(await pilot($, 'status')).toContain('✈ blocked')
+})
+
+test('with the hub: the Interaction mode in force when you press Start counts, not the one when the card opened', { plugins: [hub] }, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  expect(await pilot($, 'add a database')).toContain('follows the hub (interaction auto): asks you when blocked')
+  seen.files.set('/hub/interaction', 'off')
+  await pilot($, 'go')
+  await seen.clock.settle()
+  expect(seen.prompts[0]).toContain('Never ask me anything')
 })

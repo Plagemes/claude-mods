@@ -165,7 +165,10 @@ async function savePlan($: EngineInterface, run: AutopilotRun): Promise<void> {
 /** The hub's events since `since`; [] without the hub. */
 async function hubRecent($: EngineInterface, since: number): Promise<Awaited<ReturnType<EngineInterface['mods']['recent']>>> {
   try {
-    return await $.mods.recent({ since, limit: 50 })
+    // The bus can be busy: read the hub's stop/pause/resume on their own, so a burst of other events never hides one.
+    const [all, controls] = await Promise.all([$.mods.recent({ since, limit: 50 }), $.mods.recent({ prefix: 'control.', since, limit: 20 })])
+    const seen = new Set(all.map(event => event.id))
+    return [...all, ...controls.filter(event => !seen.has(event.id))].sort((a, b) => a.at - b.at)
   } catch {
     return []
   }
@@ -227,7 +230,9 @@ async function startRun($: EngineInterface, ctx: Ctx): Promise<string> {
     return problem
   }
   const now = await $.clock.now()
-  const run = newRun(draft, { id: crypto.randomUUID(), now, project: await rootOf($, ctx), settings: ctx.settings })
+  // The hub's Interaction mode as it is now, not as it was when the card opened.
+  const hubInteraction = await hubInteractionOf($)
+  const run = newRun({ ...draft, hubInteraction }, { id: crypto.randomUUID(), now, project: await rootOf($, ctx), settings: ctx.settings })
   await commit($, ctx, () => run)
   await update($, draftAtom, () => null)
   ctx.hubSince = now
@@ -268,6 +273,8 @@ async function drive($: EngineInterface, ctx: Ctx): Promise<void> {
   try {
     const run = await read($, runAtom)
     if (run === null || run.status !== 'running') return
+    // After a hot reload only turns drive the run: keep the ticker (caps, the hub's stop and pause) going too.
+    ensureTicker($, ctx)
     const now = await $.clock.now()
     const cap = limitReason(run, now)
     if (cap !== undefined) {
@@ -297,13 +304,24 @@ async function drive($: EngineInterface, ctx: Ctx): Promise<void> {
 /** Submits one prompt as your own words; the run records what it waits for before the prompt goes out. */
 async function submit($: EngineInterface, ctx: Ctx, submission: Submission): Promise<void> {
   const now = await $.clock.now()
-  const run = await commit($, ctx, latest => (latest === null ? null : submitted({ ...latest, blockedQuestion: submission.kind === 'answer' ? '' : latest.blockedQuestion }, submission, now)))
-  if (run === null) return
-  await hubPublish($, { topic: 'x.autopilot.step', data: { id: run.id, kind: submission.kind, turn: run.turns, step: run.stepIndex + 1, steps: run.steps.length, isEscalated: submission.isEscalated } })
+  // Claim the slot before the first await, so nothing else sends while the run records what it waits for.
   ctx.isSubmitting = true
   try {
+    const before = await read($, runAtom)
+    if (before === null || nextSubmission(before)?.marker !== submission.marker) return
+    const run = await commit($, ctx, latest => (latest === null ? null : submitted({ ...latest, blockedQuestion: submission.kind === 'answer' ? '' : latest.blockedQuestion }, submission, now)))
+    if (run === null) return
+    // You may have typed (or a turn started, or the run was paused or stopped) while the run was saved: step back.
+    const latest = await read($, runAtom)
+    if (ctx.isTurnRunning || ctx.personSubmitting > 0 || latest === null || latest.status !== 'running' || latest.awaiting?.marker !== submission.marker) {
+      await commit($, ctx, current =>
+        current === null || current.awaiting?.marker !== submission.marker ? current : { ...current, awaiting: null, turns: Math.max(0, current.turns - 1) },
+      )
+      return
+    }
     const sent = await $.prompt.submit({ text: submission.prompt, asUser: true })
     if (sent.drop !== undefined) await failedTurn($, ctx, `a hook refused the prompt: ${sent.drop}`)
+    else await hubPublish($, { topic: 'x.autopilot.step', data: { id: run.id, kind: submission.kind, turn: run.turns, step: run.stepIndex + 1, steps: run.steps.length, isEscalated: submission.isEscalated } })
   } catch (error) {
     await failedTurn($, ctx, `the prompt could not be sent: ${messageOf(error)}`)
   } finally {
@@ -485,7 +503,10 @@ async function pollHub($: EngineInterface, ctx: Ctx, run: AutopilotRun): Promise
     const asked = `${String(data.by ?? event.source)}${typeof data.reason === 'string' && data.reason !== '' ? `: ${data.reason}` : ''}`
     if (event.topic === 'control.stop') await stopRun($, ctx, `stopped by ${asked}`)
     else if (event.topic === 'control.pause') await pauseRun($, ctx, `paused by ${asked}`)
-    else if (event.topic === 'control.resume') await resumeRun($, ctx, '')
+    // A resume lifts a pause; it never answers a question Claude is blocked on.
+    else if (event.topic === 'control.resume') {
+      if ((await read($, runAtom))?.status === 'paused') await resumeRun($, ctx, '')
+    }
     // Without control.* (an older hub, a mod that raises its own topic), the stop is inferred as before.
     else if (event.topic === 'channel.inbound' && data.isOwner === true && typeof data.text === 'string') {
       const text = data.text

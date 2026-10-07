@@ -281,3 +281,6 @@ export const PROJECT_FILES = ['package.json', 'pnpm-lock.yaml', 'yarn.lock', 'bu
 
 /** The last lines of a long output. */
 export const tailOf = (output: string, lines = 15): string => output.trim().split('\n').slice(-lines).join('\n')
+
+/** Never staged by the finish commit, whatever .gitignore says, in any folder (glob pathspecs, any depth). */
+export const NEVER_STAGE: readonly string[] = ['**/.env', '**/.env.*', '**/*.pem', '**/*.key', '**/id_rsa*', '**/*.p12'].map(pattern => `:(exclude,glob)${pattern}`)

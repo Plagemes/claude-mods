@@ -267,6 +267,14 @@ export const hubStub: Plugin = {
       await $.state.set({ plugin: 'mods-hub', key: 'tab' }, e.id)
       return { value: { isPlaced: true } }
     })
+    // `hub-stop <action>` in Bash: the person raised a stop or pause ($.mods.stop) — the `control` state in force.
+    on('tool.call', async ($, e, next) => {
+      const command = String((e as { command?: unknown }).command ?? '')
+      if (String(e.tool) !== 'Bash' || !command.startsWith('hub-stop')) return next(e)
+      const action = command.split(' ')[1] === 'pause' ? 'pause' : 'stop'
+      await $.state.set({ plugin: 'mods-hub', key: 'control' }, { id: 'c1', action, scope: 'all', reason: 'STOP from the phone', by: 'owner via whatsapp', session: 'other', source: 'whatsapp-bridge', at: await $.clock.now() })
+      return { result: 'stopped' }
+    })
   },
 }
 

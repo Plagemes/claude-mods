@@ -9,11 +9,11 @@ const HOME = '/home/me'
 const NOON = new Date(2026, 9, 7, 12, 0).getTime()
 const PANE: RenderPropsOf['Pane'] = { title: 'Workflows', isFocused: true, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 50 }, view: {} }
 
-type World = { clock: MockClock; prompts: string[]; toasts: string[]; files: Map<string, string>; ran: string[]; exit: Map<string, number> }
+type World = { clock: MockClock; prompts: string[]; toasts: string[]; files: Map<string, string>; ran: string[]; exit: Map<string, number>; branch: string }
 
 /** A project with an empty .claude/recipes, and an engine that records prompts, commands, toasts and files. */
 function world(on: On): World {
-  const seen: World = { clock: mock.clock(on, { now: NOON }), prompts: [], toasts: [], files: new Map(), ran: [], exit: new Map() }
+  const seen: World = { clock: mock.clock(on, { now: NOON }), prompts: [], toasts: [], files: new Map(), ran: [], exit: new Map(), branch: 'main' }
   const kept = new Map<string, unknown>()
   on('store.get', ($, e) => ({ value: kept.get(e.key) }))
   on('store.set', ($, e) => {
@@ -37,7 +37,7 @@ function world(on: On): World {
   on('process.run', ($, e) => {
     const command = e.argv[0] === 'sh' ? (e.argv[2] ?? '') : e.argv.join(' ')
     seen.ran.push(command)
-    const stdout = command === 'git rev-parse --abbrev-ref HEAD' ? 'main\n' : ''
+    const stdout = command === 'git rev-parse --abbrev-ref HEAD' ? `${seen.branch}\n` : ''
     return { value: { exitCode: seen.exit.get(command) ?? 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('prompt.submit', ($, e) => {
@@ -262,7 +262,13 @@ const hub: Plugin = {
       return { value: { id: 'n1', targets: ['toast'], held: false } }
     })
     on('mods.read', ($, e) => ({ value: e.key === 'smart-router.policy' ? { key: e.key, owner: 'smart-router', value: { models: { light: 'haiku', standard: 'opus', deep: 'fable' } }, at: 0 } : null }))
-    on('mods.recent', ($, e) => ({ value: e.topic === 'agent.finished' ? ([1, 2, 3].map(n => ({ id: `a${n}`, topic: 'agent.finished', data: {}, source: 'smart-router', at: 0, session: 's', scope: 'session' })) as never) : [] }))
+    on('mods.recent', async ($, e) => {
+      if (e.prefix === 'control.') {
+        const raised = JSON.parse(await $.fs.read('/hub/controls.json').catch(() => '[]')) as { at: number }[]
+        return { value: raised.filter(event => event.at > (e.since ?? 0)) as never }
+      }
+      return { value: e.topic === 'agent.finished' ? ([1, 2, 3].map(n => ({ id: `a${n}`, topic: 'agent.finished', data: {}, source: 'smart-router', at: 0, session: 's', scope: 'session' })) as never) : [] }
+    })
     on('mods.hello', () => ({ value: { installed: INSTALLED } }))
     on('mods.registerTab', () => ({ value: { tabs: [] } }))
     on('mods.showTab', async ($, e) => {
@@ -292,4 +298,59 @@ test('with the hub: the Workflows tab, models from smart-router\'s policy, task 
   expect(seen.toasts).toContain('HUB publish task.finished')
   expect(seen.toasts).toContain('HUB notify success: Recipe flaky-test-hunt passed')
   expect(await recipe($, 'history')).toContain('· passed · 0s · checks 1/1 · 3 agents')
+})
+
+/** Raises a `control.*` event on the stand-in hub (it serves /hub/controls.json to `recent` with the `control.` prefix). */
+function raise(seen: World, topic: string, at: number): void {
+  const raised = JSON.parse(seen.files.get('/hub/controls.json') ?? '[]') as unknown[]
+  raised.push({ id: `c-${at}`, topic, data: { id: `c-${at}`, scope: 'all', reason: 'from the phone', by: 'owner via whatsapp', session: 'other' }, source: 'whatsapp-bridge', at, session: 'other', scope: 'session' })
+  seen.files.set('/hub/controls.json', JSON.stringify(raised))
+}
+
+test('with the hub: control.pause holds a queued run until control.resume; control.stop cancels the waiting run and skips the sent one\'s checks', { plugins: [hub] }, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  // A run waits for the current turn; a pause holds it past that turn's end.
+  await $.turn.start({ text: 'my own question', turnId: 'mine' })
+  expect(await recipe($, 'run flaky-test-hunt runs=3')).toContain('Queued flaky-test-hunt')
+  raise(seen, 'control.pause', NOON + 1_000)
+  await seen.clock.advance(6_000)
+  await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'mine', reason: 'answer' })
+  await seen.clock.advance(10_000)
+  expect(seen.prompts).toHaveLength(0)
+  raise(seen, 'control.resume', NOON + 17_000)
+  await seen.clock.advance(6_000)
+  expect(seen.prompts).toHaveLength(1)
+
+  // A stop while its turn runs: the turn finishes, its checks do not run, it is filed as cancelled.
+  await $.turn.start({ text: seen.prompts[0] ?? '', turnId: 't1' })
+  raise(seen, 'control.stop', NOON + 25_000)
+  await seen.clock.advance(6_000)
+  await $.turn.complete({ answer: 'Fixed.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await seen.clock.settle()
+  expect(seen.ran.filter(command => command.startsWith('npm'))).toEqual([])
+  expect(await recipe($, 'history')).toContain('· cancelled ·')
+
+  // A stop while a run waits for the turn: it never goes out.
+  await $.turn.start({ text: 'another question', turnId: 'mine-2' })
+  expect(await recipe($, 'run flaky-test-hunt runs=2')).toContain('Queued flaky-test-hunt')
+  raise(seen, 'control.stop', NOON + 40_000)
+  await seen.clock.advance(10_000)
+  await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'mine-2', reason: 'answer' })
+  await seen.clock.advance(10_000)
+  expect(seen.prompts).toHaveLength(1)
+  expect((await recipe($, 'history')).split('\n')[0]).toContain('· cancelled ·')
+})
+
+test('a branch name with shell characters never reaches a check command', async ($, on) => {
+  const seen = world(on)
+  seen.branch = 'x;touch${IFS}pwned'
+  seen.files.set(`${ROOT}/.claude/recipes/ship.yaml`, ['name: ship', 'description: Ship the branch.', 'steps:', '  - Push {{branch}}.', 'checks:', '  - name: Branch pushed', '    command: git ls-remote --exit-code origin {{branch}}', '  - name: Tests', '    command: npm test'].join('\n'))
+  await start($)
+  await recipe($, 'run ship')
+  await seen.clock.settle()
+  await finishTurn($, seen, 't1', 'Pushed.')
+  expect(seen.ran.some(command => command.includes('pwned'))).toBe(false)
+  expect(seen.ran).toContain('npm test')
+  expect(await recipe($, 'history')).toContain('failed')
 })

@@ -47,6 +47,10 @@ const HISTORY_PREFIX = 'history:'
 const MAX_HISTORY = 30
 const CHECK_TIMEOUT_MS = 300_000
 const GIT_TIMEOUT_MS = 5_000
+/** A value from the repository (branch, folder name) that may go into a check's shell command as it is. */
+const SHELL_SAFE = /^[\w.@/+,=-]*$/
+/** How often, with mods-hub installed, a stop, pause or resume (`control.*`) is looked for. */
+const CONTROL_POLL_MS = 5_000
 const RECIPE_FILE = /\.(?:ya?ml|json)$/i
 const SOURCE_LABEL: Record<RecipeSource, string> = { project: 'project', personal: 'personal', builtin: 'built-in' }
 const OUTCOME_COLOR: Record<RecipeRun['outcome'], string> = { queued: 'subtle', running: 'suggestion', checking: 'suggestion', passed: 'success', failed: 'error', done: 'success', cancelled: 'warning' }
@@ -63,6 +67,12 @@ type Ctx = {
   home: string | undefined
   isTurnRunning: boolean
   queued: { id: string; prompt: string } | null
+  /** How far the hub's `control.*` events were read (0: no hub). */
+  controlSeenAt: number
+  /** Why a hub pause holds the queued run back, or '' when nothing does. */
+  heldBy: string
+  /** A hub stop that came while a run was out: its checks are skipped and it is filed as cancelled. */
+  stopped: Map<string, string>
 }
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
@@ -201,10 +211,10 @@ async function runRecipe($: EngineInterface, ctx: Ctx, name: string, given: Reco
     summary: '',
   }
   await saveHistory($, ctx, runs => [...runs, run])
-  if (ctx.isTurnRunning) {
+  if (ctx.isTurnRunning || ctx.heldBy !== '') {
     ctx.queued = { id, prompt }
     await hubPublish($, { topic: 'task.queued', data: { id, title: `Recipe: ${run.title}` } })
-    return `Queued ${recipe.name}: it starts when the current turn ends.`
+    return ctx.heldBy !== '' ? `Queued ${recipe.name}: the automatic work is ${ctx.heldBy}; it starts on a resume.` : `Queued ${recipe.name}: it starts when the current turn ends.`
   }
   // Sent once the command or press that asked for it has answered.
   $.clock.after(0, () => void send($, ctx, id, prompt))
@@ -225,10 +235,18 @@ async function send($: EngineInterface, ctx: Ctx, id: string, prompt: string): P
 
 async function runChecks($: EngineInterface, ctx: Ctx, recipe: Recipe, params: Record<string, string>): Promise<RecipeCheckResult[]> {
   const root = await rootOf($, ctx)
-  const values = { ...(await builtinsOf($, ctx, recipe)), ...params }
+  const builtins: Record<string, string> = await builtinsOf($, ctx, recipe)
+  // {{branch}} and {{project}} come from the repository, not from you: never let them inject shell syntax.
+  const unsafe = Object.keys(builtins).filter(name => params[name] === undefined && !SHELL_SAFE.test(builtins[name] ?? ''))
+  const values = { ...builtins, ...params }
   const results: RecipeCheckResult[] = []
   for (const check of recipe.checks) {
     const command = fill(check.command, values)
+    const tainted = unsafe.filter(name => placeholdersIn(check.command).includes(name))
+    if (tainted.length > 0) {
+      results.push({ name: check.name, command: check.command, ok: false, summary: `✗ not run: {{${tainted[0]}}} has shell characters` })
+      continue
+    }
     try {
       const ran = await $.process.run(['sh', '-c', command], { ...(root === '' ? {} : { cwd: root }), timeoutMs: CHECK_TIMEOUT_MS })
       results.push({ name: check.name, command, ok: ran.exitCode === 0, summary: ran.exitCode === 0 ? '✓ exit 0' : `✗ exit ${ran.exitCode}` })
@@ -244,6 +262,11 @@ async function settleRun($: EngineInterface, ctx: Ctx, id: string, reason: strin
   const run = (await read($, runsAtom)).find(one => one.id === id)
   if (run === undefined) return
   const summary = oneLine(answer, 300)
+  const stoppedBy = ctx.stopped.get(id)
+  if (stoppedBy !== undefined) {
+    ctx.stopped.delete(id)
+    return finishRun($, ctx, id, 'cancelled', stoppedBy)
+  }
   if (reason === 'aborted') return finishRun($, ctx, id, 'cancelled', summary || 'you interrupted it')
   if (reason !== 'answer') return finishRun($, ctx, id, 'failed', reason === 'refusal' ? 'Claude declined' : 'the turn ended on an error')
   const recipe = findRecipe(await read($, entriesAtom), run.name)?.recipe
@@ -278,6 +301,43 @@ async function recheck($: EngineInterface, ctx: Ctx, id: string): Promise<void> 
   const outcome = checks.every(check => check.ok) ? 'passed' : 'failed'
   await saveHistory($, ctx, changeRun(id, one => ({ ...one, checks, outcome })))
   $.ui.toast(`${run.name}: checks ${checks.filter(check => check.ok).length}/${checks.length} ${outcome}`)
+}
+
+/**
+ * A stop or pause raised through mods-hub (a STOP from the phone, mission-control, `/hub stop`): a stop cancels the
+ * run still waiting for its turn and files the one already sent as cancelled without running its checks (the turn
+ * itself finishes on its own); a pause holds the waiting run until a resume.
+ */
+async function obeyControl($: EngineInterface, ctx: Ctx): Promise<void> {
+  let events: Awaited<ReturnType<EngineInterface['mods']['recent']>>
+  try {
+    events = await $.mods.recent({ prefix: 'control.', since: ctx.controlSeenAt })
+  } catch {
+    return
+  }
+  for (const event of events) {
+    ctx.controlSeenAt = Math.max(ctx.controlSeenAt, event.at)
+    const { by, reason } = (event.data ?? {}) as { by?: unknown; reason?: unknown }
+    const who = `${String(by ?? event.source)}${typeof reason === 'string' && reason !== '' ? ` (${reason})` : ''}`
+    if (event.topic === 'control.stop') {
+      ctx.heldBy = ''
+      const queued = ctx.queued
+      ctx.queued = null
+      if (queued !== null) await finishRun($, ctx, queued.id, 'cancelled', `stopped by ${who} before it started`)
+      for (const run of await read($, runsAtom)) {
+        if (run.endedAt === null && run.outcome !== 'queued') ctx.stopped.set(run.id, `stopped by ${who}`)
+      }
+    } else if (event.topic === 'control.pause') {
+      ctx.heldBy = `paused by ${who}`
+    } else if (event.topic === 'control.resume' && ctx.heldBy !== '') {
+      ctx.heldBy = ''
+      const queued = ctx.queued
+      if (queued !== null && !ctx.isTurnRunning) {
+        ctx.queued = null
+        await send($, ctx, queued.id, queued.prompt)
+      }
+    }
+  }
 }
 
 // ── Saving a plan as a recipe ───────────────────────────────────────────────────────────────────────
@@ -706,7 +766,7 @@ async function drawBody($: EngineInterface, e: PaneInput, ctx: Ctx): Promise<Ren
 // ── Hooks ───────────────────────────────────────────────────────────────────────────────────────────
 
 export const register: Register = on => {
-  const ctx: Ctx = { root: undefined, home: undefined, isTurnRunning: false, queued: null }
+  const ctx: Ctx = { root: undefined, home: undefined, isTurnRunning: false, queued: null, controlSeenAt: 0, heldBy: '', stopped: new Map() }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -725,11 +785,15 @@ export const register: Register = on => {
     } catch (error) {
       $.ui.log(`workflow-studio: could not load: ${messageOf(error)}`, { to: 'debug' })
     }
-    await hubHello(
+    const hasHub = await hubHello(
       $,
-      { version: VERSION, publishes: ['task.queued', 'task.started', 'task.finished', 'x.workflow-studio.finished'], consumes: ['agent.finished', 'smart-router.policy'] },
+      { version: VERSION, publishes: ['task.queued', 'task.started', 'task.finished', 'x.workflow-studio.finished'], consumes: ['agent.finished', 'smart-router.policy', 'control.stop', 'control.pause', 'control.resume'] },
       { id: TAB, title: PANE_TITLE, order: TAB_ORDER, command: 'recipe' },
     )
+    if (hasHub && ctx.controlSeenAt === 0) {
+      ctx.controlSeenAt = await $.clock.now()
+      $.clock.every(CONTROL_POLL_MS, () => void obeyControl($, ctx).catch(error => $.ui.log(`workflow-studio: ${messageOf(error)}`, { to: 'debug' })))
+    }
     return next(e)
   })
 
@@ -759,7 +823,7 @@ export const register: Register = on => {
       $.clock.after(0, () => void settleRun($, ctx, run.id, reason, answer).catch(error => $.ui.log(`workflow-studio: ${messageOf(error)}`, { to: 'debug' })))
     }
     const queued = ctx.queued
-    if (queued !== null) {
+    if (queued !== null && ctx.heldBy === '') {
       ctx.queued = null
       $.clock.after(0, () => void send($, ctx, queued.id, queued.prompt))
     }

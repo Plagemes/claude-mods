@@ -835,7 +835,7 @@ function contextNote(rt: Runtime, text: string): string | undefined {
 /** The tip toast: an installed mod's command that fits the prompt, once per mod per session, once per 10 minutes. */
 async function tipInstalled($: Dollar, rt: Runtime, scores: readonly IntentScored[]): Promise<void> {
   const now = await $.clock.now()
-  if (rt.isQuiet || rt.installed === undefined || now - rt.lastTipAt < TIP_GAP_MS) {
+  if (rt.isQuiet || isSnoozed(rt, now) || rt.installed === undefined || now - rt.lastTipAt < TIP_GAP_MS) {
     return
   }
   for (const one of scores) {

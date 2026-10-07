@@ -3,6 +3,7 @@ import type { EngineInterface, Register, RenderElement, RenderInput, RenderSurfa
 
 import type { IssuePilotActive, IssuePilotFilters, IssuePilotIssue, IssuePilotList, IssuePilotPhase, IssuePilotProvider, IssuePilotTestRun } from '../types'
 import {
+  NEVER_STAGE,
   PROJECT_FILES,
   REPORT_PROMPT,
   acceptanceCriteria,
@@ -79,8 +80,6 @@ const SHOWN_LOG = 4
 const STORE_PREFIX = 'active:'
 const RULES_FILE = '.claude/claude-mods/smart-router/rules.json'
 const FALLBACK_BASES = ['origin/main', 'origin/master', 'origin/develop', 'main', 'master', 'develop']
-/** Never staged by the finish commit, whatever .gitignore says. */
-const NEVER_STAGE = [':!.env', ':!.env.*', ':!*.pem', ':!*.key', ':!id_rsa*', ':!*.p12']
 const PROVIDER_LABEL: Record<IssuePilotProvider, string> = { github: 'GitHub', jira: 'Jira', linear: 'Linear' }
 const TIER_COLOR = { light: 'success', standard: 'suggestion', deep: 'warning' } as const
 const PHASE_LABEL: Record<IssuePilotPhase, string> = {
@@ -565,15 +564,28 @@ async function finishIssue($: EngineInterface, rt: Runtime, signal: 'click' | 'a
       commitMessage: redact(commitMessageOf(active.issue, active.branch)),
       error: isGreen ? null : `tests: ${tests.summary}`,
     }), `tests: ${tests.summary}`)
-    if (isGreen && (signal === 'click' || rt.settings.autoPR)) {
+    // autoPR never ships while the automatic work is stopped or paused through mods-hub (a STOP from the phone).
+    const held = signal === 'autopilot' && rt.settings.autoPR ? await controlSince($, active.startedAt) : undefined
+    if (isGreen && (signal === 'click' || (rt.settings.autoPR && held === undefined))) {
       rt.isFinishing = false
       return shipIssue($, rt)
     }
-    const why = isGreen ? 'press Open draft PR to commit, push and open it' : 'the tests did not pass: fix them, or press Open draft PR anyway'
+    const why = held !== undefined ? `autoPR held: ${held}; press Open draft PR to commit, push and open it` : isGreen ? 'press Open draft PR to commit, push and open it' : 'the tests did not pass: fix them, or press Open draft PR anyway'
     await hubNotify($, { level: isGreen ? 'success' : 'warning', title: isGreen ? `${active.issue.ref} is ready for a draft PR` : `${active.issue.ref}: the tests did not pass`, body: why, url: active.issue.url })
     return `${active.issue.ref}: ${tests.summary}; ${why}.`
   } finally {
     rt.isFinishing = false
+  }
+}
+
+/** The hub's stop or pause in force, raised since `since` (no resume after it), in words; undefined otherwise or without the hub. */
+async function controlSince($: EngineInterface, since: number): Promise<string | undefined> {
+  try {
+    const { value: control } = await $.state.get({ plugin: 'mods-hub', key: 'control' })
+    if (control === null || control === undefined || control.at < since || control.action === 'resume') return undefined
+    return `${control.action === 'stop' ? 'stopped' : 'paused'} by ${control.by || control.source}`
+  } catch {
+    return undefined
   }
 }
 

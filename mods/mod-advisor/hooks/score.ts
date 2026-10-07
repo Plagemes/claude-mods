@@ -604,6 +604,8 @@ const RARE_IDF = 2.5
 /** A description word this rare (in at most three mods) is enough on its own. */
 const VERY_RARE_IDF = 4.1
 const MIN_STRONG_WORD = 4
+/** How much of a prompt is read for intents. */
+export const PROMPT_CHARS = 2_000
 /** The most a common word counts, whatever field it sits in. */
 const COMMON_FIELD = 1.5
 
@@ -632,8 +634,13 @@ export function buildIndex(mods: readonly AdvisorMod[]): IntentIndex {
     put((mod.keywords ?? []).join(' '), KEYWORD_FIELD)
     put(mod.name.replace(/-/g, ' '), NAME_FIELD)
     put((mod.commands ?? []).map(commandWords).join(' '), COMMAND_FIELD)
-    put((mod.signals?.intents ?? []).join(' '), INTENT_FIELD)
-    phrases.set(mod.name, (mod.signals?.intents ?? []).filter(intent => /\s/.test(intent.trim())))
+    // A one-word intent tells on its own; the words of a phrase only as description words (the whole phrase scores
+    // as a phrase): "pip --user" must not make every prompt about a "user" a venv-guard prompt.
+    const intents = mod.signals?.intents ?? []
+    const isPhrase = (intent: string): boolean => tokensOf(intent).length > 1
+    put(intents.filter(intent => !isPhrase(intent)).join(' '), INTENT_FIELD)
+    put(intents.filter(isPhrase).join(' '), DESCRIPTION_FIELD)
+    phrases.set(mod.name, intents.filter(intent => /\s/.test(intent.trim())))
     docs.set(mod.name, doc)
     for (const token of doc.keys()) {
       counts.set(token, (counts.get(token) ?? 0) + 1)
@@ -660,8 +667,10 @@ export type IntentScored = Scored & { matches: number; isStrong: boolean; hits: 
  * rare word of its description) or two telling ones.
  */
 export function rankIntent(index: IntentIndex, prompt: string): IntentScored[] {
-  const tokens = tokensOf(prompt, true)
-  const text = normalize(prompt)
+  // The request is at the top; a pasted log or file below it would only add noise (and time, on every prompt).
+  const head = prompt.slice(0, PROMPT_CHARS)
+  const tokens = tokensOf(head, true)
+  const text = normalize(head)
   const results: IntentScored[] = []
   for (const [name, doc] of index.docs) {
     let score = 0

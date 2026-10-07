@@ -150,3 +150,11 @@ test('a budget alert from another mod (budget.threshold) moves borderline work d
   expect(decideRoute(borderline, FACTS, { ...SETTINGS, budgetBias: 0 }, { spentUsd: 0, budgetAlert: alert }).tier).toBe('standard')
   expect(decideRoute(verdictOf('Write unit tests for slugify'), FACTS, SETTINGS, { spentUsd: 0, budgetAlert: alert }).tier).toBe('standard')
 })
+
+test('protect deep: a spent budget or an easy streak never takes deep work off the deep tier (the opus quota you set still may)', () => {
+  const weakDeep = verdictOf('Analyze why the dashboard is slow')
+  expect(decideRoute(weakDeep, FACTS, SETTINGS, { spentUsd: 6 })).toEqual(expect.objectContaining({ tier: 'deep', model: 'opus' }))
+  expect(decideRoute(weakDeep, FACTS, SETTINGS, { spentUsd: 0, budgetAlert: 'the session dollar budget is 85% used' }).tier).toBe('deep')
+  expect(decideRoute(weakDeep, FACTS, SETTINGS, { spentUsd: 0, streak: { tier: 'deep', successes: 5 } }).tier).toBe('deep')
+  expect(decideRoute(weakDeep, FACTS, { ...SETTINGS, protectDeep: false }, { spentUsd: 6 })).toEqual(expect.objectContaining({ tier: 'standard', tag: 'budget↓' }))
+})

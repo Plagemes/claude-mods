@@ -22,7 +22,13 @@ function world(on: On, options: { isRepo?: boolean } = {}) {
   const files = new Map<string, { text: string; at: number }>()
   const git = { status: '## main...origin/main\n M src/api/user.ts\n' }
   const seen = { toasts: [] as string[], statuses: [] as (string | undefined)[], submitted: [] as { text: string; context: readonly string[]; asUser: boolean }[], edits: [] as string[] }
-  on('fs.read', ($, e) => (files.has(e.path) ? { value: files.get(e.path)?.text ?? '' } : { deny: `ENOENT: ${e.path}` }))
+  /** What another session does right after this one read a file (to play two sessions racing). */
+  const race = { afterRead: undefined as ((path: string) => void) | undefined }
+  on('fs.read', ($, e) => {
+    const answer = files.has(e.path) ? { value: files.get(e.path)?.text ?? '' } : { deny: `ENOENT: ${e.path}` }
+    race.afterRead?.(e.path)
+    return answer
+  })
   on('fs.write', ($, e) => {
     files.set(e.path, { text: e.text, at: clock.now() })
     return { value: undefined }
@@ -70,15 +76,22 @@ function world(on: On, options: { isRepo?: boolean } = {}) {
   })
   on('ui.log', () => ({ value: undefined }))
   on('ui.render', () => ({ type: 'Box', props: {}, children: [{ type: 'Text', props: {}, children: ['MISSION BOARD'] }] }) as never)
-  return { clock, files, git, seen }
+  return { clock, files, git, seen, race }
 }
 
 const start = ($: Engine) => $.session.start({ cwd: '/work/shop', surface: 'terminal', isInteractive: true })
 const command = ($: Engine, name: string, args = '') => $.command.run({ command: name, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } })
 const edit = ($: Engine, path: string) => $.tool.call({ tool: 'Edit', file_path: path, old_string: 'a', new_string: 'b', replace_all: false })
-const leases = (w: World): SyncLeaseFile => JSON.parse(w.files.get(`${DIR}/leases.json`)?.text ?? '{"leases":{}}') as SyncLeaseFile
-const inboxOf = (w: World, id: string): SyncMessage[] =>
-  (w.files.get(`${DIR}/inbox/${id}.jsonl`)?.text ?? '')
+/** Every session's leases, merged from their own files (leases/<id>.json). */
+const leases = (w: World): SyncLeaseFile => {
+  const merged: SyncLeaseFile = { v: 1, leases: {} }
+  for (const [path, file] of w.files) if (path.startsWith(`${DIR}/leases/`)) Object.assign(merged.leases, (JSON.parse(file.text) as SyncLeaseFile).leases)
+  return merged
+}
+/** One session's own lease file. */
+const leasesOf = (w: World, id: string): SyncLeaseFile => JSON.parse(w.files.get(`${DIR}/leases/${id}.json`)?.text ?? '{"v":1,"leases":{}}') as SyncLeaseFile
+const inboxOf = (w: World, id: string, from = ME): SyncMessage[] =>
+  (w.files.get(`${DIR}/inbox/${id}/${from}.jsonl`)?.text ?? '')
     .split('\n')
     .filter(line => line !== '')
     .map(line => JSON.parse(line) as SyncMessage)
@@ -107,12 +120,14 @@ function peerSession(w: World, patch: Partial<SyncPeer> = {}): void {
   w.files.set(`${DIR}/sessions/${PEER}.json`, { text: JSON.stringify(peer), at: now })
 }
 
+/** The other session takes a lease: it writes its own lease file. */
 function peerLease(w: World, rel: string, expiresIn = 8 * MINUTE): void {
   const now = w.clock.now()
-  const file = leases(w)
+  const own = `${DIR}/leases/${PEER}.json`
+  const file = JSON.parse(w.files.get(own)?.text ?? '{"v":1,"leases":{}}') as SyncLeaseFile
   const path = `/work/shop/${rel}`
   file.leases[path] = { path, rel, session: PEER, label: 'shop#b2c3', branch: 'main', task: 'Add the login form', since: now - 2 * MINUTE, renewedAt: now - MINUTE, expiresAt: now + expiresIn }
-  w.files.set(`${DIR}/leases.json`, { text: JSON.stringify(file), at: now })
+  w.files.set(own, { text: JSON.stringify(file), at: now })
 }
 
 const refusal = (ran: unknown): string => JSON.stringify(ran)
@@ -141,7 +156,7 @@ test('a file another live session holds is refused with who and what, until the 
   const allowed = await edit($, 'src/api/user.ts')
   expect(refusal(allowed)).not.toContain('is being edited')
   expect(w.seen.edits).toEqual(['src/api/user.ts'])
-  expect(leases(w).leases['/work/shop/src/api/user.ts']).toMatchObject({ session: ME, label: 'shop#a1b2', rel: 'src/api/user.ts' })
+  expect(leasesOf(w, ME).leases['/work/shop/src/api/user.ts']).toMatchObject({ session: ME, label: 'shop#a1b2', rel: 'src/api/user.ts', over: PEER })
   expect(inboxOf(w, PEER)).toMatchObject([{ kind: 'overridden', from: { label: 'shop#a1b2' }, text: expect.stringContaining('took over src/api/user.ts') }])
   await $.turn.complete(ended('t1'))
 
@@ -175,7 +190,7 @@ test('leases are renewed while the session works, expire when it idles, die with
   peerLease(w, 'src/c.ts')
   await w.clock.advance(MINUTE)
   expect(refusal(await edit($, '/work/shop/src/c.ts'))).not.toContain('is being edited')
-  expect(leases(w).leases['/work/shop/src/c.ts']?.session).toBe(ME)
+  expect(leasesOf(w, ME).leases['/work/shop/src/c.ts']?.session).toBe(ME)
 
   // Idle past the lease length: another session may take the file.
   await w.clock.advance(11 * MINUTE)
@@ -244,7 +259,7 @@ test('hand-off: /handoff-to writes the note (worktree advice when overlap is hea
   // The other way: a hand-off for this session waits for the running turn, then runs as the person's prompt.
   await $.turn.start({ text: 'working', turnId: 't1' })
   const handoff: SyncMessage = { id: 'h1', at: w.clock.now(), kind: 'handoff', from: { session: PEER, label: 'shop#b2c3', branch: 'main' }, text: 'Hand-off from shop#b2c3: finish the login form.' }
-  w.files.set(`${DIR}/inbox/${ME}.jsonl`, { text: `${JSON.stringify(handoff)}\n`, at: w.clock.now() })
+  w.files.set(`${DIR}/inbox/${ME}/${PEER}.jsonl`, { text: `${JSON.stringify(handoff)}\n`, at: w.clock.now() })
   await w.clock.advance(3_000)
   expect(w.seen.toasts).toContain('⇆ Hand-off from shop#b2c3: it runs when Claude is idle.')
   expect(w.seen.submitted.filter(entry => entry.asUser)).toEqual([])
@@ -326,4 +341,39 @@ test('outside a git repository it stays out of the way', async ($, on) => {
   expect(String((await command($, 'sync')).text)).toContain('inside a git repository')
   expect(String((await command($, 'handoff-to', 'x')).text)).toContain('inside a git repository')
   expect([...w.files.keys()]).toEqual([])
+})
+
+test('two sessions at once: a lease the other session takes while this one renews or takes its own is never lost', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await w.clock.settle()
+  peerSession(w)
+  await edit($, '/work/shop/src/a.ts')
+  // The other session takes src/b.ts at the very moment this one reads the lease files to renew or take its own.
+  let taken = false
+  w.race.afterRead = path => {
+    if (!taken && path.includes('/leases')) {
+      taken = true
+      peerLease(w, 'src/b.ts')
+    }
+  }
+  await $.tool.call({ tool: 'Read', file_path: '/work/shop/src/a.ts' })
+  await w.clock.advance(10_000)
+  peerSession(w)
+  await edit($, '/work/shop/src/c.ts')
+  w.race.afterRead = undefined
+  expect(taken).toBe(true)
+  expect(refusal(await edit($, '/work/shop/src/b.ts'))).toContain('src/b.ts is being edited by another Claude session')
+  expect(Object.keys(leasesOf(w, ME).leases).sort()).toEqual(['/work/shop/src/a.ts', '/work/shop/src/c.ts'])
+
+  // Two sessions hand off to this one together: both notes arrive.
+  const note = (id: string, from: string): SyncMessage => ({ id, at: w.clock.now(), kind: 'ask', from: { session: from, label: `shop#${from.slice(0, 4)}`, branch: 'main' }, text: `question ${id}` })
+  w.files.set(`${DIR}/inbox/${ME}/${PEER}.jsonl`, { text: `${JSON.stringify(note('q1', PEER))}\n`, at: w.clock.now() })
+  w.files.set(`${DIR}/inbox/${ME}/c3d4e5f6.jsonl`, { text: `${JSON.stringify(note('q2', 'c3d4e5f6'))}\n`, at: w.clock.now() })
+  await w.clock.advance(3_000)
+  await w.clock.settle()
+  await $.turn.start({ text: 'q', turnId: 'tq' })
+  await $.turn.complete(ended('tq'))
+  await w.clock.advance(3_000)
+  expect(w.seen.submitted.filter(entry => entry.asUser).map(entry => entry.text.split('\n').at(-1))).toEqual(['question q1', 'question q2'])
 })

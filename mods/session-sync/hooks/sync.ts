@@ -137,6 +137,7 @@ export function parseLeaseFile(value: unknown): SyncLeaseFile {
         since: num(entry.since),
         renewedAt: num(entry.renewedAt),
         expiresAt: entry.expiresAt,
+        ...(typeof entry.over === 'string' && entry.over !== '' ? { over: entry.over } : {}),
       }
     }
   }
@@ -147,6 +148,20 @@ export function parseLeaseFile(value: unknown): SyncLeaseFile {
 export const isLeaseHeld = (lease: SyncLease | undefined, now: number, isLive: (session: string) => boolean): lease is SyncLease =>
   lease !== undefined && lease.expiresAt > now && isLive(lease.session)
 
+/** Every lease of every session's file, in one list (a session's leases live in its own file: leases/<id>.json). */
+export const claimsOf = (files: readonly SyncLeaseFile[]): SyncLease[] => files.flatMap(file => Object.values(file.leases))
+
+/**
+ * The leases on `key` that bind now: held (not expired, session live) and not taken over. A lease taken over with
+ * SYNC-OK names the session it took the file from (`over`); it wins against that session's older lease.
+ */
+export function bindingClaims(claims: readonly SyncLease[], key: string, now: number, isLive: (session: string) => boolean): SyncLease[] {
+  const held = claims.filter(claim => claim.path === key && isLeaseHeld(claim, now, isLive))
+  return held
+    .filter(claim => !held.some(other => other.session !== claim.session && other.over === claim.session && other.since >= claim.since))
+    .sort((a, b) => a.since - b.since || a.session.localeCompare(b.session))
+}
+
 export type LeaseDecision =
   | { kind: 'take' }
   | { kind: 'renew'; lease: SyncLease }
@@ -154,17 +169,24 @@ export type LeaseDecision =
   | { kind: 'deny'; holder: SyncLease }
 
 /** What an edit of `key` by `me` does: take a free (or stale, or expired) lease, renew its own, or meet another's. */
-export function decideLease(input: { file: SyncLeaseFile; key: string; me: string; now: number; isLive: (session: string) => boolean; isOverride: boolean }): LeaseDecision {
-  const current = input.file.leases[input.key]
-  if (current !== undefined && current.session === input.me) return { kind: 'renew', lease: current }
-  if (!isLeaseHeld(current, input.now, input.isLive)) return { kind: 'take' }
-  return input.isOverride ? { kind: 'override', holder: current } : { kind: 'deny', holder: current }
+export function decideLease(input: { claims: readonly SyncLease[]; key: string; me: string; now: number; isLive: (session: string) => boolean; isOverride: boolean }): LeaseDecision {
+  const holder = bindingClaims(input.claims, input.key, input.now, input.isLive).find(claim => claim.session !== input.me)
+  if (holder !== undefined) return input.isOverride ? { kind: 'override', holder } : { kind: 'deny', holder }
+  const mine = input.claims.find(claim => claim.session === input.me && claim.path === input.key)
+  return mine === undefined ? { kind: 'take' } : { kind: 'renew', lease: mine }
 }
 
-/** The file with `lease` in it and every lease that no longer binds dropped. */
-export function withLease(file: SyncLeaseFile, lease: SyncLease, now: number, isLive: (session: string) => boolean): SyncLeaseFile {
+/**
+ * After writing its lease, who else binds `key` (another session that wrote at the same moment): the newcomer
+ * yields to anyone it sees, so two sessions racing for one file never both keep it (at worst both yield once).
+ */
+export const rivalAfterWrite = (claims: readonly SyncLease[], key: string, me: string, now: number, isLive: (session: string) => boolean): SyncLease | undefined =>
+  bindingClaims(claims, key, now, isLive).find(claim => claim.session !== me)
+
+/** This session's own file with `lease` in it and its expired leases dropped. */
+export function withLease(file: SyncLeaseFile, lease: SyncLease, now: number): SyncLeaseFile {
   const leases: Record<string, SyncLease> = {}
-  for (const [key, entry] of Object.entries(file.leases)) if (isLeaseHeld(entry, now, isLive)) leases[key] = entry
+  for (const [key, entry] of Object.entries(file.leases)) if (entry.session === lease.session && entry.expiresAt > now) leases[key] = entry
   leases[lease.path] = lease
   return { v: 1, leases }
 }

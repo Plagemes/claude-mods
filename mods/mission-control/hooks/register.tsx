@@ -97,6 +97,11 @@ type Runtime = {
   seq: number
   isPolling: boolean
   timers: Timer[]
+  /** Clicks of this cockpit, written one after another (each reads, then rewrites, its own file in the target's inbox). */
+  sending: Promise<unknown>
+  /** How far the hub's `control.*` events were read (0: no hub), and why a hub pause holds this session's notes. */
+  controlSeenAt: number
+  heldBy: string
 }
 
 const blankBeat = (): MissionHeartbeat => ({
@@ -153,12 +158,19 @@ const newRuntime = (options: Record<string, unknown>): Runtime => ({
   seq: 0,
   isPolling: false,
   timers: [],
+  sending: Promise.resolve(),
+  controlSeenAt: 0,
+  heldBy: '',
 })
 
 const paths = {
   sessions: (rt: Runtime): string => `${rt.dir}/sessions`,
   session: (rt: Runtime, id: string): string => `${rt.dir}/sessions/${id}.json`,
+  /** The single file of the first version: every cockpit wrote into it (kept for reading). */
   inbox: (rt: Runtime, id: string): string => `${rt.dir}/inbox/${id}.jsonl`,
+  /** A session's inbox folder: one file per sending session, so each file has one writer and no click is lost. */
+  inboxDir: (rt: Runtime, id: string): string => `${rt.dir}/inbox/${id}`,
+  inboxFrom: (rt: Runtime, id: string, from: string): string => `${rt.dir}/inbox/${id}/${from || 'mc'}.jsonl`,
   priority: (rt: Runtime): string => `${rt.dir}/priority.json`,
   activity: (rt: Runtime): string => `${rt.dir}/activity.json`,
 }
@@ -253,7 +265,8 @@ async function startSession($: EngineInterface, rt: Runtime, surface: string): P
     description: 'Opens Mission Control: every Claude session on this machine, what it does, its cost and blockers, with Pause, Stop, Note and Priority.',
     argumentHint: '[status | pause|resume|stop <session> | note <session> <text> | priority <session> high|normal|low | close]',
   })
-  await hubHello($, { version: '1.0.0', publishes: ['x.mission-control.command'], consumes: ['session.*', 'cost.update'] }, { id: TAB, title: 'Mission Control', order: 30, command: 'mission' })
+  const hasHub = await hubHello($, { version: '1.0.0', publishes: ['x.mission-control.command'], consumes: ['session.*', 'cost.update', 'control.stop', 'control.pause', 'control.resume'] }, { id: TAB, title: 'Mission Control', order: 30, command: 'mission' })
+  rt.controlSeenAt = hasHub ? now : 0
   for (const timer of rt.timers) timer.cancel()
   rt.timers = [$.clock.every(BEAT_MS, () => void tick($, rt)), $.clock.every(INBOX_MS, () => void poll($, rt))]
   $.clock.after(0, () => void afterStart($, rt))
@@ -377,8 +390,8 @@ async function poll($: EngineInterface, rt: Runtime): Promise<void> {
   rt.isPolling = true
   try {
     if (rt.isSharing && rt.dir !== '' && rt.me !== '') {
-      const text = await readText($, paths.inbox(rt, rt.me))
-      if (text !== undefined) {
+      const text = await readInbox($, rt)
+      if (text !== '') {
         const now = await $.clock.now()
         for (const command of pendingCommands(parseInbox(text), rt.beat.acked, now)) {
           rt.beat.acked = remember(rt.beat.acked, command.id)
@@ -387,11 +400,53 @@ async function poll($: EngineInterface, rt: Runtime): Promise<void> {
         await writeBeat($, rt)
       }
     }
+    await obeyControl($, rt)
     if (await isBoardShown($)) await refreshBoard($, rt)
   } catch (error) {
     $.ui.log(`${NAME}: ${messageOf(error)}`, { to: 'debug' })
   } finally {
     rt.isPolling = false
+  }
+}
+
+/** Every command file of this session's inbox (one per sending session, and the old single file), as one text. */
+async function readInbox($: EngineInterface, rt: Runtime): Promise<string> {
+  const entries = await $.fs.list(paths.inboxDir(rt, rt.me)).catch(() => [])
+  const texts = [await readText($, paths.inbox(rt, rt.me))]
+  for (const entry of entries) {
+    if (entry.kind === 'file' && entry.name.endsWith('.jsonl')) texts.push(await readText($, `${paths.inboxDir(rt, rt.me)}/${entry.name}`))
+  }
+  return texts.filter((text): text is string => text !== undefined && text !== '').join('\n')
+}
+
+/**
+ * The hub's stop, pause and resume (a STOP from the phone, `/hub pause`): mission-control's own automatic work is
+ * the notes it runs as your prompt when the session is idle. A pause holds them, a resume lets them go, a stop
+ * drops them. Its own pauses (raised for a cockpit's Pause) are skipped.
+ */
+async function obeyControl($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.controlSeenAt === 0) return
+  let events: Awaited<ReturnType<EngineInterface['mods']['recent']>>
+  try {
+    events = await $.mods.recent({ prefix: 'control.', since: rt.controlSeenAt })
+  } catch {
+    return
+  }
+  for (const event of events) {
+    rt.controlSeenAt = Math.max(rt.controlSeenAt, event.at)
+    if (event.source === NAME) continue
+    const { by, reason } = (event.data ?? {}) as { by?: unknown; reason?: unknown }
+    const who = `${String(by ?? event.source)}${typeof reason === 'string' && reason !== '' ? ` (${reason})` : ''}`
+    if (event.topic === 'control.stop') {
+      if (rt.notes.length > 0) $.ui.toast(`Mission Control: ${rt.notes.length} waiting note${rt.notes.length === 1 ? '' : 's'} dropped, stopped by ${who}.`)
+      rt.notes = []
+      rt.heldBy = ''
+    } else if (event.topic === 'control.pause') {
+      rt.heldBy = `paused by ${who}`
+    } else if (event.topic === 'control.resume' && rt.heldBy !== '') {
+      rt.heldBy = ''
+      $.clock.after(0, () => void deliverNotes($, rt))
+    }
   }
 }
 
@@ -407,6 +462,8 @@ async function runCommand($: EngineInterface, rt: Runtime, command: MissionComma
       }
       $.ui.toast(`⏸ Paused from Mission Control (${from}): no new automatic prompts${rt.turnId === undefined ? '' : '; Claude stops after this step'}.`)
       await shareFact($, 'paused', true)
+      // With mods-hub: the automatic work here (autopilot, task-queue, night-shift, workflows) pauses too.
+      await hubStop($, { action: 'pause', scope: 'session', reason: 'paused from Mission Control', by: `owner via Mission Control (${from})` })
       break
     case 'resume':
       if (!rt.beat.paused) return
@@ -416,6 +473,7 @@ async function runCommand($: EngineInterface, rt: Runtime, command: MissionComma
       rt.pausedMidTurn = false
       $.ui.toast(`▶ Resumed from Mission Control (${from}).`)
       await shareFact($, 'paused', false)
+      await hubStop($, { action: 'resume', scope: 'session', reason: 'resumed from Mission Control', by: `owner via Mission Control (${from})` })
       break
     case 'stop':
       if (rt.turnId === undefined) return
@@ -451,7 +509,7 @@ async function appendNote($: EngineInterface, text: string): Promise<void> {
 
 /** Notes (and a resume) run as the person's own prompt once the session is idle, one at a time. */
 async function deliverNotes($: EngineInterface, rt: Runtime): Promise<void> {
-  if (rt.turnId !== undefined || rt.isSubmitting) return
+  if (rt.turnId !== undefined || rt.isSubmitting || rt.heldBy !== '') return
   const text = rt.notes.shift()
   if (text === undefined) return
   rt.isSubmitting = true
@@ -486,13 +544,20 @@ async function sendCommand($: EngineInterface, rt: Runtime, target: { id: string
   const now = await $.clock.now()
   rt.seq += 1
   const command: MissionCommand = { id: `${rt.me.slice(0, 8) || 'mc'}-${now.toString(36)}-${rt.seq}`, at: now, kind, from: { session: rt.me, label: rt.beat.label }, ...extra }
-  const path = paths.inbox(rt, target.id)
-  const existing = (await readText($, path)) ?? ''
-  const acked = parseHeartbeat(await readJson($, paths.session(rt, target.id)))?.acked ?? []
-  if (!(await writeText($, path, appendCommand(existing, command, acked, now)))) return `Could not reach ${target.label}.`
+  const sent = rt.sending.then(() => writeCommand($, rt, target.id, command))
+  rt.sending = sent.catch(() => false)
+  if (!(await sent.catch(() => false))) return `Could not reach ${target.label}.`
   await noteActivity($, rt)
   if (target.id === rt.me) $.clock.after(0, () => void poll($, rt))
   return kind === 'note' ? `Note sent to ${target.label}: it runs there as your prompt when that session is idle.` : `${VERB[kind]} sent to ${target.label}.`
+}
+
+/** Appends a command to this session's own file in the target's inbox (pruning what the target handled). */
+async function writeCommand($: EngineInterface, rt: Runtime, target: string, command: MissionCommand): Promise<boolean> {
+  const path = paths.inboxFrom(rt, target, rt.me)
+  const existing = (await readText($, path)) ?? ''
+  const acked = parseHeartbeat(await readJson($, paths.session(rt, target)))?.acked ?? []
+  return writeText($, path, appendCommand(existing, command, acked, command.at))
 }
 
 async function sendFromCard($: EngineInterface, rt: Runtime, card: MissionCard, kind: MissionCommandKind, extra: { text?: string; priority?: MissionPriority } = {}): Promise<void> {

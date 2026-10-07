@@ -5,7 +5,9 @@ import type { SyncLease, SyncLeaseFile, SyncMessage, SyncMessageKind, SyncPeer, 
 import {
   SYNC_USAGE,
   appendMessage,
+  bindingClaims,
   branchWarning,
+  claimsOf,
   composeHandoff,
   decideLease,
   denyMessage,
@@ -32,6 +34,7 @@ import {
   repoKey,
   resolvePath,
   resolvePeer,
+  rivalAfterWrite,
   sameBranchConflicts,
   touch,
   withLease,
@@ -89,6 +92,10 @@ type Runtime = {
   seq: number
   isPolling: boolean
   timers: Timer[]
+  /** This session's own leases: written to leases/<id>.json by this session alone. */
+  leases: SyncLeaseFile
+  /** Messages to other sessions, written one after another (each rewrites this session's file in their inbox). */
+  sending: Promise<unknown>
 }
 
 const blankPeer = (): SyncPeer => ({ v: 1, id: '', label: '', project: '', tree: '', branch: '', isDirty: false, task: '', touched: [], acked: [], startedAt: 0, updatedAt: 0, ended: false })
@@ -119,13 +126,22 @@ const newRuntime = (options: Record<string, unknown>): Runtime => ({
   seq: 0,
   isPolling: false,
   timers: [],
+  leases: { v: 1, leases: {} },
+  sending: Promise.resolve(),
 })
 
 const paths = {
+  /** The first version's shared lease file: still read (a session of that version may write it), never written. */
   leases: (rt: Runtime): string => `${rt.dir}/leases.json`,
+  /** One file per session, each written by its session alone: no read-modify-write between sessions. */
+  leaseDir: (rt: Runtime): string => `${rt.dir}/leases`,
+  leaseOf: (rt: Runtime, id: string): string => `${rt.dir}/leases/${id}.json`,
   sessions: (rt: Runtime): string => `${rt.dir}/sessions`,
   session: (rt: Runtime, id: string): string => `${rt.dir}/sessions/${id}.json`,
+  /** The first version's single inbox file: still read. */
   inbox: (rt: Runtime, id: string): string => `${rt.dir}/inbox/${id}.jsonl`,
+  inboxDir: (rt: Runtime, id: string): string => `${rt.dir}/inbox/${id}`,
+  inboxFrom: (rt: Runtime, id: string, from: string): string => `${rt.dir}/inbox/${id}/${from}.jsonl`,
 }
 
 const ONLY_PERSON = 'session-sync sends to other sessions only when you type the command yourself.'
@@ -164,12 +180,23 @@ async function writeText($: EngineInterface, path: string, text: string): Promis
   }
 }
 
-async function readLeases($: EngineInterface, rt: Runtime): Promise<SyncLeaseFile> {
-  return parseLeaseFile(await readJson($, paths.leases(rt)))
+/** Every session's leases: the other sessions' files (written in the last day), the old shared file, and this session's own. */
+async function readClaims($: EngineInterface, rt: Runtime): Promise<SyncLease[]> {
+  const now = await $.clock.now()
+  const files: SyncLeaseFile[] = [rt.leases]
+  for (const entry of await $.fs.list(paths.leaseDir(rt)).catch(() => [])) {
+    if (entry.kind !== 'file' || !entry.name.endsWith('.json') || entry.name === `${rt.me}.json`) continue
+    if (entry.mtimeMs > 0 && now - entry.mtimeMs > 24 * 60 * MINUTE_MS) continue
+    files.push(parseLeaseFile(await readJson($, `${paths.leaseDir(rt)}/${entry.name}`)))
+  }
+  files.push(withoutLeasesOf(parseLeaseFile(await readJson($, paths.leases(rt))), rt.me))
+  return claimsOf(files)
 }
 
-async function writeLeases($: EngineInterface, rt: Runtime, file: SyncLeaseFile): Promise<boolean> {
-  return writeText($, paths.leases(rt), `${JSON.stringify(file, null, 1)}\n`)
+/** Saves this session's own leases (its file alone). */
+async function saveLeases($: EngineInterface, rt: Runtime, file: SyncLeaseFile): Promise<boolean> {
+  rt.leases = file
+  return writeText($, paths.leaseOf(rt, rt.me), `${JSON.stringify(file, null, 1)}\n`)
 }
 
 /** Every other session's file written in the last day, parsed (live or not: the caller decides). */
@@ -234,6 +261,9 @@ async function startSession($: EngineInterface, rt: Runtime): Promise<void> {
   rt.dir = `${home}/${DIR}/${key}`
   const project = (repo?.root ?? top).split('/').pop() || rt.repo
   rt.self = { ...blankPeer(), id: rt.me, label: labelOf(project, rt.me), project, tree: top, startedAt: now }
+  // A hot reload keeps the session: its own leases come back from its file.
+  const own = parseLeaseFile(await readJson($, paths.leaseOf(rt, rt.me)))
+  rt.leases = { v: 1, leases: Object.fromEntries(Object.entries(own.leases).filter(([, lease]) => lease.session === rt.me)) }
   for (const timer of rt.timers) timer.cancel()
   rt.timers = [$.clock.every(TICK_MS, () => void tick($, rt)), $.clock.every(INBOX_MS, () => void poll($, rt))]
   $.clock.after(0, () => void tick($, rt))
@@ -268,8 +298,7 @@ async function tick($: EngineInterface, rt: Runtime): Promise<void> {
     if (now - rt.lastGitAt >= GIT_MS) await refreshGit($, rt)
     await writeSelf($, rt)
     if (rt.lastActivityAt > rt.lastRenewAt) {
-      const file = await readLeases($, rt)
-      if (leasesOf(file, rt.me).length > 0) await writeLeases($, rt, renewLeasesOf(file, rt.me, now, rt.ttlMs))
+      if (leasesOf(rt.leases, rt.me).length > 0) await saveLeases($, rt, renewLeasesOf(rt.leases, rt.me, now, rt.ttlMs))
       rt.lastRenewAt = now
     }
     await checkBranches($, rt, now)
@@ -296,8 +325,11 @@ async function checkBranches($: EngineInterface, rt: Runtime, now: number): Prom
 }
 
 async function refreshView($: EngineInterface, rt: Runtime, peers: readonly SyncPeer[], now: number): Promise<SyncView> {
-  const file = await readLeases($, rt)
+  const claims = await readClaims($, rt)
   const live = peers.filter(peer => isPeerLive(peer, now))
+  const liveIds = new Set([rt.me, ...live.map(peer => peer.id)])
+  const isLive = (session: string): boolean => liveIds.has(session)
+  const binding = [...new Set(claims.map(claim => claim.path))].flatMap(path => bindingClaims(claims, path, now, isLive))
   const view: SyncView = {
     repo: rt.repo,
     me: rt.self.label,
@@ -311,9 +343,9 @@ async function refreshView($: EngineInterface, rt: Runtime, peers: readonly Sync
       task: peer.task,
       files: peer.touched.filter(entry => now - entry.at <= 30 * MINUTE_MS).length,
       sameTree: peer.tree === rt.tree,
-      leases: leasesOf(file, peer.id).filter(lease => lease.expiresAt > now).map(lease => lease.rel),
+      leases: binding.filter(lease => lease.session === peer.id).map(lease => lease.rel),
     })),
-    myLeases: leasesOf(file, rt.me).map(lease => lease.rel),
+    myLeases: leasesOf(rt.leases, rt.me).map(lease => lease.rel),
     warnings: rt.warnings,
     at: now,
   }
@@ -332,8 +364,7 @@ function showStatus($: EngineInterface, rt: Runtime, text: string | undefined): 
 /** The session ends (or /clear starts a new one): its leases go, its file says it ended. */
 async function leaveRepo($: EngineInterface, rt: Runtime): Promise<void> {
   if (rt.dir === '' || rt.me === '') return
-  const file = await readLeases($, rt)
-  if (leasesOf(file, rt.me).length > 0) await writeLeases($, rt, withoutLeasesOf(file, rt.me))
+  if (leasesOf(rt.leases, rt.me).length > 0) await saveLeases($, rt, withoutLeasesOf(rt.leases, rt.me))
   rt.self.ended = true
   await writeSelf($, rt)
 }
@@ -343,22 +374,27 @@ async function leaveRepo($: EngineInterface, rt: Runtime): Promise<void> {
 /** Takes or renews the lease on `path` for this session; the refusal text when another live session holds it. */
 async function acquire($: EngineInterface, rt: Runtime, path: string, rel: string): Promise<string | undefined> {
   const now = await $.clock.now()
-  const file = await readLeases($, rt)
   const peers = await readPeers($, rt)
   const live = new Set(peers.filter(peer => isPeerLive(peer, now)).map(peer => peer.id))
   const isLive = (session: string): boolean => session === rt.me || live.has(session)
-  const decision = decideLease({ file, key: path, me: rt.me, now, isLive, isOverride: rt.isOverride })
+  const decision = decideLease({ claims: await readClaims($, rt), key: path, me: rt.me, now, isLive, isOverride: rt.isOverride })
   if (decision.kind === 'deny') {
+    // A lease of ours on it (taken over, or taken at the same moment as theirs) yields.
+    if (rt.leases.leases[path] !== undefined) await saveLeases($, rt, withoutLeasesOf(rt.leases, rt.me, [path]))
     await hubPublish($, { topic: 'x.session-sync.conflict', data: { path: rel, holder: decision.holder.label, session: rt.self.label } })
     return denyMessage(decision.holder, now)
   }
   if (decision.kind === 'renew' && now - decision.lease.renewedAt < RENEW_WRITE_MS && decision.lease.expiresAt > now) return undefined
   const since = decision.kind === 'renew' ? decision.lease.since : now
-  const lease: SyncLease = { path, rel, session: rt.me, label: rt.self.label, branch: rt.self.branch, task: rt.self.task, since, renewedAt: now, expiresAt: now + rt.ttlMs }
-  await writeLeases($, rt, withLease(file, lease, now, isLive))
-  // Two sessions taking the same file at once: the file says who won.
-  const check = (await readLeases($, rt)).leases[path]
-  if (check !== undefined && check.session !== rt.me && isLive(check.session)) return denyMessage(check, now)
+  const over = decision.kind === 'override' ? decision.holder.session : decision.kind === 'renew' ? decision.lease.over : undefined
+  const lease: SyncLease = { path, rel, session: rt.me, label: rt.self.label, branch: rt.self.branch, task: rt.self.task, since, renewedAt: now, expiresAt: now + rt.ttlMs, ...(over === undefined ? {} : { over }) }
+  await saveLeases($, rt, withLease(rt.leases, lease, now))
+  // Two sessions taking the same file at once: whoever sees the other after writing yields.
+  const rival = rivalAfterWrite(await readClaims($, rt), path, rt.me, now, isLive)
+  if (rival !== undefined) {
+    await saveLeases($, rt, withoutLeasesOf(rt.leases, rt.me, [path]))
+    return denyMessage(rival, now)
+  }
   if (decision.kind === 'override') {
     const holder = decision.holder
     await sendMessage($, rt, holder.session, 'overridden', `${rt.self.label} took over ${rel} (the person said SYNC-OK there). Do not edit it again without asking the person.`)
@@ -395,9 +431,25 @@ async function sendMessage($: EngineInterface, rt: Runtime, to: string, kind: Sy
   const now = await $.clock.now()
   rt.seq += 1
   const message: SyncMessage = { id: `${rt.me.slice(0, 8)}-${now.toString(36)}-${rt.seq}`, at: now, kind, from: { session: rt.me, label: rt.self.label, branch: rt.self.branch }, text }
-  const path = paths.inbox(rt, to)
+  const sent = rt.sending.then(() => writeMessage($, rt, to, message))
+  rt.sending = sent.catch(() => false)
+  return sent.catch(() => false)
+}
+
+/** Appends a message to this session's own file in the other session's inbox: one writer per file, nothing lost. */
+async function writeMessage($: EngineInterface, rt: Runtime, to: string, message: SyncMessage): Promise<boolean> {
+  const path = paths.inboxFrom(rt, to, rt.me)
   const acked = parsePeer(await readJson($, paths.session(rt, to)))?.acked ?? []
-  return writeText($, path, appendMessage((await readText($, path)) ?? '', message, acked, now))
+  return writeText($, path, appendMessage((await readText($, path)) ?? '', message, acked, message.at))
+}
+
+/** Every message file of this session's inbox (one per sender, and the first version's single file), as one text. */
+async function readInbox($: EngineInterface, rt: Runtime): Promise<string> {
+  const texts = [await readText($, paths.inbox(rt, rt.me))]
+  for (const entry of await $.fs.list(paths.inboxDir(rt, rt.me)).catch(() => [])) {
+    if (entry.kind === 'file' && entry.name.endsWith('.jsonl')) texts.push(await readText($, `${paths.inboxDir(rt, rt.me)}/${entry.name}`))
+  }
+  return texts.filter((text): text is string => text !== undefined && text !== '').join('\n')
 }
 
 /** Every 3 s: new messages for this session; hand-offs and questions run as prompts once it is idle. */
@@ -405,8 +457,8 @@ async function poll($: EngineInterface, rt: Runtime): Promise<void> {
   if (rt.dir === '' || rt.isPolling) return
   rt.isPolling = true
   try {
-    const text = await readText($, paths.inbox(rt, rt.me))
-    if (text !== undefined) {
+    const text = await readInbox($, rt)
+    if (text !== '') {
       const now = await $.clock.now()
       const fresh = pendingMessages(parseMessages(text), rt.self.acked, now)
       for (const message of fresh) {
@@ -463,9 +515,8 @@ async function runSync($: EngineInterface, rt: Runtime, args: string, isPerson: 
   if (parsed.kind === 'error') return `${parsed.message}\n${SYNC_USAGE}`
   if (parsed.kind === 'ask' && !isPerson) return ONLY_PERSON
   if (parsed.kind === 'release') {
-    const file = await readLeases($, rt)
-    const mine = leasesOf(file, rt.me)
-    if (mine.length > 0) await writeLeases($, rt, withoutLeasesOf(file, rt.me))
+    const mine = leasesOf(rt.leases, rt.me)
+    if (mine.length > 0) await saveLeases($, rt, withoutLeasesOf(rt.leases, rt.me))
     return mine.length === 0 ? 'You hold no leases.' : `Released ${mine.length} lease${mine.length === 1 ? '' : 's'}: ${mine.map(lease => lease.rel).join(', ')}.`
   }
   if (parsed.kind === 'ask') {
@@ -497,9 +548,8 @@ async function runHandoff($: EngineInterface, rt: Runtime, args: string): Promis
   if (typeof target === 'string') return target
   const now = await $.clock.now()
   await refreshGit($, rt)
-  const file = await readLeases($, rt)
-  const released = leasesOf(file, rt.me).map(lease => lease.rel)
-  if (released.length > 0) await writeLeases($, rt, withoutLeasesOf(file, rt.me))
+  const released = leasesOf(rt.leases, rt.me).map(lease => lease.rel)
+  if (released.length > 0) await saveLeases($, rt, withoutLeasesOf(rt.leases, rt.me))
   const overlap = overlapWith(rt.self.touched, target, now)
   const text = composeHandoff({
     from: rt.self.label,

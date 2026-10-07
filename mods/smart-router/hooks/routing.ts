@@ -115,17 +115,20 @@ function adjustTier(verdict: Verdict, settings: RouteSettings, history: RouteHis
   }
   if (verdict.tier !== 'deep' && history.isRegression === true && CHANGING_KINDS.has(verdict.tag)) return up('regression↑', 'the tests regressed after the last change: one tier up')
   if (verdict.tier !== 'deep' && history.isUnreliable === true) return up('unreliable↑', `${verdict.tag} work has often failed on ${verdict.tier} in this project: one tier up`)
+  // Protect deep: the automatic nudges (an easy streak, a spent budget) never take deep work off the deep tier;
+  // only the opus quota, a cap you set yourself, may.
+  const isProtected = verdict.tier === 'deep' && settings.protectDeep
   const streak = history.streak
-  if (streak !== undefined && streak.successes >= DEESCALATE_AFTER && streak.tier === verdict.tier && verdict.tier !== 'light' && !verdict.isDeepCategory) {
+  if (streak !== undefined && streak.successes >= DEESCALATE_AFTER && streak.tier === verdict.tier && verdict.tier !== 'light' && !verdict.isDeepCategory && !isProtected) {
     return down('repeat↓', `${streak.successes} ${verdict.tag} tasks in a row went well on ${verdict.tier}: one tier down`)
   }
   if (settings.opusShare > 0 && (history.opusShare ?? 0) * 100 >= settings.opusShare && verdict.tier === 'deep' && verdict.isBorderline) {
     return down('quota↓', `opus already took ${Math.round((history.opusShare ?? 0) * 100)}% of this project's subagent tokens (quota ${settings.opusShare}%): borderline, one tier down`)
   }
-  if (settings.budgetBias > 0 && history.spentUsd >= settings.budgetBias && verdict.isBorderline && verdict.tier !== 'light') {
+  if (settings.budgetBias > 0 && history.spentUsd >= settings.budgetBias && verdict.isBorderline && verdict.tier !== 'light' && !isProtected) {
     return down('budget↓', `session spend ${money(history.spentUsd)} passed the ${money(settings.budgetBias)} budget bias: borderline, one tier down`)
   }
-  if (settings.budgetBias > 0 && history.budgetAlert !== undefined && verdict.isBorderline && verdict.tier !== 'light') {
+  if (settings.budgetBias > 0 && history.budgetAlert !== undefined && verdict.isBorderline && verdict.tier !== 'light' && !isProtected) {
     return down('budget↓', `${history.budgetAlert}: borderline, one tier down`)
   }
   return { tier: verdict.tier, tag: verdict.tag, notes, isRetry: false }

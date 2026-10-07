@@ -62,6 +62,9 @@ test('Finish (a click): tests, commit, push, DRAFT PR "Fixes #12", link and summ
   expect(said).toBe('Opened the draft PR for #12: https://github.com/acme/shop/pull/99')
   expect(callsOf(w, 'sh', '-c')[0]).toEqual(['sh', '-c', 'npm test'])
   expect(w.stdin.get('git commit -F')).toContain('fix: login redirect loops after SSO (#12)')
+  // Secrets stay out of the commit in every folder, not only at the root (packages/api/.env).
+  const add = callsOf(w, 'git', 'add')[0] ?? []
+  for (const pattern of [':(exclude,glob)**/.env', ':(exclude,glob)**/.env.*', ':(exclude,glob)**/*.pem', ':(exclude,glob)**/id_rsa*']) expect(add).toContain(pattern)
   const push = w.runs.findIndex(argv => argv.join(' ') === `git push -u origin ${BRANCH}`)
   const pr = w.runs.findIndex(argv => argv[0] === 'gh' && argv[1] === 'pr')
   expect(push).toBeGreaterThan(-1)
@@ -261,6 +264,22 @@ test('with autoPR on, autopilot reporting done opens the draft PR by itself', { 
   const ui = await $.ui.mount({ ...HUB_PANE, surface: 'desktop' })
   expect((await ui.find({ key: 'ci' }))?.text).toBe('CI test: failed')
   await ui.unmount()
+})
+
+test('with autoPR on, a stop raised through the hub holds the auto-PR until you click', { options: { autoPR: true }, plugins: [hubStub, autopilotStub] }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await issues($, 'start 12')
+  await w.clock.advance(1_000)
+  await $.tool.call({ tool: 'Bash', command: 'hub-stop stop' })
+  await $.tool.call({ tool: 'Bash', command: 'autopilot-done run-9' })
+  await endTurn($)
+  await w.clock.settle()
+  expect(callsOf(w, 'sh', '-c')).toHaveLength(1)
+  expect(callsOf(w, 'git', 'push')).toHaveLength(0)
+  expect(callsOf(w, 'gh', 'pr')).toHaveLength(0)
+  expect(w.hub.notices.at(-1)?.body).toContain('autoPR held: stopped by owner via whatsapp')
+  expect(await issues($, 'pr')).toBe('Opened the draft PR for #12: https://github.com/acme/shop/pull/99')
 })
 
 test('the issue in progress survives a new session of the same project', async ($, on) => {

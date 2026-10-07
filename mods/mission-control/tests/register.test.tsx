@@ -93,8 +93,8 @@ function world(on: On) {
 const start = ($: Engine) => $.session.start({ cwd: '/work/shop', surface: 'terminal', isInteractive: true })
 const mission = ($: Engine, args = '') => $.command.run({ command: 'mission', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } })
 const myBeat = (w: World): MissionHeartbeat => JSON.parse(w.files.get(`${DIR}/sessions/${ME}.json`)?.text ?? '{}') as MissionHeartbeat
-const inboxOf = (w: World, id: string): MissionCommand[] =>
-  (w.files.get(`${DIR}/inbox/${id}.jsonl`)?.text ?? '')
+const inboxOf = (w: World, id: string, from = ME): MissionCommand[] =>
+  (w.files.get(`${DIR}/inbox/${id}/${from}.jsonl`)?.text ?? '')
     .split('\n')
     .filter(line => line !== '')
     .map(line => JSON.parse(line) as MissionCommand)
@@ -238,7 +238,7 @@ test('two sessions: the cockpit lists the other one, its blocker and today\'s sp
   expect(status).toContain('api#b2c3 (main) · needs approval 5m00s')
 
   for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
-    w.files.delete(`${DIR}/inbox/${PEER}.jsonl`)
+    w.files.delete(`${DIR}/inbox/${PEER}/${ME}.jsonl`)
     const ui = await $.ui.mount({ plugin: 'mission-control', surface, component: 'Pane', requestId: 'mission-control', props: PANE })
     expect(await ui.find({ type: 'Text', text: 'Mission Control' })).toBeDefined()
     expect(await ui.find({ key: `card-${PEER}` })).toBeDefined()
@@ -312,8 +312,17 @@ const hub: Plugin = {
     const answer = async () => ({}) as never
     on('engine.create', async ($, e, next) => ({
       ...(await next(e)),
-      mods: { hello: answer, registerTab: answer, showTab: answer, notify: answer, publish: answer, share: answer } as never,
+      mods: { hello: answer, registerTab: answer, showTab: answer, notify: answer, publish: answer, share: answer, recent: answer, stop: answer } as never,
     }))
+    // The hub's control.* events a test raises, from /hub/controls.json.
+    on('mods.recent', async ($, e) => {
+      const raised = JSON.parse(await $.fs.read('/hub/controls.json').catch(() => '[]')) as { topic: string; at: number }[]
+      return { value: raised.filter(event => event.at > (e.since ?? 0) && (e.prefix === undefined || event.topic.startsWith(e.prefix))) as never }
+    })
+    on('mods.stop', async ($, e) => {
+      $.ui.toast(`hub:stop ${JSON.stringify(e)}`)
+      return { value: {} as never }
+    })
     on('mods.hello', async ($, e) => {
       $.ui.toast(`hub:hello ${JSON.stringify(e)}`)
       return { value: {} as never }
@@ -375,4 +384,57 @@ test('with mods-hub: a Mission Control tab, long waits routed by the hub, facts 
   expect(notice?.level).toBe('warning')
   expect(notice?.title).toContain('shop#a1b2 has waited 3m')
   expect(w.seen.toasts.some(text => !text.startsWith('hub:') && text.includes('shop#a1b2 has waited'))).toBe(false)
+})
+
+test('two cockpits at once never lose a click: each sending session writes its own inbox file, and the target runs both', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await w.clock.settle()
+  peerBeat(w)
+  // Two clicks of this cockpit racing each other.
+  await Promise.all([mission($, 'note api first'), mission($, 'note api second')])
+  expect(inboxOf(w, PEER).map(command => command.text).sort()).toEqual(['first', 'second'])
+
+  // The other session's cockpit and this one both send to this session: both commands run here.
+  w.files.set(`${DIR}/inbox/${ME}/${PEER}.jsonl`, { text: `${JSON.stringify({ id: 'p1', at: w.clock.now(), kind: 'priority', priority: 'high', from: { session: PEER, label: 'api#b2c3' } })}\n`, at: w.clock.now() })
+  await mission($, 'note shop#a1b2 from myself')
+  await w.clock.advance(2_000)
+  expect(myBeat(w)).toMatchObject({ priority: 'high' })
+  expect(w.seen.submitted.map(one => one.text)).toContain('from myself')
+})
+
+test('with mods-hub: a Pause from a cockpit pauses the automatic work here too; the hub\'s pause holds notes, resume runs them, stop drops them', { plugins: [hub] }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await w.clock.settle()
+  sendToMe(w, [{ kind: 'pause' }, { kind: 'resume' }])
+  await w.clock.advance(2_000)
+  expect(hubCall(w, 'stop')).toEqual([
+    expect.objectContaining({ action: 'pause', scope: 'session' }),
+    expect.objectContaining({ action: 'resume', scope: 'session' }),
+  ])
+
+  const raise = (topic: string, at: number): void => {
+    const raised = JSON.parse(w.files.get('/hub/controls.json')?.text ?? '[]') as unknown[]
+    raised.push({ id: `c${at}`, topic, data: { id: `c${at}`, scope: 'all', reason: 'lunch', by: 'owner via whatsapp', session: 'other' }, source: 'whatsapp-bridge', at, session: 'other', scope: 'session' })
+    w.files.set('/hub/controls.json', { text: JSON.stringify(raised), at: w.clock.now() })
+  }
+  raise('control.pause', w.clock.now() + 1)
+  await w.clock.advance(2_000)
+  w.files.set(`${DIR}/inbox/${ME}/${PEER}.jsonl`, { text: `${JSON.stringify({ id: 'n1', at: w.clock.now(), kind: 'note', text: 'run the migration', from: { session: PEER, label: 'api#b2c3' } })}\n`, at: w.clock.now() })
+  await w.clock.advance(4_000)
+  expect(w.seen.submitted.map(one => one.text)).not.toContain('run the migration')
+  raise('control.resume', w.clock.now() + 1)
+  await w.clock.advance(4_000)
+  expect(w.seen.submitted.map(one => one.text)).toContain('run the migration')
+
+  raise('control.stop', w.clock.now() + 1)
+  await $.turn.start({ text: 'busy', turnId: 't1' })
+  w.files.set(`${DIR}/inbox/${ME}/${PEER}.jsonl`, { text: `${JSON.stringify({ id: 'n2', at: w.clock.now(), kind: 'note', text: 'and deploy', from: { session: PEER, label: 'api#b2c3' } })}\n`, at: w.clock.now() })
+  await w.clock.advance(2_000)
+  raise('control.stop', w.clock.now() + 1)
+  await w.clock.advance(2_000)
+  await $.turn.complete(ended('t1'))
+  await w.clock.advance(4_000)
+  expect(w.seen.submitted.map(one => one.text)).not.toContain('and deploy')
 })

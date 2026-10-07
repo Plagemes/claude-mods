@@ -271,3 +271,35 @@ describe('intents', () => {
     expect(recommendable(rolled).map(one => one.name)).toEqual(['commit-composer'])
   })
 })
+
+describe('intent phrases from the real catalog', () => {
+  // As catalog.json carries them: multi-word intents whose single words are everyday English.
+  const PHRASED: AdvisorMod[] = [
+    { name: 'venv-guard', category: 'python', description: 'Blocks pip install outside an active virtualenv so system Python stays clean.', signals: { intents: ['pip install', 'virtualenv', 'venv', 'pip --user', 'system python'] } },
+    { name: 'status-check', category: 'productivity', description: '/service-status checks whether GitHub, npm, PyPI or the Anthropic API are having an outage.', signals: { intents: ['is github down', 'outage', 'service status', 'status page'] } },
+    { name: 'issue-drafter', category: 'team', description: '/issue turns the current conversation into a well-structured GitHub issue.', signals: { intents: ['github issue', 'bug report', 'open an issue'] } },
+    { name: 'resume-brief', category: 'productivity', description: 'Shows what you were working on last time when a new session starts.', signals: { intents: ['resume work', 'continue where we left off', 'last session'] } },
+    ...CATALOG_MODS.filter(mod => !['venv-guard', 'status-check', 'issue-drafter', 'resume-brief'].includes(mod.name)),
+  ]
+  const PHRASED_INDEX = buildIndex(PHRASED)
+
+  test('one everyday word of a phrase is no reason for a tip or a note to Claude', () => {
+    for (const prompt of ['refactor the user service', 'fix the bug in the login form', 'continue', 'the service crashes for some users']) {
+      const named = rankIntent(PHRASED_INDEX, prompt).filter(one => one.score >= TIP_MIN).map(one => one.name)
+      expect(named).not.toEqual(expect.arrayContaining([expect.stringMatching(/^(venv-guard|status-check|issue-drafter|resume-brief)$/)]))
+    }
+  })
+
+  test('only the head of a long prompt is read: a pasted file below the request adds no matches', () => {
+    const pasted = `why does this fail?\n${'ok\n'.repeat(1_000)}${'pip install --user, is github down, outage\n'.repeat(500)}`
+    expect(rankIntent(PHRASED_INDEX, pasted).map(one => one.name)).not.toContain('venv-guard')
+    expect(rankIntent(PHRASED_INDEX, pasted).map(one => one.name)).not.toContain('status-check')
+  })
+
+  test('the phrase itself, or a one-word intent, still decides', () => {
+    expect(top('pip install --user keeps failing', PHRASED_INDEX)?.name).toBe('venv-guard')
+    expect(top('is github down right now?', PHRASED_INDEX)?.name).toBe('status-check')
+    expect(top('we had an outage', PHRASED_INDEX)?.name).toBe('status-check')
+    expect(top('continue where we left off yesterday', PHRASED_INDEX)?.name).toBe('resume-brief')
+  })
+})

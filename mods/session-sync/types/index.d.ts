@@ -36,14 +36,16 @@ export type SyncLease = {
   since: number
   renewedAt: number
   expiresAt: number
+  /** Taken over with SYNC-OK from this session: wins against that session's older lease on the same file. */
+  over?: string
 }
 
-/** leases.json: every lease in the repository, read and written by every session in it. */
+/** leases/<id>.json: the leases one session holds, written by that session alone (leases.json: the first version's shared file, still read). */
 export type SyncLeaseFile = { v: 1; leases: Record<string, SyncLease> }
 
 export type SyncMessageKind = 'handoff' | 'ask' | 'overridden'
 
-/** One line of inbox/<id>.jsonl: a hand-off, a question, or a lease taken over. */
+/** One line of inbox/<id>/<sender id>.jsonl (one file per sender): a hand-off, a question, or a lease taken over. */
 export type SyncMessage = {
   id: string
   at: number

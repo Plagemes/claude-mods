@@ -4,7 +4,9 @@ import {
   OVERLAP_WINDOW_MS,
   appendMessage,
   composeHandoff,
+  claimsOf,
   decideLease,
+  rivalAfterWrite,
   denyMessage,
   dirOf,
   hasSyncOk,
@@ -86,27 +88,26 @@ test('leases: take a free one, renew your own, meet a live one, override it, tak
   const live = new Set(['me', 'peer'])
   const isLive = (session: string) => live.has(session)
   const path = '/work/shop/src/api/user.ts'
-  const held: SyncLeaseFile = { v: 1, leases: { [path]: lease(path, 'peer') } }
-  const decide = (file: SyncLeaseFile, isOverride = false, liveness = isLive, now = NOW) => decideLease({ file, key: path, me: 'me', now, isLive: liveness, isOverride })
+  const held = [lease(path, 'peer')]
+  const decide = (claims: SyncLease[], isOverride = false, liveness = isLive, now = NOW) => decideLease({ claims, key: path, me: 'me', now, isLive: liveness, isOverride })
 
-  expect(decide({ v: 1, leases: {} }).kind).toBe('take')
-  expect(decide({ v: 1, leases: { [path]: lease(path, 'me') } }).kind).toBe('renew')
+  expect(decide([]).kind).toBe('take')
+  expect(decide([lease(path, 'me')]).kind).toBe('renew')
   expect(decide(held)).toMatchObject({ kind: 'deny', holder: { session: 'peer' } })
   expect(decide(held, true)).toMatchObject({ kind: 'override', holder: { session: 'peer' } })
   expect(decide(held, false, isLive, NOW + 10 * MINUTE).kind).toBe('take')
   expect(decide(held, false, session => session === 'me').kind).toBe('take')
 
+  // A session's own file: its leases alone, the expired ones dropped on the next write.
   const mine = lease('/work/shop/src/a.ts', 'me')
-  const crowded: SyncLeaseFile = {
-    v: 1,
-    leases: { [path]: lease(path, 'peer'), old: lease('old', 'peer', { expiresAt: NOW - 1 }), ghost: lease('ghost', 'gone') },
-  }
-  const after = withLease(crowded, mine, NOW, isLive)
+  const own: SyncLeaseFile = { v: 1, leases: { old: lease('old', 'me', { expiresAt: NOW - 1 }), [path]: lease(path, 'me') } }
+  const after = withLease(own, mine, NOW)
   expect(Object.keys(after.leases).sort()).toEqual(['/work/shop/src/a.ts', path])
   expect(renewLeasesOf(after, 'me', NOW + MINUTE, 10 * MINUTE).leases[mine.path]?.expiresAt).toBe(NOW + 11 * MINUTE)
-  expect(renewLeasesOf(after, 'me', NOW + MINUTE, 10 * MINUTE).leases[path]?.expiresAt).toBe(NOW + 9 * MINUTE)
-  expect(Object.keys(withoutLeasesOf(after, 'me').leases)).toEqual([path])
+  expect(Object.keys(withoutLeasesOf(after, 'me', [path]).leases)).toEqual(['/work/shop/src/a.ts'])
+  expect(Object.keys(withoutLeasesOf(after, 'me').leases)).toEqual([])
   expect(parseLeaseFile(JSON.parse(JSON.stringify(after)))).toEqual(after)
+  expect(claimsOf([after, { v: 1, leases: { [path]: lease(path, 'peer') } }])).toHaveLength(3)
 
   const message = denyMessage(lease(path, 'peer'), NOW)
   expect(message).toContain('src/api/user.ts is being edited by another Claude session on this repo, shop#peer (branch main), working on "Add login"')
@@ -165,4 +166,23 @@ test('hand-offs and the inbox: the note carries the context and suggests a workt
   expect(parseSyncArgs('').kind).toBe('status')
   expect(parseHandoffArgs('b2c3 finish the API tests')).toEqual({ who: 'b2c3', message: 'finish the API tests' })
   expect(typeof parseHandoffArgs('  ')).toBe('string')
+})
+
+test('two sessions racing for one file: whoever sees the other after writing yields; a SYNC-OK take-over wins against the older lease', () => {
+  const isLive = () => true
+  const path = '/work/shop/src/api/user.ts'
+  const a = lease(path, 'a', { since: NOW })
+  const b = lease(path, 'b', { since: NOW + 5 })
+  // b wrote after a: b sees a and yields; a, reading back before b wrote, kept it.
+  expect(rivalAfterWrite([a], path, 'a', NOW, isLive)).toBeUndefined()
+  expect(rivalAfterWrite([a, b], path, 'b', NOW, isLive)?.session).toBe('a')
+  // Both saw each other: both yield (never both keep it).
+  expect(rivalAfterWrite([a, b], path, 'a', NOW, isLive)?.session).toBe('b')
+  // b took it over with SYNC-OK: a's older lease no longer binds, for a as for b.
+  const over = lease(path, 'b', { since: NOW + 10, over: 'a' })
+  expect(rivalAfterWrite([a, over], path, 'b', NOW, isLive)).toBeUndefined()
+  expect(decideLease({ claims: [a, over], key: path, me: 'a', now: NOW, isLive, isOverride: false })).toMatchObject({ kind: 'deny', holder: { session: 'b' } })
+  // a takes it back with SYNC-OK: its newer lease wins against b's.
+  const back = lease(path, 'a', { since: NOW + 20, over: 'b' })
+  expect(decideLease({ claims: [back, over], key: path, me: 'b', now: NOW, isLive, isOverride: false })).toMatchObject({ kind: 'deny', holder: { session: 'a' } })
 })
