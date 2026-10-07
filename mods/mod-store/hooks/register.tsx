@@ -368,14 +368,14 @@ async function uninstall($: Dollar, catalog: StoreCatalog, bin: string, name: st
   if (!installed.isKnown) {
     return failure(`Could not read the installed mods: ${installed.error}`)
   }
-  const install = installed.mods[name]
-  if (install === undefined) {
+  const entry = installed.mods[name]
+  if (entry === undefined) {
     return info(`${name} is not installed.`)
   }
-  if (install.scope === 'managed') {
+  if (entry.scope === 'managed') {
     return failure(`${name} is managed by your organization and cannot be uninstalled here.`)
   }
-  const outcome = parseOutcome(await runCli($, argv.uninstall(bin, name, catalog.marketplace, install.scope), CHANGE_TIMEOUT_MS))
+  const outcome = parseOutcome(await runCli($, argv.uninstall(bin, name, catalog.marketplace, entry.scope), CHANGE_TIMEOUT_MS))
   await refreshInstalled($, catalog.marketplace)
 
   return outcome.isOk
