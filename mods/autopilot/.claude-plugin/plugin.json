@@ -1,0 +1,57 @@
+{
+  "name": "autopilot",
+  "version": "1.0.0",
+  "description": "Give it a goal and success criteria; it plans, delegates, verifies and retries until the criteria pass or it needs you.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#autopilot",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "agents",
+    "automation",
+    "verification"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "budgetUsd": {
+      "type": "number",
+      "title": "Default budget (USD)",
+      "description": "The budget a new run's setup card starts with; the run stops once its turns and subagents cost this much.",
+      "default": 5
+    },
+    "maxMinutes": {
+      "type": "number",
+      "title": "Default time limit (minutes)",
+      "description": "The time limit a new run's setup card starts with (paused and blocked time do not count).",
+      "default": 60
+    },
+    "maxFailures": {
+      "type": "number",
+      "title": "Failures in a row",
+      "description": "A run stops after this many failed check rounds (or failed turns) in a row (1-10). The second failed round is retried with harder thinking and a stronger model.",
+      "default": 3
+    },
+    "maxTurns": {
+      "type": "number",
+      "title": "Turns per run",
+      "description": "The most prompts one run sends (2-100), whatever else happens.",
+      "default": 30
+    },
+    "checkTimeoutSeconds": {
+      "type": "number",
+      "title": "Check timeout (seconds)",
+      "description": "How long one criterion's command may run before it counts as failed (5-600).",
+      "default": 300
+    },
+    "allowWorkflow": {
+      "type": "boolean",
+      "title": "Allow workflow by default",
+      "description": "Tick \"allow workflow\" on new setup cards: Claude may then use the Workflow tool for a big step.",
+      "default": false
+    }
+  }
+}
