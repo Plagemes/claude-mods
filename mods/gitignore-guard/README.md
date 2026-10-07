@@ -39,6 +39,7 @@ Then stage again, or name the files you want instead of using -A / .
 | `extraPatterns` | string | empty | Comma-separated globs for more files or folders to keep out, e.g. `*.sqlite,coverage/`. |
 
 ## How it works
-- A `tool.call` hook on `Bash` parses the `git add`. For a broad add it runs `git status --porcelain=v1 -z --untracked-files=all` (15 s timeout) and checks untracked paths against the patterns, then `$.fs.stat` on up to 300 changed files for the size limit. `git add .` only looks at the working directory's subtree.
+- A `tool.call` hook on `Bash` parses the `git add` with the shared claude-mods shell reader (also inside `bash -c`, `eval`, `$(…)`, a heredoc fed to a shell or `docker exec … sh -c`; a `cat <<EOF` note is only text). For a broad add it runs `git status --porcelain=v1 -z --untracked-files=all` (15 s timeout) and checks untracked paths against the patterns, then `$.fs.stat` on up to 300 changed files for the size limit. `git add .` only looks at the working directory's subtree.
 - Build folders (`dist/`, `build/`, caches) are only judged for "add everything" commands, since some repositories track a `build/` folder on purpose; `node_modules/`, OS junk, logs and `.env` are refused either way.
 - It fails open: if git or the repository cannot be read, the add goes ahead. It sees only what is untracked or modified now; ignored files never show up.
+- With [mods-hub](../mods-hub) installed, every refusal is also published as `risk.blocked` (rule `ignored-file` or `big-file`, what would be staged, severity `low`, the command with secrets masked). Without the hub nothing changes.

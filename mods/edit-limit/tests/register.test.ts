@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptOrigin } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 /** Answers `$.state` from memory, as the host does: a value and the version it stands at. */
 const memoryState = (on: On) => {
   const cells = new Map<string, { value: unknown; version: number }>()
@@ -169,4 +171,36 @@ test('registers /edit-limit when the session starts', async ($, on) => {
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
 
   expect(registered).toEqual(['edit-limit'])
+})
+
+test('regression: EDITS-OK does not carry into a turn the person did not start', async ($, on) => {
+  world(on)
+  await say($, 'refactor everything, EDITS-OK')
+  await editMany($, 16)
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await edit($, '/repo/f17.ts')).deny).toBeUndefined()
+  // A notification that starts a turn of its own is held to the limit again.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  await newTurn($)
+  await editMany($, 15, '/other/g')
+  expect((await edit($, '/other/g16.ts')).deny).toBeDefined()
+})
+
+test('with mods-hub: says hello; a refusal is published as risk.blocked and sent as a warning, not a toast', async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['risk.blocked'], consumes: [] }])
+
+  await editMany($, 15)
+  expect((await edit($, '/repo/one-too-many.ts')).deny).toContain('the limit is 15')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'edit-limit', tool: 'Edit', reason: 'more than 15 files in one turn', severity: 'low', path: '/repo/one-too-many.ts' } },
+  ])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'stopped at 15 files this turn; Claude was told to check with you' }])
+  expect(seen.toasts).toEqual([])
 })

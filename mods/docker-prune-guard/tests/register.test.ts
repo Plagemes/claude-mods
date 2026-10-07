@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 const PERSON = { wait: false, origin: { kind: 'composer' } } as const
 
 /** Stands in for the engine: records the commands that reach the Bash tool and lets prompts through. */
@@ -45,6 +47,11 @@ const RISKY = [
   'nice -n 10 docker system prune --volumes',
   'bash -c "docker compose down -v"',
   "sh -c 'docker volume prune -f'",
+  // The shared shell reader: GNU time, substitutions, heredocs fed to a shell, a shell inside a container.
+  'time -f %e docker volume prune -f',
+  'echo "$(docker volume rm pgdata)"',
+  'bash <<EOF\ndocker compose down -v\nEOF',
+  'docker exec ci sh -c "docker volume prune -f"',
 ]
 
 const SAFE = [
@@ -71,6 +78,7 @@ const SAFE = [
   'ls -la',
   'bash -c "docker compose ps"',
   'timeout 30 docker compose up -d',
+  "cat <<'EOF' > NOTES.md\ndocker compose down -v wipes the db\nEOF",
 ]
 
 test('denies commands that can delete volumes or every unused image, and says what would be lost', async ($, on) => {
@@ -127,4 +135,33 @@ test('PRUNE-OK from a notification or another plugin is not an approval', async 
   await $.prompt.submit({ text: 'PRUNE-OK', wait: false, origin: { kind: 'task-notification' } })
   await $.prompt.submit({ text: 'PRUNE-OK', wait: false, origin: { kind: 'plugin', name: 'other' } })
   expect((await $.tool.call({ tool: 'Bash', command: 'docker volume prune -f' })).deny).toContain('docker-prune-guard')
+})
+
+test('regression: PRUNE-OK does not carry into a turn the person did not start', async ($, on) => {
+  engine(on)
+  const command = 'docker compose down -v'
+  await $.prompt.submit({ ...PERSON, text: 'reset my local db, PRUNE-OK' })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('docker-prune-guard')
+})
+
+test('with mods-hub: a deny is published as risk.blocked with the rule and what would be lost', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect((await $.tool.call({ tool: 'Bash', command: 'docker volume rm pgdata' })).deny).toContain('docker-prune-guard')
+  expect((await $.tool.call({ tool: 'Bash', command: 'docker ps' })).deny).toBeUndefined()
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: { guard: 'docker-prune-guard', tool: 'Bash', reason: 'volume-rm: would delete the volume pgdata and all the data in it', severity: 'medium', command: 'docker volume rm pgdata' },
+    },
+  ])
 })

@@ -1,0 +1,11 @@
+{
+  "name": "workflow-studio",
+  "version": "1.0.0",
+  "description": "Build, save and share reusable workflows — release, dependency update, security audit — and run them with one command.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#workflow-studio",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "agents", "workflows", "automation"],
+  "types": "./types/index.d.ts"
+}

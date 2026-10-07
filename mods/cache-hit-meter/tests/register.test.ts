@@ -1,5 +1,7 @@
 import { test, expect } from 'claude-code/testing'
-import type { ModelUsage, On } from 'claude-code'
+import type { On, TurnUsage } from 'claude-code'
+
+import { fakeHub } from './hub'
 
 type Spy = { statuses: (string | undefined)[]; toasts: string[] }
 
@@ -7,6 +9,7 @@ const answerEngine = (on: On): Spy => {
   const spy: Spy = { statuses: [], toasts: [] }
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('ui.status', (_$, e) => {
     spy.statuses.push(e.text)
     return { value: undefined }
@@ -18,7 +21,7 @@ const answerEngine = (on: On): Spy => {
   return spy
 }
 
-const turn = (usage: Partial<ModelUsage>, agentId?: string) => ({
+const turn = (usage: Partial<TurnUsage>, agentId?: string) => ({
   reason: 'answer' as const,
   answer: 'done',
   durationMs: 1000,
@@ -90,4 +93,43 @@ test('/clear starts the counters over', async ($, on) => {
 
   await $.turn.complete(turn({ cache_read_input_tokens: 1000 }))
   expect(spy.statuses.at(-1)).toBe('cache 100%')
+})
+
+const MANIFEST = '{"version":"1.0.0"}'
+
+test('with mods-hub: the status line adds what the cache saved against the hub\'s session spend', async ($, on) => {
+  const spy = answerEngine(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: MANIFEST }))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['cost.update'] }])
+
+  // Opus 5.5 ($4 in, $0.20 cache read): 1,000,000 cached tokens save $3.80.
+  hub.events.push({ topic: 'cost.update', data: { turnUsd: 1, sessionUsd: 11.4, model: 'claude-opus-5-5', tokens: 1, isEstimate: false }, at: 1, source: 'mods-hub' })
+  await $.turn.complete(turn({ model: 'claude-opus-5-5', input_tokens: 0, cache_read_input_tokens: 1_000_000 }))
+  expect(spy.statuses.at(-1)).toBe('cache 100% · saved $3.80 (25% off)')
+
+})
+
+test('with mods-hub, the low-cache warning goes through its notifications, not a toast', async ($, on) => {
+  const spy = answerEngine(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: MANIFEST }))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const miss = turn({ input_tokens: 100, cache_read_input_tokens: 10, cache_creation_input_tokens: 890 })
+  for (let i = 0; i < 5; i++) await $.turn.complete(miss)
+  expect(hub.notified.map(notice => [notice.level, notice.title])).toEqual([['info', 'Only 1% of input came from the prompt cache (5 turns)']])
+  expect(spy.toasts).toEqual([])
+})
+
+test('with mods-hub but no cost.update yet, only the saving is shown; a turn with no cache reads shows none', async ($, on) => {
+  const spy = answerEngine(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: MANIFEST }))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toHaveLength(1)
+  await $.turn.complete(turn({ input_tokens: 1000 }))
+  expect(spy.statuses.at(-1)).toBe('cache 0%')
+  await $.turn.complete(turn({ model: 'claude-opus-5-5', cache_read_input_tokens: 500_000 }))
+  expect(spy.statuses.at(-1)).toMatch(/^cache 100% · last 100% · saved \$1\.90$/)
 })

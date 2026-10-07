@@ -1,5 +1,7 @@
-import { test, expect } from 'claude-code/testing'
+import { test, expect, mock } from 'claude-code/testing'
 import type { On, SessionContextUsage } from 'claude-code'
+
+import { fakeHub } from './hub'
 
 const BAND = {
   plugin: 'context-gauge',
@@ -105,4 +107,50 @@ test('regression: another plugin\'s band beneath still shows under the gauge', a
     expect(await ui.find({ type: 'Text', text: 'other band' })).toBeDefined()
     await ui.unmount()
   }
+})
+
+const START = { cwd: '/w', surface: 'terminal', isInteractive: true } as const
+
+/** The engine as it answers the gauge at session start: a command to register, and a usage with no context reading. */
+const answerStart = (on: On) => {
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('session.usage', () => ({ value: { context: {} } }) as never)
+  answerEngine(on)
+}
+
+test('with mods-hub: says hello and starts from the hub\'s last context.pressure when the engine has no reading', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  answerStart(on)
+  const hub = fakeHub(on, {}, clock)
+  hub.events.push({ topic: 'context.pressure', data: { percent: 85, tokens: 170_000, window: 200_000 }, at: 900_000, source: 'mods-hub' })
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['context.pressure'] }])
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ type: 'Text', text: '85%' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '/compact' })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub, an old context.pressure is not trusted', async ($, on) => {
+  const clock = mock.clock(on, { now: 10_000_000 })
+  answerStart(on)
+  const hub = fakeHub(on, {}, clock)
+  hub.events.push({ topic: 'context.pressure', data: { percent: 85, tokens: 170_000, window: 200_000 }, at: 1_000, source: 'mods-hub' })
+  await $.session.start(START)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /context/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without mods-hub nothing is drawn until the engine measures', async ($, on) => {
+  answerStart(on)
+  await $.session.start(START)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /context/ })).toBeUndefined()
+  await ui.unmount()
 })

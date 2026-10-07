@@ -2,6 +2,8 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 import { groupByDirectory, mentionOf } from '../hooks/files'
 
 const PANE = {
@@ -16,11 +18,15 @@ const engine = (on: On) => {
   const copies: unknown[] = []
   const fills: unknown[] = []
   const toasts: string[] = []
+  const opened: string[] = []
   mock.clock(on, { now: 1_000_000 })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/repo' }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.open', ($, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true } }
+  })
   on('ui.render', () => ({ type: 'Box' }))
   on('ui.copy', ($, e) => {
     copies.push(e)
@@ -39,7 +45,7 @@ const engine = (on: On) => {
     if (e.tool === 'Write') return { result: { type: e.file_path.endsWith('new.ts') ? 'create' : 'update' } }
     return { result: 'ok' }
   })
-  return { copies, fills, toasts }
+  return { copies, fills, toasts, opened }
 }
 
 const touchAll = async ($: Engine) => {
@@ -110,4 +116,46 @@ test('groups paths and writes mentions the way the prompt reads them', () => {
   ])
   expect(mentionOf('/repo/docs/my notes.md', '/repo')).toBe('@"docs/my notes.md"')
   expect(mentionOf('/tmp/x.log', '/repo')).toBe('@/tmp/x.log')
+})
+
+const HUB_PANE = { ...PANE, requestId: 'claude-mods', props: { ...PANE.props, title: 'Claude Mods' } } as const
+
+test('with mods-hub: registers its half of the Changes tab, /files opens the tab, and the files are drawn in it on both surfaces', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await touchAll($)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
+  expect(hub.tabs).toEqual([{ id: 'changes', title: 'Changes', order: 250, command: 'files' }])
+
+  await $.command.run({ command: 'files', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(hub.shown).toEqual(['changes'])
+  hub.tab = 'changes'
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...HUB_PANE, surface })
+    expect(await ui.find({ type: 'Text', text: 'Files this session' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'hosts' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'README.md' })).toBeDefined()
+    await ui.press({ key: 'filter' })
+    expect(await ui.find({ type: 'Text', text: 'hosts' })).toBeUndefined()
+    await ui.press({ key: 'filter' })
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub: another tab of the panel is left to its owner', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  hub.tab = 'cost'
+  const ui = await $.ui.mount({ ...HUB_PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'filter' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without mods-hub /files opens the own pane', async ($, on) => {
+  const spy = engine(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'files', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(spy.opened).toEqual(['files'])
 })

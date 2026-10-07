@@ -78,3 +78,43 @@ export const formatSections = (sections: Sections, style: Style): string => {
     block('Blockers', sections.blockers),
   ].join('\n\n')
 }
+
+/** What mods-hub's sessions.json says about the other Claude sessions on this project: how many, their turns and cost, and the commits their heartbeats carry. */
+export type Neighbours = { commits: Commit[]; sessions: number; turns: number; usd: number }
+
+const NONE: Neighbours = { commits: [], sessions: 0, turns: 0, usd: 0 }
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+const number = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+
+const isInside = (cwd: unknown, root: string): boolean => typeof cwd === 'string' && (cwd === root || cwd.startsWith(`${root.replace(/[\\/]+$/, '')}/`))
+
+/**
+ * Reads the hub's `sessions.json` (session id → heartbeat): the sessions that work inside `root` other than `own`, and the
+ * `git.commit` events any of them (this one included) published with scope `global` since `sinceMs`. `day` formats a time as `YYYY-MM-DD`.
+ */
+export const neighboursOf = (raw: unknown, root: string, own: string, sinceMs: number, day: (ms: number) => string): Neighbours => {
+  if (!isRecord(raw)) return NONE
+  const result: Neighbours = { commits: [], sessions: 0, turns: 0, usd: 0 }
+  for (const [id, entry] of Object.entries(raw)) {
+    if (!isRecord(entry) || !isInside(entry.cwd, root)) continue
+    if (id !== own) {
+      result.sessions += 1
+      result.turns += number(entry.turns)
+      result.usd += number(entry.usd)
+    }
+    for (const event of Array.isArray(entry.events) ? entry.events : []) {
+      if (!isRecord(event) || event.topic !== 'git.commit' || number(event.at) < sinceMs || !isRecord(event.data)) continue
+      const { sha, message } = event.data
+      if (typeof sha === 'string' && typeof message === 'string' && message.trim() !== '') {
+        result.commits.push({ date: day(number(event.at)), hash: sha.slice(0, 7), subject: (message.split('\n')[0] ?? '').trim() })
+      }
+    }
+  }
+  return result
+}
+
+/** The commits of `extra` that `known` (from git log) does not list, by hash, each once. */
+export const unseenCommits = (known: readonly Commit[], extra: readonly Commit[]): Commit[] => {
+  const seen = new Set(known.map(commit => commit.hash))
+  return extra.filter(commit => !seen.has(commit.hash) && (seen.add(commit.hash), true))
+}

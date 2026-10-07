@@ -8,7 +8,10 @@ Each mod also carries its own version in `mods/<name>/.claude-plugin/plugin.json
 
 ### Added
 
-- 100 new mods in 10 new categories, for 201 mods in 21 categories.
+- 118 new mods, for 219 mods in 21 categories: 100 in 10 new categories (below) and 18 system and platform mods.
+- **The platform.** [mods-hub](mods/mods-hub) is the shared core: one event bus with typed standard events (`test.result`, `ci.result`, `cost.update`, `control.stop`, ...), one side panel whose tabs the mods fill (switch with `0`-`9`), one notification router that knows if you are here, away, Silent or in your Night hours, shared facts, and a **STOP** (`/hub`, or from your phone) that halts the automatic mods in one session or all of them. Every mod still works alone; the hub only makes them cooperate. The architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the rules for mod authors in [docs/MOD_CONTRACT.md](docs/MOD_CONTRACT.md).
+- **System and platform mods:** [mods-hub](mods/mods-hub), [mod-advisor](mods/mod-advisor) (recommends mods for your project and what you ask, installs in one click), [smart-router](mods/smart-router) (routes subagents by task difficulty), [project-brain](mods/project-brain) (an associative project memory), [autopilot](mods/autopilot) (goal and criteria, plan, delegate, verify, retry), [workflow-studio](mods/workflow-studio) (reusable recipes), [mission-control](mods/mission-control) (one dashboard for every session), [session-sync](mods/session-sync) (file leases and hand-offs), [guardian](mods/guardian) (one security policy and a safety score), [context-optimizer](mods/context-optimizer), [issue-pilot](mods/issue-pilot) (issue to draft PR on GitHub, Jira or Linear), [team-hub](mods/team-hub), [calendar-sync](mods/calendar-sync) and [email-digest](mods/email-digest).
+- **Channels:** [whatsapp-bridge](mods/whatsapp-bridge) (one self-hosted OpenWA number), [telegram-bridge](mods/telegram-bridge), [slack-bridge](mods/slack-bridge) and [discord-bridge](mods/discord-bridge) post progress, questions and approvals and take commands and STOP back; only the owner's messages through a bridge are trusted.
 - Showcase site: a second shelf on the rack, a *New in v2* filter, badges and a *What's new* section.
 - README catalog grouped into collapsible categories.
 
@@ -23,9 +26,27 @@ Each mod also carries its own version in `mods/<name>/.claude-plugin/plugin.json
 - **Performance & Reliability:** [benchmark-compare](mods/benchmark-compare), [slow-test-flag](mods/slow-test-flag), [flaky-detector](mods/flaky-detector), [leak-hint](mods/leak-hint), [outdated-deps](mods/outdated-deps), [profile-run](mods/profile-run), [net-retry](mods/net-retry), [disk-guard](mods/disk-guard), [regression-guard](mods/regression-guard), [watch-mode-guard](mods/watch-mode-guard).
 - **Mod Ecosystem:** [mod-maker](mods/mod-maker), [mod-doctor](mods/mod-doctor), [mod-profiles](mods/mod-profiles), [settings-sync](mods/settings-sync), [quiet-mode](mods/quiet-mode), [achievements](mods/achievements), [streaks](mods/streaks), [soundpack](mods/soundpack), [daily-goal](mods/daily-goal), [session-replay](mods/session-replay).
 
+### Changed
+
+- **Hub integration across 165 mods:** every v1 mod and the v2 mods that have something to say publish to, read from or notify through mods-hub when it is installed (a vendored `types/mods-hub.d.ts` and a small hub-client block), and behave exactly as before when it is not. Dashboards moved into the shared panel as tabs (every tab has its own order, and the tab buttons show their digit, `1: Advisor`), notifications go through one router (here, away, Silent, Night, per-level routes) instead of each mod's toast, and test, CI, cost, deploy and lint results travel on the bus.
+- **Shared libraries:** one shell lexer, test-runner detection, model prices, secret patterns, a line index and the hub client live in `shared/` and are vendored into the mods that use them with `node scripts/sync-shared.mjs` (`--check` fails when a copy drifts), so a fix lands in every guard at once.
+- **Install line:** the same two steps everywhere, `/plugin marketplace add plagemes/claude-mods` then `/plugin install <mod>@claude-mods`.
+- Every changed mod moved to a new minor version (148 mods; mods new in v2 start at 1.0.0), and the site and README count 219 mods in 21 categories with the platform in *What's new*.
+- A pull channel's `send` must report failure and cap its retries, and the four older pull channels now drain on the cursor (at-least-once): see the contract.
+
 ### Fixed
 
-<!-- REVIEW-FIXES -->
+A review of every mod found and fixed about 180 bugs, each with a test. By theme:
+
+- **Guard bypasses:** guards that a quoted, nested, chained or aliased command slipped past (nested shell scripts, `bash -c`, command substitution, env prefixes, relative and `~` paths); a gap between what a guard read and what ran; approvals that could be answered by the wrong party. Remote commands now count as the owner's only from a known bridge (whatsapp, telegram, slack, discord).
+- **False positives:** checks that cried wolf on comments, strings, test fixtures, generated files, lockfiles and watch-mode runs, so a guard no longer blocks work it should not and test, type-check and watch detection read real runs.
+- **Data safety:** edits and checkpoints that could lose or overwrite work (rollbacks, migrations, backups, files written non-atomically), memory that kept private text it should not, and auto-compaction that could drop what was still needed.
+- **Cross-session races:** shared files that two sessions rewrote at once (heartbeats, prefs, inboxes, control, leases, outboxes) now have one writer per file or are merged from disk, a lease handover cannot leave two leaders, and a hot reload no longer steals the visible tab (mod-advisor).
+- **Secrets:** tokens, keys and passwords in nested commands, finish commits, logs, notices and phone messages are masked or kept out; bridges refuse spoofed owners.
+- **Performance:** slow scans, backtracking regular expressions and per-keystroke work on large repos and long sessions were bounded, cached or moved off the hot path.
+- **Bands and panes:** a band no longer hides the ones beneath it, and every pane draws on terminal, desktop and the fallbacks.
+- **Lost notices:** a notice that failed to send comes back on the next drain instead of vanishing, and one that can never be sent is dropped with a single notice rather than blocking the queue.
+- **Small polish:** every tab in the shared panel has its own order (no more ties between error-feed, issue-pilot and the Telegram tab, or task-queue and team-hub), and the daily-goal question is no longer asked the moment a goal is set after the ask hour.
 
 ## [1.0.0] - 2026-10-07
 

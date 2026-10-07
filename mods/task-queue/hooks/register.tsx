@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PluginOptions, Register, Timer } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register, RenderElement, RenderInput, Timer } from 'claude-code'
 
 import type { QueueFinished, QueueItem, QueueOutcome, QueueView } from '../types'
 import { EMPTY_VIEW, fromStore, listText, moveItem, oneLine, parseQueueArgs, shortDuration, statusText } from './queue'
@@ -23,6 +23,13 @@ const DRAFT_RETRY_MS = 5_000
 /** A submitted prompt whose turn never started by then is given up, so the queue cannot stall on it. */
 const START_TIMEOUT_MS = 120_000
 const PERSON_ORIGINS: ReadonlySet<string> = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
+/** The hub's shared panel, and this mod's Queue tab in it. */
+const HUB_PANE = 'claude-mods'
+const TAB = { id: 'queue', title: 'Queue', order: 220, command: 'queue' } as const
+/** How often, with mods-hub installed, a stop, pause or resume (`control.*`) is looked for. */
+const CONTROL_POLL_MS = 5_000
+const TITLE_CHARS = 80
+const TASK_OUTCOME: Record<QueueOutcome, 'ok' | 'failed' | 'cancelled'> = { done: 'ok', interrupted: 'cancelled', failed: 'failed', dropped: 'failed' }
 const OUTCOME_GLYPHS: Record<QueueOutcome, { glyph: string; color: string }> = {
   done: { glyph: '✓', color: 'success' },
   interrupted: { glyph: '⏹', color: 'warning' },
@@ -43,6 +50,11 @@ type Session = {
   /** This plugin's own `$.prompt.submit` is in flight. */
   isSubmitting: boolean
   timer: Timer | undefined
+  /** mods-hub is installed (checked at session start). */
+  hasHub: boolean
+  /** How far the hub's `control.*` events were read, and whether a hub stop or pause paused the queue. */
+  controlSeenAt: number
+  isPausedByControl: boolean
 }
 
 function readSettings(options: PluginOptions): Settings {
@@ -94,6 +106,68 @@ function schedule($: EngineInterface, session: Session, settings: Settings, ms: 
   })
 }
 
+// ── mods-hub: tasks on the bus, stop/pause/resume from anywhere, notices while you are away ────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello, the Queue tab in its panel, and a watch on stop/pause/resume. */
+async function greetHub($: EngineInterface, session: Session, settings: Settings): Promise<void> {
+  session.hasHub = (await hubMode($)) !== undefined
+  if (!session.hasHub) return
+  session.controlSeenAt = await $.clock.now()
+  await hubHello($, { version: await ownVersion($), publishes: ['task.queued', 'task.started', 'task.finished'], consumes: ['session.idle', 'control.stop', 'control.pause', 'control.resume'] }, TAB)
+  $.clock.every(CONTROL_POLL_MS, () => void obeyControl($, session, settings).catch(() => undefined))
+}
+
+/**
+ * A stop or pause raised through mods-hub (a STOP from the phone, mission-control, autopilot) pauses the queue;
+ * the prompt already running finishes. A resume lifts a pause the hub caused, never one you made yourself.
+ */
+async function obeyControl($: EngineInterface, session: Session, settings: Settings): Promise<void> {
+  if (!session.hasHub) return
+  let events
+  try {
+    events = await $.mods.recent({ prefix: 'control.', since: session.controlSeenAt })
+  } catch {
+    return
+  }
+  for (const event of events) {
+    session.controlSeenAt = Math.max(session.controlSeenAt, event.at)
+    const { by, reason } = event.data as { by?: unknown; reason?: unknown }
+    if (event.topic === 'control.stop' || event.topic === 'control.pause') {
+      session.timer?.cancel()
+      const what = `${event.topic === 'control.stop' ? 'stopped' : 'paused'} by ${String(by ?? event.source)}${typeof reason === 'string' && reason !== '' ? ` (${reason})` : ''}`
+      await commit($, session, view => ({ ...view, isPaused: true, pauseReason: what }))
+      session.isPausedByControl = true
+    } else if (event.topic === 'control.resume' && session.isPausedByControl) {
+      session.isPausedByControl = false
+      await resume($, session, settings)
+    }
+  }
+}
+
+/** A queue event on the hub's bus (autopilot, workflow-studio, mission-control); nothing without the hub. */
+async function publishTask($: EngineInterface, session: Session, input: { id: string; text: string; outcome?: QueueOutcome }, topic: 'task.queued' | 'task.started' | 'task.finished'): Promise<void> {
+  if (!session.hasHub) return
+  const title = oneLine(input.text, TITLE_CHARS)
+  if (topic === 'task.finished') await hubPublish($, { topic, data: { id: input.id, title, outcome: TASK_OUTCOME[input.outcome ?? 'done'] } })
+  else await hubPublish($, { topic, data: { id: input.id, title } })
+}
+
+/** Whether mods-hub says you are away from the keyboard (`session.idle` / `session.away`); false without it. */
+async function isAway($: EngineInterface): Promise<boolean> {
+  const mode = await hubMode($)
+  return mode !== undefined && mode.presence !== 'here'
+}
+
 const isBusy = (session: Session): boolean => session.isTurnRunning || session.isSubmitting || session.personSubmitting > 0
 
 /** Ends the running prompt with `outcome`; a `pauseReason` pauses the queue too. */
@@ -106,6 +180,7 @@ async function finish(
   durationMs?: number,
 ): Promise<void> {
   const endedAt = await $.clock.now()
+  const ran = (await read($, viewAtom)).running
   await commit($, session, view => {
     if (view.running?.id !== id) return view
     const done: QueueFinished = { id, text: view.running.text, outcome, endedAt, ...(durationMs === undefined ? {} : { durationMs }) }
@@ -117,17 +192,19 @@ async function finish(
       pauseReason: pauseReason ?? view.pauseReason,
     }
   })
+  if (ran?.id === id) await publishTask($, session, { id, text: ran.text, outcome }, 'task.finished')
 }
 
 /** Submits the next queued prompt, only while the session is idle and the queue may run. */
 async function drain($: EngineInterface, session: Session, settings: Settings): Promise<void> {
+  await obeyControl($, session, settings)
   const view = await read($, viewAtom)
   if (view.isPaused || view.running !== null || view.items.length === 0 || isBusy(session)) return
 
   if (view.streak >= settings.maxRuns) {
     const why = `${plural(settings.maxRuns, 'prompt')} ran in a row without you`
     await commit($, session, latest => ({ ...latest, isPaused: true, pauseReason: why }))
-    $.ui.toast(`⏸ queue paused: ${why} · /queue resume to go on`)
+    await hubNotify($, { level: 'warning', title: `⏸ queue paused: ${why} · /queue resume to go on`, topic: 'task.finished' })
     return
   }
 
@@ -154,6 +231,7 @@ async function drain($: EngineInterface, session: Session, settings: Settings): 
   session.isSubmitting = true
   try {
     const submitted = await $.prompt.submit({ text: item.text, asUser: true })
+    if (submitted.drop === undefined) await publishTask($, session, item, 'task.started')
     if (submitted.drop !== undefined) await finish($, session, item.id, 'dropped', `a hook refused it: ${oneLine(submitted.drop, 80)}`)
   } catch (error) {
     await finish($, session, item.id, 'failed', `it could not be submitted: ${oneLine(messageOf(error), 80)}`)
@@ -177,6 +255,7 @@ async function add($: EngineInterface, session: Session, settings: Settings, tex
   }
   const item: QueueItem = { id: crypto.randomUUID(), text, addedAt: await $.clock.now() }
   const view = await commit($, session, latest => ({ ...latest, items: [...latest.items, item] }))
+  await publishTask($, session, item, 'task.queued')
   const label = `#${view.items.findIndex(one => one.id === item.id) + 1}: ${oneLine(text, 60)}`
   if (view.isPaused) return `Queued ${label} · the queue is paused, /queue resume runs it.`
   if (isBusy(session) || view.running !== null) return `Queued ${label} · it runs when Claude is free.`
@@ -213,6 +292,7 @@ async function pause($: EngineInterface, session: Session): Promise<string> {
 }
 
 async function resume($: EngineInterface, session: Session, settings: Settings): Promise<string> {
+  session.isPausedByControl = false
   const view = await commit($, session, latest => ({ ...latest, isPaused: false, pauseReason: '', streak: 0 }))
   if (view.items.length === 0) return 'Resumed. The queue is empty: add prompts with /queue <prompt>.'
   if (isBusy(session) || view.running !== null) return `Resumed: ${plural(view.items.length, 'prompt')} waiting, the next runs when Claude is free.`
@@ -228,7 +308,7 @@ async function runCommand($: EngineInterface, session: Session, settings: Settin
   const command = parseQueueArgs(args)
   switch (command.kind) {
     case 'open': {
-      await openPane($)
+      if (!(await hubShowTab($, TAB.id))) await openPane($)
       return listText(await read($, viewAtom))
     }
     case 'list':
@@ -269,13 +349,114 @@ async function afterTurn(
   }
 
   const after = await read($, viewAtom)
-  if (!isClean && after.items.length > 0) $.ui.toast(`⏸ queue paused: ${why} · /queue resume to go on`)
+  if (!isClean && after.items.length > 0) await hubNotify($, { level: 'warning', title: `⏸ queue paused: ${why} · /queue resume to go on`, topic: 'task.finished' })
   if (!after.isPaused && after.items.length > 0) schedule($, session, settings, SETTLE_MS)
+  // With mods-hub, while you are away: the queue's last prompt is done (the notice reaches your channels).
+  if (isQueued && isClean && after.items.length === 0 && (await isAway($))) {
+    const ran = after.recent.filter(done => done.outcome === 'done').length
+    await hubNotify($, { level: 'success', title: `✓ Queue done: ${plural(ran, 'prompt')} ran`, body: oneLine(running.text, TITLE_CHARS), topic: 'task.finished' })
+  }
+}
+
+/** The queue: this mod's own pane, or its tab in the hub's panel (`isTab`, no Close button). */
+async function drawQueue($: EngineInterface, e: RenderInput<'Pane'>, session: Session, settings: Settings, isTab: boolean): Promise<RenderElement> {
+  const elements = $.ui.resolve(e)
+  const { Box, Button, Text } = elements
+  const Input = 'Input' in elements ? elements.Input : undefined
+  const view = await read($, viewAtom)
+  const now = await $.clock.now()
+  const width = Math.max(20, e.props.bodyColumns)
+  const rowText = Math.max(10, width - 14)
+  const waiting = view.items.length
+  const headline = view.isPaused
+    ? `⏸ Paused${view.pauseReason ? `: ${view.pauseReason}` : ''}`
+    : waiting === 0 && view.running === null
+      ? 'Nothing queued'
+      : `⏭ ${plural(waiting, 'prompt')} waiting · each runs when Claude is free`
+
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Box key="headline">
+        <Text bold color={view.isPaused ? 'warning' : undefined} wrap="truncate-end">
+          {headline}
+        </Text>
+      </Box>
+      {view.running !== null && (
+        <Box key="running" flexDirection="row" gap={1}>
+          <Text color="suggestion">▶</Text>
+          <Box flexGrow={1}>
+            <Text wrap="truncate-end">{oneLine(view.running.text, rowText)}</Text>
+          </Box>
+          <Text dimColor>{shortDuration(now - view.running.startedAt)}</Text>
+        </Box>
+      )}
+      {waiting > 0 && (
+        <Box flexDirection="column">
+          {view.items.map((item, index) => (
+            <Box key={`item:${item.id}`} flexDirection="row" gap={1}>
+              <Text dimColor>{String(index + 1).padStart(2)}</Text>
+              <Box flexGrow={1}>
+                <Text wrap="truncate-end">{oneLine(item.text, rowText)}</Text>
+              </Box>
+              <Button key={`up:${item.id}`} label="↑" plain dimColor={index === 0} onPress={() => void move($, session, item.id, -1)} />
+              <Button key={`down:${item.id}`} label="↓" plain dimColor={index === waiting - 1} onPress={() => void move($, session, item.id, 1)} />
+              <Button key={`remove:${item.id}`} label="✕" plain onPress={() => void removeById($, session, item.id)} />
+            </Box>
+          ))}
+        </Box>
+      )}
+      {Input !== undefined && waiting < MAX_ITEMS && (
+        <Input
+          key="add"
+          label="Add "
+          placeholder="a prompt to run after the others"
+          submitLabel="queue"
+          onSubmit={value => {
+            if (value.trim() !== '') void add($, session, settings, value.trim())
+          }}
+        />
+      )}
+      <Box flexDirection="row" gap={1} flexWrap="wrap">
+        {view.isPaused ? (
+          <Button key="resume" label="Resume" hotkey="r" variant="primary" onPress={() => void resume($, session, settings)} />
+        ) : (
+          <Button key="pause" label="Pause" hotkey="p" onPress={() => void pause($, session)} />
+        )}
+        {waiting > 0 && <Button key="clear" label="Clear" onPress={() => void clear($, session)} />}
+        {!isTab && <Button key="close" label="Close" role="dismiss" onPress={() => void $.ui.close({ id: PANE })} />}
+      </Box>
+      {view.recent.length > 0 && (
+        <Box key="recent" flexDirection="column">
+          <Text dimColor>Recent</Text>
+          {view.recent.slice(0, RECENT_SHOWN).map(done => (
+            <Box key={`done:${done.id}`} flexDirection="row" gap={1}>
+              <Text color={OUTCOME_GLYPHS[done.outcome].color}>{OUTCOME_GLYPHS[done.outcome].glyph}</Text>
+              <Box flexGrow={1}>
+                <Text dimColor wrap="truncate-end">
+                  {oneLine(done.text, rowText)}
+                </Text>
+              </Box>
+              <Text dimColor>{done.durationMs === undefined ? done.outcome : shortDuration(done.durationMs)}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  )
 }
 
 export const register: Register = (on, options) => {
   const settings = readSettings(options)
-  const session: Session = { root: undefined, isTurnRunning: false, personSubmitting: 0, isSubmitting: false, timer: undefined }
+  const session: Session = {
+    root: undefined,
+    isTurnRunning: false,
+    personSubmitting: 0,
+    isSubmitting: false,
+    timer: undefined,
+    hasHub: false,
+    controlSeenAt: 0,
+    isPausedByControl: false,
+  }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -289,6 +470,7 @@ export const register: Register = (on, options) => {
     } catch (error) {
       $.ui.log(`task-queue: could not load the queue: ${messageOf(error)}`, { to: 'debug' })
     }
+    await greetHub($, session, settings)
     return next(e)
   })
 
@@ -337,89 +519,114 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const elements = $.ui.resolve(e)
-    const { Box, Button, Text } = elements
-    const Input = 'Input' in elements ? elements.Input : undefined
-    const view = await read($, viewAtom)
-    const now = await $.clock.now()
-    const width = Math.max(20, e.props.bodyColumns)
-    const rowText = Math.max(10, width - 14)
-    const waiting = view.items.length
-    const headline = view.isPaused
-      ? `⏸ Paused${view.pauseReason ? `: ${view.pauseReason}` : ''}`
-      : waiting === 0 && view.running === null
-        ? 'Nothing queued'
-        : `⏭ ${plural(waiting, 'prompt')} waiting · each runs when Claude is free`
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawQueue($, e, session, settings, false))
 
+  // The Queue tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
+  on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
+    if (!(await hubTabIs($, TAB.id))) return next(e)
+    const { Box } = $.ui.resolve(e)
     return (
-      <Box flexDirection="column" gap={1}>
-        <Box key="headline">
-          <Text bold color={view.isPaused ? 'warning' : undefined} wrap="truncate-end">
-            {headline}
-          </Text>
-        </Box>
-        {view.running !== null && (
-          <Box key="running" flexDirection="row" gap={1}>
-            <Text color="suggestion">▶</Text>
-            <Box flexGrow={1}>
-              <Text wrap="truncate-end">{oneLine(view.running.text, rowText)}</Text>
-            </Box>
-            <Text dimColor>{shortDuration(now - view.running.startedAt)}</Text>
-          </Box>
-        )}
-        {waiting > 0 && (
-          <Box flexDirection="column">
-            {view.items.map((item, index) => (
-              <Box key={`item:${item.id}`} flexDirection="row" gap={1}>
-                <Text dimColor>{String(index + 1).padStart(2)}</Text>
-                <Box flexGrow={1}>
-                  <Text wrap="truncate-end">{oneLine(item.text, rowText)}</Text>
-                </Box>
-                <Button key={`up:${item.id}`} label="↑" plain dimColor={index === 0} onPress={() => void move($, session, item.id, -1)} />
-                <Button key={`down:${item.id}`} label="↓" plain dimColor={index === waiting - 1} onPress={() => void move($, session, item.id, 1)} />
-                <Button key={`remove:${item.id}`} label="✕" plain onPress={() => void removeById($, session, item.id)} />
-              </Box>
-            ))}
-          </Box>
-        )}
-        {Input !== undefined && waiting < MAX_ITEMS && (
-          <Input
-            key="add"
-            label="Add "
-            placeholder="a prompt to run after the others"
-            submitLabel="queue"
-            onSubmit={value => {
-              if (value.trim() !== '') void add($, session, settings, value.trim())
-            }}
-          />
-        )}
-        <Box flexDirection="row" gap={1} flexWrap="wrap">
-          {view.isPaused ? (
-            <Button key="resume" label="Resume" hotkey="r" variant="primary" onPress={() => void resume($, session, settings)} />
-          ) : (
-            <Button key="pause" label="Pause" hotkey="p" onPress={() => void pause($, session)} />
-          )}
-          {waiting > 0 && <Button key="clear" label="Clear" onPress={() => void clear($, session)} />}
-          <Button key="close" label="Close" role="dismiss" onPress={() => void $.ui.close({ id: PANE })} />
-        </Box>
-        {view.recent.length > 0 && (
-          <Box key="recent" flexDirection="column">
-            <Text dimColor>Recent</Text>
-            {view.recent.slice(0, RECENT_SHOWN).map(done => (
-              <Box key={`done:${done.id}`} flexDirection="row" gap={1}>
-                <Text color={OUTCOME_GLYPHS[done.outcome].color}>{OUTCOME_GLYPHS[done.outcome].glyph}</Text>
-                <Box flexGrow={1}>
-                  <Text dimColor wrap="truncate-end">
-                    {oneLine(done.text, rowText)}
-                  </Text>
-                </Box>
-                <Text dimColor>{done.durationMs === undefined ? done.outcome : shortDuration(done.durationMs)}</Text>
-              </Box>
-            ))}
-          </Box>
-        )}
+      <Box flexDirection="column">
+        {await next(e)}
+        {await drawQueue($, e, session, settings, true)}
       </Box>
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

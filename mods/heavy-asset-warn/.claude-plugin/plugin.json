@@ -1,6 +1,6 @@
 {
   "name": "heavy-asset-warn",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Warns when large images, videos or fonts are added to the project.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#heavy-asset-warn",

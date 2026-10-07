@@ -2,6 +2,8 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 type World = { files: Record<string, string>; toasts: string[]; failing: Set<string> }
 
 /** `files` is the project as it stands after each call (the engine bottom writes nothing). */
@@ -59,7 +61,7 @@ test('toasts the count at turn end and /todos-added lists file:line items for an
   )
 
   expect(world.toasts).toEqual([
-    'todo-tracker: 2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them',
+    '2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them',
   ])
   expect((await todos($)).split('\n')).toEqual([
     'Markers added in the latest turn that added any (2):',
@@ -80,7 +82,7 @@ test('a Write counts only the markers the old file did not have', async ($, on) 
   )
 
   expect(world.toasts).toEqual([
-    'todo-tracker: 2 markers added this turn (1 HACK, 1 XXX). /todos-added lists them',
+    '2 markers added this turn (1 HACK, 1 XXX). /todos-added lists them',
   ])
   expect((await todos($)).split('\n').slice(1)).toEqual(['  lib.py:3  # HACK: new', '  lib.py:4  # XXX also new'])
 })
@@ -133,4 +135,34 @@ test('a turn without additions raises no toast and keeps the last list', async (
 
   expect(world.toasts).toHaveLength(1)
   expect(await todos($)).toContain('a.ts:2')
+})
+
+test('with mods-hub: the turn-end count is an info notification and an x.todo-tracker.added event, not a toast', async ($, on) => {
+  const world = answerEngine(on, { '/proj/src/a.ts': 'const a = 1\n// TODO: handle errors\n// FIXME retry\n' })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.todo-tracker.added'], consumes: [] }])
+
+  await turn($, () =>
+    $.tool.call({ tool: 'Edit', file_path: '/proj/src/a.ts', old_string: 'const a = 1', new_string: 'const a = 1\n// TODO: handle errors\n// FIXME retry' }),
+  )
+
+  expect(world.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'info', title: '2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them' }])
+  expect(hub.published).toEqual([
+    {
+      topic: 'x.todo-tracker.added',
+      data: {
+        turn: 1,
+        count: 2,
+        items: [
+          { file: 'src/a.ts', line: 2, marker: 'TODO', text: '// TODO: handle errors' },
+          { file: 'src/a.ts', line: 3, marker: 'FIXME', text: '// FIXME retry' },
+        ],
+      },
+    },
+  ])
 })

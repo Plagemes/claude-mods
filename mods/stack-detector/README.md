@@ -37,3 +37,4 @@ Recognised: Next.js, React, Vue/Nuxt, Svelte/SvelteKit, NestJS, Express, TypeScr
 - `session.start` lists the project root and reads only the manifests present; `turn.start` scans again if the project root moved (`/cd`, a worktree).
 - `prompt.compose` appends one `session`-scoped section (`stack-detector:conventions`, about 2,000 characters for a typical web app) after the engine's own, so the shared prompt cache is untouched; skipped under `--bare`.
 - Limits: only the root directory is scanned, so packages inside a monorepo's subfolders are not seen; frameworks are recognised from dependency names, not from code.
+- With [mods-hub](../mods-hub) installed, every scan is also shared as the fact `stack-detector.stack` (the technologies and their evidence, the package manager, the test command; skipped ones left out), which other mods read instead of scanning the project again. Without the hub nothing changes.

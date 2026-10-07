@@ -1,6 +1,8 @@
 import { test, expect } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 type Answer = Partial<ProcessRunResult> | 'missing'
 type Run = { argv: readonly string[]; cwd: string | undefined }
 
@@ -149,4 +151,19 @@ test('a missing linter is mentioned once; a crashing one only shows in the statu
   expect(toasts).toEqual(['ruff is not installed, so app.py was not linted'])
   expect(crashed.context).toBeUndefined()
   expect(statuses.at(-1)).toBe('✗ lint: eslint failed on app.ts: Oops! Something went wrong! Cannot find module "typescript-eslint"')
+})
+
+test('with mods-hub: each lint is published as lint.result, and a missing linter is a warning notice', async ($, on) => {
+  const { toasts } = world(on, { ...ESLINT_PROJECT, '/repo/app.py': '' }, argv => (argv[0] === 'ruff' ? 'missing' : eslintReport([UNUSED, PREFER_CONST])))
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
+  await $.tool.call(edit('/repo/src/app.ts'))
+  expect(hub.published).toEqual([{ topic: 'lint.result', data: { tool: 'eslint', errors: 1, warnings: 1, files: ['src/app.ts'] } }])
+
+  await $.tool.call(edit('/repo/app.py'))
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'ruff is not installed, so app.py was not linted', topic: 'lint.result' }])
+  expect(toasts).toEqual([])
 })

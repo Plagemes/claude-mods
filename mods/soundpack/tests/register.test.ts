@@ -2,6 +2,8 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 type Played = { asset?: string; gain?: number }
 type Reply = { text: string; isError?: true }
 
@@ -225,4 +227,27 @@ test('regression: a command that only names a test runner is not a test run', as
 
   await bash($, clock, 'cd web && CI=1 npx vitest run 2>&1 | tail -20')
   expect(played.map(clip => clip.asset)).toEqual(['assets/minimal/green.wav'])
+})
+
+test('with mods-hub: test-watch\'s runs and a guard\'s refusal have their sounds; the hub\'s own reports are not played twice', async ($, on) => {
+  const { clock, played } = world(on)
+  const hub = fakeHub(on, {}, clock)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['test.result', 'risk.blocked'] }])
+
+  hub.events.push({ topic: 'test.result', source: 'test-watch', at: clock.now() + 1, data: { runner: 'vitest', outcome: 'passed', passed: 3, failed: 0 } })
+  await clock.advance(3000)
+  await clock.settle()
+  expect(played.map(clip => clip.asset)).toEqual(['assets/minimal/green.wav'])
+
+  hub.events.push({ topic: 'test.result', source: 'mods-hub', at: clock.now() + 1, data: { runner: 'jest', outcome: 'failed', passed: 0, failed: 1 } })
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(played).toHaveLength(1)
+
+  hub.events.push({ topic: 'risk.blocked', source: 'rm-rf-guard', at: clock.now() + 1, data: { guard: 'rm-rf-guard', tool: 'Bash', reason: 'x', severity: 'high' } })
+  await clock.advance(3000)
+  await clock.settle()
+  expect(played.map(clip => clip.asset)).toEqual(['assets/minimal/green.wav', 'assets/minimal/error.wav'])
 })

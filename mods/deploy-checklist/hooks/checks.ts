@@ -1,4 +1,5 @@
 import type { DeployChecklistItem as Item } from '../types'
+import { isTestCommand as isSharedTestCommand } from './shared/test-runners'
 
 /** One known deploy command: what to call it and how to spot it in a shell line. */
 type Deploy = { label: string; pattern: RegExp }
@@ -15,25 +16,34 @@ const DEPLOYS: readonly Deploy[] = [
   { label: 'npm publish', pattern: /\b(?:npm|pnpm|yarn(?:\s+npm)?|bun)\s+publish\b(?![^|;&]*\s--dry-run\b)/ },
 ]
 
-// A runner counts as the command word (`npx jest`, `&& pytest -q`), never as part of a path (`cat jest.config.js`).
-const TEST_COMMANDS: readonly RegExp[] = [
-  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?::[\w:-]+)?(?=\s|$)/,
-  /(?:^|[\s;&|(/])(?:(?:npx|bunx|pnpm\s+exec|yarn)\s+)?(?:vitest|jest|mocha|ava|pytest|phpunit|rspec|tox|nox)(?=\s|$)/,
-  /\bplaywright\s+test\b|\bcypress\s+run\b/,
-  /\b(?:go|cargo|deno|bun|mix|dotnet|swift)\s+test\b/,
-  /\b(?:rails|artisan)\s+test\b|\bpython3?\s+-m\s+(?:pytest|unittest)\b/,
-  /\bmake\s+(?:test|check)\b/,
-  /\b(?:gradlew?|mvnw?)\b[^|;&]*\s(?:test|check|verify)\b/,
-]
+/**
+ * A test runner as the command one shell segment runs, past env assignments, launchers (`npx`, `poetry run`, `bundle exec`...),
+ * `sh -c` and a path: `cd web && npx jest` runs tests; `cat jest.config.js`, `npm i -D vitest` or `echo pytest` only name a runner.
+ */
+const TEST_COMMAND = new RegExp(
+  String.raw`^\s*(?:\w+=\S*\s+|["']|(?:ba|z|da)?sh\s+-[a-zA-Z]*c[a-zA-Z]*\s+|(?:sudo|time|env|nice|command|npx|pnpx|bunx|yarn|pnpm|bun)\s+|timeout\s+\S+\s+|(?:poetry|uv|pipenv|pdm|hatch|rye)\s+run\s+|(?:bundle|pnpm|yarn|npm)\s+exec\s+(?:--\s+)?)*?` +
+    String.raw`(?:[\w.~-]*\/)*(?:` +
+    [
+      String.raw`(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?::[\w:-]+)?`,
+      'vitest|jest|mocha|ava|pytest|phpunit|rspec|tox|nox',
+      String.raw`playwright\s+test|cypress\s+run`,
+      String.raw`(?:go|cargo|deno|bun|mix|dotnet|swift)\s+test`,
+      String.raw`rails\s+test|(?:php\s+)?artisan\s+test|python[\d.]*\s+-m\s+(?:pytest|unittest)`,
+      String.raw`make\s+(?:test|check)`,
+      String.raw`(?:gradlew?|mvnw?)\b[^|;&]*\s(?:test|check|verify)`,
+    ].join('|') +
+    String.raw`)(?![\w./-])`,
+)
+const SEGMENTS = /&&|\|\||[;|&\n(){}]/
 
 export const CHANGELOG_NAMES = ['CHANGELOG.md', 'CHANGELOG', 'CHANGELOG.txt', 'CHANGES.md', 'HISTORY.md', 'changelog.md']
 
 /**
  * The text a command matcher reads: quoted text blanked, so `git commit -m "fly deploy"` runs
- * nothing, except where a shell runs the quoted text (`bash -c "…"`, `eval`, `ssh host "…"`).
+ * nothing, except where a shell runs the quoted text (`bash -c "…"`, `sh -lc '…'`, `eval`, `ssh host "…"`).
  */
 const matchText = (command: string): string =>
-  /(?:^|\s)(?:-c|eval|ssh)\s/.test(command) ? command : command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, quoted => `"${' '.repeat(quoted.length - 2)}"`)
+  /(?:^|\s)(?:-c|eval|ssh)\s|\b(?:ba|z|da|k)?sh\s+(?:-[a-zA-Z]+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s/.test(command) ? command.replace(/["']/g, ' ') : command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, quoted => `"${' '.repeat(quoted.length - 2)}"`)
 
 /** The kind of deploy a shell line runs, or undefined when it deploys nothing this mod knows. */
 export const deployKind = (command: string, extra: RegExp | undefined): string | undefined => {
@@ -43,9 +53,10 @@ export const deployKind = (command: string, extra: RegExp | undefined): string |
   return extra?.test(command) === true ? 'custom deploy' : undefined
 }
 
+/** A test run: this mod's runners, or the ones every Claude Mod knows (`shared/test-runners.ts`: `just test`...). */
 export const isTestCommand = (command: string): boolean => {
   const code = matchText(command)
-  return TEST_COMMANDS.some(pattern => pattern.test(code))
+  return code.split(SEGMENTS).some(segment => TEST_COMMAND.test(segment)) || isSharedTestCommand(code)
 }
 
 /** True when the line runs a test command and only then (`&&`) the deploy. */

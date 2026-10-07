@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { deltaText, fixPrompt, gaugeSvg, parseReport } from '../hooks/report'
+import { fakeHub } from './hub'
 import { pageUrl, portsFromPackage } from '../hooks/server'
 
 const PLUGIN = 'lighthouse-run'
@@ -128,6 +129,29 @@ test('/lighthouse finds the dev server, runs Lighthouse with a Playwright Chromi
     else expect((await ui.find({ key: 'score:performance' }))?.text).toContain('62')
     await ui.unmount()
   }
+})
+
+test('with mods-hub: says hello and publishes the scores of each finished run', async ($, on) => {
+  const state = world(on, [{ exitCode: 0, stdout: report([0.62, 0.81, 0.92, 0.9]) }, { exitCode: 1, stdout: '', stderr: 'Unable to connect' }])
+  const hub = fakeHub(on, {}, state.clock)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/work/site', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.lighthouse-run.scores'], consumes: [] }])
+
+  await lighthouse($, '')
+  await state.clock.settle()
+  expect(hub.published).toEqual([
+    {
+      topic: 'x.lighthouse-run.scores',
+      data: { url: 'http://localhost:5173/', formFactor: 'mobile', scores: { performance: 62, accessibility: 81, 'best-practices': 92, seo: 90 } },
+    },
+  ])
+
+  await lighthouse($, 'desktop')
+  await state.clock.settle()
+  expect(hub.published).toHaveLength(1)
 })
 
 test('a second run shows deltas, and Ask Claude sends the top issues', async ($, on) => {

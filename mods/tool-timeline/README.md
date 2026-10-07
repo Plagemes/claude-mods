@@ -45,3 +45,4 @@ No configuration needed.
 - Hooks `tool.call` around every call, timing it with `$.clock.now()`. It keeps the newest 300 calls in `$.state`, so the pane redraws as calls start and finish.
 - Opening the pane scrolls it to the end with `$.ui.scroll`. The engine then keeps the newest row in view until you scroll yourself.
 - A `/clear` empties the timeline. Limit: the list lasts for the session only and isn't saved.
+- With [mods-hub](../mods-hub) installed the same timeline is the **Timeline** tab of the shared Claude Mods panel (tab order 270; `registerTab`, drawn by hooking the hub's `claude-mods` pane while that tab is shown), `/timeline` opens it, and the hub's `turn.finished` events draw a dim `─── turn · 12 tools · 2m05s` line under the last call of each turn (`· interrupted` when you stopped it; not drawn while only failed calls are listed). The mod publishes nothing. Without the hub the own pane and `/timeline` are exactly as above.

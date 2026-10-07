@@ -42,3 +42,4 @@ The command is `/profile-mods`, so it cannot be confused with Claude Code's own 
   - mod-profiles never disables itself.
   - Plugins your organization manages can't be changed and are skipped.
   - It doesn't install or uninstall anything, and it never touches other settings.
+- With [mods-hub](../mods-hub) installed every mod a profile switches on is also published as `mod.installed` (name and the version `claude plugin list` reports) on the hub's bus, for mod-advisor and mod-doctor; switching a mod off, and a profile that already matches, publish nothing. The pane and `/profile-mods` are unchanged. Without the hub nothing changes.

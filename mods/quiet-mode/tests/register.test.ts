@@ -4,8 +4,10 @@ import type { On } from 'claude-code'
 
 import { formatMinutes, muteVerdict, parseQuietArgs } from '../hooks/args'
 import type { QuietState } from '../types'
+import { fakeHub } from './hub'
 
 const NOW = Date.UTC(2026, 9, 7, 12, 0, 0)
+const OFF: QuietState = { isOn: false, until: null }
 
 /** The engine under the plugin: a clock, the session's state store, and what reached the toast and status lines. */
 const world = (on: On) => {
@@ -127,4 +129,39 @@ test('parseQuietArgs reads minutes, hours and the words; formatMinutes rounds up
     { kind: 'status' },
   ])
   expect([formatMinutes(1), formatMinutes(61_000), formatMinutes(25 * 60_000), formatMinutes(60 * 60_000), formatMinutes(125 * 60_000)]).toEqual(['1m', '2m', '25m', '1h', '2h 5m'])
+})
+
+test('with mods-hub: /quiet sets the hub\'s Silent for every session and the status line follows it', async ($, on) => {
+  const { statuses, stored, toasts, clock } = world(on)
+  const hub = fakeHub(on, {}, clock)
+
+  expect((await quiet($, '25')).text).toBe(
+    "Quiet mode is on for 25m, in every session (mods-hub's Silent): toasts and sounds from your mods wait in the Claude Mods panel.",
+  )
+  expect(hub.modes).toEqual([{ silentMinutes: 25 }])
+  expect(statuses).toEqual(['🔕 quiet 25m'])
+  // Its own switch stays off: the hub holds other mods' toasts and sounds.
+  expect(stored.get('quiet-mode.quiet')?.value ?? OFF).toEqual(OFF)
+
+  await clock.advance(10 * 60_000)
+  expect(statuses.at(-1)).toBe('🔕 quiet 15m')
+  expect((await quiet($, 'status')).text).toBe("Quiet mode (mods-hub's Silent) is on, 15m left.")
+
+  expect((await quiet($)).text).toBe('Quiet mode is off in every session: toasts and sounds from your mods are back.')
+  expect(hub.modes.at(-1)).toEqual({ silentMinutes: null })
+  expect(statuses.at(-1)).toBeUndefined()
+  expect(toasts).toEqual([])
+})
+
+test('with mods-hub: /quiet on asks for a Silent with no end, and a Silent the hub ends clears the status line', async ($, on) => {
+  const { statuses, clock } = world(on)
+  const hub = fakeHub(on, {}, clock)
+
+  expect((await quiet($, 'on')).text).toContain('until you run /quiet again, in every session')
+  expect(hub.modes).toEqual([{ isSilent: true }])
+  expect(statuses).toEqual(['🔕 quiet'])
+
+  hub.mode = { ...hub.mode, isSilent: false, silentUntil: null }
+  await clock.advance(30_000)
+  expect(statuses.at(-1)).toBeUndefined()
 })

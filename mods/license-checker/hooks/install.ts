@@ -1,53 +1,13 @@
+import { simpleCommands } from './shared/shell'
+import type { ShellCommand } from './shared/shell'
+
 export type Ecosystem = 'npm' | 'pypi'
 
 /** One package an install command adds to the project. */
 export type InstallRequest = { ecosystem: Ecosystem; name: string; version?: string; isDev: boolean }
 
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const PREFIXES = new Set(['sudo', 'command', 'exec', 'time', 'nohup'])
 /** A cheap test before parsing: does the command mention an installer at all? */
 const INSTALLER_HINT = /\b(?:npm|pnpm|yarn|bun|pip3?|python3?|uv|poetry)\b/
-
-/** Splits a command line into simple commands, each a list of words; quotes are honoured, expansions kept as text. */
-const simpleCommands = (command: string): string[][] => {
-  const commands: string[][] = []
-  let words: string[] = []
-  let word = ''
-  let isOpen = false
-  const endWord = (): void => {
-    if (isOpen) words.push(word)
-    word = ''
-    isOpen = false
-  }
-  const endCommand = (): void => {
-    endWord()
-    if (words.length > 0) commands.push(words)
-    words = []
-  }
-  for (let i = 0; i < command.length; i += 1) {
-    const char = command[i] as string
-    if (char === '\\' && i + 1 < command.length) {
-      word += command[i + 1]
-      isOpen = true
-      i += 1
-    } else if (char === "'" || char === '"') {
-      const end = command.indexOf(char, i + 1)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i + 1, stop)
-      isOpen = true
-      i = stop
-    } else if (char === ' ' || char === '\t') {
-      endWord()
-    } else if (char === ';' || char === '|' || char === '&' || char === '\n' || char === '(' || char === ')') {
-      endCommand()
-    } else {
-      word += char
-      isOpen = true
-    }
-  }
-  endCommand()
-  return commands
-}
 
 type Parsed = { operands: string[]; isDev: boolean; isGlobal: boolean }
 
@@ -110,17 +70,10 @@ const pypiRequest = (spec: string, isDev: boolean): InstallRequest | undefined =
   return { ecosystem: 'pypi', name: name.toLowerCase().replace(/[-_.]+/g, '-'), version: exact, isDev }
 }
 
-const installsOf = (argv: readonly string[]): InstallRequest[] => {
-  let start = 0
-  while (start < argv.length && (PREFIXES.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) {
-    const isSudo = argv[start] === 'sudo'
-    start += 1
-    // `sudo -H pip install ...`: sudo's own options (and the value of -u / -g) are not the command.
-    while (isSudo && (argv[start] ?? '').startsWith('-')) start += /^-[ug]$/.test(argv[start] as string) ? 2 : 1
-  }
-  const [tool = '', sub = '', third = '', ...rest] = argv.slice(start)
-  const name = tool.replace(/^.*\//, '')
-  const afterSub = argv.slice(start + 2)
+/** The packages one simple command installs; the shared shell reader has peeled wrappers and assignments and opened `bash -c "…"`, `eval` and the like. */
+const installsOf = ({ name, argv }: ShellCommand): InstallRequest[] => {
+  const [, sub = '', third = '', ...rest] = argv
+  const afterSub = argv.slice(2)
 
   if (name === 'npm' || name === 'pnpm' || name === 'yarn' || name === 'bun') {
     const isAdd = name === 'yarn' ? sub === 'add' : NPM_INSTALL.has(sub) || (name === 'bun' && sub === 'a')
@@ -148,8 +101,7 @@ const installsOf = (argv: readonly string[]): InstallRequest[] => {
 export const installsIn = (command: string): InstallRequest[] => {
   if (!INSTALLER_HINT.test(command)) return []
   const seen = new Set<string>()
-  return simpleCommands(command)
-    .flatMap(installsOf)
+  return simpleCommands(command).flatMap(installsOf)
     .filter(request => {
       const key = `${request.ecosystem}:${request.name}`
       if (seen.has(key)) return false

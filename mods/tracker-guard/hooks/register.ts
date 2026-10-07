@@ -3,6 +3,9 @@ import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 import { INSTALLER_HINT, LOOKS_LIKE_TRACKING, isWatchedFile, trackersAdded, trackersInstalledBy } from './detect'
 import { isApproved } from './trackers'
 import type { Tracker } from './trackers'
+import { redactSummary } from './shared/secrets'
+
+const MOD = 'tracker-guard'
 
 const DEFAULT_ALLOW_WORD = 'TRACKER-OK'
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
@@ -21,10 +24,41 @@ const denial = (what: string, trackers: readonly Tracker[], settings: Settings):
   const first = trackers[0]?.id ?? ''
   const word = settings.allowWord === '' ? '' : ` or by writing ${settings.allowWord} in their next message`
   return (
-    `tracker-guard: blocked. ${what} adds ${names}, which is not on the approved list. ` +
+    `${MOD}: blocked. ${what} adds ${names}, which is not on the approved list. ` +
     'Do not add analytics or tracking without the user\'s say-so: ask whether they want it. ' +
     `They can approve it by adding "${first}" to this mod's approved list${word}. Otherwise leave it out.`
   )
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['risk.blocked'], consumes: [] })
+}
+
+/** Tells mods-hub (when installed) what was blocked, the command or path masked and cut short. The deny never waits on it. */
+async function reportBlock($: EngineInterface, tool: string, trackers: readonly Tracker[], where: { command: string } | { path: string }): Promise<void> {
+  const names = trackers.map(tracker => `${tracker.name} (${tracker.category})`).join(', ')
+  await hubPublish($, {
+    topic: 'risk.blocked',
+    data: {
+      guard: MOD,
+      tool,
+      reason: `tracker: adds ${names}`,
+      severity: 'medium',
+      ...('command' in where ? { command: redactSummary(where.command) } : { path: redactSummary(where.path) }),
+    },
+  })
 }
 
 type Change = { path: string; before: string; after: string }
@@ -62,15 +96,24 @@ export const register: Register = (on, options) => {
 
   on('prompt.submit', ($, e, next) => {
     if (isPerson(e.origin)) isAllowed = settings.allowWord !== '' && e.text.includes(settings.allowWord)
+    // A turn nobody typed (a notification, a schedule, a peer) starts without the approval of an earlier prompt.
+    else if (e.turnId === undefined) isAllowed = false
     return next(e)
   })
 
-  on('tool.call', { tool: 'Bash' }, ($, e, next) => {
+  on('session.start', async ($, e, next) => {
+    await greetHub($)
+    return next(e)
+  })
+
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (isAllowed) return next(e)
     const found = forbidden(trackersInstalledBy(e.command), settings)
-    return found.length === 0 ? next(e) : { deny: denial('This install command', found, settings) }
+    if (found.length === 0) return next(e)
+    await reportBlock($, 'Bash', found, { command: e.command })
+    return { deny: denial('This install command', found, settings) }
   }).catch(($, e, next) =>
-    next.called || !('command' in e) || !INSTALLER_HINT.test(e.command) ? next(e) : { deny: 'tracker-guard: its check failed, so this install was blocked.' },
+    next.called || !('command' in e) || !INSTALLER_HINT.test(e.command) ? next(e) : { deny: `${MOD}: its check failed, so this install was blocked.` },
   )
 
   on('tool.call', { tool: /^(?:Edit|MultiEdit|Write|NotebookEdit)$/ }, async ($, e, next) => {
@@ -78,6 +121,105 @@ export const register: Register = (on, options) => {
     const change = await changeOf($, e)
     if (change === undefined) return next(e)
     const found = forbidden(trackersAdded(change.path, change.before, change.after), settings)
-    return found.length === 0 ? next(e) : { deny: denial(`This edit to ${change.path}`, found, settings) }
-  }).catch(($, e, next) => (next.called || !LOOKS_LIKE_TRACKING.test(JSON.stringify(e)) ? next(e) : { deny: 'tracker-guard: its check failed, so this edit was blocked.' }))
+    if (found.length === 0) return next(e)
+    await reportBlock($, String(e.tool), found, { path: change.path })
+    return { deny: denial(`This edit to ${change.path}`, found, settings) }
+  }).catch(($, e, next) => (next.called || !LOOKS_LIKE_TRACKING.test(JSON.stringify(e)) ? next(e) : { deny: `${MOD}: its check failed, so this edit was blocked.` }))
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

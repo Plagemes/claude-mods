@@ -1,6 +1,6 @@
 {
   "name": "pr-describer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "/pr-desc drafts a pull request title and description from your branch diff.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#pr-describer",

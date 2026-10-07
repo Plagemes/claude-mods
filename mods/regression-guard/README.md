@@ -46,3 +46,4 @@ Every time a test command runs through Bash (`npm test`, `npx vitest run`, `pyte
   - Background Bash runs and tests run outside Claude Code aren't seen.
   - Output the Bash tool cut in the middle loses the tests in the cut.
   - A test renamed between runs counts as a new test.
+- With **mods-hub** installed each run that adds regressions is published as `x.regression-guard.regressed` (count, total, the first 20 test names, command) and announced as a hub notification at level `error` listing the first five tests (your phone channels too while you are away, held while Silent); a run that clears them all is a `success` notice. The tests are read from the output, which the hub's `test.result` (counts only) cannot replace, so the parsers stay; `shared/test-runners` also decides what counts as a test command, beside this mod's own detector. Without the hub nothing changes (toasts).

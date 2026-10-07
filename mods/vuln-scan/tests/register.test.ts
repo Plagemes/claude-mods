@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { NPM_AUDIT_V2, PIP_AUDIT } from './fixtures'
+import { fakeHub } from './hub'
 
 const PANE_PROPS = { title: 'Vulnerabilities', isFocused: false, bodyColumns: 110, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 const OSV: Record<string, string> = {
@@ -151,4 +152,45 @@ test('a clean audit says so in the status line for a minute', async ($, on) => {
   expect(state.statuses.at(-1)).toBe('🛡 no known vulnerabilities')
   await state.clock.advance(60_000)
   expect(state.statuses.at(-1)).toBeUndefined()
+})
+
+test('with mods-hub: says hello, publishes x.vuln-scan.found, raises an error notice only when critical or high ones increase, and a failed audit is a warning notice', async ($, on) => {
+  const state = world(on, { missing: ['pip-audit'] })
+  const hub = fakeHub(on, {}, state.clock)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.vuln-scan.found'], consumes: [] }])
+
+  await bash($, 'npm install lodash')
+  await state.clock.advance(1_500)
+  expect(hub.published).toEqual([{ topic: 'x.vuln-scan.found', data: { tool: 'npm audit', dir: '', total: 11, critical: 1, high: 2, moderate: 4, low: 4 } }])
+  expect(hub.notified).toEqual([{ level: 'error', title: '🛡 1 critical · 2 high in npm audit', body: '/vulns lists them and can ask Claude to fix them.' }])
+
+  // The same audit again: nothing is worse than before, so no second alert.
+  await bash($, 'npm install lodash')
+  await state.clock.advance(1_500)
+  expect(hub.published).toHaveLength(2)
+  expect(hub.notified).toHaveLength(1)
+
+  await bash($, 'cd api && uv add httpx')
+  await state.clock.advance(1_500)
+  expect(hub.notified.at(-1)).toEqual({ level: 'warning', title: 'pip-audit (api) could not run: pip-audit is not installed (pipx install pip-audit)' })
+  expect(state.toasts).toEqual([])
+})
+
+test('with mods-hub, a clean audit publishes nothing', async ($, on) => {
+  const state = world(on, { npmOutput: '{"auditReportVersion":2,"vulnerabilities":{},"metadata":{}}' })
+  const hub = fakeHub(on, {}, state.clock)
+  await bash($, 'npm install')
+  await state.clock.advance(1_500)
+  expect(hub.published).toEqual([])
+  expect(hub.notified).toEqual([])
+})
+
+test('without mods-hub the audit is the status line only, and a failure is the same toast', async ($, on) => {
+  const state = world(on, { missing: ['pip-audit'] })
+  await bash($, 'npm install lodash')
+  await bash($, 'cd api && uv add httpx')
+  await state.clock.advance(1_500)
+  expect(state.statuses.at(-1)).toBe('🛡 1 critical · 2 high')
+  expect(state.toasts).toEqual(['pip-audit (api) could not run: pip-audit is not installed (pipx install pip-audit)'])
 })

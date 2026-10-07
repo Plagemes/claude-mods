@@ -122,3 +122,15 @@ test('a project path with spaces is quoted in NODE_OPTIONS, so the profiles land
   expect(nodeOptionValue('C:\\Users\\me\\My Project')).toBe('"C:\\\\Users\\\\me\\\\My Project"')
   expect(nodeOptionValue('C:\\Users\\me\\proj')).toBe('C:\\Users\\me\\proj')
 })
+
+test('regression: python -c grouped with other options is refused, and python options stay before cProfile', () => {
+  const dir = '/r/.claude/profiles'
+  for (const command of ['python -u -c "print(1)"', 'python3 -Bc "import app"', 'python -X dev -c "x()"']) {
+    expect(planProfile(command, dir, 'p1', 'python3').profiler).toBe('none')
+  }
+  expect(planProfile('python -u -X importtime app.py --fast', dir, 'p1', 'python3')).toEqual({
+    profiler: 'python',
+    argv: ['python', '-u', '-X', 'importtime', '-m', 'cProfile', '-o', '/r/.claude/profiles/p1.pstats', 'app.py', '--fast'],
+    statsFile: '/r/.claude/profiles/p1.pstats',
+  })
+})

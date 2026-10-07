@@ -2,6 +2,7 @@ import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
 import { findExpensive } from '../hooks/cost'
+import { fakeHub } from './hub'
 
 const PERSON = { wait: false, origin: { kind: 'composer' } } as const
 
@@ -130,4 +131,37 @@ test('regression: a command handed to bash -c, sh -lc or eval is checked too', (
   expect(findExpensive("sh -lc 'eksctl create cluster --nodes 3'", 32)[0]?.what).toContain('EKS cluster with 3')
   expect(findExpensive('eval aws ec2 run-instances --instance-type p4d.24xlarge', 32)).toHaveLength(1)
   expect(findExpensive('bash -c "echo aws ec2 run-instances --instance-type p3.2xlarge"', 32)).toHaveLength(0)
+  // The shared shell reader: wrappers, substitutions, heredocs fed to a shell; a heredoc note is only text.
+  expect(findExpensive('timeout 60 aws ec2 run-instances --instance-type p3.2xlarge --image-id ami-1', 32)).toHaveLength(1)
+  expect(findExpensive('ID=$(aws ec2 run-instances --instance-type p3.2xlarge --query x)', 32)).toHaveLength(1)
+  expect(findExpensive('bash <<EOF\neksctl create cluster --nodes 3\nEOF', 32)).toHaveLength(1)
+  expect(findExpensive("cat <<'EOF' > plan.md\neksctl create cluster --nodes 3\nEOF", 32)).toHaveLength(0)
+})
+
+test('regression: COST-OK does not carry into a turn the person did not start', async ($, on) => {
+  engine(on)
+  const command = 'eksctl create cluster --name demo'
+  await $.prompt.submit({ ...PERSON, text: 'spin up a cluster, COST-OK' })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('cloud-cost-warn')
+})
+
+test('with mods-hub: a deny is published as risk.blocked with the estimate', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  const command = 'eksctl create cluster --name demo --node-type m5.xlarge --nodes 3'
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('cloud-cost-warn')
+  expect(hub.published).toHaveLength(1)
+  const [event] = hub.published
+  expect(event?.topic).toBe('risk.blocked')
+  expect(event?.data).toMatchObject({ guard: 'cloud-cost-warn', tool: 'Bash', severity: 'medium', command })
+  expect(String((event?.data as { reason?: unknown }).reason)).toMatch(/^costly-resource: would create an EKS cluster with 3 .* per hour$/)
 })

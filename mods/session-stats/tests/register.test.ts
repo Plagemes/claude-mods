@@ -3,6 +3,8 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { compact, formatDuration, topTools } from '../hooks/format'
+import { EMPTY_HUB, describeRun, foldEvents, toolsPerTurn } from '../hooks/hubstats'
+import { fakeHub } from './hub'
 
 const PANE = {
   plugin: 'session-stats',
@@ -14,13 +16,13 @@ const PANE = {
 const RUN = { command: 'session-stats', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } } as const
 
 /** The engine beneath the plugin: a session that began at 0 and has cost $1.84. */
-const engine = (on: On) => {
+const engine = (on: On, options: { hasLedger?: boolean } = {}) => {
   const clock = mock.clock(on, { now: 0 })
   const opened: string[] = []
   const registered: string[] = []
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.end', ($, e) => ({ sessionId: e.sessionId }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [], cost: { usd: 1.84 } } }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [], ...(options.hasLedger === false ? {} : { cost: { usd: 1.84 } }) } }))
   on('command.register', ($, e) => {
     if (e.name === 'stats') return { deny: '"/stats" refused: it is the built-in /usage' }
     registered.push(e.name)
@@ -123,4 +125,95 @@ test('formats counts, durations and the tool ranking', () => {
   expect(formatDuration(245_000)).toBe('4m 05s')
   expect(formatDuration(4_320_000)).toBe('1h 12m')
   expect(topTools({ Read: 2, Bash: 2, Edit: 5 }, 2)).toEqual([['Edit', 5], ['Bash', 2]])
+})
+
+const HUB_PANE = { ...PANE, requestId: 'claude-mods', props: { ...PANE.props, title: 'Claude Mods' } } as const
+
+const bus = (hub: ReturnType<typeof fakeHub>, at: number) => {
+  hub.events.push(
+    { topic: 'test.result', data: { runner: 'vitest', outcome: 'failed', passed: 118, failed: 2 }, at, source: 'mods-hub' },
+    { topic: 'test.result', data: { runner: 'vitest', outcome: 'passed', passed: 120, failed: 0 }, at: at + 1, source: 'mods-hub' },
+    { topic: 'turn.finished', data: { durationMs: 90_000, tools: 9, isAborted: false }, at: at + 2, source: 'mods-hub' },
+    { topic: 'cost.update', data: { turnUsd: 0.42, sessionUsd: 1.9, model: 'claude-opus-5-5', tokens: 1, isEstimate: false }, at: at + 3, source: 'mods-hub' },
+  )
+}
+
+test('with mods-hub: the Stats tab opens with /session-stats and draws the tiles plus Tests, tools per turn and the last turn\'s cost', async ($, on) => {
+  const { clock, opened } = engine(on)
+  const hub = fakeHub(on, {}, clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await work($, clock)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['cost.update', 'test.result', 'turn.finished'] }])
+  expect(hub.tabs).toEqual([{ id: 'stats', title: 'Stats', order: 290, command: 'session-stats' }])
+
+  bus(hub, 330_100)
+  await clock.advance(300)
+  await $.command.run(RUN)
+  expect(hub.shown).toEqual(['stats'])
+  expect(opened).toEqual([])
+  hub.tab = 'stats'
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...HUB_PANE, surface })
+    const values = (await ui.findAll({ type: 'Text' })).filter(found => found.props.bold === true).map(found => found.text)
+    expect(values).toEqual(['1', '9', '64k', '$1.84', '5m 30s', '2', '2 runs', 'Top tools'])
+    expect(await ui.find({ type: 'Text', text: '9.0 tools per turn' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'last turn $0.42' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'last passed · 120 passed' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '1 not passing' })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub, the hub\'s priced cost fills the Cost tile where the engine keeps no ledger, and /clear starts the totals over', async ($, on) => {
+  const { clock } = engine(on, { hasLedger: false })
+  const hub = fakeHub(on, {}, clock)
+  hub.events.push({ topic: 'cost.update', data: { turnUsd: 0.1, sessionUsd: 1.9, model: 'm', tokens: 1, isEstimate: true }, at: 5, source: 'mods-hub' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.turn.complete({ answer: 'Done.', durationMs: 1000, isAborted: false, turnId: 'main', reason: 'answer' })
+  await clock.advance(300)
+
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '~$1.90' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'as the hub prices it' })).toBeDefined()
+  await ui.unmount()
+
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '~$1.90' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: '—' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('with mods-hub: another tab of the panel is left to its owner', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  hub.tab = 'cost'
+  const ui = await $.ui.mount({ ...HUB_PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'Top tools' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without mods-hub there is no Tests tile and nothing is read from a bus', async ($, on) => {
+  const { clock } = engine(on)
+  await work($, clock)
+  await clock.advance(300)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'Tests' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /tools per turn/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('foldEvents counts what the hub\'s events carry and ignores the rest', () => {
+  const total = foldEvents(EMPTY_HUB, [
+    { topic: 'test.result', data: { runner: 'pytest', outcome: 'error', passed: null, failed: null } },
+    { topic: 'test.result', data: 'broken' },
+    { topic: 'turn.finished', data: { durationMs: 1, tools: 4, isAborted: false } },
+    { topic: 'turn.finished', data: { durationMs: 1, tools: 1, isAborted: false } },
+    { topic: 'git.commit', data: {} },
+  ])
+  expect(total).toMatchObject({ runs: 1, failedRuns: 1, turns: 2, tools: 5, sessionUsd: null })
+  expect(describeRun(total.lastRun as never)).toBe('error')
+  expect(toolsPerTurn(total)).toBe('2.5 tools per turn')
+  expect(toolsPerTurn(EMPTY_HUB)).toBeUndefined()
 })

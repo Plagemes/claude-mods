@@ -2,8 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { fromGitBash, writeTargets } from './bash'
+import { redactSummary } from './shared/secrets'
 
-type Target = { path: string; via: string; cdChain: readonly string[] }
+/** `isLiteral`: a tool's own path field (Edit, Write): no shell reads it, so `$` and backticks are plain characters. */
+type Target = { path: string; via: string; cdChain: readonly string[]; isLiteral?: boolean }
 type Jail = { roots: string[]; sep: string; cwd: string; home: string | undefined; tmp: string | undefined }
 type Placed = { real: string } | { problem: string }
 
@@ -60,17 +62,20 @@ const placeAbsolute = async ($: EngineInterface, path: string, sep: string, pass
 }
 
 /** Expands what a shell would before writing (`~`, `$HOME`, `$PWD`, `$TMPDIR`); undefined when it cannot. */
-const expand = (path: string, jail: Jail, cwd: string): string | undefined => {
+const expand = (path: string, jail: Jail, cwd: string, isLiteral = false): string | undefined => {
   let result = path
   if (result === '~' || result.startsWith('~/')) {
     if (jail.home === undefined) return undefined
     result = jail.home + result.slice(1)
   }
-  result = result
-    .replace(/\$\{?HOME\}?(?![\w])/g, () => jail.home ?? '$HOME')
-    .replace(/\$\{?PWD\}?(?![\w])/g, cwd)
-    .replace(/\$\{?TMPDIR\}?(?![\w])/g, () => jail.tmp ?? '$TMPDIR')
-  if (/[$`]|^~/.test(result)) return undefined
+  // `app/routes/$slug.tsx` (Remix, TanStack Router) written with Edit/Write is a real file name, not an expansion.
+  if (!isLiteral) {
+    result = result
+      .replace(/\$\{?HOME\}?(?![\w])/g, () => jail.home ?? '$HOME')
+      .replace(/\$\{?PWD\}?(?![\w])/g, cwd)
+      .replace(/\$\{?TMPDIR\}?(?![\w])/g, () => jail.tmp ?? '$TMPDIR')
+    if (/[$`]|^~/.test(result)) return undefined
+  }
   return jail.sep === '\\' ? fromGitBash(result) : result
 }
 
@@ -90,7 +95,7 @@ const placeTarget = async ($: EngineInterface, target: Target, jail: Jail): Prom
     if (directory === undefined) return { problem: `it follows a \`cd ${step}\` the jail cannot follow` }
     cwd = isAbsolute(directory) ? directory : `${cwd}${jail.sep}${directory}`
   }
-  const expanded = expand(target.path, jail, cwd)
+  const expanded = expand(target.path, jail, cwd, target.isLiteral === true)
   if (expanded === undefined) return { problem: 'it uses a shell expansion the jail cannot check' }
   const literal = withoutGlob(expanded)
   if (literal === undefined) return { problem: 'it climbs out of a glob with `..`' }
@@ -100,7 +105,7 @@ const placeTarget = async ($: EngineInterface, target: Target, jail: Jail): Prom
 const targetsOf = (e: { tool: string; [field: string]: unknown }): Target[] => {
   const tool = String(e.tool)
   const field = tool === 'NotebookEdit' ? e.notebook_path : tool === 'Bash' ? undefined : e.file_path
-  if (typeof field === 'string') return [{ path: field, via: tool, cdChain: [] }]
+  if (typeof field === 'string') return [{ path: field, via: tool, cdChain: [], isLiteral: true }]
   if (tool === 'Bash' && typeof e.command === 'string') return writeTargets(e.command)
   return []
 }
@@ -173,12 +178,47 @@ const isClaudeFile = (real: string, folders: { plans?: string; projects?: string
   return project !== undefined && folder === 'memory'
 }
 
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['risk.blocked'], consumes: [] })
+}
+
+/** What a deny tells mods-hub: `rule` is `outside-jail` or `unverifiable-write`. */
+type Block = { rule: string; severity: 'medium' | 'high'; reason: string; tool: string; path: string; command?: string }
+
+/** Tells mods-hub (when installed) what was blocked, path and command masked and cut short. The deny never waits on it. */
+async function reportBlock($: EngineInterface, block: Block): Promise<void> {
+  await hubPublish($, {
+    topic: 'risk.blocked',
+    data: {
+      guard: PLUGIN,
+      tool: block.tool,
+      reason: `${block.rule}: ${block.reason}`,
+      severity: block.severity,
+      path: redactSummary(block.path),
+      ...(block.command === undefined ? {} : { command: redactSummary(block.command) }),
+    },
+  })
+}
+
 export const register: Register = (on, options) => {
   const extraRoots = listOption(options.allowedRoots)
   const isStrict = options.blockUncheckable !== false
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'jail', description: 'path-jail: list the folders writes are allowed in' })
+    await greetHub($)
     return next(e)
   })
 
@@ -203,13 +243,17 @@ export const register: Register = (on, options) => {
 
     const jail = await loadJail($, extraRoots)
     const folders = await claudeFolders($, jail)
+    const tool = String(e.tool)
+    const command = 'command' in e && typeof e.command === 'string' ? e.command : undefined
     for (const target of targets) {
       const placed = await placeTarget($, target, jail)
       if ('problem' in placed) {
-        if (!isStrict && String(e.tool) === 'Bash') continue
+        if (!isStrict && tool === 'Bash') continue
+        await reportBlock($, { rule: 'unverifiable-write', severity: 'medium', reason: `${target.via}: ${placed.problem}`, tool, path: target.path, command })
         return { deny: `${PLUGIN}: blocked ${target.via} on "${target.path}": ${placed.problem}. Use a literal path inside the project.` }
       }
       if (!jail.roots.some(root => isInside(placed.real, root, jail.sep)) && !isClaudeFile(placed.real, folders, jail.sep)) {
+        await reportBlock($, { rule: 'outside-jail', severity: 'high', reason: `${target.via} resolves to ${placed.real}, outside the allowed folders`, tool, path: target.path, command })
         return {
           deny:
             `${PLUGIN}: blocked ${target.via} on "${target.path}": it resolves to ${placed.real}, outside the allowed folders ` +
@@ -220,3 +264,100 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch(($, e, next) => (next.called ? next(e) : { deny: `${PLUGIN}: could not verify where this writes, so it was blocked.` }))
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

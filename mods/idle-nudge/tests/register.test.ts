@@ -2,6 +2,8 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const MINUTE = 60_000
 
 type World = {
@@ -105,4 +107,23 @@ test('the idle time comes from the configuration', { options: { idleMinutes: 5 }
 
   await world.advance(6 * MINUTE)
   expect(world.toasts).toHaveLength(1)
+})
+
+test('with mods-hub: no nudge while you are active in another session, and the nudge is a hub notice', async ($, on) => {
+  const world = answerEngine(on)
+  const hub = fakeHub(on)
+  await start($)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['session.idle'] }])
+
+  // Idle here for 20 minutes, but typing in another session: the hub says you are here.
+  await world.advance(21 * MINUTE)
+  expect(hub.notified).toEqual([])
+
+  hub.mode = { ...hub.mode, presence: 'idle' }
+  await world.advance(MINUTE)
+  expect(world.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'info', title: 'idle-nudge: you have 2 uncommitted files (idle 22 min)', topic: 'session.idle' }])
+
+  await world.advance(10 * MINUTE)
+  expect(hub.notified).toHaveLength(1)
 })

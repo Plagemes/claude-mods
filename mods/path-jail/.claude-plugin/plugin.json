@@ -1,6 +1,6 @@
 {
   "name": "path-jail",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#path-jail",

@@ -1,19 +1,20 @@
+import { simpleCommands } from './shared/shell'
+
 /** One command of a command line, as words, and whether the shell sent it to the background with `&`. */
 export type Segment = { words: string[]; isBackground: boolean }
 
 /** A command that never ends on its own, and what to run instead. */
 export type Verdict = { command: string; instead: string }
 
-type Invocation = { program: string; args: string[]; env: Map<string, string>; isBounded: boolean }
+type Invocation = { program: string; args: string[]; env: Map<string, string> }
 
-const CONNECTORS = new Set(['&&', '||', ';', '|', '\n'])
-const WRAPPERS = new Set(['sudo', 'time', 'nice', 'command', 'env', 'exec', 'nohup', 'stdbuf', 'npx', 'bunx', 'pnpx'])
+/** Runners the shared shell reader leaves on: `npx jest --watch` runs jest. */
+const WRAPPERS = new Set(['npx', 'bunx', 'pnpx'])
 /** `bundle exec rails s`, `poetry run flask run`, `pnpm exec jest`: the program is what comes after. */
 const EXEC_WRAPPERS: Readonly<Record<string, readonly string[]>> = {
   bundle: ['exec'], poetry: ['run'], uv: ['run'], pipenv: ['run'], pdm: ['run'], rye: ['run'], pnpm: ['exec', 'dlx'], yarn: ['exec', 'dlx'], npm: ['exec'], bun: ['x'],
 }
 const WRAPPER_FLAGS_WITH_VALUE = new Set(['-n', '-u', '-g', '-C'])
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun'])
 
 /** Package scripts that by convention start something that keeps running (`dev`, `start:prod`, `test:watch`; not `build:dev` or `test:unit`). */
@@ -81,108 +82,15 @@ const PRINT_AND_EXIT = ['--help', '--version']
 /** Whether a bundle of short flags (`-fn`, `-nf`) holds one of `letters`. */
 const hasShortFlag = (args: readonly string[], letters: string): boolean => args.some(arg => /^-[A-Za-z]+$/.test(arg) && [...letters].some(letter => arg.includes(letter)))
 
-/** The delimiter of the here-document that starts at `start` (just after `<<`), quotes removed, and whether `<<-` strips leading tabs. */
-const heredocAt = (command: string, start: number): { delimiter: string; isIndented: boolean } => {
-  let i = start
-  const isIndented = command[i] === '-'
-  if (isIndented) i += 1
-  while (command[i] === ' ' || command[i] === '\t') i += 1
-  let delimiter = ''
-  let quote: string | undefined
-  for (; i < command.length; i++) {
-    const char = command[i] ?? ''
-    if (quote !== undefined) {
-      if (char === quote) quote = undefined
-      else delimiter += char
-    } else if (char === "'" || char === '"') quote = char
-    else if (char === '\\') continue
-    else if (/[\s;&|<>()]/.test(char)) break
-    else delimiter += char
-  }
-  return { delimiter, isIndented }
-}
-
-/** Where the bodies of `heredocs` end, when they start at `start`: just after the line holding the last delimiter. */
-const afterHeredocs = (command: string, start: number, heredocs: readonly { delimiter: string; isIndented: boolean }[]): number => {
-  let position = start
-  for (const { delimiter, isIndented } of heredocs) {
-    while (position < command.length) {
-      const end = command.indexOf('\n', position)
-      const line = command.slice(position, end === -1 ? command.length : end)
-      position = end === -1 ? command.length : end + 1
-      if ((isIndented ? line.replace(/^\t+/, '') : line) === delimiter) break
-    }
-  }
-  return position
-}
-
 /**
- * The command line split at `&&`, `||`, `;`, `|` and line breaks outside quotes, quotes removed. A lone `&` sends the command before it
- * to the background. Here-document bodies (`cat <<'EOF' ... EOF`) are text, not commands, and are skipped.
+ * The commands of a line, from the shared claude-mods shell reader (quotes, line continuations and here-document
+ * bodies understood, wrappers such as `sudo` and `env` peeled, redirections set apart), and whether each was sent
+ * to the background with `&`. Only the line itself: scripts handed to a shell are read by findNeverEnding.
  */
-export const segmentsOf = (command: string): Segment[] => {
-  const segments: Segment[] = [{ words: [], isBackground: false }]
-  let word: string | undefined
-  let quote: '"' | "'" | undefined
-  let heredocs: { delimiter: string; isIndented: boolean }[] = []
-  const endWord = () => {
-    if (word !== undefined) segments.at(-1)?.words.push(word)
-    word = undefined
-  }
-  const startSegment = (isBackground: boolean) => {
-    endWord()
-    const last = segments.at(-1)
-    if (last !== undefined) last.isBackground = isBackground
-    segments.push({ words: [], isBackground: false })
-  }
-
-  for (let i = 0; i < command.length; i++) {
-    const char = command[i] ?? ''
-    const next = command[i + 1]
-    const pair = `${char}${next ?? ''}`
-    if (quote !== undefined) {
-      if (char === quote) quote = undefined
-      else if (char === '\\' && quote === '"' && next !== undefined) {
-        word = (word ?? '') + next
-        i += 1
-      } else word = (word ?? '') + char
-    } else if (char === "'" || char === '"') {
-      quote = char
-      word ??= ''
-    } else if (char === '\\' && next === '\n') {
-      // A line continuation: the command goes on on the next line.
-      endWord()
-      i += 1
-    } else if (char === '\\' && next !== undefined) {
-      word = (word ?? '') + next
-      i += 1
-    } else if (command.startsWith('<<<', i)) {
-      word = (word ?? '') + '<<<'
-      i += 2
-    } else if (pair === '<<') {
-      heredocs.push(heredocAt(command, i + 2))
-      word = (word ?? '') + pair
-      i += 1
-    } else if (char === '\n' && heredocs.length > 0) {
-      startSegment(false)
-      i = afterHeredocs(command, i + 1, heredocs) - 1
-      heredocs = []
-    } else if (pair === '&&' || pair === '||') {
-      startSegment(false)
-      i += 1
-    } else if (char === '&' && command[i - 1] !== '>' && next !== '>') {
-      startSegment(true)
-    } else if (CONNECTORS.has(char)) {
-      startSegment(false)
-    } else if (/\s/.test(char)) {
-      endWord()
-    } else {
-      word = (word ?? '') + char
-    }
-  }
-  endWord()
-  return segments.filter(segment => segment.words.length > 0)
-}
+export const segmentsOf = (command: string): Segment[] =>
+  simpleCommands(command)
+    .filter(cmd => cmd.depth === 0 && cmd.argv.length > 0)
+    .map(cmd => ({ words: cmd.argv, isBackground: cmd.isBackground }))
 
 const withoutLeadingFlags = (words: readonly string[]): string[] => {
   let skipped = 0
@@ -190,26 +98,17 @@ const withoutLeadingFlags = (words: readonly string[]): string[] => {
   return words.slice(skipped)
 }
 
-/** The program a segment runs and its arguments, with the variables, `sudo`, `time`, `npx`, `bundle exec` and the like in front taken off. */
-const invocationOf = (words: readonly string[]): Invocation => {
-  const env = new Map<string, string>()
+/** The program a command runs and its arguments, with `npx`, `bundle exec` and the like in front taken off. */
+const invocationOf = (words: readonly string[], env: Map<string, string>): Invocation => {
   let rest = [...words]
-  let isBounded = false
   for (;;) {
     const [first = '', second = ''] = rest
-    if (ASSIGNMENT.test(first)) {
-      env.set(first.slice(0, first.indexOf('=')), first.slice(first.indexOf('=') + 1))
-      rest = rest.slice(1)
-    } else if (first === 'timeout') {
-      // `timeout 60 npm run dev` stops by itself.
-      isBounded = true
-      rest = rest.slice(1)
-    } else if (WRAPPERS.has(first)) {
+    if (WRAPPERS.has(first)) {
       rest = withoutLeadingFlags(rest.slice(1))
     } else if (EXEC_WRAPPERS[first]?.includes(second) === true) {
       rest = withoutLeadingFlags(rest.slice(2))
     } else {
-      return { program: baseName(first), args: rest.slice(1), env, isBounded }
+      return { program: baseName(first), args: rest.slice(1), env }
     }
   }
 }
@@ -311,14 +210,24 @@ const verdictFor = (invocation: Invocation, isCi: boolean): string | undefined =
 
 /**
  * The first command in `command` that would keep running in the foreground, with what to run instead.
- * Commands sent to the background with `&`, or bounded by `timeout`, stop on their own or never hold the turn.
+ * Commands sent to the background with `&`, or bounded by `timeout`, stop on their own or never hold the turn,
+ * and so does what they run inside (`timeout 60 bash -c "npm run dev"`). The shared shell reader opens
+ * `bash -lc "…"`, `eval`, `$(…)` and heredocs fed to a shell; `watch <cmd>` repeats its command forever.
  */
 export const findNeverEnding = (command: string, isCi: boolean): Verdict | undefined => {
-  for (const segment of segmentsOf(command)) {
-    if (segment.isBackground) continue
-    const invocation = invocationOf(segment.words)
-    const instead = invocation.isBounded ? undefined : verdictFor(invocation, isCi)
-    if (instead !== undefined) return { command: segment.words.join(' '), instead }
+  /** Whether the latest command at each depth holds the line: a script nested at depth d is run by the one at d - 1. */
+  const holds: boolean[] = []
+  for (const cmd of simpleCommands(command)) {
+    const isBounded = cmd.wrappers.includes('timeout')
+    // A substitution runs before its command, whatever wraps that command (its `&` is already in isBackground).
+    const parentHolds = cmd.depth === 0 || cmd.via === '$()' || holds[cmd.depth - 1] === true
+    const doesHold = parentHolds && !cmd.isBackground && !isBounded
+    holds[cmd.depth] = doesHold
+    if (!doesHold || cmd.argv.length === 0) continue
+    const shown = cmd.argv.join(' ')
+    if (cmd.wrappers.includes('watch')) return { command: `watch ${shown}`, instead: BACKGROUND_ONLY }
+    const instead = verdictFor(invocationOf(cmd.argv, new Map(Object.entries(cmd.assignments))), isCi)
+    if (instead !== undefined) return { command: shown, instead }
   }
   return undefined
 }

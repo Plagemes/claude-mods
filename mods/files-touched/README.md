@@ -45,3 +45,4 @@ No configuration needed.
 - Limits:
   - Files changed by Bash commands (`sed`, `mv`, generators) and paths matched by Grep or Glob aren't counted.
   - The tally lasts for the session only.
+- With [mods-hub](../mods-hub) installed the same list is a section of the **Changes** tab of the shared Claude Mods panel (tab order 250, drawn by hooking the hub's `claude-mods` pane while that tab is shown), beneath [diff-pane](../diff-pane)'s changed-files list when that mod is installed too; whichever of the two registers the tab first owns it, and either one alone is enough. `/files` opens the tab. The mod trades no events: what a file was (read, edited, created) is known only from Claude's own tool calls. Without the hub `/files` opens the own pane as above.

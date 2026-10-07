@@ -1,6 +1,6 @@
 {
   "name": "main-branch-warn",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Warns you the moment Claude starts editing files directly on main or master.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#main-branch-warn",

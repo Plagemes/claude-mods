@@ -31,6 +31,7 @@ Put `COST-OK` in your next message to allow it. It applies to that message only.
 | `largeSize` | string | `8xlarge` | Size from which EC2, RDS and GCP machines count as expensive (`8xlarge` = 32 vCPUs). GPU, `.metal` and memory-optimised types are always flagged. |
 
 ## How it works
-- A `tool.call` guard on `Bash` splits the command line like a shell (so `echo "aws ec2 run-instances ..."` is ignored, while the script of `bash -c "..."` or `eval` is read), recognises the cloud command and reads its type, size, count and GPU flags, and prices them from a small embedded table of list prices (us regions, on demand, Linux). A `prompt.submit` hook remembers the latest message from the person.
+- A `tool.call` guard on `Bash` splits the command line with the shared claude-mods shell reader (so `echo "aws ec2 run-instances ..."` and a `cat <<EOF` note are ignored, while `sudo`/`timeout` wrappers are peeled and the script of `bash -c "..."`, `eval`, `$(...)` or a heredoc fed to a shell is read), recognises the cloud command and reads its type, size, count and GPU flags, and prices them from a small embedded table of list prices (us regions, on demand, Linux). A `prompt.submit` hook remembers the latest message from the person.
 - It fails closed: if the check itself throws, a cloud create command is refused.
+- With [mods-hub](../mods-hub) installed, every deny is also published as `risk.blocked` (rule `costly-resource`, what it would create and the hourly estimate, severity `medium`, the command with secrets masked). Without the hub nothing changes.
 - Limits: the prices are rough and some may be out of date (expect +-30%, more for committed or regional pricing). It cannot see inside `terraform`, CloudFormation or a `--cli-input-json` file, so those pass.

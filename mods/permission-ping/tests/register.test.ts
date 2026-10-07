@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PING_ASSET = 'assets/ping.wav'
 
 const listen = (on: On, isAnswered = false) => {
@@ -86,4 +88,43 @@ test('options can silence the toast', { options: { toast: false, sound: true } }
 
   expect(toasts).toHaveLength(0)
   expect(clips).toHaveLength(1)
+})
+
+test('with mods-hub: publishes approval.requested and notifies a question instead of toasting', async ($, on) => {
+  mock.clock(on, { now: 5_000 })
+  const { toasts, clips } = listen(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['approval.requested'], consumes: [] }])
+
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'rm -rf build' } })
+
+  expect(hub.published).toEqual([
+    { topic: 'approval.requested', data: { id: 'permission-5000', question: '🔔 Approval needed: Bash — rm -rf build', tool: 'Bash' } },
+  ])
+  expect(hub.notified).toEqual([
+    { level: 'warning', kind: 'question', title: '🔔 Approval needed: Bash — rm -rf build', topic: 'approval.requested' },
+  ])
+  expect(toasts).toEqual([])
+  expect(clips).toEqual([{ asset: PING_ASSET }])
+})
+
+test('with mods-hub: the request and its notification pair make one event, and the toast option still rules', { options: { toast: false } }, async ($, on) => {
+  const clock = mock.clock(on)
+  const { clips } = listen(on)
+  const hub = fakeHub(on)
+
+  await $.classic.PermissionRequest({ tool_name: 'Edit', tool_input: { file_path: 'src/app.ts' } })
+  await $.classic.Notification({ message: 'Claude needs your permission', notification_type: 'permission_prompt' })
+  expect(hub.published).toHaveLength(1)
+
+  await clock.advance(10_000)
+  await $.classic.Notification({ message: 'Claude needs your permission', notification_type: 'permission_prompt' })
+  expect(hub.published).toHaveLength(2)
+  expect(hub.published[1]?.data).toMatchObject({ question: '🔔 Claude is waiting for your approval' })
+  expect(hub.published[1]?.data).not.toHaveProperty('tool')
+  expect(hub.notified).toEqual([])
+  expect(clips).toHaveLength(2)
 })

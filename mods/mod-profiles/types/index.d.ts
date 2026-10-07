@@ -8,7 +8,7 @@ export type ModProfile = {
 }
 
 /** One installed plugin, as `claude plugin list --json` reports it. */
-export type ModProfilesPlugin = { id: string; scope: string; isEnabled: boolean }
+export type ModProfilesPlugin = { id: string; scope: string; isEnabled: boolean; version?: string }
 
 /** The installed plugins as last listed, or why they could not be. */
 export type ModProfilesCurrent =

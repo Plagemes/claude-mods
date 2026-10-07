@@ -3,8 +3,29 @@ export type OptionValue = string | number | boolean | string[]
 /** Option name → value, per plugin name. */
 export type ModOptions = Record<string, Record<string, OptionValue>>
 
-/** What the export file holds, after it has been read and checked. */
-export type ExportFile = { exportedAt: string | undefined; plugins: ModOptions }
+/** What the export file holds, after it has been read and checked. `hub` is the hub's portable preferences, when the file carries them. */
+export type ExportFile = { exportedAt: string | undefined; plugins: ModOptions; hub: HubPrefs | undefined }
+
+const LEVELS = ['info', 'success', 'warning', 'error', 'critical'] as const
+const ROUTES = ['terminal', 'away', 'always', 'off'] as const
+const INTERACTIONS = ['auto', 'on', 'off'] as const
+const QUIET_HOURS = /^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/
+const CHANNEL_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
+
+/**
+ * The part of mods-hub's `prefs.json` that is a preference rather than the moment's state: how the hub treats
+ * interaction, night and each level, and which channels are on. (Silent, presence and its end time are left out.)
+ */
+export type HubPrefs = {
+  interaction?: (typeof INTERACTIONS)[number]
+  isNightOn?: boolean
+  quietHours?: string
+  routes?: Partial<Record<(typeof LEVELS)[number], (typeof ROUTES)[number]>>
+  channels?: Record<string, { isEnabled: boolean; minLevel: (typeof LEVELS)[number] }>
+}
+
+/** One hub preference that would change: its name (`routes.warning`, `channels.telegram.isEnabled`) and both values. */
+export type HubChange = { path: string; before: unknown; after: unknown }
 
 export type Change = {
   /** The `pluginConfigs` key it lands under on this machine. */
@@ -85,10 +106,37 @@ export const exportableOptions = (settings: Json, marketplace: string): { plugin
   return { plugins, skipped }
 }
 
-/** The export file's text. */
-export const exportText = (plugins: ModOptions, marketplace: string, exportedAt: string): string => {
+const oneOf = <T extends string>(list: readonly T[], value: unknown): value is T => typeof value === 'string' && (list as readonly string[]).includes(value)
+
+/** The portable preferences in a hub `prefs.json` (or an export's `hub.prefs`): known fields with valid values, nothing else. */
+export const portableHubPrefs = (raw: unknown): HubPrefs | undefined => {
+  if (!isObject(raw)) return undefined
+  const prefs: HubPrefs = {}
+  if (oneOf(INTERACTIONS, raw.interaction)) prefs.interaction = raw.interaction
+  if (typeof raw.isNightOn === 'boolean') prefs.isNightOn = raw.isNightOn
+  if (typeof raw.quietHours === 'string' && QUIET_HOURS.test(raw.quietHours)) prefs.quietHours = raw.quietHours
+  if (isObject(raw.routes)) {
+    const routes: NonNullable<HubPrefs['routes']> = {}
+    for (const level of LEVELS) {
+      const route = raw.routes[level]
+      if (oneOf(ROUTES, route)) routes[level] = route
+    }
+    if (Object.keys(routes).length > 0) prefs.routes = routes
+  }
+  if (isObject(raw.channels)) {
+    const channels: NonNullable<HubPrefs['channels']> = {}
+    for (const [id, value] of Object.entries(raw.channels)) {
+      if (CHANNEL_ID.test(id) && isObject(value)) channels[id] = { isEnabled: value.isEnabled !== false, minLevel: oneOf(LEVELS, value.minLevel) ? value.minLevel : 'info' }
+    }
+    if (Object.keys(channels).length > 0) prefs.channels = channels
+  }
+  return Object.keys(prefs).length === 0 ? undefined : prefs
+}
+
+/** The export file's text; `hub` adds mods-hub's portable preferences under a `hub` key. */
+export const exportText = (plugins: ModOptions, marketplace: string, exportedAt: string, hub?: HubPrefs): string => {
   const pluginConfigs = Object.fromEntries(Object.entries(plugins).map(([name, options]) => [name, { options }]))
-  return `${JSON.stringify({ format: EXPORT_FORMAT, version: 1, exportedAt, marketplace, pluginConfigs }, null, 2)}\n`
+  return `${JSON.stringify({ format: EXPORT_FORMAT, version: 1, exportedAt, marketplace, pluginConfigs, ...(hub === undefined ? {} : { hub: { prefs: hub } }) }, null, 2)}\n`
 }
 
 /** Reads an export file: its plugins and options, or the reason it cannot be one. Names and values that are not safe to merge are dropped. */
@@ -111,7 +159,8 @@ export const parseExport = (text: string): { file: ExportFile; dropped: string[]
       else optionsOf(plugins, name)[option] = value
     }
   }
-  return { file: { exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : undefined, plugins }, dropped }
+  const hub = isObject(data.hub) ? portableHubPrefs(data.hub.prefs) : undefined
+  return { file: { exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : undefined, plugins, hub }, dropped }
 }
 
 const sameValue = (a: OptionValue | undefined, b: OptionValue): boolean => JSON.stringify(a) === JSON.stringify(b)
@@ -151,6 +200,49 @@ export const applyChanges = (settings: Json, changes: readonly Change[]): Record
   }
   return { ...settings, pluginConfigs: configs }
 }
+
+/** Each hub preference in `prefs` flattened to a `path` and a value (`routes.warning`, `channels.slack.minLevel`). */
+const hubLeaves = (prefs: HubPrefs): [string, unknown][] => [
+  ...(prefs.interaction === undefined ? [] : ([['interaction', prefs.interaction]] as [string, unknown][])),
+  ...(prefs.isNightOn === undefined ? [] : ([['isNightOn', prefs.isNightOn]] as [string, unknown][])),
+  ...(prefs.quietHours === undefined ? [] : ([['quietHours', prefs.quietHours]] as [string, unknown][])),
+  ...Object.entries(prefs.routes ?? {}).map(([level, route]): [string, unknown] => [`routes.${level}`, route]),
+  ...Object.entries(prefs.channels ?? {}).flatMap(([id, channel]): [string, unknown][] => [
+    [`channels.${id}.isEnabled`, channel.isEnabled],
+    [`channels.${id}.minLevel`, channel.minLevel],
+  ]),
+]
+
+/** What importing `incoming` would change in this machine's hub preferences (`current` is its `prefs.json`, `{}` when there is none). */
+export const planHubImport = (current: Json, incoming: HubPrefs): { changes: HubChange[]; unchanged: number } => {
+  const have = new Map(hubLeaves(portableHubPrefs(current) ?? {}))
+  const plan = { changes: [] as HubChange[], unchanged: 0 }
+  for (const [path, after] of hubLeaves(incoming)) {
+    if (have.has(path) && have.get(path) === after) plan.unchanged += 1
+    else plan.changes.push({ path, before: have.get(path), after })
+  }
+  return plan
+}
+
+/** `current` (the hub's `prefs.json`) with the changes merged in; every other field, the hub's moment-to-moment state included, is kept. */
+export const applyHubChanges = (current: Json, changes: readonly HubChange[]): Record<string, unknown> => {
+  const next: Record<string, unknown> = { ...current }
+  const routes: Record<string, unknown> = isObject(current.routes) ? { ...current.routes } : {}
+  const channels: Record<string, Record<string, unknown>> = {}
+  for (const [id, value] of Object.entries(isObject(current.channels) ? current.channels : {})) channels[id] = isObject(value) ? { ...value } : {}
+  for (const { path, after } of changes) {
+    const [head, id, field] = path.split('.')
+    if (head === 'routes' && id !== undefined) routes[id] = after
+    else if (head === 'channels' && id !== undefined && field !== undefined) channels[id] = { ...(channels[id] ?? {}), [field]: after }
+    else if (head !== undefined) next[head] = after
+  }
+  if (changes.some(change => change.path.startsWith('routes.'))) next.routes = routes
+  if (changes.some(change => change.path.startsWith('channels.'))) next.channels = channels
+  return next
+}
+
+export const describeHubChanges = (changes: readonly HubChange[]): string[] =>
+  changes.map(({ path, before, after }) => `  ${path}: ${before === undefined ? '(not set)' : JSON.stringify(before)} → ${JSON.stringify(after)}`)
 
 const show = (value: OptionValue | undefined): string => {
   if (value === undefined) return '(not set)'

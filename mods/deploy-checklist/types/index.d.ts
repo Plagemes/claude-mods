@@ -1,6 +1,7 @@
 /** One line of the checklist: `skip` when it does not apply (no git, no changelog). */
 export type DeployChecklistItem = {
-  id: 'branch' | 'tree' | 'tests' | 'changelog'
+  /** `ci` only with mods-hub: the latest CI run of the branch (`ci.result`). */
+  id: 'branch' | 'tree' | 'tests' | 'changelog' | 'ci'
   label: string
   status: 'pass' | 'fail' | 'warn' | 'skip'
   detail: string

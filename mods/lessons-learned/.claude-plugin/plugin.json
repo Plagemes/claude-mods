@@ -1,6 +1,6 @@
 {
   "name": "lessons-learned",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "When Claude fixes a mistake, offers to save the lesson to CLAUDE.md.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#lessons-learned",

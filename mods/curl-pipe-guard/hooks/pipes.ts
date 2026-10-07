@@ -1,20 +1,20 @@
+import { embeddedShellScripts, simpleCommands, type ShellCommand } from './shared/shell'
+
 export type Finding = {
+  /** Which case it is, for mods-hub's risk.blocked: `pipe-to-interpreter` or `run-substitution`. */
+  rule: string
   /** The interpreter that would run the download. */
   interpreter: string
   /** The URLs the download names, for the "download first" advice. */
   urls: string[]
 }
 
-type Stage = string[]
-
 const DOWNLOADERS = new Set(['curl', 'wget', 'iwr', 'irm', 'invoke-webrequest', 'invoke-restmethod', 'fetch', 'http', 'https', 'xh', 'aria2c'])
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh', 'ash', 'powershell', 'pwsh'])
 const SCRIPT_RUNNERS = /^(?:python[\d.]*|pypy[\d]*|node|nodejs|ruby|perl|php|lua)$/
 const ALWAYS_EXECUTES_INPUT = new Set(['iex', 'invoke-expression'])
-const WRAPPERS = new Set(['sudo', 'doas', 'env', 'exec', 'command', 'nohup', 'time', 'nice', 'stdbuf'])
-const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-r', '-t', '-U', '-D', '-T'])
 const PROGRAM_OPTIONS = new Set(['-c', '-m', '-e', '-E', '-p', '-r', '--eval', '--print'])
-/** How deep `bash -c "…"` and `eval "…"` strings are opened up to look inside them. */
+/** How deep scripts handed to a shell further along (`docker exec web sh -c '…'`) are opened up. */
 const MAX_NESTING = 3
 
 const FETCH = String.raw`(?:curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod|fetch)\b`
@@ -31,87 +31,6 @@ const INTERPRETS_SUBSTITUTION = new RegExp(
 )
 // iex (iwr ...), iex ((New-Object Net.WebClient).DownloadString(...))
 const POWERSHELL_EVALUATES_DOWNLOAD = new RegExp(String.raw`\b(?:iex|invoke-expression)\b[^;|\n]*?(?:${FETCH}|downloadstring)`, 'i')
-
-/** Pipelines of stages of words: `a | b && c` is [[a, b], [c]]. Quotes are honoured; nothing is run. */
-function parsePipelines(input: string): Stage[][] {
-  const pipelines: Stage[][] = []
-  let stages: Stage[] = []
-  let words: string[] = []
-  let word = ''
-  let hasWord = false
-  let quote: '"' | "'" | undefined
-  /** A lone `>` or `2>` names its file in the next word: that word is not an argument. */
-  let isRedirectTarget = false
-
-  const endWord = () => {
-    if (hasWord) {
-      if (isRedirectTarget) isRedirectTarget = false
-      else if (/^[0-9]*(?:[<>]+|>&|<&)$/.test(word)) isRedirectTarget = true
-      else if (!/^[0-9]*[<>]/.test(word)) words.push(word)
-    }
-    word = ''
-    hasWord = false
-  }
-  const endStage = () => {
-    endWord()
-    isRedirectTarget = false
-    if (words.length > 0) stages.push(words)
-    words = []
-  }
-  const endPipeline = () => {
-    endStage()
-    if (stages.length > 0) pipelines.push(stages)
-    stages = []
-  }
-
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i] as string
-    if (quote !== undefined) {
-      if (ch === quote) quote = undefined
-      else if (ch === '\\' && quote === '"' && i + 1 < input.length) word += input[++i]
-      else word += ch
-    } else if (ch === '"' || ch === "'") {
-      quote = ch
-      hasWord = true
-    } else if (ch === '\\' && i + 1 < input.length) {
-      word += input[++i]
-      hasWord = true
-    } else if (ch === '|' && input[i + 1] !== '|') {
-      // `|&` pipes stderr along with stdout: still a pipe.
-      if (input[i + 1] === '&') i += 1
-      endStage()
-    } else if (ch === '&' && /[<>]$/.test(word)) {
-      word += ch
-    } else if (/[\n;|&()\x60]/.test(ch)) {
-      endPipeline()
-    } else if (/\s/.test(ch)) {
-      endWord()
-    } else {
-      word += ch
-      hasWord = true
-    }
-  }
-  endPipeline()
-  return pipelines
-}
-
-function baseName(word: string): string {
-  return word.slice(word.lastIndexOf('/') + 1).toLowerCase()
-}
-
-/** The command a stage runs and its arguments, with sudo/env-style wrappers and assignments skipped. */
-function commandOf(stage: Stage): { name: string; args: string[] } | undefined {
-  for (let i = 0; i < stage.length; i++) {
-    const word = stage[i] as string
-    if (/^\w+=/.test(word) || WRAPPERS.has(baseName(word))) continue
-    if (word.startsWith('-')) {
-      if (WRAPPER_OPTIONS_WITH_VALUE.has(word)) i += 1
-      continue
-    }
-    return { name: baseName(word), args: stage.slice(i + 1) }
-  }
-  return undefined
-}
 
 /** Does this interpreter, with these arguments, take its program from standard input? */
 function readsProgramFromStdin(name: string, args: readonly string[]): boolean {
@@ -131,45 +50,39 @@ function readsProgramFromStdin(name: string, args: readonly string[]): boolean {
   return true
 }
 
-function urlsIn(stage: Stage): string[] {
-  return stage.filter(word => /^https?:\/\//i.test(word))
+const urlsIn = (argv: readonly string[]): string[] => argv.filter(word => /^https?:\/\//i.test(word))
+
+/** A downloader piped straight into a stage that runs its stdin as a program. */
+function pipedDownload(commands: readonly ShellCommand[]): Finding | undefined {
+  for (const runner of commands) {
+    if (runner.stage === 0 || !readsProgramFromStdin(runner.name, runner.argv.slice(1))) continue
+    const download = commands.find(cmd => cmd.pipeline === runner.pipeline && cmd.stage < runner.stage && DOWNLOADERS.has(cmd.name))
+    if (download !== undefined) return { rule: 'pipe-to-interpreter', interpreter: runner.name, urls: urlsIn(download.argv) }
+  }
+  return undefined
 }
 
-/** The command strings a stage hands to another shell: `bash -c "…"` (also after `docker exec`, `sudo`, ...) and `eval "…"`. */
-function nestedScripts(stage: Stage): string[] {
-  const scripts: string[] = []
-  stage.forEach((word, index) => {
-    if (!SHELLS.has(baseName(word))) return
-    const flag = stage.findIndex((arg, at) => at > index && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(arg))
-    const script = flag === -1 ? undefined : stage[flag + 1]
-    if (script !== undefined) scripts.push(script)
-  })
-  if (commandOf(stage)?.name === 'eval') scripts.push(commandOf(stage)?.args.join(' ') ?? '')
-  return scripts
-}
-
-/** The first download that would be executed unread, or undefined. */
+/**
+ * The first download that would be executed unread, or undefined. The shared shell reader splits pipelines, peels
+ * wrappers (`sudo -E`, `env`, `FOO=1`) and opens `bash -c "…"`, `eval "…"`, `$(…)` and heredocs fed to a shell;
+ * scripts handed to a shell further along (`docker exec web sh -c '…'`) are opened here.
+ */
 export function findPipeToShell(command: string, depth = 0): Finding | undefined {
+  const commands = simpleCommands(command)
   if (depth < MAX_NESTING) {
-    for (const stage of parsePipelines(command).flat()) {
-      for (const script of nestedScripts(stage)) {
+    for (const { argv } of commands) {
+      for (const script of embeddedShellScripts(argv)) {
         const found = findPipeToShell(script, depth + 1)
         if (found !== undefined) return found
       }
     }
   }
-  for (const stages of parsePipelines(command)) {
-    for (let i = 1; i < stages.length; i++) {
-      const runner = commandOf(stages[i] as Stage)
-      if (runner === undefined || !readsProgramFromStdin(runner.name, runner.args)) continue
-      const download = stages.slice(0, i).find(stage => DOWNLOADERS.has(commandOf(stage)?.name ?? ''))
-      if (download !== undefined) return { interpreter: runner.name, urls: urlsIn(download) }
-    }
-  }
+  const piped = pipedDownload(commands)
+  if (piped !== undefined) return piped
   const patterns = [EVALUATES_SUBSTITUTION, INTERPRETS_SUBSTITUTION, POWERSHELL_EVALUATES_DOWNLOAD]
   if (patterns.some(pattern => pattern.test(command))) {
     const urls = command.match(/https?:\/\/[^\s"')`]+/g) ?? []
-    return { interpreter: 'a shell', urls }
+    return { rule: 'run-substitution', interpreter: 'a shell', urls }
   }
   return undefined
 }

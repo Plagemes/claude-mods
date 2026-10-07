@@ -1,5 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 const BLOCKED = [
   'rm -rf /',
   'rm   -rf    /',
@@ -36,6 +38,11 @@ const BLOCKED = [
   'eval "rm -rf /usr"',
   'zsh -c "git reset --hard"',
   'echo garbage > /dev/sda',
+  "su -c 'rm -rf /' root",
+  'echo $(rm -rf ~)',
+  'strace -f rm -rf /etc',
+  'ls | xargs -0 rm -rf /usr',
+  'bash <<EOF\nrm -rf /\nEOF',
 ]
 
 const ALLOWED = [
@@ -64,6 +71,9 @@ const ALLOWED = [
   'bash scripts/clean.sh',
   'git commit -m "guard against sh -c \'rm -rf /\'"',
   'echo done > /dev/null',
+  "cat <<'EOF' > notes.md\nnever run rm -rf / here\nEOF",
+  'cat /dev/sda > disk.img',
+  'make 2>&1 | tee build.log',
 ]
 
 test('denies catastrophic commands with an explanation and a safer alternative', async ($, on) => {
@@ -89,4 +99,38 @@ test('allowGitReset permits git reset --hard and git clean -fdx but never rm -rf
   expect((await $.tool.call({ tool: 'Bash', command: 'git reset --hard HEAD~1' })).deny).toBeUndefined()
   expect((await $.tool.call({ tool: 'Bash', command: 'git clean -fdx' })).deny).toBeUndefined()
   expect((await $.tool.call({ tool: 'Bash', command: 'rm -rf /' })).deny).toContain('rm-rf-guard')
+})
+
+test('with mods-hub: each deny is published as risk.blocked, the command masked', async ($, on) => {
+  on('tool.call', () => ({ result: 'ran' }))
+  const hub = fakeHub(on)
+  const key = 'ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8'
+  expect((await $.tool.call({ tool: 'Bash', command: `GH_TOKEN=${key} rm -rf /` })).deny).toContain('rm-rf-guard: blocked')
+  expect((await $.tool.call({ tool: 'Bash', command: 'rm -rf node_modules' })).result).toBe('ran')
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: {
+        guard: 'rm-rf-guard',
+        tool: 'Bash',
+        reason: 'rm-catastrophic: recursive rm of "/" would wipe a home, system or whole working directory',
+        severity: 'high',
+        command: 'GH_TOKEN=[REDACTED:github-token] rm -rf /',
+      },
+    },
+  ])
+})
+
+test('says hello to mods-hub at session start', async ($, on) => {
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+})
+
+test('without mods-hub a deny still happens and nothing is published', async ($, on) => {
+  on('tool.call', () => ({ result: 'ran' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect((await $.tool.call({ tool: 'Bash', command: 'rm -rf ~' })).deny).toContain('rm-rf-guard: blocked')
 })

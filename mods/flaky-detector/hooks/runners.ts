@@ -21,23 +21,30 @@ const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]/g
 const DURATION = /\s+(?:\(?\d+(?:\.\d+)?\s?m?s\)?)$/
 const SCRIPT_FILE = /\.(?:[cm]?[jt]sx?|vue|svelte)$/
 
+/** A shell segment's start, past env assignments and launchers (`npx`, `python -m`, `poetry run`, `bundle exec`...) and a path. */
+const LAUNCHED =
+  String.raw`^\s*(?:\w+=\S*\s+|(?:sudo|time|env|nice|command|npx|pnpx|bunx|yarn|pnpm|bun)\s+|timeout\s+\S+\s+|(?:python3?|py)\s+-m\s+|(?:poetry|uv|pipenv|pdm|hatch|rye)\s+run\s+|(?:bundle|pnpm|yarn|npm)\s+exec\s+(?:--\s+)?)*?` +
+  String.raw`(?:[\w.~-]*\/)*`
+/** A runner as the command a segment runs: `cat jest.config.js`, `npm i -D vitest` or `git commit -m "fix pytest"` run none. */
+const RUNNER = new RegExp(LAUNCHED + String.raw`(vitest|jest|py\.test|pytest|go\s+test|cargo\s+(?:test|nextest)|rspec)(?![\w./-])`)
+/** A package script or make target named test. */
+const TEST_SCRIPT = new RegExp(LAUNCHED + String.raw`(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?::\S+)?|(?:make|just)\s+test)(?![\w./-])`)
+const SEGMENTS = /&&|\|\||[;|&\n(){}]/
+
+const RUNNER_OF: Record<string, Runner> = { vitest: 'vitest', jest: 'jest', 'py.test': 'pytest', pytest: 'pytest', go: 'go', cargo: 'cargo', rspec: 'rspec' }
+
 /** The runner a command invokes directly, if it is one; `npm test` and friends are told apart by their output. */
 export const runnerOfCommand = (command: string): Runner | undefined => {
-  if (/\bvitest\b/.test(command)) return 'vitest'
-  if (/\bjest\b/.test(command)) return 'jest'
-  if (/\b(?:py\.test|pytest)\b/.test(command)) return 'pytest'
-  if (/\bgo\s+test\b/.test(command)) return 'go'
-  if (/\bcargo\s+(?:test|nextest)\b/.test(command)) return 'cargo'
-  if (/\brspec\b/.test(command)) return 'rspec'
+  for (const segment of command.split(SEGMENTS)) {
+    const found = RUNNER.exec(segment)?.[1]
+    if (found !== undefined) return RUNNER_OF[found.split(/\s/)[0] ?? '']
+  }
   return undefined
 }
 
-/** Whether a shell command runs tests at all (a runner, or a package script named test). */
+/** Whether a shell command runs tests at all (a runner, or a package script named test), rather than only naming one. */
 export const isTestCommand = (command: string): boolean =>
-  runnerOfCommand(command) !== undefined ||
-  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?::\S+)?\b/.test(command) ||
-  /\bnpx\s+(?:vitest|jest)\b/.test(command) ||
-  /\b(?:make|just)\s+test\b/.test(command)
+  runnerOfCommand(command) !== undefined || command.split(SEGMENTS).some(segment => TEST_SCRIPT.test(segment))
 
 /** The runner whose summary the output carries. */
 export const runnerOfOutput = (output: string): Runner | undefined => {

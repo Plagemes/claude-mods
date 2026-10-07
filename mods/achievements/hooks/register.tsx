@@ -19,6 +19,9 @@ type Tracker = {
   sessionFiles: Set<string>
   failingRunners: Set<string>
   lastChecklist: string
+  /** mods-hub is installed, and how far its bus was read. */
+  hasHub: boolean
+  hubSeenAt: number
 }
 type Settings = { isSoundOn: boolean }
 
@@ -36,6 +39,9 @@ const BAR_CELLS = 10
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit'])
 const AGENT_TOOLS = new Set(['Agent', 'Task'])
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
+/** How often, with mods-hub installed, the commits, test runs and CI runs other mods report are counted. */
+const HUB_POLL_MS = 15_000
+const HUB_TOPICS = new Set(['git.commit', 'test.result', 'ci.result'])
 const FILTER_ALL = 'all'
 const FILTER_UNLOCKED = 'unlocked'
 const FILTER_LOCKED = 'locked'
@@ -109,14 +115,66 @@ function scheduleSave($: Dollar, tracker: Tracker, delayMs: number): void {
   tracker.saveTimer = $.clock.after(delayMs, () => void save($, tracker).catch(error => $.ui.log(`could not save progress: ${describe(error)}`, { to: 'debug' })))
 }
 
-function announce($: Dollar, settings: Settings, unlocked: readonly Achievement[]): void {
+/** The unlock: a toast without mods-hub; with it, a `success` notice (held while Silent, the sound held at night). */
+async function announce($: Dollar, settings: Settings, tracker: Tracker, unlocked: readonly Achievement[]): Promise<void> {
   const [first] = unlocked
   if (first === undefined) return
   const text = unlocked.length === 1
     ? `🏆 Unlocked: ${first.icon} ${first.title} · ${first.description}`
     : `🏆 Unlocked ${unlocked.length}: ${unlocked.map(achievement => `${achievement.icon} ${achievement.title}`).join(', ')}`
-  $.ui.toast(text, { timeoutMs: TOAST_MS })
+  if (tracker.hasHub) await hubNotify($, { level: 'success', title: text })
+  else $.ui.toast(text, { timeoutMs: TOAST_MS })
   if (settings.isSoundOn) $.clock.after(0, () => void $.audio.play(SOUND).catch(() => undefined))
+}
+
+// ── mods-hub: what other mods report counts too ──────────────────────────────────────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: Dollar): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello, and the bus counted every 15 seconds. */
+async function greetHub($: Dollar, tracker: Tracker, settings: Settings): Promise<void> {
+  tracker.hasHub = (await hubMode($)) !== undefined
+  if (!tracker.hasHub) return
+  tracker.hubSeenAt = await $.clock.now()
+  await hubHello($, { version: await ownVersion($), publishes: [], consumes: [...HUB_TOPICS] })
+  $.clock.every(HUB_POLL_MS, () => void countHub($, tracker, settings).catch(error => $.ui.log(`could not read mods-hub: ${describe(error)}`, { to: 'debug' })))
+}
+
+/**
+ * The commits, test runs and CI runs other mods reported since the last look: commit-composer's commits (made
+ * without Bash) count as commits; test-watch's and quick-commands' runs, and CI runs (ci-watch), count as test runs,
+ * green or red, a red run turning green counting toward Bug squasher. The hub's own test reports are the Bash runs
+ * this mod already counts, so they are left out.
+ */
+async function countHub($: Dollar, tracker: Tracker, settings: Settings): Promise<void> {
+  const events = (await $.mods.recent({ since: tracker.hubSeenAt, limit: 50 })).filter(event => HUB_TOPICS.has(event.topic))
+  for (const event of events) tracker.hubSeenAt = Math.max(tracker.hubSeenAt, event.at)
+  const counted = events.filter(event => !(event.topic === 'test.result' && event.source === 'mods-hub'))
+  if (counted.length === 0) return
+  await record($, tracker, settings, (progress, pending) => {
+    for (const event of counted) {
+      const data = event.data as { outcome?: unknown; runner?: unknown; workflow?: unknown }
+      if (event.topic === 'git.commit') {
+        bump(progress, pending, 'commits')
+        continue
+      }
+      const key = event.topic === 'ci.result' ? `ci:${String(data.workflow)}` : `${event.source}:${String(data.runner)}`
+      if (data.outcome === 'passed') {
+        bump(progress, pending, 'greenRuns')
+        if (tracker.failingRunners.delete(key)) bump(progress, pending, 'redToGreen')
+      } else if (data.outcome === 'failed' || data.outcome === 'error') {
+        tracker.failingRunners.add(key)
+      }
+    }
+  })
 }
 
 async function record($: Dollar, tracker: Tracker, settings: Settings, change: Change): Promise<void> {
@@ -127,7 +185,7 @@ async function record($: Dollar, tracker: Tracker, settings: Settings, change: C
   settleDays(progress, day)
   const unlocked = unlockReached(progress, day, now)
   if (unlocked.length > 0) {
-    announce($, settings, unlocked)
+    await announce($, settings, tracker, unlocked)
     await update($, progressState, () => progress)
   }
   scheduleSave($, tracker, unlocked.length > 0 ? 0 : SAVE_DELAY_MS)
@@ -234,11 +292,14 @@ export const register: Register = (on, options) => {
     sessionFiles: new Set(),
     failingRunners: new Set(),
     lastChecklist: '',
+    hasHub: false,
+    hubSeenAt: 0,
   }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'achievements', description: 'Show your achievements and how close you are to the next ones' })
     $.clock.after(0, () => void progressOf($, tracker).then(progress => update($, progressState, () => progress)).catch(() => undefined))
+    await greetHub($, tracker, settings)
 
     return next(e)
   })
@@ -363,3 +424,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

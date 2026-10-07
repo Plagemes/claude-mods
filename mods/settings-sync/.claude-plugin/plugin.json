@@ -1,6 +1,6 @@
 {
   "name": "settings-sync",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Exports and imports your mods' configuration so you can move it between machines.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#settings-sync",

@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 type Run = { argv: readonly string[]; cwd: string | undefined }
 
 const PANE_PROPS = {
@@ -158,4 +160,39 @@ test('the pane explains itself before any run', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: 'No test run yet' })).toBeDefined()
   expect(await ui.find({ key: 'rerun' })).toBeUndefined()
   await ui.unmount()
+})
+
+test('with mods-hub: publishes test.result and its plan, and /tests-last opens the Tests tab of the shared panel', async ($, on) => {
+  const clock = mock.clock(on)
+  const { opened, statuses } = world(on, VITEST_PROJECT, () => VITEST_FAILED)
+  const hub = fakeHub(on)
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['test.result'], consumes: [] }])
+  expect(hub.tabs).toEqual([{ id: 'tests', title: 'Tests', order: 100, command: 'tests-last' }])
+
+  await $.tool.call(edit('/repo/src/app.ts'))
+  await clock.advance(3000)
+  expect(statuses.at(-1)).toBe('✗ 2 failed · 10 passed')
+  expect(hub.published).toEqual([
+    {
+      topic: 'test.result',
+      data: { runner: 'vitest', outcome: 'failed', passed: 10, failed: 2, durationMs: 0, command: 'node_modules/.bin/vitest run src/app.test.ts' },
+    },
+  ])
+  expect(hub.facts.get('plan')).toEqual({ runners: ['vitest'], targets: ['src/app.test.ts'], plans: [{ runner: 'vitest', cwd: '/repo' }] })
+
+  await $.command.run({ command: 'tests-last', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+  expect(hub.shown).toEqual(['tests'])
+  expect(opened).toEqual([])
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'test-watch', surface, component: 'Pane', requestId: 'claude-mods', props: { ...PANE_PROPS, title: 'Claude Mods' } })
+    expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: '✗' }))?.text).toBe('✗ 2 failed · 10 passed')
+    expect(await ui.find({ key: 'rerun' })).toBeDefined()
+    expect(await ui.find({ key: 'close' })).toBeUndefined()
+    await ui.unmount()
+  }
 })

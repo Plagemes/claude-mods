@@ -1,4 +1,5 @@
-export type Protection = { reason: string }
+/** Why a path is protected; `rule` names the case for mods-hub's risk.blocked. */
+export type Protection = { rule: string; reason: string }
 
 const ENV_FILE = /^\.env(?:\.[^/]*|[*?].*)?$/
 const ENV_TEMPLATE = /\.(?:example|sample|template|dist)$/
@@ -47,14 +48,14 @@ export function protectionOf(rawPath: string): Protection | undefined {
   const path = normalize(rawPath)
   const name = baseName(path)
 
-  if (ENV_FILE.test(name) && !ENV_TEMPLATE.test(name)) return { reason: 'an environment file' }
-  if (/(?:^|\/)\.ssh(?:\/|$)/.test(path) && !name.endsWith('.pub')) return { reason: 'an SSH directory entry' }
-  if (SSH_KEY_FILE.test(name) && !name.endsWith('.pub')) return { reason: 'an SSH private key' }
-  if (PRIVATE_KEY_FILE.test(name)) return { reason: 'a private key or certificate bundle' }
-  if (/(?:^|\/)\.aws\/credentials$/.test(path)) return { reason: 'the AWS credentials file' }
-  if (/^[._]netrc$/.test(name)) return { reason: 'a netrc credentials file' }
-  if (KUBECONFIG_FILE.test(name) || /(?:^|\/)\.kube\/config$/.test(path)) return { reason: 'a kubeconfig' }
-  if (name === '.git-credentials' || name === '.pgpass') return { reason: 'a stored credentials file' }
-  if (/(?:^|\/)\.gnupg(?:\/|$)/.test(path)) return { reason: 'the GnuPG key ring' }
+  if (ENV_FILE.test(name) && !ENV_TEMPLATE.test(name)) return { rule: 'env-file', reason: 'an environment file' }
+  if (/(?:^|\/)\.ssh(?:\/|$)/.test(path) && !name.endsWith('.pub')) return { rule: 'ssh-dir', reason: 'an SSH directory entry' }
+  if (SSH_KEY_FILE.test(name) && !name.endsWith('.pub')) return { rule: 'ssh-key', reason: 'an SSH private key' }
+  if (PRIVATE_KEY_FILE.test(name)) return { rule: 'private-key', reason: 'a private key or certificate bundle' }
+  if (/(?:^|\/)\.aws\/credentials$/.test(path)) return { rule: 'aws-credentials', reason: 'the AWS credentials file' }
+  if (/^[._]netrc$/.test(name)) return { rule: 'netrc', reason: 'a netrc credentials file' }
+  if (KUBECONFIG_FILE.test(name) || /(?:^|\/)\.kube\/config$/.test(path)) return { rule: 'kubeconfig', reason: 'a kubeconfig' }
+  if (name === '.git-credentials' || name === '.pgpass') return { rule: 'credentials-file', reason: 'a stored credentials file' }
+  if (/(?:^|\/)\.gnupg(?:\/|$)/.test(path)) return { rule: 'gnupg', reason: 'the GnuPG key ring' }
   return undefined
 }

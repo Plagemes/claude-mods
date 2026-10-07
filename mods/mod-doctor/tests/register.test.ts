@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'mod-doctor'
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 12)
@@ -190,4 +192,39 @@ test('offline with a cached catalog, and without a pane, the report still compar
   expect(text).toContain('▲ secret-shield 1.0.0 → 1.3.0 available')
   expect(text).toContain('• broken-thing is no longer in the claude-mods catalog')
   expect(text).toEndWith('Offline (getaddrinfo ENOTFOUND raw.githubusercontent.com): catalog plagemes/claude-mods@main as cached 3 h ago')
+})
+
+test('with mods-hub: says hello, tells when a mod was installed after the check, and announces start-up load errors as an error notice', { options: { checkAtStart: true } }, async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on, {}, w.clock)
+  let installedEvent: { value: unknown; version: number } = { value: null, version: 1 }
+  on('state.get', { plugin: 'mods-hub', key: 'latest', id: 'mod.installed' }, () => ({ value: installedEvent }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toHaveLength(1)
+  expect(hub.hellos[0]?.consumes).toEqual(['mod.installed'])
+  await w.clock.settle()
+  expect(hub.notified).toEqual([{ level: 'error', title: '✗ broken-thing fails to load · /mod-doctor' }])
+  expect(w.toasts).toEqual([])
+
+  await doctor($)
+  await w.clock.settle()
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PLUGIN, props: PANE })
+    expect(await ui.find({ key: 'stale' })).toBeUndefined()
+    await ui.unmount()
+  }
+
+  installedEvent = { value: { id: 'e1', topic: 'mod.installed', data: { name: 'cost-meter', version: '1.1.0' }, source: 'mod-store', at: NOW + 60_000, session: 's', scope: 'session' }, version: 2 }
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PLUGIN, props: PANE })
+    expect((await ui.find({ key: 'stale' }))?.text).toContain('cost-meter 1.1.0 was installed after this check')
+    await ui.unmount()
+  }
+})
+
+test('without mods-hub the pane has no stale line and the start-up announcement is a toast', { options: { checkAtStart: true } }, async ($, on) => {
+  const w = world(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await w.clock.settle()
+  expect(w.toasts).toEqual(['✗ broken-thing fails to load · /mod-doctor'])
 })

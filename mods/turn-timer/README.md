@@ -26,3 +26,4 @@ Measures how long each turn takes, from your prompt to Claude's final answer, an
 - Hooks `turn.complete` and reads its `durationMs`, the engine's own wall-clock length of the turn, so no start time has to be tracked and a prompt queued behind a running turn is not over-counted.
 - Totals live in `$.state` (a hot reload keeps them) and are shown with `$.ui.status`.
 - The toast fires when the turn ends, not while it is still running.
+- With [mods-hub](../mods-hub) installed the long-turn toast becomes an info notice through the hub (a toast, held while you are Silent) that also says how many tool calls the turn made, read from the hub's `turn.finished` event a moment after the turn ends. Without the hub it is the toast above.

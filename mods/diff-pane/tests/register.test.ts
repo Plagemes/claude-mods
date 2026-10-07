@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 import { barCells, cutDiff, parseTracked } from '../hooks/parse'
 
 const PLUGIN = 'diff-pane'
@@ -21,6 +23,8 @@ type Repo = {
   calls: string[]
   copies: unknown[]
   isOpen: boolean
+  /** The hub's panel is open. */
+  isHubPanelOpen: boolean
   clock: ReturnType<typeof mock.clock>
 }
 
@@ -36,6 +40,7 @@ const world = (on: On, isRepo = true): Repo => {
     calls: [],
     copies: [],
     isOpen: false,
+    isHubPanelOpen: false,
     clock: mock.clock(on),
   }
   on('process.run', ($, e) => {
@@ -65,7 +70,10 @@ const world = (on: On, isRepo = true): Repo => {
     return { value: { isPlaced: true } }
   })
   on('ui.panes', () => ({
-    value: repo.isOpen ? [{ id: 'changes', title: 'Changes', isShown: true, isFocused: false, isPlaced: true }] : [],
+    value: [
+      ...(repo.isOpen ? [{ id: 'changes', title: 'Changes', isShown: true, isFocused: false, isPlaced: true }] : []),
+      ...(repo.isHubPanelOpen ? [{ id: 'claude-mods', title: 'Claude Mods', isShown: true, isFocused: false, isPlaced: true }] : []),
+    ],
   }))
   on('ui.copy', ($, e) => {
     repo.copies.push({ text: e.text, surface: e.surface })
@@ -73,6 +81,7 @@ const world = (on: On, isRepo = true): Repo => {
   })
   on('ui.toast', () => ({ value: undefined }))
   on('tool.call', () => ({ result: 'ok' }))
+  on('turn.complete', ($, e) => ({ text: e.answer }))
   return repo
 }
 
@@ -154,4 +163,106 @@ test('parses numstat, splits bars and cuts long diffs at a hunk', () => {
   const cut = cutDiff(long, 45)
   expect(cut.isCut).toBe(true)
   expect(cut.text.endsWith('+x\n')).toBe(true)
+})
+
+const HUB_PANE_PROPS = { ...PANE_PROPS, title: 'Claude Mods' }
+const mountHubPane = ($: Engine, surface: 'terminal' | 'desktop') =>
+  $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: 'claude-mods', props: HUB_PANE_PROPS })
+const TURN = { answer: 'ok', durationMs: 5, isAborted: false, turnId: 't', reason: 'answer' } as const
+
+/** The engine with the hub installed: its tab strip is what the plugin's tab is drawn beneath. */
+const hubbed = async ($: Engine, on: On, repo: Repo) => {
+  const hub = fakeHub(on, {}, repo.clock)
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  return hub
+}
+
+test('with mods-hub: registers the Changes tab, scans at start, /changes opens the tab and the list is drawn under the hub strip', async ($, on) => {
+  const repo = world(on)
+  const hub = await hubbed($, on, repo)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['git.commit'] }])
+  expect(hub.tabs).toEqual([{ id: 'changes', title: 'Changes', order: 250, command: 'changes' }])
+  expect(repo.calls.some(call => call.startsWith('ls-files --others'))).toBe(true)
+
+  expect((await openChanges($)).text).toBe('Changes tab opened.')
+  expect(hub.shown).toEqual(['changes'])
+  expect(repo.isOpen).toBe(false)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mountHubPane($, surface)
+    expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+    expect((await ui.find({ key: 'row:src/auth.ts' }))?.text).toContain('+3 −1')
+    expect((await ui.find({ key: 'totals' }))?.text).toContain('4 files changed')
+    await ui.press({ key: 'diff:src/auth.ts' })
+    expect((await ui.find({ type: 'Code' }))?.props.format).toBe('diff')
+    await ui.press({ key: 'diff:src/auth.ts' })
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub: another tab of the panel is left to its owner', async ($, on) => {
+  const repo = world(on)
+  const hub = await hubbed($, on, repo)
+  hub.tab = 'cost'
+  const ui = await mountHubPane($, 'terminal')
+  expect(await ui.find({ type: 'Text', text: 'HUB STRIP' })).toBeDefined()
+  expect(await ui.find({ key: 'totals' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('with mods-hub: edits rescan while the panel shows the Changes tab, and not while it shows another', async ($, on) => {
+  const repo = world(on)
+  const hub = await hubbed($, on, repo)
+  repo.isHubPanelOpen = true
+  const scans = () => repo.calls.filter(call => call.startsWith('ls-files')).length
+
+  hub.tab = 'home'
+  const before = scans()
+  await $.tool.call({ tool: 'Edit', file_path: '/work/app/src/a.ts', old_string: 'a', new_string: 'b' })
+  await repo.clock.advance(500)
+  expect(scans()).toBe(before)
+
+  hub.tab = 'changes'
+  repo.tracked.push(['A', '20', '0', 'src/new.ts'])
+  await $.tool.call({ tool: 'Edit', file_path: '/work/app/src/new.ts', old_string: 'a', new_string: 'b' })
+  await repo.clock.advance(500)
+  expect(scans()).toBe(before + 1)
+  const ui = await mountHubPane($, 'terminal')
+  expect((await ui.find({ key: 'row:src/new.ts' }))?.text).toContain('+20 −0')
+  await ui.unmount()
+})
+
+test('with mods-hub: a commit another mod made (git.commit on the bus) rescans at the end of the turn', async ($, on) => {
+  const repo = world(on)
+  const hub = await hubbed($, on, repo)
+  repo.isHubPanelOpen = true
+  hub.tab = 'changes'
+  await repo.clock.advance(1000)
+  const scans = () => repo.calls.filter(call => call.startsWith('ls-files')).length
+  const before = scans()
+
+  await $.turn.complete(TURN)
+  expect(scans()).toBe(before)
+
+  repo.tracked.length = 0
+  hub.events.push({ topic: 'git.commit', data: { sha: 'abc', message: 'x', branch: 'main', files: 3 }, at: 1500, source: 'commit-composer' })
+  await repo.clock.advance(1000)
+  await $.turn.complete(TURN)
+  expect(scans()).toBe(before + 1)
+  const ui = await mountHubPane($, 'terminal')
+  expect(await ui.find({ key: 'row:src/auth.ts' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without mods-hub /changes opens the own pane and nothing is scanned at start', async ($, on) => {
+  const repo = world(on)
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  expect(repo.calls).toEqual([])
+  expect((await openChanges($)).text).toBe('Changes pane opened.')
+  expect(repo.isOpen).toBe(true)
 })

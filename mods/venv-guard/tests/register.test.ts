@@ -1,6 +1,9 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
+import { findGlobalInstall } from '../hooks/pip'
+import { fakeHub } from './hub'
+
 /** Stands in for the engine: records the commands that reach the Bash tool, answers the project folder and its listing. */
 function engine(on: On, variables: Record<string, string> | 'broken' = {}, folders: string[] = []) {
   const ran: string[] = []
@@ -33,6 +36,12 @@ const GLOBAL_INSTALLS = [
   'cd backend && pip install -e .',
   'pip install pytest; pytest',
   'source /opt/other/setup.sh && pip install x',
+  // The shared shell reader: wrappers, shells handed a script, substitutions, heredocs fed to a shell.
+  'timeout 300 pip install torch',
+  'bash -c "pip install requests"',
+  'echo "$(pip install requests)"',
+  'bash <<EOF\npip install requests\nEOF',
+  'bash -c "source .venv/bin/activate" && pip install requests',
 ]
 
 const ISOLATED = [
@@ -56,6 +65,8 @@ const ISOLATED = [
   'echo "remember to pip install requests"',
   'git commit -m "pip install docs"',
   'ls -la',
+  'source .venv/bin/activate && bash -c "pip install requests"',
+  'env VIRTUAL_ENV=/repo/.venv pip install requests',
 ]
 
 test('denies pip install when no virtualenv is active, whatever the spelling', async ($, on) => {
@@ -137,4 +148,27 @@ test('regression: here-document bodies are text, not commands', async ($, on) =>
   expect((await $.tool.call({ tool: 'Bash', command: readme })).deny).toBeUndefined()
   expect((await $.tool.call({ tool: 'Bash', command: 'cat > x <<EOF\npip install a\nEOF\npip install b' })).deny).toContain('"pip install b"')
   expect(ran).toEqual([readme])
+})
+
+test('an activation reaches the scripts run after it, but not the other way round', () => {
+  expect(findGlobalInstall('. .venv/bin/activate; sh -c "pip install a"')).toBeUndefined()
+  expect(findGlobalInstall('sh -c ". .venv/bin/activate"; pip install a')).toEqual({ command: 'pip install a', isSystemWide: false })
+  expect(findGlobalInstall('sudo -H pip install a')).toEqual({ command: 'sudo pip install a', isSystemWide: true })
+})
+
+test('with mods-hub: a deny is published as risk.blocked', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect((await $.tool.call({ tool: 'Bash', command: 'pip install requests' })).deny).toContain('venv-guard')
+  expect((await $.tool.call({ tool: 'Bash', command: 'sudo pip install requests' })).deny).toContain('venv-guard')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'venv-guard', tool: 'Bash', reason: 'no-virtualenv: pip install with no virtualenv active', severity: 'low', command: 'pip install requests' } },
+    {
+      topic: 'risk.blocked',
+      data: { guard: 'venv-guard', tool: 'Bash', reason: 'system-wide-install: sudo pip or pip --user installs into the system Python', severity: 'medium', command: 'sudo pip install requests' },
+    },
+  ])
 })

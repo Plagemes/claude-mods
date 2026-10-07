@@ -1,6 +1,6 @@
 {
   "name": "lockfile-guard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Prevents hand-editing lockfiles; they must change through the package manager.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#lockfile-guard",

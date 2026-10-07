@@ -1,6 +1,8 @@
 import { test, expect } from 'claude-code/testing'
 import type { FsStat, On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const file = (size: number): FsStat => ({ kind: 'file', size, mtimeMs: 0, isLink: false })
 
 const answerEngine = (on: On, sizes: Record<string, number>) => {
@@ -73,4 +75,30 @@ test('regression: an offset alone is a bounded read', async ($, on) => {
 
   const whole = await $.tool.call({ tool: 'Read', file_path: '/repo/app.log' })
   expect(whole.deny).toContain('over the 256 KB limit')
+})
+
+test('with mods-hub: says hello and publishes each refusal as risk.blocked (severity low, with the path)', async ($, on) => {
+  answerEngine(on, { '/repo/data.csv': 3 * 1024 * 1024, '/repo/pnpm-lock.yaml': 120 * 1024, '/repo/ok.ts': 1024 })
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['risk.blocked'], consumes: [] }])
+
+  const big = await $.tool.call({ tool: 'Read', file_path: '/repo/data.csv' })
+  const lock = await $.tool.call({ tool: 'Read', file_path: '/repo/pnpm-lock.yaml' })
+  const fine = await $.tool.call({ tool: 'Read', file_path: '/repo/ok.ts' })
+  expect(big.deny).toContain('3.0 MB')
+  expect(lock.deny).toContain('lock file')
+  expect(fine.deny).toBeUndefined()
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'big-read-guard', tool: 'Read', reason: 'over the 256 KB limit for a full read (3.0 MB)', severity: 'low', path: '/repo/data.csv' } },
+    { topic: 'risk.blocked', data: { guard: 'big-read-guard', tool: 'Read', reason: 'a minified, bundled or lock file (120 KB)', severity: 'low', path: '/repo/pnpm-lock.yaml' } },
+  ])
+})
+
+test('without mods-hub the refusal is the same and nothing breaks', async ($, on) => {
+  answerEngine(on, { '/repo/data.csv': 3 * 1024 * 1024 })
+  const blocked = await $.tool.call({ tool: 'Read', file_path: '/repo/data.csv' })
+  expect(blocked.deny).toContain('big-read-guard: /repo/data.csv is 3.0 MB')
 })

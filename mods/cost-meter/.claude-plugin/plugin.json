@@ -1,6 +1,6 @@
 {
   "name": "cost-meter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Live session cost estimate in the status line, from real token usage.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#cost-meter",

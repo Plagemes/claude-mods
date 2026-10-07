@@ -2,12 +2,14 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'mod-store'
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 12, 0, 0)
 const RAW = 'https://raw.githubusercontent.com/plagemes/claude-mods/main/'
 const BIN = '/opt/claude-code/bin/claude'
-const APPDATA = 'C:\\Users\\me\\AppData\\Roaming'
+const HOME = '/Users/me'
 
 const MARKETPLACE = {
   name: 'claude-mods',
@@ -51,8 +53,8 @@ type WorldOptions = {
   isPlaced?: boolean
   copies?: boolean
   listFails?: boolean
-  /** The desktop app: no CLAUDE_CODE_EXECPATH, its folders by path, and the engine version. */
-  desktop?: { folders: Record<string, { name: string; kind: 'file' | 'dir' }[]>; version: string; bin: string }
+  /** The desktop app: no CLAUDE_CODE_EXECPATH, its environment, its folders by path, and the engine version. */
+  desktop?: { env: Record<string, string>; folders: Record<string, { name: string; kind: 'file' | 'dir' }[]>; version: string; bin: string }
 }
 
 /** Stands for everything beneath the plugin: GitHub, the claude CLI, the surface. */
@@ -60,13 +62,13 @@ function world(on: On, options: WorldOptions = {}) {
   const clock = mock.clock(on, { now: NOW })
   mock.store(on, options.store ?? {})
   const bin = options.desktop?.bin ?? BIN
-  mock.env(on, options.desktop === undefined ? { CLAUDE_CODE_EXECPATH: BIN } : { APPDATA })
+  mock.env(on, options.desktop === undefined ? { CLAUDE_CODE_EXECPATH: BIN } : options.desktop.env)
   if (options.desktop !== undefined) {
     const { folders, version } = options.desktop
     on('session.version', () => ({ value: { version } }))
     on('fs.list', ($, e) => {
       const entries = folders[e.path ?? '']
-      return entries === undefined ? { deny: `ENOENT: ${e.path}` } : { value: entries.map(entry => ({ ...entry, size: 0, mtimeMs: 0 })) }
+      return entries === undefined ? { deny: `ENOENT: ${e.path}` } : { value: entries.map(entry => ({ ...entry, size: 0, mtimeMs: 0, isLink: false })) }
     })
   }
   const net = { isOnline: options.isOnline ?? true }
@@ -487,6 +489,40 @@ test('a repository setting that is not owner/repo is reported instead of fetched
   expect(await ui.find({ type: 'Text', text: /is not owner\/repo/ })).toBeDefined()
 })
 
+test('with mods-hub: says hello and publishes mod.installed for every install and update, with the version', async ($, on) => {
+  const w = world(on, { marketplaces: [], installed: { 'secret-shield': { version: '1.0.0', scope: 'user', enabled: true } } })
+  const hub = fakeHub(on, {}, w.clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: false })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['mod.installed'], consumes: [] }])
+
+  await mods($, 'install cost-meter')
+  await mods($, 'update secret-shield')
+  await mods($, 'install-all')
+  expect(hub.published).toEqual([
+    { topic: 'mod.installed', data: { name: 'cost-meter', version: '1.1.0' } },
+    { topic: 'mod.installed', data: { name: 'secret-shield', version: '1.2.0' } },
+    { topic: 'mod.installed', data: { name: 'mod-store', version: '1.0.0' } },
+    { topic: 'mod.installed', data: { name: 'rm-rf-guard', version: '1.0.0' } },
+    { topic: 'mod.installed', data: { name: 'git-status-line', version: '2.0.0' } },
+    { topic: 'mod.installed', data: { name: 'branch-namer', version: '1.0.0' } },
+  ])
+})
+
+test('with mods-hub: a failed install and an uninstall publish nothing', async ($, on) => {
+  const w = world(on, { installed: { 'cost-meter': { version: '1.1.0', scope: 'user', enabled: true } } })
+  const hub = fakeHub(on, {}, w.clock)
+  await mods($, 'uninstall cost-meter')
+  await mods($, 'install not-a-mod')
+  expect(hub.published).toEqual([])
+})
+
+test('without mods-hub installing works exactly as before', async ($, on) => {
+  const w = world(on, { marketplaces: [] })
+  expect((await mods($, 'install cost-meter')).text).toBe('✓ Installed cost-meter 1.1.0. Run /reload-plugins to activate it.')
+  expect(w.installed.has('cost-meter')).toBe(true)
+})
+
 test('when the installed mods cannot be read, the store says so instead of counting zero', async ($, on) => {
   const w = world(on, { listFails: true })
   const report = await mods($, 'refresh')
@@ -500,19 +536,22 @@ test('when the installed mods cannot be read, the store says so instead of count
   expect(await ui.find({ type: 'Text', text: /0 installed/ })).toBeUndefined()
 })
 
-test('in the desktop app, where claude is not on PATH, the store runs the claude.exe the app installed', async ($, on) => {
-  const root = `${APPDATA}\\Claude\\claude-code`
+test('in the desktop app, where claude is not on PATH, the store runs the claude the app installed', async ($, on) => {
+  // The macOS layout: its absolute paths read the same on every host the tests run on. The Windows layout
+  // (%APPDATA%\Claude\claude-code\<version>\<build>\claude.exe) is covered by the path helpers in catalog.test.ts.
+  const root = `${HOME}/Library/Application Support/Claude/claude-code`
   const w = world(on, {
     installed: OUTDATED,
     desktop: {
+      env: { HOME },
       version: '2.1.286',
-      bin: `${root}\\2.1.286\\635c\\claude.exe`,
+      bin: `${root}/2.1.286/635c/claude`,
       folders: {
         [root]: [{ name: '2.1.284', kind: 'dir' }, { name: '2.1.286', kind: 'dir' }],
-        [`${root}\\2.1.284`]: [{ name: 'aaaa', kind: 'dir' }],
-        [`${root}\\2.1.284\\aaaa`]: [{ name: 'claude.exe', kind: 'file' }],
-        [`${root}\\2.1.286`]: [{ name: '635c', kind: 'dir' }],
-        [`${root}\\2.1.286\\635c`]: [{ name: 'claude.exe', kind: 'file' }],
+        [`${root}/2.1.284`]: [{ name: 'aaaa', kind: 'dir' }],
+        [`${root}/2.1.284/aaaa`]: [{ name: 'claude', kind: 'file' }],
+        [`${root}/2.1.286`]: [{ name: '635c', kind: 'dir' }],
+        [`${root}/2.1.286/635c`]: [{ name: 'claude', kind: 'file' }],
       },
     },
   })

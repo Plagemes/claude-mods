@@ -37,6 +37,18 @@ test('asks about an earlier open goal first, then today’s in the evening, once
   expect(questionFor([entry('2026-09-20', 'long ago')], today, 9, 18)).toBeNull()
 })
 
+test('a goal set after the ask hour is not asked about right away; it waits for the next day', () => {
+  const today = '2026-10-07'
+  const at = (hour: number): number => new Date(2026, 9, 7, hour, 0).getTime()
+  const late = [{ date: today, text: 'late goal', setAt: at(19), status: 'open' as const }]
+  expect(questionFor(late, today, 19, 18)).toBeNull()
+  expect(questionFor(late, today, 23, 18)).toBeNull()
+  expect(questionFor(late, '2026-10-08', 9, 18)).toEqual({ date: today, text: 'late goal', isToday: false })
+  const early = [{ date: today, text: 'early goal', setAt: at(10), status: 'open' as const }]
+  expect(questionFor(early, today, 17, 18)).toBeNull()
+  expect(questionFor(early, today, 18, 18)).toEqual({ date: today, text: 'early goal', isToday: true })
+})
+
 test('history shows the last 14 days with ✓ and ✗, and the streak', () => {
   const entries = [
     entry('2026-10-07', 'ship the login fix'),

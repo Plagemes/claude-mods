@@ -1,6 +1,6 @@
 {
   "name": "watch-mode-guard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Blocks watch-mode and never-ending commands run in the foreground, where they'd hang the turn.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#watch-mode-guard",

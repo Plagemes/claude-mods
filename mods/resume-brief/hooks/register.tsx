@@ -3,7 +3,6 @@ import type { EngineInterface, Register, SessionMessage } from 'claude-code'
 
 import type { Brief } from '../types'
 
-const MOD = 'resume-brief'
 const DEFAULT_MAX_AGE_DAYS = 14
 const DAY_MS = 86_400_000
 const PROMPTS_KEPT = 3
@@ -13,9 +12,16 @@ const TODOS_KEPT = 8
 const LINE_CHARS = 160
 const GIT_TIMEOUT_MS = 3_000
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+/** mods-hub's heartbeat file: one entry per live session, with its last global events. */
+const HUB_SESSIONS = '.claude/claude-mods/hub/sessions.json'
+const DECISIONS_KEPT = 5
 
 const briefAtom = atom({ plugin: 'resume-brief', key: 'brief' } as const, null)
 const isHiddenAtom = atom({ plugin: 'resume-brief', key: 'isHidden' } as const, false)
+const othersAtom = atom({ plugin: 'resume-brief', key: 'others' } as const, 0)
+
+/** What mods-hub's sessions.json says about this project: other live sessions, and decisions recorded since a time. */
+type Neighbours = { others: number; decisions: string[] }
 
 /** What this load caches between saves: the branch, read once per turn off the hot path. */
 type Saver = { branch: string; isInteractive: boolean }
@@ -81,15 +87,70 @@ function filesLine(files: readonly string[]): string {
   return files.length > FILES_SHOWN ? `${shown} +${files.length - FILES_SHOWN}` : shown
 }
 
-function continuePrompt(brief: Brief, now: number): string {
+function continuePrompt(brief: Brief, now: number, decisions: readonly string[] = []): string {
   const lines = [`Continue where we left off. In the last session (${brief.branch ? `on branch ${brief.branch}, ` : ''}${ago(now - brief.savedAt)}):`]
   lines.push(`- My last requests: ${brief.prompts.map(prompt => `"${prompt}"`).join('; ')}`)
   if (brief.files.length > 0) lines.push(`- Files you edited: ${brief.files.join(', ')}`)
   if (brief.todos.length > 0) lines.push(`- Todos still open: ${brief.todos.join('; ')}`)
   if (brief.lastAnswer) lines.push(`- Where you stopped: ${brief.lastAnswer}`)
+  if (decisions.length > 0) lines.push(`- Decided since, in other sessions: ${decisions.join('; ')}`)
   lines.push('Check the current state of those files first, then pick up the unfinished work.')
 
   return lines.join('\n')
+}
+
+// ── mods-hub: the other sessions on this project ────────────────────────────────────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed; false without it. */
+async function greetHub($: EngineInterface): Promise<boolean> {
+  if ((await hubMode($)) === undefined) return false
+  await hubHello($, { version: await ownVersion($), publishes: [], consumes: ['session.started', 'decision.recorded'] })
+  return true
+}
+
+/** Whether a session working in `cwd` works on the project at `root`. */
+const isSameProject = (cwd: unknown, root: string): boolean => {
+  const base = root.replace(/[\\/]+$/, '')
+  return typeof cwd === 'string' && (cwd.replace(/[\\/]+$/, '') === base || cwd.startsWith(`${base}/`))
+}
+
+/**
+ * Reads mods-hub's sessions.json (written only while the hub is installed): how many OTHER live sessions work
+ * on this project, and the decisions any of them recorded (`decision.recorded`, global) after `since`.
+ */
+async function neighboursOf($: EngineInterface, since: number): Promise<Neighbours> {
+  const none: Neighbours = { others: 0, decisions: [] }
+  try {
+    const home = await $.env.get('HOME')
+    if (home === undefined || home === '') return none
+    const sessions = JSON.parse(await $.fs.read(`${home}/${HUB_SESSIONS}`)) as Record<string, { id?: unknown; cwd?: unknown; events?: unknown }>
+    const root = await $.session.root()
+    const own = await $.session.id()
+    let others = 0
+    const decisions: { at: number; title: string }[] = []
+    for (const [id, entry] of Object.entries(sessions)) {
+      if (typeof entry !== 'object' || entry === null || !isSameProject(entry.cwd, root)) continue
+      if (id !== own) others += 1
+      for (const event of Array.isArray(entry.events) ? entry.events : []) {
+        const { topic, at, data } = (event ?? {}) as { topic?: unknown; at?: unknown; data?: { title?: unknown } }
+        if (topic === 'decision.recorded' && typeof at === 'number' && at > since && typeof data?.title === 'string') decisions.push({ at, title: clip(data.title) })
+      }
+    }
+    const titles = [...new Set(decisions.sort((a, b) => a.at - b.at).map(decision => decision.title))]
+    return { others, decisions: titles.slice(-DECISIONS_KEPT) }
+  } catch {
+    return none
+  }
 }
 
 async function branchOf($: EngineInterface): Promise<string> {
@@ -141,7 +202,9 @@ async function showBrief($: EngineInterface, maxAgeMs: number): Promise<Brief | 
 async function continueWork($: EngineInterface): Promise<void> {
   const brief = await read($, briefAtom)
   await update($, isHiddenAtom, () => true)
-  if (brief !== null) await $.prompt.submit({ text: continuePrompt(brief, await $.clock.now()), asUser: true })
+  if (brief === null) return
+  const { decisions } = (await hubMode($)) === undefined ? { decisions: [] } : await neighboursOf($, brief.savedAt)
+  await $.prompt.submit({ text: continuePrompt(brief, await $.clock.now(), decisions), asUser: true })
 }
 
 async function hide($: EngineInterface): Promise<void> {
@@ -150,8 +213,8 @@ async function hide($: EngineInterface): Promise<void> {
 
 async function briefCommand($: EngineInterface, maxAgeMs: number): Promise<string> {
   const brief = await showBrief($, maxAgeMs)
-  if (brief === undefined) return `${MOD}: no earlier session to resume in this project.`
-  return `↩ ${MOD}: shown above the prompt. Press Continue to pick up “${brief.prompts.at(-1) ?? ''}”.`
+  if (brief === undefined) return 'No earlier session to resume in this project.'
+  return `↩ Shown above the prompt. Press Continue to pick up “${brief.prompts.at(-1) ?? ''}”.`
 }
 
 export const register: Register = (on, options) => {
@@ -163,6 +226,10 @@ export const register: Register = (on, options) => {
     saver.isInteractive = e.isInteractive
     await $.command.register({ name: 'resume-brief', description: 'Show what you were working on in the last session' })
     if (e.isInteractive) await showBrief($, maxAgeMs)
+    if ((await greetHub($)) && e.isInteractive) {
+      const { others } = await neighboursOf($, Number.POSITIVE_INFINITY)
+      await update($, othersAtom, () => others)
+    }
 
     return next(e)
   })
@@ -197,35 +264,143 @@ export const register: Register = (on, options) => {
     if (e.props.hasSurvey || brief === null || (await read($, isHiddenAtom))) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
+    // Other plugins' bands draw beneath this one rather than being replaced by it.
+    const below = await next(e)
     const when = ago((await $.clock.now()) - brief.savedAt)
+    const others = await read($, othersAtom)
     const facts = [
       brief.files.length > 0 ? `Edited ${filesLine(brief.files)}` : '',
       brief.todos.length > 0 ? `${brief.todos.length} open todo${brief.todos.length === 1 ? '' : 's'}` : '',
     ].filter(Boolean)
 
     return (
-      <Box flexDirection="column" width={e.props.bodyColumns}>
-        <Text wrap="truncate-end">
-          <Text bold>↩ Last session</Text>
-          <Text dimColor>
-            {' '}
-            · {when}
-            {brief.branch ? ` · ${brief.branch}` : ''}
+      <Box flexDirection="column">
+        <Box key="brief" flexDirection="column" width={e.props.bodyColumns}>
+          <Text wrap="truncate-end">
+            <Text bold>↩ Last session</Text>
+            <Text dimColor>
+              {' '}
+              · {when}
+              {brief.branch ? ` · ${brief.branch}` : ''}
+            </Text>
           </Text>
-        </Text>
-        <Text wrap="truncate-end">
-          You asked: “{brief.prompts.at(-1) ?? ''}”
-        </Text>
-        {facts.length > 0 && (
-          <Text dimColor wrap="truncate-end">
-            {facts.join(' · ')}
+          <Text wrap="truncate-end">
+            You asked: “{brief.prompts.at(-1) ?? ''}”
           </Text>
-        )}
-        <Box flexDirection="row" gap={1}>
-          <Button key="continue" label="Continue" hotkey="c" variant="primary" onPress={() => continueWork($)} />
-          <Button key="dismiss" label="Dismiss" hotkey="x" role="dismiss" onPress={() => hide($)} />
+          {facts.length > 0 && (
+            <Text dimColor wrap="truncate-end">
+              {facts.join(' · ')}
+            </Text>
+          )}
+          {others > 0 && (
+            <Text color="warning" wrap="truncate-end">
+              {others === 1 ? '1 other session is' : `${others} other sessions are`} open on this project now
+            </Text>
+          )}
+          <Box flexDirection="row" gap={1}>
+            <Button key="continue" label="Continue" hotkey="c" variant="primary" onPress={() => continueWork($)} />
+            <Button key="dismiss" label="Dismiss" hotkey="x" role="dismiss" onPress={() => hide($)} />
+          </Box>
         </Box>
+        {below}
       </Box>
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

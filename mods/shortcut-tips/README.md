@@ -33,3 +33,4 @@ Every tip is checked against Claude Code 2.1.292 and nothing is invented: slash 
 - `session.start` registers `/tip` and, in an interactive session that has not shown a tip today (local calendar day), toasts the next tip. `$.store` keeps the day it last showed one and the position in the list.
 - `/tip` takes the next tip off the same rotation without using up the daily one.
 - Limits: tips describe the default key bindings, so a key you rebound with `/keybindings` will differ; a few shortcuts (alt+p, for example) need your terminal to send the Option or Alt key as Meta. If the store cannot be read the mod stays silent instead of failing the session start.
+- With [mods-hub](../mods-hub) installed: the daily tip goes through `notify` at `info` level (held while Silent) instead of a 12-second toast; `/tip` is unchanged. It publishes and consumes no events. Without the hub nothing changes.

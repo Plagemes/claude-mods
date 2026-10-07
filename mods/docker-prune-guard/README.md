@@ -28,6 +28,7 @@ To allow it, put `PRUNE-OK` in your next message. It applies to that message onl
 No configuration needed.
 
 ## How it works
-- A `tool.call` guard on `Bash` splits the command line like a shell (quotes respected, so `echo "docker volume prune"` is ignored, while the script of `bash -c "…"` is read too), looks past wrappers such as `sudo -u root`, `xargs -r`, `timeout 60` and `env`, reads the engine, subcommand and flags (`-af` counts as `-a -f`), and matches them against the delete rules. A `prompt.submit` hook remembers the latest message that came from the person.
+- A `tool.call` guard on `Bash` splits the command line with the shared claude-mods shell reader (quotes respected, so `echo "docker volume prune"` and a `cat <<EOF` note are ignored, while the script of `bash -c "…"`, `eval`, `$(…)`, a heredoc fed to a shell or `docker exec … sh -c "…"` is read too), looks past wrappers such as `sudo -u root`, `xargs -r`, `timeout 60` and `env`, reads the engine, subcommand and flags (`-af` counts as `-a -f`), and matches them against the delete rules. A `prompt.submit` hook remembers the latest message that came from the person.
 - It fails closed: if the check itself throws, a command that mentions docker or podman together with prune, volume, down or rm is refused.
+- With [mods-hub](../mods-hub) installed, every deny is also published as `risk.blocked` (rule such as `volume-prune` or `compose-down-volumes`, what would be lost, severity `medium`, the command with secrets masked). Without the hub nothing changes.
 - Limits: it reads text only, so a script or `make` target that runs these commands is not seen, and it does not list the volumes that exist.

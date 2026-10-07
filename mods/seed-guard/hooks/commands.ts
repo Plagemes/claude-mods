@@ -1,4 +1,4 @@
-import { baseName, parseShell } from './shell'
+import { baseName, simpleCommands, type ShellCommand } from './shared/shell'
 
 export type Hit = {
   /** The destructive command, as a short label (`prisma migrate reset`). */
@@ -10,7 +10,6 @@ export type Hit = {
 }
 
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s
-const WRAPPERS = new Set(['sudo', 'time', 'nohup', 'command', 'exec', 'env'])
 /** Words that run the next command: `npx prisma ...`, `bundle exec rails ...`. */
 const RUNNERS: readonly (readonly string[])[] = [
   ['npx'], ['bunx'], ['pnpx'], ['npm', 'exec'], ['pnpm', 'exec'], ['pnpm', 'dlx'], ['yarn', 'exec'], ['yarn', 'dlx'], ['bun', 'x'],
@@ -23,10 +22,6 @@ const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun'])
  */
 const DESTRUCTIVE_SCRIPT =
   /^(?:(?:db|database)[:_-](?:seed|reset|drop|wipe|fresh)|seed)(?:[:_-]\w+)?$|^(?:reset|drop|wipe|fresh)(?:[:_-](?:db|database|data|all|dev|local))?$|^prisma[:_-](?:seed|reset)$|^migrate[:_-](?:fresh|reset|refresh)$/
-/** Programs that run a command string given as an argument: `bash -c "…"`. */
-const SCRIPT_RUNNERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
-const SCRIPT_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
-const MAX_NESTING = 4
 const RAILS_TASKS = new Set([
   'db:reset', 'db:drop', 'db:drop:all', 'db:seed', 'db:setup', 'db:migrate:reset', 'db:seed:replant', 'db:schema:load', 'db:structure:load', 'db:purge',
 ])
@@ -36,21 +31,6 @@ const SEQUELIZE_COMMANDS = new Set(['db:seed', 'db:seed:all', 'db:seed:undo', 'd
 const PYTHON = /^(?:python|py)\d*(?:\.\d+)*(?:\.exe)?$/
 const ENVIRONMENT_NAMES = /^(?:RAILS_ENV|RACK_ENV|NODE_ENV|APP_ENV|DJANGO_ENV|ENVIRONMENT)$/
 const REMOTE_ENVIRONMENT = /^(?:prod|production|staging|stage)$/i
-
-/** The command's own words: `NAME=value` words and wrappers (`sudo`, `env`) removed. */
-function splitPrefix(all: readonly string[]): { assignments: Record<string, string>; words: string[] } {
-  const assignments: Record<string, string> = {}
-  let index = 0
-  let isAfterWrapper = false
-  for (; index < all.length; index += 1) {
-    const word = all[index] as string
-    const assignment = ASSIGNMENT.exec(word)
-    if (assignment !== null) assignments[assignment[1] as string] = assignment[2] as string
-    else if (WRAPPERS.has(baseName(word))) isAfterWrapper = true
-    else if (!(isAfterWrapper && word.startsWith('-'))) break
-  }
-  return { assignments, words: all.slice(index) }
-}
 
 const runnerOf = (words: readonly string[]): readonly string[] | undefined =>
   RUNNERS.find(prefix => prefix.every((word, index) => words[index] === word))
@@ -144,36 +124,41 @@ export function moveTo(directory: string, target: string): string {
   return parts.join('/')
 }
 
-/** The command string a shell is handed: `bash -lc "…"`, `eval "…"`. */
-function nestedScript(words: readonly string[]): string | undefined {
-  if (words[0] === 'eval') return words.slice(1).join(' ')
-  if (!SCRIPT_RUNNERS.has(baseName(words[0] ?? ''))) return undefined
-  const flagAt = words.findIndex((word, index) => index > 0 && SCRIPT_FLAG.test(word))
-  return flagAt === -1 ? undefined : words[flagAt + 1]
-}
+/** Where commands of one script run, and what it exported so far. */
+type Scope = { directory: string; exported: Record<string, string> }
 
-/** Destructive database commands of the line, with the `cd` and `export` words that came before them. Reads text; runs nothing. */
-export function findDestructive(line: string, depth = 0): Hit[] {
+/**
+ * Destructive database commands of the line, with the `cd` and `export` words that came before them. Reads text;
+ * runs nothing. The shared shell reader opens `bash -c`, `eval`, `$(…)` and heredocs fed to a shell; a nested
+ * script starts where its parent command runs, with the parent's `NAME=value` words (not for `$(…)`, whose
+ * assignments do not reach the substitution), and its own `cd` and `export` stay inside it.
+ */
+export function findDestructive(line: string): Hit[] {
   const hits: Hit[] = []
-  const exported: Record<string, string> = {}
-  let directory = ''
-  for (const segment of parseShell(line)) {
-    const { assignments, words } = splitPrefix(segment.words)
+  const scopes = new Map<number, Scope>()
+  /** The latest command seen at each depth, and its scope: a script nested at depth d belongs to the one at d - 1. */
+  const latest: { scope: Scope; command: ShellCommand }[] = []
+  for (const command of simpleCommands(line)) {
+    let scope = scopes.get(command.script)
+    if (scope === undefined) {
+      const parent = latest[command.depth - 1]
+      const inherited = parent === undefined || command.via === '$()' ? {} : parent.command.assignments
+      scope = { directory: parent?.scope.directory ?? '', exported: { ...parent?.scope.exported, ...inherited } }
+      scopes.set(command.script, scope)
+    }
+    const { argv: words } = command
     if (words[0] === 'cd' && words[1] !== undefined) {
-      directory = moveTo(directory, words[1])
+      scope.directory = moveTo(scope.directory, words[1])
     } else if (words[0] === 'export') {
       for (const word of words.slice(1)) {
         const assignment = ASSIGNMENT.exec(word)
-        if (assignment !== null) exported[assignment[1] as string] = assignment[2] as string
+        if (assignment !== null) scope.exported[assignment[1] as string] = assignment[2] as string
       }
     } else {
       const label = destructiveLabel(words)
-      if (label !== undefined) hits.push({ label, directory, assignments: { ...exported, ...assignments } })
-      const script = depth < MAX_NESTING ? nestedScript(words) : undefined
-      for (const inner of script === undefined ? [] : findDestructive(script, depth + 1)) {
-        hits.push({ ...inner, directory: moveTo(directory, inner.directory), assignments: { ...exported, ...assignments, ...inner.assignments } })
-      }
+      if (label !== undefined) hits.push({ label, directory: scope.directory, assignments: { ...scope.exported, ...command.assignments } })
     }
+    latest[command.depth] = { scope, command }
   }
   return hits
 }

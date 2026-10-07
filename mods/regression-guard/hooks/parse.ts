@@ -20,19 +20,26 @@ const JEST_SEPARATOR = ' › '
 const VITEST_SEPARATOR = ' > '
 const SKIPPED_BULLETS = new Set(['Test suite failed to run'])
 
-/** A shell command that runs a test suite. */
+/**
+ * A test runner as the command one shell segment runs, past env assignments and launchers (`npx`, `python -m`, `poetry run`...):
+ * `cd web && npx vitest run` runs tests; `cat jest.config.js`, `npm i -D vitest` or `git commit -m "fix pytest"` only name a runner.
+ */
 const TEST_COMMAND = new RegExp(
-  [
-    '\\b(vitest|jest|mocha|ava|pytest|py\\.test|phpunit|rspec|karma|tox|nox|ctest|playwright test)\\b',
-    '\\b(npm|pnpm|yarn|bun)\\s+(run\\s+)?test(:\\S+)?\\b',
-    '\\b(go|cargo|deno|bun|dotnet|mix|swift|zig)\\s+test\\b',
-    '\\bcargo\\s+nextest\\b',
-    '\\bnode\\s+(\\S+\\s+)*--test\\b',
-    '\\bpython3?\\s+-m\\s+(pytest|unittest)\\b',
-    '\\b(mvn|mvnw|gradle|gradlew)\\b[^|;&]*\\btest\\b',
-    '\\bmake\\s+(test|check)\\b',
-  ].join('|'),
+  String.raw`^\s*(?:\w+=\S*\s+|(?:sudo|time|env|nice|command|npx|pnpx|bunx|yarn|pnpm|bun)\s+|timeout\s+\S+\s+|(?:poetry|uv|pipenv|pdm|hatch|rye)\s+run\s+|(?:bundle|pnpm|yarn|npm)\s+exec\s+(?:--\s+)?)*?` +
+    String.raw`(?:[\w.~-]*\/)*(?:` +
+    [
+      'vitest|jest|mocha|ava|pytest|py\\.test|phpunit|rspec|karma|tox|nox|ctest|playwright\\s+test',
+      '(?:npm|pnpm|yarn|bun)\\s+(?:run\\s+)?test(?::\\S+)?',
+      '(?:go|cargo|deno|bun|dotnet|mix|swift|zig)\\s+test',
+      'cargo\\s+nextest',
+      'node\\s+(?:\\S+\\s+)*--test',
+      'python[\\d.]*\\s+-m\\s+(?:pytest|unittest)',
+      '(?:mvnw?|gradlew?)\\b[^|;&]*\\btest',
+      'make\\s+(?:test|check)',
+    ].join('|') +
+    ')(?![\\w./-])',
 )
+const SEGMENTS = /&&|\|\||[;|&\n(){}]/
 
 const PASS_GLYPHS = new Set(['✓', '✔', '√'])
 const GLYPH_LINE = /^(\s*)([✓✔√✕✗×✖✘])\s+(.+?)\s*$/
@@ -59,7 +66,7 @@ const INDENTED = /^(\s*)(\S.*?)\s*$/
 
 export const stripAnsi = (text: string): string => text.replace(ANSI, '')
 
-export const isTestCommand = (command: string): boolean => TEST_COMMAND.test(command)
+export const isTestCommand = (command: string): boolean => command.split(SEGMENTS).some(segment => TEST_COMMAND.test(segment))
 
 /** The command as messages show it: its first line, at most `max` characters. */
 export const shortCommand = (command: string, max = 60): string => {

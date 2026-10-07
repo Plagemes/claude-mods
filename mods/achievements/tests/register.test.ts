@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'achievements'
 const SURFACES = ['terminal', 'desktop'] as const
 /** Wednesday 7 October 2026, noon, in the local time zone. */
@@ -155,4 +157,29 @@ test('without a pane, /achievements lists them in the transcript', { options: { 
   expect(w.sounds).toEqual([])
   const text = (await $.command.run({ command: 'achievements', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })).text ?? ''
   expect(text).toStartWith('🏆 1 of 26 achievements unlocked\n✓ 👋 Hello, Claude: Send your first prompt (just now)\n· 💬 Regular: Send 100 prompts (1/100)')
+})
+
+test('with mods-hub: commit-composer\'s commits, test-watch\'s runs and CI runs count, and an unlock is a success notice', async ($, on) => {
+  const { clock, store, toasts } = world(on)
+  const hub = fakeHub(on, {}, clock)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['git.commit', 'test.result', 'ci.result'] }])
+
+  const at = NOON + 1
+  hub.events.push(
+    { topic: 'git.commit', source: 'commit-composer', at, data: { sha: 'abc', message: 'feat: x', branch: 'main', files: 1 } },
+    { topic: 'test.result', source: 'test-watch', at, data: { runner: 'vitest', outcome: 'failed', passed: 1, failed: 1 } },
+    { topic: 'test.result', source: 'test-watch', at, data: { runner: 'vitest', outcome: 'passed', passed: 2, failed: 0 } },
+    // The hub's own report of a Bash run, which the tool hook counts already.
+    { topic: 'test.result', source: 'mods-hub', at, data: { runner: 'jest', outcome: 'passed', passed: 2, failed: 0 } },
+    { topic: 'ci.result', source: 'ci-watch', at, data: { provider: 'github', workflow: 'test', outcome: 'passed' } },
+  )
+  await clock.advance(15_000)
+  await clock.settle()
+
+  expect(progress(store).counters).toMatchObject({ commits: 1, greenRuns: 2, redToGreen: 1 })
+  expect(Object.keys(progress(store).unlocked)).toEqual(expect.arrayContaining(['first-commit', 'green-1']))
+  expect(toasts).toEqual([])
+  expect(hub.notified[0]?.level).toBe('success')
+  expect(hub.notified[0]?.title).toContain('🏆 Unlocked 2:')
 })

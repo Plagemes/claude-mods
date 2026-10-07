@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 type World = {
   /** NUL-separated `git status --porcelain=v1 -z` output; undefined means "not a repository". */
   status?: string
@@ -108,4 +110,35 @@ test('every git add of a chained command is checked, not only the first', async 
   expect((await $.tool.call(bash('git add src/a.ts && git add -A'))).deny).toContain('node_modules/')
   expect((await $.tool.call(bash('git add -u && git add .env'))).deny).toContain('.env (environment file)')
   expect((await $.tool.call(bash('git add src/a.ts && git add -u'))).deny).toBeUndefined()
+})
+
+test('regression: a git add inside bash -lc, sh -ec or eval is checked too', async ($, on) => {
+  engine(on, { status: nul('?? node_modules/a/index.js', '?? src/a.ts') })
+  for (const command of ['bash -lc "git add -A && git commit -m wip"', "sudo -u me sh -ec 'cd /repo && git add .'", "eval 'git add --all'"]) {
+    expect(`${command} => ${(await $.tool.call(bash(command))).deny ?? 'ALLOWED'}`).toContain('node_modules/')
+  }
+  expect((await $.tool.call(bash('bash -c "git add src/a.ts"'))).deny).toBeUndefined()
+})
+
+test('the shared shell reader: wrappers, substitutions, heredocs fed to a shell and a shell inside a container', async ($, on) => {
+  engine(on, { status: nul('?? node_modules/a/index.js', '?? src/a.ts') })
+  for (const command of ['timeout 30 git add -A', 'echo "$(git add --all)"', 'bash <<EOF\ngit add .\nEOF', 'docker exec dev sh -c "git add -A"']) {
+    expect(`${command} => ${(await $.tool.call(bash(command))).deny ?? 'ALLOWED'}`).toContain('node_modules/')
+  }
+  expect((await $.tool.call(bash("cat <<'EOF' > HOWTO.md\nrun git add -A\nEOF"))).deny).toBeUndefined()
+})
+
+test('with mods-hub: a deny is published as risk.blocked with what would be staged', async ($, on) => {
+  engine(on, { status: nul('?? node_modules/a/index.js', '?? node_modules/b/index.js', '?? src/a.ts') })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect((await $.tool.call(bash('git add -A'))).deny).toContain('node_modules/')
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: { guard: 'gitignore-guard', tool: 'Bash', reason: 'ignored-file: git add would stage node_modules/ (2 files)', severity: 'low', command: 'git add -A' },
+    },
+  ])
 })

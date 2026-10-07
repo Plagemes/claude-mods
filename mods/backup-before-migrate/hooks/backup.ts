@@ -1,5 +1,6 @@
 import { conninfo, mysqlConnection, passwordEnv } from './db'
 import type { DbTarget, ServerTarget } from './db'
+import { simpleCommands } from './shared/shell'
 
 /** One backup as `.claude/db-backups/index.json` keeps it, newest last. */
 export type Entry = {
@@ -41,10 +42,10 @@ export const SKIP_MARK = /(?:^|[\s;&|])SKIP_DB_BACKUP=(?:1|true|yes)\b/
 
 /**
  * The text a command matcher reads: quoted text blanked, so `git commit -m "fly deploy"` runs
- * nothing, except where a shell runs the quoted text (`bash -c "…"`, `eval`, `ssh host "…"`).
+ * nothing, except where a shell runs the quoted text (`bash -c "…"`, `sh -lc '…'`, `eval`, `ssh host "…"`).
  */
 const matchText = (command: string): string =>
-  /(?:^|\s)(?:-c|eval|ssh)\s/.test(command) ? command : command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, quoted => `"${' '.repeat(quoted.length - 2)}"`)
+  /(?:^|\s)(?:-c|eval|ssh)\s|\b(?:ba|z|da|k)?sh\s+(?:-[a-zA-Z]+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s/.test(command) ? command.replace(/["']/g, ' ') : command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, quoted => `"${' '.repeat(quoted.length - 2)}"`)
 
 export const migrationKind = (command: string, extra: RegExp | undefined): string | undefined => {
   const code = matchText(command)
@@ -61,8 +62,14 @@ export const compileExtra = (source: unknown): RegExp | undefined => {
   }
 }
 
-/** The `DATABASE_URL=…` a command sets for itself (`DATABASE_URL=postgres://… npx prisma migrate dev`), unquoted. */
+/**
+ * The `DATABASE_URL=…` a command sets for itself (`DATABASE_URL=postgres://… npx prisma migrate dev`,
+ * `env DATABASE_URL=… prisma migrate`), unquoted: read with the shell lexer every Claude Mod shares, then
+ * `export DATABASE_URL=…` and other forms it leaves as words.
+ */
 export const inlineDatabaseUrl = (command: string): string | undefined => {
+  const assigned = simpleCommands(command).find(one => 'DATABASE_URL' in one.assignments)?.assignments.DATABASE_URL
+  if (assigned !== undefined) return assigned
   const match = /(?:^|[\s;&|(])(?:export\s+)?DATABASE_URL=("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(command)
   return match?.[1]?.replace(/^(["'])([\s\S]*)\1$/, '$2')
 }

@@ -28,6 +28,7 @@ An edited test file runs itself.
   - the files that ran
   - the runner's whole output, colors stripped
   - **Run again** (hotkey `r`) and **Close** buttons
+- With [mods-hub](../mods-hub) installed, `/tests-last` opens the **Tests** tab of the shared Claude Mods panel instead (same view, without Close).
 
 ## Configuration
 | Key | Type | Default | Description |
@@ -37,7 +38,8 @@ An edited test file runs itself.
 
 ## How it works
 - Hooks `tool.call` for Edit, Write and MultiEdit. Each edited path is queued and a `$.clock.after` debounce timer is restarted, so a burst of edits causes one run.
-- When the timer fires, it lists the candidate test folders and runs each runner once per project with `$.process.run`, with `CI=1` and colors off. It reads the pass and fail counts from the runner's summary line. The last run is kept in `$.state` for the pane.
+- When the timer fires, it lists the candidate test folders and runs each runner once per project with `$.process.run`, with `CI=1` and colors off. It reads the pass and fail counts from the runner's summary line with the detector every Claude Mod shares (`shared/test-runners.ts`). The last run is kept in `$.state` for the pane.
+- With mods-hub installed: every run is published as `test.result` (runner, outcome, counts, duration, command) for the mods that react to tests (celebrate, error-buzz, smart-router, mod-advisor...), and what ran is shared as the fact `test-watch.plan`; the pane becomes the panel's **Tests** tab. Without the hub nothing changes.
 - Limits:
   - It only reports. It doesn't tell Claude about failures.
   - Edits that arrive during a run trigger another run once that one finishes.

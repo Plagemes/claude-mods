@@ -24,3 +24,4 @@ No configuration needed.
 - Hooks `tool.call` for `Edit` and `Write`. It compares the lines before and after (for `Write`, the file on disk against the new content), so a debug line the edit merely leaves in place is not flagged.
 - Adds the note through the tool result's `context`, so the model reads it and you do not see extra transcript noise.
 - Limits: detection is line-based pattern matching, not parsing, so a string that merely contains `console.log(` can be flagged; the status count resets when the session restarts or the mod reloads.
+- With [mods-hub](https://github.com/plagemes/claude-mods/tree/main/mods/mods-hub) installed it publishes `lint.result` (`tool: debug-catcher`, the file, and how many findings) after each edit with findings (it has no toast of its own: the status line and the note to Claude are unchanged). Without the hub nothing changes; the mod stands alone.

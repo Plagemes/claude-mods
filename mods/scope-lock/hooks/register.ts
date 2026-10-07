@@ -4,7 +4,9 @@ import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 import { writeTargets } from './bash'
 import type { WriteTarget } from './bash'
 import { isInScope, normalizeGlob, resolvePath } from './glob'
+import { redactSummary } from './shared/secrets'
 
+const MOD = 'scope-lock'
 const SECTION_ID = 'scope-lock:scope'
 const GUARDED_TOOLS = /^(?:Edit|Write|MultiEdit|NotebookEdit|Bash)$/
 const TEMP_GLOBS = ['/tmp/**', '/private/tmp/**', '/var/folders/**']
@@ -44,6 +46,40 @@ async function setGlobs($: EngineInterface, globs: readonly string[]): Promise<v
   const unique = [...new Set(globs)]
   await update($, globsAtom, () => unique)
   $.ui.status(statusText(unique))
+  // On mods-hub's blackboard as `scope-lock.scope` (an empty list when off).
+  await hubShareFact($, { name: 'scope', value: unique })
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed, and shares the scope a reload kept. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['risk.blocked'], consumes: [] })
+  await hubShareFact($, { name: 'scope', value: await read($, globsAtom) })
+}
+
+/** Tells mods-hub (when installed) what was blocked, path and command masked and cut short. The deny never waits on it. */
+async function reportBlock($: EngineInterface, rule: string, reason: string, tool: string, path: string, command: string | undefined): Promise<void> {
+  await hubPublish($, {
+    topic: 'risk.blocked',
+    data: {
+      guard: MOD,
+      tool,
+      reason: `${rule}: ${reason}`,
+      severity: 'medium',
+      path: redactSummary(path),
+      ...(command === undefined ? {} : { command: redactSummary(command) }),
+    },
+  })
 }
 
 /** Expands what a shell would before writing (`~`, `$HOME`, `$PWD`); undefined when it cannot tell. */
@@ -85,6 +121,7 @@ export const register: Register = (on, options) => {
       description: 'Lock Claude’s writes to the files you name (globs); /scope off to unlock',
       argumentHint: '<glob…> | add <glob…> | remove <glob…> | show | off',
     })
+    await greetHub($)
     return next(e)
   })
 
@@ -134,12 +171,15 @@ export const register: Register = (on, options) => {
             const path = 'notebook_path' in e ? e.notebook_path : 'file_path' in e ? e.file_path : undefined
             return typeof path === 'string' ? [{ target: { path, via: tool, cdChain: [] }, resolved: resolvePath(path, root) }] : []
           })()
+    const command = 'command' in e && typeof e.command === 'string' ? e.command : undefined
     for (const check of checks) {
       if (check.resolved === undefined) {
         if (!settings.blockUncheckable) continue
+        await reportBlock($, 'unverifiable-write', `${check.target.via}: ${check.problem ?? 'cannot be checked'}`, tool, check.target.path, command)
         return { deny: `🔒 scope-lock: blocked ${check.target.via} on "${check.target.path}": ${check.problem}. The scope is ${globs.join(', ')}; use a literal path inside it.` }
       }
       if (!isInScope(check.resolved, root, allowed)) {
+        await reportBlock($, 'outside-scope', `${check.target.via} outside ${globs.join(', ')}`, tool, check.target.path, command)
         return {
           deny:
             `🔒 scope-lock: blocked ${check.target.via} on "${check.target.path}": it is outside the scope (${globs.join(', ')}). ` +
@@ -150,3 +190,100 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch(($, e, next) => (next.called ? next(e) : { deny: '🔒 scope-lock: could not check this write against the scope, so it was blocked.' }))
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

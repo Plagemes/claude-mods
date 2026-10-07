@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptOrigin } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 /** The engine beneath the plugin: tool calls fail while their command or file is listed in `failing`. */
 const world = (on: On) => {
   const seen = { reached: 0, toasts: [] as string[], failing: new Set<string>(), isRefusing: false }
@@ -122,4 +124,33 @@ test('a call another plugin refused is not a failure', async ($, on) => {
   world(on).isRefusing = true
 
   for (let i = 0; i < 5; i += 1) expect((await bash($, 'rm -rf x')).deny).toBe('nope')
+})
+
+test('with mods-hub: a stopped loop is a warning notice, and error.repeated for what the hub does not report itself', async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['error.repeated'], consumes: [] }])
+
+  seen.failing.add('/repo/src/a.ts')
+  for (let i = 0; i < 3; i += 1) await edit($, '/repo/src/a.ts')
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'stopped a loop: "Edit /repo/src/a.ts" failed 3 times in a row', topic: 'error.repeated' }])
+  expect(hub.published).toEqual([{ topic: 'error.repeated', data: { signature: 'Edit /repo/src/a.ts', count: 3, tool: 'Edit' } }])
+
+  // The hub's own sensor reports a Bash command failing three times: not twice.
+  seen.failing.add('npm run build')
+  for (let i = 0; i < 3; i += 1) await bash($, 'npm run build')
+  expect(hub.notified).toHaveLength(2)
+  expect(hub.published).toHaveLength(1)
+})
+
+test('with mods-hub and a limit of 2: a Bash loop is reported before the hub would', { options: { limit: 2 } }, async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on)
+  seen.failing.add('npm run build')
+  await bash($, 'npm run build')
+  await bash($, 'npm run build')
+  expect(hub.published).toEqual([{ topic: 'error.repeated', data: { signature: 'Bash npm run build', count: 2, tool: 'Bash', command: 'npm run build' } }])
 })

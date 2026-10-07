@@ -1,6 +1,6 @@
 {
   "name": "docker-lint",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Flags Dockerfile smells: :latest tags, running as root, apt without cleanup, ADD instead of COPY.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#docker-lint",

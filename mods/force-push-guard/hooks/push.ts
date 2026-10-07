@@ -1,3 +1,5 @@
+import { embeddedShellScripts, simpleCommands } from './shared/shell'
+
 /** A word of a shell command line with its place in the original text, so it can be rewritten. */
 export type Word = { text: string; start: number; end: number }
 
@@ -6,6 +8,8 @@ export type Edit = { start: number; end: number; text: string }
 export type Push = {
   /** `git -C <dir>`: where the push runs. */
   directory?: string
+  /** The remote named (`git push origin …`), or undefined for the default one. */
+  remote?: string
   isForced: boolean
   /** --all or --mirror: every branch goes, protected or not. */
   isBroad: boolean
@@ -20,51 +24,8 @@ export type Push = {
 const LEASE = '--force-with-lease'
 const OPTIONS_WITH_VALUE = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec'])
 const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
+/** How deep scripts handed to a shell further along (`docker exec ci sh -c "…"`) are opened up. */
 const MAX_NESTING = 3
-const SHELLS = /(?:^|\/)(?:ba|z|da|k)?sh$/
-
-/** Splits a command line into simple commands of words; quotes are honoured, redirections dropped. */
-export function lexCommands(input: string): Word[][] {
-  const commands: Word[][] = []
-  let words: Word[] = []
-  let text = ''
-  let start = -1
-  let quote: '"' | "'" | undefined
-
-  const endWord = (end: number) => {
-    if (start !== -1 && !/^[0-9]*[<>]/.test(text)) words.push({ text, start, end })
-    text = ''
-    start = -1
-  }
-  const endCommand = (end: number) => {
-    endWord(end)
-    if (words.length > 0) commands.push(words)
-    words = []
-  }
-
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i] as string
-    if (quote !== undefined) {
-      if (ch === quote) quote = undefined
-      else if (ch === '\\' && quote === '"' && i + 1 < input.length) text += input[++i]
-      else text += ch
-    } else if (ch === '"' || ch === "'") {
-      if (start === -1) start = i
-      quote = ch
-    } else if (ch === '\\' && input[i + 1] === '\n') {
-      i += 1 // a line continuation joins the two lines
-    } else if (/[\n;|&()`]/.test(ch)) {
-      endCommand(i)
-    } else if (/\s/.test(ch)) {
-      endWord(i)
-    } else {
-      if (start === -1) start = i
-      text += ch === '\\' && i + 1 < input.length ? input[++i] : ch
-    }
-  }
-  endCommand(input.length)
-  return commands
-}
 
 function parsePush(words: readonly Word[], pushIndex: number, directory: string | undefined): Push {
   const push: Push = { directory, isForced: false, isBroad: false, refs: [], usesCurrentBranch: false, leaseEdits: [] }
@@ -102,29 +63,24 @@ function parsePush(words: readonly Word[], pushIndex: number, directory: string 
     if (!isDeletion && !destination.startsWith('refs/')) push.refs.push(destination)
   }
   push.usesCurrentBranch = positionals.length < 2
+  if (positionals[0] !== undefined) push.remote = positionals[0].text
   if (hasLease) push.leaseEdits = []
   return push
 }
 
-/** The script of a `bash -c '<script>'` (also sh, zsh, `-lc`, ...) on this simple command, if any. */
-function nestedScript(words: readonly Word[]): string | undefined {
-  const shellIndex = words.findIndex(word => SHELLS.test(word.text))
-  if (shellIndex === -1) return undefined
-  for (let i = shellIndex + 1; i < words.length; i++) {
-    const text = (words[i] as Word).text
-    if (!text.startsWith('-')) return undefined
-    if (/^-[a-z]*c[a-z]*$/.test(text)) return words[i + 1]?.text
-  }
-  return undefined
-}
-
-/** Every `git push` on the command line, wherever it hides behind `&&`, `;`, a pipe or `bash -c`. */
+/**
+ * Every `git push` on the command line, wherever it hides: behind `&&`, `;`, pipes and wrappers, in `bash -c '…'`,
+ * `eval`, `$(…)` or a heredoc fed to a shell (the shared shell reader), or in a shell further along
+ * (`docker exec ci sh -c '…'`). Only a push on the line itself can be rewritten: a nested script's offsets are not
+ * the line's, so a push in one is checked but never rewritten.
+ */
 export function findPushes(command: string, depth = 0): Push[] {
   const pushes: Push[] = []
-  for (const words of lexCommands(command)) {
-    const script = depth < MAX_NESTING ? nestedScript(words) : undefined
-    // A nested script's offsets are not the outer command's, so it is checked but never rewritten.
-    if (script !== undefined) pushes.push(...findPushes(script, depth + 1).map(push => ({ ...push, leaseEdits: [] })))
+  for (const { argv, spans, depth: nesting } of simpleCommands(command)) {
+    if (depth < MAX_NESTING) {
+      for (const script of embeddedShellScripts(argv)) pushes.push(...findPushes(script, depth + 1).map(push => ({ ...push, leaseEdits: [] })))
+    }
+    const words: Word[] = argv.map((text, at) => ({ text, start: spans[at]?.start ?? 0, end: spans[at]?.end ?? 0 }))
     const gitIndex = words.findIndex(word => word.text === 'git' || word.text.endsWith('/git'))
     if (gitIndex === -1) continue
     let directory: string | undefined
@@ -134,7 +90,10 @@ export function findPushes(command: string, depth = 0): Push[] {
         if (text === '-C') directory = words[i + 1]?.text
         i += 1
       } else if (!text.startsWith('-')) {
-        if (text === 'push') pushes.push(parsePush(words, i, directory))
+        if (text === 'push') {
+          const push = parsePush(words, i, directory)
+          pushes.push(depth === 0 && nesting === 0 ? push : { ...push, leaseEdits: [] })
+        }
         break
       }
     }

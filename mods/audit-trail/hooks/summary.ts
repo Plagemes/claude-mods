@@ -1,4 +1,8 @@
+import { redactText } from './shared/secrets'
+
 const REDACTED = '[redacted]'
+/** The shared rule set's keys and tokens only: e-mails and IPs in a command are not credentials. */
+const SHARED_SECRETS = { enabled: new Set(['secrets'] as const) }
 const SECRET_WORD = String.raw`(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key)`
 /** The most characters of one text that are looked at: a pasted megabyte costs no more than a long command. */
 const SCAN_LIMIT_FACTOR = 8
@@ -29,10 +33,13 @@ const USER_PASSWORD = /((?:^|\s)(?:-u|--user)[\s=]+["']?[^\s:"']+:)[^\s"']+/g
 /** `mysql -phunter2`: the password glued to `-p`. */
 const MYSQL_PASSWORD = /(\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^\n|;&]*?\s-p)[^\s-]\S*/g
 
-/** Masks the credentials in `text`, so a log can hold what Claude ran without holding what it was trusted with. */
+/**
+ * Masks the credentials in `text`, so a log can hold what Claude ran without holding what it was trusted with:
+ * this mod's shapes and assignments first, then the key and token rules every Claude Mod shares (`shared/secrets.ts`).
+ */
 export const redact = (text: string): string => {
   const masked = SECRET_SHAPES.reduce((current, shape) => current.replace(shape, REDACTED), text)
-  return masked
+  const assigned = masked
     .replace(URL_CREDENTIALS, REDACTED)
     .replace(AUTH_HEADER, `$1${REDACTED}`)
     .replace(BEARER, `$1${REDACTED}`)
@@ -40,6 +47,7 @@ export const redact = (text: string): string => {
     .replace(SECRET_FLAG, `$1${REDACTED}`)
     .replace(USER_PASSWORD, `$1${REDACTED}`)
     .replace(MYSQL_PASSWORD, `$1${REDACTED}`)
+  return redactText(assigned, SHARED_SECRETS).text
 }
 
 /** One line of at most `max` characters: whitespace collapsed, the end replaced by an ellipsis when cut. */

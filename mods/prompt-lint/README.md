@@ -29,3 +29,4 @@ In strict mode the prompt is held back instead, with the tip and "Send it again 
 - A prompt counts as naming a target when it has a file name, path, backticked or camelCase or snake_case identifier, number, link, quote or `@mention`.
 - Skipped: slash commands, `!` and `#` prompts, prompts typed over a running turn, prompts with images or files attached, anything not typed by a person, and text that is not Latin script.
 - Limits: these are heuristics, so some vague prompts slip by and an occasional specific one gets a tip. A follow-up like "fix it", sensible after Claude has just shown a bug, is flagged too; the tip is only a nudge.
+- With [mods-hub](../mods-hub) installed: in `warn` mode the tip goes through `notify` at `info` level instead of a 7-second toast (held while Silent). Strict mode's refusal is unchanged. It publishes no events. Without the hub nothing changes.

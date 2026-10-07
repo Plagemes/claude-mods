@@ -20,6 +20,7 @@ Needs the [GitHub CLI](https://cli.github.com) installed and logged in (`gh auth
   - status line: `🕒 CI: waiting for a run on main @ abc1234`, then `⏳ CI running on ... · 1/3 done · build`
   - when done: toast `✅ CI passed on main · 3 workflows`, `❌ CI failed on main: test (failure)` or `⛔ CI cancelled on main: deploy`, plus a transcript line with the run's URL
 - If the commit's runs already finished, `/ci-watch` simply reports the result.
+- With [mods-hub](../mods-hub) installed, a bare `/ci-watch` follows the branch you pushed in the last 15 minutes (the hub's `git.push` event), and the verdict goes through the hub's notifications instead of a toast: success, error or warning, with the run's link, so it reaches your phone channel while you are away.
 
 ## Configuration
 | Key | Type | Default | Description |
@@ -31,4 +32,5 @@ Needs the [GitHub CLI](https://cli.github.com) installed and logged in (`gh auth
 ## How it works
 - `/ci-watch` resolves the branch and the pushed commit (`origin/<branch>`) with git, then polls `gh run list --branch <b> --json ...` with `$.process.run` on a `$.clock.every` timer, grouping all workflow runs of that commit into one verdict.
 - Stops by itself when the verdict is in, after 5 minutes with no run for the commit, after 3 hours, or after 3 consecutive `gh` errors (each with a toast saying why).
+- With mods-hub installed: the verdict is published as `ci.result` to every session (provider `github`, workflow, outcome, branch, url, duration) for issue drafting, team channels and the advisor; every alert (verdict, no run, gave up) goes through `$.mods.notify`; and no chime plays while the hub is Silent or in Night mode. Without the hub it behaves as above.
 - Sounds play through `afplay` on macOS; other platforms show the toast silently. The watch lives in this session only and ends with it (or when the mod reloads).

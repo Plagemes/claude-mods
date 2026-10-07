@@ -1,3 +1,5 @@
+import { lineFinder } from './shared/line-index'
+
 export type Attr = { name: string; value: string | undefined }
 
 export type Tag = {
@@ -210,22 +212,6 @@ const hasNameInside = (text: string, tags: readonly Tag[], index: number, closer
   }
   content += text.slice(from, close.start)
   return content.replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}|<!--[\s\S]*?-->|&nbsp;|&#160;/g, '').trim() !== ''
-}
-
-/** Line numbers by offset: the newline offsets once, then a binary search per lookup. */
-const lineFinder = (text: string): ((offset: number) => number) => {
-  const newlines: number[] = []
-  for (let index = text.indexOf('\n'); index >= 0; index = text.indexOf('\n', index + 1)) newlines.push(index)
-  return offset => {
-    let low = 0
-    let high = newlines.length
-    while (low < high) {
-      const middle = (low + high) >> 1
-      if ((newlines[middle] ?? Infinity) < offset) low = middle + 1
-      else high = middle
-    }
-    return low + 1
-  }
 }
 
 const andList = (items: readonly string[]): string => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`)

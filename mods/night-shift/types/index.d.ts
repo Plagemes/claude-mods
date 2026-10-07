@@ -52,6 +52,8 @@ export type ShiftView = {
   tasks: ShiftTask[]
   /** When the next shift starts (epoch ms), or null when none is scheduled. */
   at: number | null
+  /** `/night-shift away`: the next shift starts as soon as mods-hub says you are away. */
+  isOnAway?: boolean
   run: ShiftRun | null
   last: ShiftReport | null
 }

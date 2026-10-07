@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
 import { TIPS, dayKey, positionOf, tipAt } from '../hooks/tips'
 
 const DAY = 86_400_000
@@ -43,6 +44,19 @@ test('registers /tip and toasts one tip when the first session of the day starts
 
   expect(seen.registered).toEqual(['tip'])
   expect(seen.toasts).toEqual([`💡 ${tipAt(0).text}  ·  /tip for another`])
+})
+
+test('with mods-hub: says hello, and the daily tip is an info notification instead of a toast', async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on, {}, { now: () => START })
+
+  await startSession($)
+
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'info', title: `💡 ${tipAt(0).text}  ·  /tip for another` }])
+  await startSession($)
+  expect(hub.notified).toHaveLength(1)
 })
 
 test('shows at most one tip a day, and the next one on the next day', async ($, on) => {

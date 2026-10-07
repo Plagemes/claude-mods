@@ -4,6 +4,7 @@ import type { On } from 'claude-code'
 
 import { sha256Hex } from '../hooks/sha256'
 import { redact, summarize } from '../hooks/summary'
+import { fakeHub } from './hub'
 
 const NOON = Date.UTC(2026, 9, 7, 12, 0, 0)
 const LOG = '/repo/.claude/audit/2026-10-07.jsonl'
@@ -267,4 +268,41 @@ test('regression: redact masks curl -u passwords and mysql -p passwords', () => 
   expect(redact('curl --user=admin:hunter2 https://x')).toBe('curl --user=admin:[redacted] https://x')
   expect(redact('mysql -u root -phunter2 shop')).toBe('mysql -u root -p[redacted] shop')
   expect(redact('mysql -u root -p shop && mkdir -p a/b && ssh -p 22 host')).toBe('mysql -u root -p shop && mkdir -p a/b && ssh -p 22 host')
+})
+
+test('with mods-hub: every event on the bus goes in the log, a guard\'s refusal with its guard and severity', async ($, on) => {
+  const files = new Map<string, string>()
+  const { clock } = world(on, files)
+  const hub = fakeHub(on, {}, clock)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['*', 'risk.blocked'] }])
+  hub.events.push(
+    { topic: 'risk.blocked', source: 'rm-rf-guard', at: NOON + 1, data: { guard: 'rm-rf-guard', tool: 'Bash', reason: 'recursive delete of /', severity: 'high', command: 'rm -rf /' } },
+    { topic: 'deploy.started', source: 'deploy-checklist', at: NOON + 2, data: { target: 'vercel', environment: 'production', url: `https://x.dev/?token=${GITHUB_TOKEN}` } },
+  )
+  await clock.advance(10_000)
+  await clock.settle()
+
+  const logged = lines(files)
+  expect(logged[0]).toMatchObject({ kind: 'event', topic: 'risk.blocked', source: 'rm-rf-guard', guard: 'rm-rf-guard', severity: 'high', reason: 'recursive delete of /', outcome: 'denied' })
+  expect(logged[1]).toMatchObject({ kind: 'event', topic: 'deploy.started', source: 'deploy-checklist' })
+  expect(String(logged[1]?.summary)).toContain('production')
+  expect(files.get(LOG)).not.toContain(GITHUB_TOKEN)
+
+  // Read once: the next look logs nothing new.
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(lines(files)).toHaveLength(2)
+
+  const shown = await $.command.run({ command: 'audit', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(shown.text).toContain('2 mods-hub events')
+})
+
+test('redact also masks the keys the shared rules know, and leaves e-mails and IPs alone', () => {
+  // A Slack refresh token (xoxe-): a shape only the rules every Claude Mod shares know.
+  const key = fake('xoxe-', '1-abcdefghijklmnopqrstuvwxyz0123')
+  expect(redact(`slack-cli auth ${key}`)).toBe('slack-cli auth [REDACTED:slack-token]')
+  expect(redact('deploy as alice@example.com to 10.0.0.4')).toBe('deploy as alice@example.com to 10.0.0.4')
 })

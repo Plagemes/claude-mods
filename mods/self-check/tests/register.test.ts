@@ -3,6 +3,7 @@ import type { Engine, MockClock } from 'claude-code/testing'
 import type { ModelForkResult, On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
 
 import { fixPrompt, parseVerdict } from '../hooks/verdict'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const USAGE = { input_tokens: 20, output_tokens: 40, cache_read_input_tokens: 9_000, cache_creation_input_tokens: 0 }
@@ -154,4 +155,30 @@ test('auto mode sends the gaps back once, but never when a newer turn has starte
   await seen.clock.advance(0)
   expect(seen.forks).toHaveLength(2)
   expect(seen.submitted).toHaveLength(1)
+})
+
+test('with mods-hub: says hello, publishes agent.finished for each check, and announces the auto-fix as an info notice', { options: { mode: 'auto' } }, async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on, {}, seen.clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['agent.finished'], consumes: [] }])
+
+  await editingTurn($, seen, 't1', REQUEST, ['src/checkout.ts'])
+  expect(hub.published).toEqual([{ topic: 'agent.finished', data: { agentType: 'self-check', outcome: 'ok', durationMs: 0 } }])
+  expect(hub.notified).toEqual([{ level: 'info', title: '🔎 2 gaps found · asked Claude to close them' }])
+  expect(seen.toasts).toEqual([])
+
+  seen.reply.text = 'not json at all'
+  await editingTurn($, seen, 't2', REQUEST, ['src/checkout.ts']) // the fix turn auto mode asked for: not checked again
+  expect(hub.published).toHaveLength(1)
+  await editingTurn($, seen, 't3', REQUEST, ['src/checkout.ts'])
+  expect(hub.published.at(-1)).toEqual({ topic: 'agent.finished', data: { agentType: 'self-check', outcome: 'failed', durationMs: 0 } })
+})
+
+test('without mods-hub the auto-fix message is the same toast and nothing is published', { options: { mode: 'auto' } }, async ($, on) => {
+  const seen = world(on)
+  await editingTurn($, seen, 't1', REQUEST, ['src/checkout.ts'])
+  expect(seen.toasts.at(-1)).toContain('2 gaps found · asked Claude to close them')
 })

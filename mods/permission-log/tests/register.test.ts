@@ -2,6 +2,8 @@ import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 /** Answers `$.state` from memory, as the host does: a value and the version it stands at. */
 const memoryState = (on: On) => {
   const cells = new Map<string, { value: unknown; version: number }>()
@@ -113,4 +115,24 @@ test('says so when nothing was denied, and /denied clear empties the log and the
   expect(await denied($, 'clear')).toContain('Cleared')
   expect(statuses.at(-1)).toBeUndefined()
   expect(await denied($)).toContain('No tool call has been denied')
+})
+
+test('with mods-hub: each refusal names the guard and severity it reported, and other guard reports are listed', async ($, on) => {
+  engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['risk.blocked'] }])
+  await $.tool.call({ tool: 'Bash', command: 'rm -rf build' })
+  hub.events.push(
+    { topic: 'risk.blocked', source: 'rm-rf-guard', at: 1, data: { guard: 'rm-rf-guard', tool: 'Bash', reason: 'recursive delete', severity: 'high', command: 'rm -rf build' } },
+    { topic: 'risk.blocked', source: 'secret-shield', at: 2, data: { guard: 'secret-shield', tool: 'Edit', reason: 'an AWS key in the edit', severity: 'high', path: 'src/config.ts' } },
+  )
+
+  const text = await denied($)
+  expect(text).toContain('why: [rm-rf-guard · high] rm-rf-guard: refusing to delete outright.')
+  expect(text).toContain('Also reported by guards (mods-hub):')
+  expect(text).toMatch(/Edit {2}src\/config\.ts\n {10}why: \[secret-shield · high\] an AWS key in the edit/)
 })

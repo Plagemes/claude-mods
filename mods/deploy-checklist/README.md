@@ -47,3 +47,9 @@ Claude wants to run a vercel --prod. It runs only once you approve.
   `go test`, …) and whether it passed; `npm test && vercel --prod` counts as tested. Changelog edits made by Claude count too.
 - Approvals expire after 15 minutes. Limits: it reads command text, so a deploy hidden in a script or `make` target
   is only caught through `extraPattern`, and tests run outside this session are not seen.
+- Test commands are also recognised by the detector every Claude Mod shares (`shared/test-runners.ts`), and what a deploy deploys is read with the shared shell lexer (`shared/shell.ts`).
+- With [mods-hub](../mods-hub) installed:
+  - the **Tests** line uses the latest `test.result` any mod reported (test-watch's own runs, the hub's reading of Bash runs) when it is newer than what this hook saw, instead of guessing from command text;
+  - a **CI** line shows the latest `ci.result` of the current branch (from ci-watch): a failed run fails the checklist;
+  - each deploy the checklist lets through is published for every session: `deploy.started` (tool, environment: `production` for `--prod`, the `--app`/`--context`/`--env` value...), then `deploy.finished` (duration, the link it printed) or `deploy.failed` (why), the failure also as an `error` notice that reaches your channels while you are away.
+  Without the hub nothing changes.

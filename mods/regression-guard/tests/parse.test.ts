@@ -198,3 +198,12 @@ test('files that passed in full stand for their tests, unless Claude edited the 
   expect(touchedBy(['/home/me/calc/div_test.go'])('example.com/calc')).toBe(true)
   expect(touchedBy(['/home/me/calc/div.go'])('example.com/calc')).toBe(false)
 })
+
+test('regression: a command that only names a runner is not a test run', () => {
+  for (const command of ['cat jest.config.js', 'npm i -D vitest', 'git commit -m "add jest"', 'tail -100 pytest.log', 'grep -rn rspec Gemfile', 'pip install pytest']) {
+    expect(isTestCommand(command)).toBe(false)
+  }
+  for (const command of ['cd web && npx vitest run', 'CI=1 yarn jest', 'poetry run pytest', 'bundle exec rspec', './gradlew test', 'make check', 'python3 -m unittest']) {
+    expect(isTestCommand(command)).toBe(true)
+  }
+})

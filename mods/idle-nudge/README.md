@@ -24,3 +24,4 @@ Nothing to do. The clock restarts whenever you send a prompt or a turn starts or
 - A timer started at `session.start` ticks every 60 seconds; `prompt.submit`, `turn.start` and `turn.complete` hooks record activity.
 - When the idle time is up it runs `git status --porcelain` (5 second timeout) and counts the lines; untracked files count. Outside a git repository, or if git fails, it stays silent.
 - Timers do not survive a hot reload of the mod; they start again with the next session.
+- With [mods-hub](../mods-hub) installed, it follows the hub's presence, which counts your activity in every session (`session.idle`): no nudge while you are typing in another session, and the nudge becomes a hub notice (held while Silent, like every mod's toasts). Without the hub nothing changes.

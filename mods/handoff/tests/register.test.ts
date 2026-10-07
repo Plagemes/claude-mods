@@ -1,7 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { composeNote, missingSections, sectionsOf, stampOf } from '../hooks/note'
+import { composeNote, decisionsOf, handoffPrompt, missingSections, sectionsOf, stampOf } from '../hooks/note'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const NOW = new Date(2026, 9, 7, 13, 42).getTime()
@@ -37,7 +38,7 @@ const handoff = (args = '') => ({
 })
 
 type World = { forks: string[]; files: Map<string, string>; copies: string[] }
-type Setup = { fork?: 'nothing'; repo?: boolean; existing?: string[] }
+type Setup = { sessions?: unknown; fork?: 'nothing'; repo?: boolean; existing?: string[] }
 
 const world = (on: On, setup: Setup = {}): World => {
   const state: World = { forks: [], files: new Map((setup.existing ?? []).map(path => [path, 'old'])), copies: [] }
@@ -58,6 +59,8 @@ const world = (on: On, setup: Setup = {}): World => {
   })
   on('session.root', () => ({ value: ROOT }))
   on('session.id', () => ({ value: 'sess-123' }))
+  mock.env(on, { HOME: '/home/me' })
+  on('fs.read', ($, e) => (e.path.endsWith('/hub/sessions.json') && setup.sessions !== undefined ? { value: JSON.stringify(setup.sessions) } : { deny: 'ENOENT' }))
   on('fs.exists', ($, e) => ({ value: state.files.has(e.path) }))
   on('fs.write', ($, e) => {
     state.files.set(e.path, e.text)
@@ -131,4 +134,43 @@ test('copying can be turned off, and the folder moved', { options: { copy: false
   const ran = await $.command.run(handoff())
   expect(ran.text).toBe('Wrote docs/handoffs/2026-10-07-1342.md.')
   expect(state.copies).toEqual([])
+})
+
+const DECISION = (title: string, at: number, summary?: string) => ({ topic: 'decision.recorded', at, data: { title, ...(summary === undefined ? {} : { summary }) } })
+
+test('with mods-hub: says hello and gives the fork the decisions recorded in this session and by other sessions of the project', async ($, on) => {
+  const sessions = {
+    other: { cwd: `${ROOT}/web`, events: [DECISION('Use cursor pagination for /orders', NOW - 3_600_000, 'offsets drift while rows are inserted'), DECISION('Old choice', NOW - 3 * 86_400_000)] },
+    elsewhere: { cwd: '/work/blog', events: [DECISION('Not this project', NOW - 1000)] },
+  }
+  const state = world(on, { sessions })
+  const hub = fakeHub(on)
+  hub.events.push({ topic: 'decision.recorded', data: { title: 'Keep the currency mocks stale until the API v2 lands' }, at: NOW - 1000, source: 'decision-log' })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['decision.recorded', 'session.ended'] }])
+
+  const ran = await $.command.run(handoff())
+  expect(ran.text).toBe('Wrote .claude/handoff/2026-10-07-1342.md and copied it to the clipboard.')
+  const prompt = state.forks[0] ?? ''
+  expect(prompt).toContain('Decisions recorded for this project (mention the ones that matter, with their reasons):')
+  expect(prompt).toContain('- Use cursor pagination for /orders: offsets drift while rows are inserted')
+  expect(prompt).toContain('- Keep the currency mocks stale until the API v2 lands')
+  expect(prompt).not.toContain('Old choice')
+  expect(prompt).not.toContain('Not this project')
+  expect(prompt.indexOf('Use cursor')).toBeLessThan(prompt.indexOf('Keep the currency'))
+})
+
+test('without mods-hub the handoff request has no decisions section', async ($, on) => {
+  const state = world(on, { sessions: { other: { cwd: ROOT, events: [DECISION('Some decision', NOW - 1000)] } } })
+  await $.command.run(handoff())
+  expect(state.forks[0]).not.toContain('Decisions recorded')
+})
+
+test('decisionsOf keeps recent, well-formed decisions once each, oldest first, capped', () => {
+  const many = Array.from({ length: 12 }, (_, i) => DECISION(`d${i}`, 100 + i))
+  const found = decisionsOf([...many, DECISION('d3', 500), { topic: 'x' }, null, DECISION('', 200), DECISION('old', 1)], 50)
+  expect(found.map(one => one.title)).toEqual(['d4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11'])
+  expect(handoffPrompt(undefined, '', [{ title: 'A', summary: 'because' }])).toContain('- A: because')
 })

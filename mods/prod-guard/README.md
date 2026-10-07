@@ -38,4 +38,6 @@ plugin that happens to contain "PROD-OK" does not approve anything.
 - `prompt.submit` remembers your latest message (only when it came from you); a `tool.call` guard on `Bash` checks each command against the rules and the approval word.
 - When `kubectl`/`helm` names no `--context`, it asks `kubectl config current-context` (3 s timeout) to see where the command would land.
 - It fails closed: if the check itself throws, the command is denied, and a failing prompt hook revokes the approval.
+- Commands are read with the shared claude-mods shell reader (`shared/shell`), so `bash -c '…'`, `eval`, `su -c`, `$(…)`, a heredoc fed to a shell and `docker exec … sh -c '…'` are opened up, while a `cat <<EOF` runbook is just text.
+- With [mods-hub](../mods-hub) installed, every deny is also published as `risk.blocked` (rule such as `iac-apply` or `sql-drop`, severity `high`, the command with secrets masked), and when another mod announced a production `deploy.started` in the last 30 minutes the refusal says so. Without the hub nothing changes.
 - Limits: it reads command text. Scripts (`./deploy.sh`), `make` targets, CI triggers and tools it does not know are not seen, and "production" is whatever your pattern says it is.

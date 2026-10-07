@@ -1,5 +1,7 @@
-import { test, expect } from 'claude-code/testing'
+import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
+
+import { fakeHub } from './hub'
 
 type Spy = { statuses: (string | undefined)[]; toasts: string[] }
 
@@ -7,6 +9,7 @@ const answerEngine = (on: On): Spy => {
   const spy: Spy = { statuses: [], toasts: [] }
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('ui.status', (_$, e) => {
     spy.statuses.push(e.text)
     return { value: undefined }
@@ -82,4 +85,42 @@ test('/clear starts the timings over', async ($, on) => {
 
   await $.turn.complete(turn(10))
   expect(spy.statuses.at(-1)).toBe('last 10s · avg 10s')
+})
+
+const START = { cwd: '/w', surface: 'terminal', isInteractive: true } as const
+
+test('with mods-hub: says hello and announces a long turn as an info notice with its tool count', async ($, on) => {
+  const clock = mock.clock(on)
+  const spy = answerEngine(on)
+  const hub = fakeHub(on, {}, clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start(START)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['turn.finished'] }])
+
+  hub.events.push({ topic: 'turn.finished', data: { durationMs: 125_000, tools: 14, isAborted: false }, at: 1, source: 'mods-hub' })
+  await $.turn.complete(turn(125))
+  await clock.advance(300)
+  expect(hub.notified).toEqual([{ level: 'info', title: 'That turn took 2m 05s', body: '14 tool calls' }])
+  expect(spy.toasts).toEqual([])
+  expect(spy.statuses.at(-1)).toBe('last 2m 05s · avg 2m 05s')
+})
+
+test('with mods-hub but no turn.finished for that turn, the notice has no tool count', async ($, on) => {
+  const clock = mock.clock(on)
+  const spy = answerEngine(on)
+  const hub = fakeHub(on, {}, clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start(START)
+  hub.events.push({ topic: 'turn.finished', data: { durationMs: 5000, tools: 2, isAborted: false }, at: 1, source: 'mods-hub' })
+  await $.turn.complete(turn(130))
+  await clock.advance(300)
+  expect(hub.notified).toEqual([{ level: 'info', title: 'That turn took 2m 10s' }])
+  expect(spy.toasts).toEqual([])
+})
+
+test('without mods-hub the long-turn notice is the same toast as before', async ($, on) => {
+  const spy = answerEngine(on)
+  await $.session.start(START)
+  await $.turn.complete(turn(125))
+  expect(spy.toasts).toEqual(['That turn took 2m 05s'])
 })

@@ -3,8 +3,8 @@ import type { EngineInterface, Register } from 'claude-code'
 type Pack = 'minimal' | 'retro' | 'nature'
 type SoundEvent = 'done' | 'error' | 'permission' | 'green'
 type Settings = { pack: Pack; enabled: Record<SoundEvent, boolean>; gain: number; longTurnMs: number }
-/** When each sound last played, so a burst of failures or prompts is one sound. */
-type Player = { lastPlayed: Partial<Record<SoundEvent, number>> }
+/** When each sound last played, so a burst of failures or prompts is one sound; and how far mods-hub's bus was heard. */
+type Player = { lastPlayed: Partial<Record<SoundEvent, number>>; heardAt: number }
 
 const PACKS: readonly Pack[] = ['minimal', 'retro', 'nature']
 const EVENTS: readonly SoundEvent[] = ['done', 'error', 'permission', 'green']
@@ -20,6 +20,8 @@ const DEFAULT_VOLUME = 1
 const MAX_VOLUME = 4
 /** The longest clip is 1.55 s: previews start each sound this far after the last, so they never overlap. */
 const PREVIEW_SPACING_MS = 1700
+/** How often, with mods-hub installed, the test runs and refusals other mods report are listened for. */
+const HUB_POLL_MS = 3000
 
 /** A test runner at the start of one part of a command line (after variables and `npx`, `poetry run`, `python -m`...), not just named in it. */
 const TEST_RUNNER =
@@ -61,6 +63,43 @@ const platformNote = async ($: EngineInterface): Promise<string> => {
   } catch {
     return GENERIC_PLATFORM_NOTE
   }
+}
+
+// ── mods-hub: test runs other mods make, and guards' refusals, have a sound too ─────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+const ownVersion = async ($: EngineInterface): Promise<string> => {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello, and the bus listened to every 3 seconds. */
+const greetHub = async ($: EngineInterface, player: Player, settings: Settings): Promise<void> => {
+  if ((await hubMode($)) === undefined) return
+  player.heardAt = await $.clock.now()
+  await hubHello($, { version: await ownVersion($), publishes: [], consumes: ['test.result', 'risk.blocked'] })
+  $.clock.every(HUB_POLL_MS, () => void listen($, player, settings).catch(() => undefined))
+}
+
+/**
+ * Plays for what other mods reported since the last look: a test run test-watch or quick-commands made (green or
+ * error), and a guard's refusal (`risk.blocked`, the error sound). The hub's own test reports are the Bash runs
+ * the tool hook already plays for. The hub holds every sound while Silent and at night.
+ */
+const listen = async ($: EngineInterface, player: Player, settings: Settings): Promise<void> => {
+  const events = await $.mods.recent({ since: player.heardAt, limit: 50 })
+  let sound: SoundEvent | undefined
+  for (const event of events) {
+    player.heardAt = Math.max(player.heardAt, event.at)
+    const outcome = (event.data as { outcome?: unknown }).outcome
+    if (event.topic === 'risk.blocked' || (event.topic === 'test.result' && event.source !== 'mods-hub' && outcome !== 'passed')) sound = 'error'
+    else if (event.topic === 'test.result' && event.source !== 'mods-hub' && sound === undefined) sound = 'green'
+  }
+  if (sound !== undefined) await play($, player, settings, sound)
 }
 
 const describeSettings = (settings: Settings, platform: string): string[] => [
@@ -106,7 +145,7 @@ export const register: Register = (on, options) => {
     gain: Math.min(MAX_VOLUME, Math.max(0, numberOr(options.volume, DEFAULT_VOLUME))),
     longTurnMs: Math.max(0, numberOr(options.longTurnSeconds, DEFAULT_LONG_TURN_SECONDS)) * 1000,
   }
-  const player: Player = { lastPlayed: {} }
+  const player: Player = { lastPlayed: {}, heardAt: 0 }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -114,6 +153,7 @@ export const register: Register = (on, options) => {
       description: 'Plays the sounds of your sound pack, so you can hear them.',
       argumentHint: `[${PACKS.join('|')}|${EVENTS.join('|')}]`,
     })
+    await greetHub($, player, settings)
     return next(e)
   })
 
@@ -147,3 +187,100 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'soundpack' }, async ($, e) => ({ text: await preview($, settings, e.args) }))
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

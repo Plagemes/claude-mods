@@ -1,7 +1,7 @@
 # path-jail
 > Allows writes only inside the project root, resolving symlinks and .. tricks.
 
-**Category:** Security & Guardrails · **Version:** 1.0.2
+**Category:** Security & Guardrails · **Version:** 1.1.0
 
 ## What it does
 Every `Edit`, `Write`, `MultiEdit` and `NotebookEdit` call, and every Bash command that writes a file, is checked against where the path really lands: symbolic links are followed and `..` is folded by the file system, so `out/hosts` where `out -> /etc` is caught. Writes are allowed only under the project root, `/tmp`, folders you list, and folders added with `/add-dir` or `permissions.additionalDirectories`. Anything else is refused before it runs, with the resolved path in the message.
@@ -33,4 +33,6 @@ Bash coverage: redirections (`>`, `>>`, `&>`, `>|`), `tee`, `mv` (source and des
 - A `tool.call` guard (with a `.catch` that denies) resolves every target with `$.fs.stat(path, { resolve: true })`; a file that does not exist yet is placed under the real path of its deepest existing folder. Roots are resolved the same way, so only real paths are compared.
 - Claude Code's own plan files (`~/.claude/plans`, or under `CLAUDE_CONFIG_DIR`) and auto-memory folders (`~/.claude/projects/*/memory`, or your `autoMemoryDirectory`) stay writable, so plan mode and memory keep working.
 - `classic.DirectoryAdded` records folders added with `/add-dir`; settings are re-read on every check, so a worktree move or new root takes effect at once.
-- Limits: shell parsing is best effort. Writes hidden inside interpreters (`python -c`, `node -e`), `xargs`, `eval` or scripts are not seen, globs are checked by the folder they expand in, and relative Bash paths assume the session's working directory unless a `cd` precedes them on the same line.
+- Bash commands are read with the shared claude-mods shell reader (`shared/shell`): quotes, heredocs and fd duplication are understood, wrappers (`sudo`, `timeout`, `xargs`, `time`) are peeled, and the scripts of `bash -c`, `su -c`, `eval`, `$(…)` and heredocs or here-strings fed to a shell are read with their own `cd`s.
+- With [mods-hub](../mods-hub) installed, every deny is also published as `risk.blocked` (rule `outside-jail`, severity `high`, or `unverifiable-write`, severity `medium`; the path and command with secrets masked). Without the hub nothing changes.
+- Limits: shell parsing is best effort. Writes hidden inside interpreters (`python -c`, `node -e`) or scripts are not seen, globs are checked by the folder they expand in, and relative Bash paths assume the session's working directory unless a `cd` precedes them on the same line.

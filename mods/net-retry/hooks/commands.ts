@@ -1,8 +1,9 @@
+import { MAX_NESTING, SHELLS, baseName, shellScriptArg, unwrap } from './shared/shell'
+
 /** The words of one command: its program, then its arguments. */
 type Words = readonly string[]
 
 const CONNECTORS = new Set(['&&', '||', ';', '|', '\n'])
-const WRAPPERS = new Set(['sudo', 'time', 'nice', 'command', 'env', 'nohup'])
 /** Commands that do nothing a second run would regret: they set things up, look, or are the receiving end of a download. */
 const HARMLESS = new Set([
   'cd', 'pushd', 'popd', 'export', 'set', 'unset', 'echo', 'printf', 'true', 'pwd', 'ls', 'cat', 'mkdir', 'rm', 'test', '[', 'source', '.', ':',
@@ -95,43 +96,29 @@ export const segmentsOf = (command: string): Words[] | undefined => {
 
 const REDIRECT_TO_NEXT_WORD = /^(?:\d*>|&>)$/
 const REDIRECT = /^(?:\d*>|&>|<)/
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const WRAPPER_FLAGS_WITH_VALUE = new Set(['-n', '-u', '-g', '-C'])
 
-/** `words` without redirections (`> out.log`, `2>&1`, `&>/dev/null`) and without what runs before the program: variables, `sudo`, `time`, `timeout 60`. */
+/** `words` without redirections (`> out.log`, `2>&1`, `&>/dev/null`) and without what runs before the program (variables, `sudo`, `time`, `timeout 60`, `env`…: peeled by the shared shell reader). */
 const programWords = (words: Words): string[] => {
-  let rest: string[] = []
+  const rest: string[] = []
   for (let i = 0; i < words.length; i++) {
     const word = words[i] ?? ''
     if (REDIRECT_TO_NEXT_WORD.test(word)) i += 1
     else if (!REDIRECT.test(word)) rest.push(word)
   }
-
-  for (;;) {
-    const [first = '', ...after] = rest
-    if (ASSIGNMENT.test(first)) {
-      rest = after
-    } else if (WRAPPERS.has(first)) {
-      let skipped = 0
-      while (after[skipped]?.startsWith('-') === true) skipped += WRAPPER_FLAGS_WITH_VALUE.has(after[skipped] ?? '') ? 2 : 1
-      rest = after.slice(skipped)
-    } else if (first === 'timeout') {
-      let skipped = 0
-      while (after[skipped]?.startsWith('-') === true) skipped += 1
-      rest = after.slice(skipped + 1)
-    } else {
-      return rest
-    }
-  }
+  return unwrap(rest).argv
 }
 
-const baseName = (program: string): string => program.split('/').at(-1) ?? program
-
 /** Whether `words` is one fetch-type command a second run would redo without harm. */
-const isRepeatable = (words: Words): boolean => {
+const isRepeatable = (words: Words, depth: number): boolean => {
   const [rawProgram = '', ...args] = programWords(words)
   let program = baseName(rawProgram)
   let rest = args
+
+  if (SHELLS.has(program)) {
+    // `bash -lc "npm ci"`: the script decides, read like a command line of its own.
+    const script = shellScriptArg([rawProgram, ...args])
+    return script !== undefined && depth < MAX_NESTING && isRetryable(script, depth + 1)
+  }
 
   if (/^python[\d.]*$/.test(program) && rest[0] === '-m' && rest[1] === 'pip') {
     program = 'pip'
@@ -180,10 +167,10 @@ const isRepeatableDocker = (program: string, args: Words): boolean => {
  * (install, fetch, pull, clone, a GET) or something harmless beside one (`cd`, `rm -rf node_modules`, `tar`).
  * At least one part has to be a fetch, or there is nothing a network error could have broken.
  */
-export const isRetryable = (command: string): boolean => {
+export const isRetryable = (command: string, depth = 0): boolean => {
   const segments = segmentsOf(command)
   if (segments === undefined || segments.length === 0) return false
-  const kinds = segments.map(words => (isRepeatable(words) ? 'fetch' : HARMLESS.has(baseName(programWords(words)[0] ?? '')) ? 'harmless' : 'other'))
+  const kinds = segments.map(words => (isRepeatable(words, depth) ? 'fetch' : HARMLESS.has(baseName(programWords(words)[0] ?? '')) ? 'harmless' : 'other'))
   return kinds.includes('fetch') && !kinds.includes('other')
 }
 

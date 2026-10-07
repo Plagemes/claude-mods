@@ -6,19 +6,11 @@ export type Runner = TestWatchPlan['runner']
 /** Where to look for a source file's tests: a directory and the file names that would be them. */
 export type Lookup = { dir: string; names: readonly string[] }
 
-type Counts = { passed: number | null; failed: number | null }
-
 export const SCRIPT_EXTENSIONS = new Set(['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'mts', 'cts', 'vue', 'svelte'])
 export const PYTHON_EXTENSIONS = new Set(['py'])
 
-const TEST_FILE = /(^|\/)__tests__\/|[._](test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]*\.py$|_test\.(py|go)$/
 const MIRROR_ROOTS = ['test', 'tests', '__tests__']
 const SOURCE_ROOTS = /^(src|lib|app)(\/|$)/
-const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]/g
-
-export const isTestFile = (path: string): boolean => TEST_FILE.test(path)
-
-export const stripAnsi = (text: string): string => text.replace(ANSI, '')
 
 export const stemOf = (file: string): string => {
   const base = basename(file)
@@ -71,39 +63,6 @@ export const commandFor = (runner: Runner, executable: string, tests: readonly s
       return [executable, 'test', '-v', ...tests]
     case 'cargo':
       return [executable, 'test', ...tests]
-  }
-}
-
-const sumOf = (text: string, pattern: RegExp): number | null => {
-  const found = [...text.matchAll(pattern)]
-  return found.length === 0 ? null : found.reduce((sum, match) => sum + Number(match[1]), 0)
-}
-
-const countIn = (line: string | undefined): Counts => ({
-  passed: line === undefined ? null : sumOf(line, /(\d+) passed/g),
-  failed: line === undefined ? null : sumOf(line, /(\d+) (?:failed|errors?)\b/g),
-})
-
-/** The passed and failed counts a runner's summary reports; null where it says none. */
-export const summarize = (runner: Runner, output: string): Counts => {
-  const lines = output.split('\n')
-  switch (runner) {
-    case 'vitest':
-      return countIn(lines.findLast(line => /^\s*Tests\s+\d/.test(line)))
-    case 'jest':
-      return countIn(lines.findLast(line => /^\s*Tests:\s+\d/.test(line)))
-    case 'pytest':
-      return countIn(lines.findLast(line => /\d+ (passed|failed|errors?)\b/.test(line)))
-    case 'go': {
-      const passed = (output.match(/^\s*--- PASS:/gm) ?? []).length
-      const failed = (output.match(/^\s*--- FAIL:/gm) ?? []).length
-      return passed + failed === 0 ? { passed: null, failed: null } : { passed, failed }
-    }
-    case 'cargo':
-      return {
-        passed: sumOf(output, /test result: \w+\. (\d+) passed/g),
-        failed: sumOf(output, /test result: \w+\. \d+ passed; (\d+) failed/g),
-      }
   }
 }
 

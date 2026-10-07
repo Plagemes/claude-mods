@@ -1,6 +1,6 @@
 {
   "name": "commit-composer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "/commit writes a Conventional Commit message from your staged diff and commits it.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#commit-composer",

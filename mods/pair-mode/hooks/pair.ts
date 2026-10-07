@@ -1,3 +1,5 @@
+import { simpleCommands } from './shared/shell'
+
 /** What `/pair <args>` asks for. */
 export type PairAction = 'on' | 'off' | 'check' | 'toggle' | 'help'
 
@@ -20,14 +22,7 @@ export const parseAction = (args: string): PairAction => {
 
 // ── Shell commands that write files ─────────────────────────────────────────
 
-const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g
-const HEREDOC = /<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1/
-const SEPARATORS = /\|\||&&|[;|&\n()`]|\$\(/
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const WRAPPERS = new Set(['sudo', 'command', 'exec', 'nohup', 'time', 'env', 'nice', 'xargs', 'doas'])
 const SAFE_TARGET = /^(?:\/dev\/(?:null|stdout|stderr|tty)|&\d|&-)$/
-const REDIRECTION = /(?:^|[^<>&\d])\d?>>?\|?(?!&)\s*([^\s;&|<>()]+)/g
-const BOTH_REDIRECTION = /&>>?\s*([^\s;&|<>()]+)/g
 // `--?\w`: an option's dashes are read one way only, so a long run of options cannot backtrack exponentially.
 const INLINE_SCRIPT = /\b(?:node|python[\d.]*|ruby|perl|deno|bun|php)(?:\s+--?\w[\w-]*)*\s+(?:-e|-c|-p|-r|--eval|eval|-)(?=\s|$)/
 const SCRIPTED_WRITE =
@@ -36,38 +31,6 @@ const FILE_TOOLS = new Set(['rm', 'mv', 'cp', 'touch', 'truncate', 'ln', 'patch'
 const GIT_WRITERS = new Set(['apply', 'am', 'restore', 'cherry-pick', 'revert', 'merge', 'rebase', 'pull'])
 const FORMATTERS = new Set(['black', 'isort', 'rustfmt', 'autopep8', 'yapf', 'autoflake'])
 const CHECK_FLAGS = new Set(['--check', '--check-only', '--diff', '-c', '--dry-run'])
-
-/** Drops here-document bodies, so their lines are not read as commands. */
-const withoutHeredocs = (command: string): string => {
-  const kept: string[] = []
-  let delimiter: string | undefined
-  for (const line of command.split('\n')) {
-    if (delimiter !== undefined) {
-      if (line.trim() === delimiter) delimiter = undefined
-      continue
-    }
-    kept.push(line)
-    delimiter = HEREDOC.exec(line)?.[2]
-  }
-  return kept.join('\n')
-}
-
-/** The words of each simple command, quoted text blanked out; env assignments and wrappers dropped. */
-const simpleCommands = (bare: string): string[][] =>
-  bare
-    .split(SEPARATORS)
-    .map(part => part.trim().split(/\s+/).filter(word => word !== ''))
-    .map(words => {
-      let start = 0
-      while (start < words.length) {
-        const word = words[start] as string
-        if (ASSIGNMENT.test(word) || WRAPPERS.has(word) || (start > 0 && word.startsWith('-') && WRAPPERS.has(words[start - 1] ?? ''))) {
-          start += 1
-        } else break
-      }
-      return words.slice(start)
-    })
-    .filter(words => words.length > 0)
 
 const hasShortFlag = (args: readonly string[], flag: string): boolean =>
   args.some(arg => /^-[A-Za-z]+/.test(arg) && !arg.startsWith('--') && arg.slice(1).includes(flag))
@@ -124,20 +87,20 @@ const writerOf = (words: readonly string[]): string | undefined => {
 /**
  * Why a shell command looks like it writes files (`sed -i`, `> out.txt`,
  * `rm`, `prettier --write`, a script calling writeFileSync...), or
- * undefined when it does not. Best effort: quoted text and here-document
- * bodies are not read as commands, and redirections to /dev/null are fine.
+ * undefined when it does not. Best effort: the command is read with the shared shell reader (quoted text and
+ * here-document bodies are not commands, `bash -c`, `eval` and `$(...)` are opened up, wrappers peeled),
+ * and redirections to /dev/null are fine.
  */
 export const writesFiles = (command: string): string | undefined => {
   if (INLINE_SCRIPT.test(command) && SCRIPTED_WRITE.test(command)) return 'a script that writes files'
-  const bare = withoutHeredocs(command).replace(QUOTED, '""')
-  for (const pattern of [REDIRECTION, BOTH_REDIRECTION]) {
-    for (const match of bare.matchAll(pattern)) {
-      const target = match[1] ?? ''
-      if (!SAFE_TARGET.test(target)) return target === '""' ? 'a redirection to a file' : `a redirection to ${target}`
+  const commands = simpleCommands(command)
+  for (const { redirects } of commands) {
+    for (const { op, target } of redirects) {
+      if (op.includes('>') && target !== '' && !SAFE_TARGET.test(target)) return `a redirection to ${target}`
     }
   }
-  for (const words of simpleCommands(bare)) {
-    const writer = writerOf(words)
+  for (const { argv } of commands) {
+    const writer = writerOf(argv)
     if (writer !== undefined) return writer
   }
   return undefined

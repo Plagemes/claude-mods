@@ -194,9 +194,5 @@ export const matchBackward = (code: string, close: number): number => {
   return -1
 }
 
-/** The 1-based line of an offset. */
-export const lineAt = (source: string, index: number): number => {
-  let line = 1
-  for (let i = 0; i < index && i < source.length; i += 1) if (source[i] === '\n') line += 1
-  return line
-}
+/** The 1-based line of an offset in a source (shared with the other scanners; the newline offsets are found once per file). */
+export { lineAt } from './shared/line-index'

@@ -13,7 +13,7 @@ Claude sometimes leaves `// TODO` or `FIXME` comments behind instead of finishin
 ```
 
 ## Usage
-- At the end of a turn that added markers, a toast: `todo-tracker: 2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them`.
+- At the end of a turn that added markers, a toast: `2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them`.
 - `/todos-added` lists the markers of the latest turn that added any, as `src/a.ts:42  // TODO: handle errors`.
 - `/todos-added all` lists every marker added this session. `/clear` forgets them.
 
@@ -24,3 +24,4 @@ No configuration needed.
 - A `tool.call` hook on `Edit`, `Write` and `MultiEdit` compares the text a call replaces with the text it puts in; only marker lines that were not already there count, so editing a line next to an old TODO does not re-announce it. Markers are matched as whole upper-case words, so `todoList` and `todos` are ignored.
 - Line numbers come from re-reading the file after the call (or the line in the written content for `Write`); if the file cannot be read the item is listed without a line.
 - Files changed through Bash (`sed -i`, a formatter, a heredoc) are not seen. The list is kept in `$.state` and capped at 200 items.
+- With [mods-hub](../mods-hub) installed: the end-of-turn count goes through `notify` at `info` level instead of a toast, and each turn that added markers publishes `x.todo-tracker.added` (turn, count and the first 20 markers with file, line and text). Without the hub nothing changes. Line numbers come from the shared `line-index` library.

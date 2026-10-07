@@ -42,17 +42,26 @@ const SIGNATURES: ReadonlyArray<readonly [Runner, RegExp]> = [
   ['go', /^(?:ok|FAIL)\s+\S+\s+(?:[\d.]+s|\(cached\))|^--- (?:PASS|FAIL):/m],
   ['mocha', /^\s*\d+ passing\b/m],
 ]
+/** A shell segment's start, past env assignments and launchers (`npx`, `python -m`, `poetry run`, `bundle exec`...) and a path. */
+const LAUNCHED =
+  String.raw`^\s*(?:\w+=\S*\s+|(?:sudo|time|env|nice|command|npx|pnpx|bunx|yarn|pnpm|bun)\s+|timeout\s+\S+\s+|(?:python3?|py)\s+-m\s+|(?:poetry|uv|pipenv|pdm|hatch|rye)\s+run\s+|(?:bundle|pnpm|yarn|npm)\s+exec\s+(?:--\s+)?)*?` +
+  String.raw`(?:[\w.~-]*\/)*`
+/** The command a segment runs, not a word in it: `cat jest.config.js` or `npm i -D vitest` run no tests. */
+const runs = (command: string): RegExp => new RegExp(`${LAUNCHED}(?:${command})(?![\\w./-])`)
+const SEGMENTS = /&&|\|\||[;|&\n(){}]/
 const COMMANDS: ReadonlyArray<readonly [Runner, RegExp]> = [
-  ['pytest', /\b(?:pytest|py\.test)\b/],
-  ['vitest', /\bvitest\b/],
-  ['jest', /\bjest\b/],
-  ['mocha', /\bmocha\b/],
-  ['nextest', /\bcargo(?:\s+\+\S+)?\s+nextest\b/],
-  ['cargo', /\bcargo(?:\s+\+\S+)?\s+test\b/],
-  ['go', /\bgo\s+test\b/],
+  ['pytest', runs(String.raw`pytest|py\.test`)],
+  ['vitest', runs('vitest')],
+  ['jest', runs('jest')],
+  ['mocha', runs('mocha')],
+  ['nextest', runs(String.raw`cargo(?:\s+\+\S+)?\s+nextest`)],
+  ['cargo', runs(String.raw`cargo(?:\s+\+\S+)?\s+test`)],
+  ['go', runs(String.raw`go\s+test`)],
 ]
 /** Commands that run a project's tests without naming the runner. */
-const TEST_SCRIPT = /\b(?:(?:npm|yarn|pnpm|bun)(?:\s+run)?\s+test(?::[\w-]+)?|tox|nox|make\s+test)\b/
+const TEST_SCRIPT = runs(String.raw`(?:npm|yarn|pnpm|bun)(?:\s+run)?\s+test(?::[\w-]+)?|tox|nox|make\s+test`)
+/** Whether one of the command's shell segments matches. */
+const anySegment = (command: string, pattern: RegExp): boolean => command.split(SEGMENTS).some(segment => pattern.test(segment))
 
 const toMs = (seconds: string | undefined): number => Math.round(Number.parseFloat(seconds ?? '0') * 1000)
 const asMs = (millis: string | undefined): number => Math.round(Number.parseFloat(millis ?? '0'))
@@ -133,14 +142,15 @@ export const slowest = (timings: readonly Timing[], count: number, thresholdMs: 
 
 /** Which runner printed this output, from the command and, failing that, from what the output looks like. */
 export const runnerOf = (command: string, output: string): Runner | undefined => {
-  const named = COMMANDS.find(([, pattern]) => pattern.test(command))?.[0]
+  const named = COMMANDS.find(([, pattern]) => anySegment(command, pattern))?.[0]
   return named ?? SIGNATURES.find(([, pattern]) => pattern.test(output))?.[0]
 }
 
 /** Whether the output shows a test run at all, whatever runner and whatever timings. */
 export const hasRunTests = (output: string): boolean => SIGNATURES.some(([, pattern]) => pattern.test(output))
 
-export const isTestCommand = (command: string): boolean => COMMANDS.some(([, pattern]) => pattern.test(command)) || TEST_SCRIPT.test(command)
+export const isTestCommand = (command: string): boolean =>
+  COMMANDS.some(([, pattern]) => anySegment(command, pattern)) || anySegment(command, TEST_SCRIPT)
 
 /** The one flag that makes a runner print per-test times, when its output had none. */
 export const HINTS: Readonly<Record<Runner, string | undefined>> = {

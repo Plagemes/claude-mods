@@ -2,7 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { parsePlanCommand, parsePlanJson, parsePlanText } from '../hooks/plan'
+import { environmentOf, parsePlanCommand, parsePlanJson, parsePlanText } from '../hooks/plan'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'terraform-plan-pane'
 const PANE_PROPS = {
@@ -210,10 +211,48 @@ test('reads which command runs a plan, and ignores the rest', () => {
   expect(parsePlanCommand('terraform apply tf.plan')).toBeUndefined()
   expect(parsePlanCommand('echo terraform plan')).toBeUndefined()
   expect(parsePlanCommand('terraform fmt && terraform validate')).toBeUndefined()
+  // The shared shell reader also opens wrappers and nested scripts.
+  expect(parsePlanCommand('sudo -u deploy env TF_VAR_x=1 terraform plan')).toEqual({ tool: 'terraform', cd: undefined, chdir: undefined, out: undefined })
+  expect(parsePlanCommand("bash -c 'cd infra && tofu plan -out=p.tfplan'")).toEqual({ tool: 'tofu', cd: 'infra', chdir: undefined, out: 'p.tfplan' })
+  expect(environmentOf('/repo/envs/prod')).toBe('production')
+  expect(environmentOf('/repo/stacks/staging-eu')).toBe('staging')
+  expect(environmentOf('/repo/infra')).toBe('unspecified')
+  expect(environmentOf('/repo/products')).toBe('unspecified')
 
   expect(parsePlanText('  # aws_instance.a (deposed object 1a2b) will be destroyed\n').resources).toEqual([
     { address: 'aws_instance.a', action: 'destroy', detail: 'deposed object' },
   ])
   expect(parsePlanText('  # aws_instance.a is tainted, so must be replaced\n').resources[0]?.detail).toBe('tainted')
   expect(parsePlanJson('{"no":"plan"}')).toBeUndefined()
+})
+
+test('with mods-hub: says hello, publishes deploy.started once per plan with changes (target and environment), and warns through the hub', async ($, on) => {
+  const w = world(on, PLAN_TEXT)
+  const hub = fakeHub(on, {}, w.clock)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['deploy.started'], consumes: [] }])
+
+  await $.tool.call({ tool: 'Bash', command: 'cd envs/prod && terraform plan -out=tf.plan' })
+  await w.clock.settle()
+  expect(hub.published).toEqual([{ topic: 'deploy.started', data: { target: 'terraform:/repo/envs/prod', environment: 'production' } }])
+  expect(hub.notified).toHaveLength(1)
+  expect(hub.notified[0]).toMatchObject({ level: 'warning' })
+  expect(hub.notified[0]?.title).toContain('plan destroys aws_s3_bucket.logs')
+  expect(w.toasts).toEqual([])
+})
+
+test('with mods-hub, a clean plan and a failed one announce nothing', async ($, on) => {
+  const w = world(on, 'No changes. Your infrastructure matches the configuration.\n')
+  const hub = fakeHub(on, {}, w.clock)
+  await $.tool.call({ tool: 'Bash', command: 'tofu plan' })
+  expect(hub.published).toEqual([])
+  expect(hub.notified).toEqual([])
+})
+
+test('without mods-hub the warning is the same toast and nothing is published', async ($, on) => {
+  const w = world(on, PLAN_TEXT)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'terraform plan' })
+  await w.clock.settle()
+  expect(w.toasts).toHaveLength(1)
 })

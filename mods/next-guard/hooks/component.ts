@@ -1,3 +1,5 @@
+import { lineFinder } from './shared/line-index'
+
 export type Finding = {
   kind: 'needs-client' | 'error-boundary' | 'server-import' | 'metadata' | 'needless-client'
   /** Line, counting from 1; 0 for the file as a whole. */
@@ -46,8 +48,6 @@ const withoutComments = (source: string): string => source.replace(TOKENS, token
 const codeOnly = (source: string): string =>
   source.replace(TOKENS, token => (token.startsWith('//') || token.startsWith('/*') ? blank(token) : `${token[0]}${blank(token.slice(1, -1))}${token.slice(-1)}`))
 
-const lineOf = (text: string, index: number): number => text.slice(0, index).split('\n').length
-
 const hasDirective = (text: string, directive: string): boolean => new RegExp(`^\\s*(['"])${directive}\\1`).test(text)
 
 /** The client-only features a file uses, named (hooks, handlers, browser APIs ...); comments and strings do not count. */
@@ -76,7 +76,8 @@ export function checkComponent(source: string, path: string, options: { hintUnne
   const isClient = hasDirective(text, 'use client')
   const code = codeOnly(source)
   const features = clientFeatures(source)
-  const imports = [...text.matchAll(IMPORT)].map(match => ({ specifier: match[1] as string, line: lineOf(text, match.index ?? 0) }))
+  const lineOf = lineFinder(text)
+  const imports = [...text.matchAll(IMPORT)].map(match => ({ specifier: match[1] as string, line: lineOf(match.index ?? 0) }))
   const findings: Finding[] = []
 
   if (!isClient) {

@@ -1,4 +1,5 @@
 import type { Ecosystem } from './popular'
+import { simpleCommands } from './shared/shell'
 
 /** One package an install command asks for, by its registry name. */
 export type PackageRequest = { ecosystem: Ecosystem; name: string; spec: string }
@@ -6,8 +7,6 @@ export type PackageRequest = { ecosystem: Ecosystem; name: string; spec: string 
 /** A cheap test before parsing: does the command mention an installer at all? */
 export const INSTALLER_HINT = /\b(?:npm|pnpm|yarn|bun|npx|bunx|pip3?|pipx|uv|poetry|cargo|go)\b/
 
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const PREFIXES = new Set(['sudo', 'command', 'exec', 'time', 'nohup', 'env'])
 /** Options a JavaScript package manager takes before its subcommand (`pnpm --filter web add x`), the ones with a value. */
 const LEADING_VALUED: Readonly<Record<string, ReadonlySet<string>>> = {
   npm: new Set(['-w', '--workspace', '--prefix']),
@@ -22,47 +21,6 @@ const fromSubcommand = (tool: string, args: readonly string[]): string[] => {
   while (at < args.length && (args[at] as string).startsWith('-')) at += LEADING_VALUED[tool]?.has(args[at] as string) === true ? 2 : 1
   if (tool === 'yarn' && args[at] === 'workspace') at += 2
   return args.slice(at)
-}
-
-/** Splits a command line into simple commands, each a list of words; quotes are honoured, expansions kept as text. */
-export const simpleCommands = (command: string): string[][] => {
-  const commands: string[][] = []
-  let words: string[] = []
-  let word = ''
-  let hasWord = false
-  const endWord = (): void => {
-    if (hasWord) words.push(word)
-    word = ''
-    hasWord = false
-  }
-  const endCommand = (): void => {
-    endWord()
-    if (words.length > 0) commands.push(words)
-    words = []
-  }
-  for (let i = 0; i < command.length; i += 1) {
-    const char = command[i] as string
-    if (char === '\\' && i + 1 < command.length) {
-      word += command[i + 1]
-      hasWord = true
-      i += 1
-    } else if (char === "'" || char === '"') {
-      const end = command.indexOf(char, i + 1)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i + 1, stop)
-      hasWord = true
-      i = stop
-    } else if (char === ' ' || char === '\t') {
-      endWord()
-    } else if (char === ';' || char === '|' || char === '&' || char === '\n' || char === '(' || char === ')') {
-      endCommand()
-    } else {
-      word += char
-      hasWord = true
-    }
-  }
-  endCommand()
-  return commands
 }
 
 /** Drops options (and the values of the ones listed in `valued`), keeping operands. */
@@ -136,12 +94,10 @@ const requestsOf = (
     return name === undefined ? [] : [{ ecosystem, name, spec }]
   })
 
-/** The packages one simple command installs or runs from a registry. */
+/** The packages one simple command installs or runs from a registry; `argv` comes from the shared shell reader, wrappers peeled. */
 const installsOf = (argv: readonly string[]): PackageRequest[] => {
-  let start = 0
-  while (start < argv.length && (PREFIXES.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) start += 1
-  const name = (argv[start] ?? '').replace(/^.*\//, '')
-  const words = ['npm', 'pnpm', 'yarn', 'bun'].includes(name) ? [argv[start] ?? '', ...fromSubcommand(name, argv.slice(start + 1))] : argv.slice(start)
+  const name = (argv[0] ?? '').replace(/^.*\//, '')
+  const words = ['npm', 'pnpm', 'yarn', 'bun'].includes(name) ? [argv[0] ?? '', ...fromSubcommand(name, argv.slice(1))] : [...argv]
   const [, sub = '', third = '', ...rest] = words
   const afterSub = words.slice(2)
 
@@ -158,7 +114,7 @@ const installsOf = (argv: readonly string[]): PackageRequest[] => {
     return []
   }
   if (name === 'npx' || name === 'bunx') {
-    const args = argv.slice(start + 1)
+    const args = argv.slice(1)
     const packages = args.flatMap((arg, index) =>
       arg === '-p' || arg === '--package' ? [args[index + 1] ?? ''] : arg.startsWith('--package=') ? [arg.slice(10)] : [],
     )
@@ -186,12 +142,16 @@ const installsOf = (argv: readonly string[]): PackageRequest[] => {
   return []
 }
 
-/** Every registry package `command` would install, each once. */
+/**
+ * Every registry package `command` would install, each once. The shared shell reader splits the line, peels
+ * wrappers (`sudo`, `env`, `timeout`, ...), skips comments and here-document bodies, and reads `bash -c`, `eval`,
+ * `$(...)` and heredocs fed to a shell.
+ */
 export const packageRequests = (command: string): PackageRequest[] => {
   if (!INSTALLER_HINT.test(command)) return []
   const seen = new Set<string>()
   return simpleCommands(command)
-    .flatMap(installsOf)
+    .flatMap(({ argv }) => installsOf(argv))
     .filter(request => {
       const key = `${request.ecosystem}:${request.name}`
       if (seen.has(key)) return false

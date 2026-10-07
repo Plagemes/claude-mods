@@ -2,6 +2,8 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const MINUTE = 60_000
 
 // Stands for the engine: a clock that only the test moves, a store in memory, and a toast recorder.
@@ -91,4 +93,37 @@ test('stays silent in a headless run', async ($, on) => {
   await work($, clock, 60)
 
   expect(toasts).toHaveLength(0)
+})
+
+test('with mods-hub: the reminder is a terminal notice, waits out a focus round, and a round\'s end or being away resets the count', async ($, on) => {
+  const { clock, toasts, start } = engine(on)
+  const hub = fakeHub(on, {}, clock)
+  await start($)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['session.idle', 'session.away', 'focus.started', 'focus.ended'] }])
+
+  await work($, clock, 52)
+  expect(toasts).toEqual([])
+  expect(hub.notified).toHaveLength(1)
+  expect(hub.notified[0]?.level).toBe('info')
+  expect(hub.notified[0]?.audience).toBe('terminal')
+  expect(hub.notified[0]?.title).toContain('min of active work')
+
+  // A 60-minute focus round: no reminder in the middle of it.
+  hub.events.push({ topic: 'focus.started', source: 'focus-timer', at: clock.now(), data: { minutes: 60 } })
+  await work($, clock, 56)
+  expect(hub.notified).toHaveLength(1)
+
+  // The round ends (its own break starts): the count starts over.
+  hub.events.push({ topic: 'focus.ended', source: 'focus-timer', at: clock.now(), data: { minutes: 60, isCompleted: true } })
+  await work($, clock, 44)
+  expect(hub.notified).toHaveLength(1)
+
+  // Away (no activity in any session): a break, the count starts over again.
+  hub.mode = { ...hub.mode, presence: 'away' }
+  await clock.advance(MINUTE)
+  hub.mode = { ...hub.mode, presence: 'here' }
+  await work($, clock, 44)
+  expect(hub.notified).toHaveLength(1)
+  await work($, clock, 8)
+  expect(hub.notified).toHaveLength(2)
 })

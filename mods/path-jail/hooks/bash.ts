@@ -1,8 +1,10 @@
 /**
- * A small, conservative reader of shell commands: it finds the paths a command
- * line would write to (redirections and the usual file commands), and the `cd`
- * in effect where each one is written. Best effort: a shell is Turing complete.
+ * Finds the paths a command line would write to (redirections and the usual file commands), and the `cd` in
+ * effect where each one is written. The words come from the shared claude-mods shell reader (`shared/shell`:
+ * quotes, escapes, heredocs, fd duplication, wrappers); this file walks them in order to keep the `cd` chain.
+ * Best effort: a shell is Turing complete.
  */
+import { operands, shellReadsStdin, shellScriptArg, tokenize, unwrap, type ShellRedirect } from './shared/shell'
 
 /** One path a command would write, and the `cd` target in effect before it (undefined: the shell's cwd). */
 export type WriteTarget = {
@@ -13,178 +15,10 @@ export type WriteTarget = {
   via: string
 }
 
-type Word = { kind: 'word'; text: string }
-type Op = { kind: 'op'; text: string }
-type Redirect = { kind: 'redirect'; text: string; isWrite: boolean; isHeredoc: boolean }
-type Token = Word | Op | Redirect
-
 const SEPARATORS = new Set(['&&', '||', ';', '|', '|&', '&', '\n', '(', ')', '{', '}'])
-const PREFIX_WORDS = new Set(['command', 'builtin', 'nohup', 'time', 'exec', 'then', 'do', 'else', 'if', 'while', 'until', '!'])
 const SAFE_DEVICES = /^\/dev\/(?:null|zero|stdout|stderr|stdin|tty|fd\/\d+)$/
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-
-/** Splits a command line into words, separators and redirections, honouring quotes, escapes and heredocs. */
-export const tokenize = (command: string): Token[] => {
-  const tokens: Token[] = []
-  const heredocs: { delimiter: string; stripTabs: boolean }[] = []
-  let word = ''
-  let hasWord = false
-  let i = 0
-
-  const pushWord = (): void => {
-    if (hasWord) tokens.push({ kind: 'word', text: word })
-    word = ''
-    hasWord = false
-  }
-
-  /** Skips heredoc bodies that start after the newline at `i`. */
-  const skipHeredocs = (): void => {
-    while (heredocs.length > 0) {
-      const { delimiter, stripTabs } = heredocs.shift() as { delimiter: string; stripTabs: boolean }
-      while (i < command.length) {
-        const end = command.indexOf('\n', i)
-        const line = command.slice(i, end === -1 ? command.length : end)
-        i = end === -1 ? command.length : end + 1
-        if ((stripTabs ? line.replace(/^\t+/, '') : line) === delimiter) break
-      }
-    }
-  }
-
-  while (i < command.length) {
-    const char = command[i] as string
-    const next = command[i + 1] ?? ''
-
-    if (char === '\\' && next !== '') {
-      if (next !== '\n') {
-        word += next
-        hasWord = true
-      }
-      i += 2
-      continue
-    }
-    if (char === "'") {
-      const end = command.indexOf("'", i + 1)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i + 1, stop)
-      hasWord = true
-      i = stop + 1
-      continue
-    }
-    if (char === '"') {
-      i += 1
-      while (i < command.length && command[i] !== '"') {
-        if (command[i] === '\\' && i + 1 < command.length) i += 1
-        word += command[i]
-        i += 1
-      }
-      hasWord = true
-      i += 1
-      continue
-    }
-    if (char === '$' && next === '(') {
-      // Keep a command substitution whole inside the word: its contents are not this line's redirections.
-      let depth = 0
-      const start = i
-      for (; i < command.length; i += 1) {
-        if (command[i] === '(') depth += 1
-        else if (command[i] === ')' && --depth === 0) break
-      }
-      word += command.slice(start, i + 1)
-      hasWord = true
-      i += 1
-      continue
-    }
-    if (char === '`') {
-      const end = command.indexOf('`', i + 1)
-      const stop = end === -1 ? command.length : end
-      word += command.slice(i, stop + 1)
-      hasWord = true
-      i = stop + 1
-      continue
-    }
-    if (char === '#' && !hasWord) {
-      while (i < command.length && command[i] !== '\n') i += 1
-      continue
-    }
-    if (char === '\n') {
-      pushWord()
-      tokens.push({ kind: 'op', text: '\n' })
-      i += 1
-      skipHeredocs()
-      continue
-    }
-    if (char === ' ' || char === '\t') {
-      pushWord()
-      i += 1
-      continue
-    }
-    if (char === '>' || char === '<' || (char === '&' && next === '>')) {
-      // A word made only of digits right before the operator is its file descriptor (`2>`).
-      if (/^\d+$/.test(word)) {
-        word = ''
-        hasWord = false
-      }
-      pushWord()
-      const rest = command.slice(i)
-      const op = /^(?:&>>|&>|>>|>\||>&|>|<<<|<<-|<<|<&|<>|<)/.exec(rest)?.[0] ?? char
-      i += op.length
-      if ((op === '>&' || op === '<&') && /^\s*(?:\d+|-)(?![\w./])/.test(command.slice(i))) {
-        // File-descriptor duplication (`2>&1`, `>&-`): no file is written.
-        const dup = /^\s*(?:\d+|-)/.exec(command.slice(i))?.[0] ?? ''
-        i += dup.length
-        continue
-      }
-      const isHeredoc = op === '<<' || op === '<<-'
-      tokens.push({ kind: 'redirect', text: op, isWrite: op.includes('>'), isHeredoc })
-      if (isHeredoc) {
-        const match = /^\s*(['"]?)([^\s'";&|<>]+)\1/.exec(command.slice(i))
-        if (match !== null) {
-          heredocs.push({ delimiter: match[2] as string, stripTabs: op === '<<-' })
-          i += match[0].length
-        }
-      }
-      continue
-    }
-    const two = char + next
-    if (two === '&&' || two === '||' || two === '|&' || two === ';;') {
-      pushWord()
-      tokens.push({ kind: 'op', text: two === ';;' ? ';' : two })
-      i += 2
-      continue
-    }
-    if (char === ';' || char === '|' || char === '&' || char === '(' || char === ')') {
-      pushWord()
-      tokens.push({ kind: 'op', text: char })
-      i += 1
-      continue
-    }
-    if ((char === '{' || char === '}') && !hasWord && (next === ' ' || next === '\n' || next === '' || next === ';')) {
-      pushWord()
-      tokens.push({ kind: 'op', text: char })
-      i += 1
-      continue
-    }
-    word += char
-    hasWord = true
-    i += 1
-  }
-  pushWord()
-  return tokens
-}
-
-const operands = (args: readonly string[]): string[] => {
-  const result: string[] = []
-  let isOptionsDone = false
-  for (const arg of args) {
-    if (!isOptionsDone && arg === '--') {
-      isOptionsDone = true
-      continue
-    }
-    if (!isOptionsDone && arg.startsWith('-') && arg !== '-') continue
-    result.push(arg)
-  }
-  return result
-}
+/** How deep scripts handed to a shell (`bash -c`, `eval`, a heredoc fed to `sh`) are opened up. */
+const MAX_NESTING = 3
 
 /** `-t DIR` / `--target-directory=DIR` of cp, mv, ln, install. */
 const targetDirectory = (args: readonly string[]): string | undefined => {
@@ -216,20 +50,9 @@ const VALUED_OPTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
   perl: new Set(['-e', '-E', '-M', '-I']),
 }
 const NO_VALUED: ReadonlySet<string> = new Set()
-const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
-const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
-/** Commands that run the command after their own options, and those options that take a value. */
-const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
-  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-r', '-t', '-T', '-U', '--user', '--group', '--host', '--prompt', '--chdir']),
-  doas: new Set(['-u', '-C']),
-  nice: new Set(['-n', '--adjustment']),
-  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata']),
-  stdbuf: new Set(['-i', '-o', '-e']),
-  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
-}
 
-/** The paths one simple command (`argv`) writes, by what the command is; a nested `sh -c` script is read too. */
-const writesOf = (argv: readonly string[]): { path: string; via: string; cdChain?: readonly string[] }[] => {
+/** The paths one simple command (`argv`) writes, by what the command is; a nested `sh -c` or `eval` script is read too. */
+const writesOf = (argv: readonly string[], depth: number): { path: string; via: string; cdChain?: readonly string[] }[] => {
   const name = (argv[0] ?? '').replace(/^.*\//, '')
   const args = argv.slice(1)
   const list = operands(withoutOptionValues(args, VALUED_OPTIONS[name] ?? NO_VALUED))
@@ -284,103 +107,72 @@ const writesOf = (argv: readonly string[]): { path: string; via: string; cdChain
       }
       return each(starts.length === 0 ? ['.'] : starts)
     }
+    case 'eval':
+      return depth < MAX_NESTING ? writeTargets(args.join(' '), depth + 1) : []
     default: {
-      if (!SHELLS.has(name)) return []
-      // `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`.
-      const flag = args.findIndex(arg => SHELL_COMMAND_FLAG.test(arg))
-      const script = flag === -1 ? undefined : args[flag + 1]
-      return script === undefined ? [] : writeTargets(script)
+      // `bash -c`, `sh -ec`, `su -c` and the like: the script is read with its own `cd`s.
+      const script = shellScriptArg(argv)
+      return script === undefined || depth >= MAX_NESTING ? [] : writeTargets(script, depth + 1)
     }
   }
 }
 
 /** Every path `command` would write to, with the `cd`s that precede it on the line. */
-export const writeTargets = (command: string): WriteTarget[] => {
-  const tokens = tokenize(command)
+export const writeTargets = (command: string, depth = 0): WriteTarget[] => {
   const targets: WriteTarget[] = []
   const cdChain: string[] = []
-  let argv: string[] = []
-  let isRedirectTarget: Redirect | undefined
+  let words: string[] = []
+  let heredocBodies: string[] = []
+  let isRedirectTarget: ShellRedirect | undefined
 
-  const flush = (): void => {
-    let start = 0
-    for (let previous = -1; previous !== start; ) {
-      previous = start
-      while (start < argv.length && (PREFIX_WORDS.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) start += 1
-      if (argv[start] === 'env') {
-        start += 1
-        while (start < argv.length && (ASSIGNMENT.test(argv[start] as string) || (argv[start] as string).startsWith('-'))) start += 1
-      }
-      // `sudo -u root rm …`, `timeout 5 rm …`, `nice -n 5 rm …`: skip the wrapper's own options to reach the command.
-      const valued = WRAPPERS[argv[start] ?? '']
-      if (valued !== undefined) {
-        const wrapper = argv[start]
-        start += 1
-        while (start < argv.length && (argv[start] as string).startsWith('-')) start += valued.has(argv[start] as string) ? 2 : 1
-        if (wrapper === 'timeout' && start < argv.length) start += 1
-      }
-    }
-    const simple = argv.slice(start)
-    if (simple[0] === 'cd' || simple[0] === 'pushd') {
-      const directory = operands(simple.slice(1))[0]
-      cdChain.push(directory ?? '~')
-    } else {
-      for (const write of writesOf(simple)) {
-        targets.push({ path: write.path, via: write.via, cdChain: [...cdChain, ...(write.cdChain ?? [])] })
-      }
-    }
-    argv = []
+  const nestedTargets = (script: string): void => {
+    if (depth >= MAX_NESTING) return
+    for (const nested of writeTargets(script, depth + 1)) targets.push({ ...nested, cdChain: [...cdChain, ...nested.cdChain] })
   }
 
-  for (const token of tokens) {
+  const flush = (): void => {
+    // `sudo -u root rm …`, `timeout 5 rm …`, `env A=1 xargs rm …`: wrappers, their options and assignments go.
+    const { argv } = unwrap(words)
+    if (argv[0] === 'cd' || argv[0] === 'pushd') {
+      const directory = operands(argv.slice(1))[0]
+      cdChain.push(directory ?? '~')
+    } else {
+      for (const write of writesOf(argv, depth)) {
+        targets.push({ path: write.path, via: write.via, cdChain: [...cdChain, ...(write.cdChain ?? [])] })
+      }
+      // `bash <<EOF … EOF`, `sh <<< "…"`: the shell runs what it reads.
+      if (shellReadsStdin(argv)) for (const body of heredocBodies) nestedTargets(body)
+    }
+    words = []
+    heredocBodies = []
+  }
+
+  for (const token of tokenize(command)) {
     if (isRedirectTarget !== undefined) {
       if (token.kind === 'word') {
         if (isRedirectTarget.isWrite && !SAFE_DEVICES.test(token.text)) {
           targets.push({ path: token.text, via: isRedirectTarget.text, cdChain: [...cdChain] })
         }
+        if (isRedirectTarget.text === '<<<') heredocBodies.push(token.text)
         isRedirectTarget = undefined
         continue
       }
       isRedirectTarget = undefined
     }
     if (token.kind === 'redirect') {
-      isRedirectTarget = token.isHeredoc ? undefined : token
+      if (token.isHeredoc) heredocBodies.push(token.body ?? '')
+      else isRedirectTarget = token
       continue
     }
     if (token.kind === 'op') {
       if (SEPARATORS.has(token.text)) flush()
       continue
     }
-    argv.push(token.text)
-    for (const body of substitutionBodies(token.text)) {
-      for (const nested of writeTargets(body)) targets.push({ ...nested, cdChain: [...cdChain, ...nested.cdChain] })
-    }
+    words.push(token.text)
+    for (const body of token.substitutions) nestedTargets(body)
   }
   flush()
   return targets
-}
-
-/** The commands inside `$(...)` and backticks of a word, which run before the word is used. */
-const substitutionBodies = (word: string): string[] => {
-  const bodies: string[] = []
-  for (let i = 0; i < word.length; i += 1) {
-    if (word[i] === '`') {
-      const end = word.indexOf('`', i + 1)
-      if (end === -1) break
-      bodies.push(word.slice(i + 1, end))
-      i = end
-    } else if (word[i] === '$' && word[i + 1] === '(') {
-      let depth = 0
-      let end = i + 1
-      for (; end < word.length; end += 1) {
-        if (word[end] === '(') depth += 1
-        else if (word[end] === ')' && --depth === 0) break
-      }
-      bodies.push(word.slice(i + 2, end))
-      i = end
-    }
-  }
-  return bodies
 }
 
 /**

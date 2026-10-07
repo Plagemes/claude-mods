@@ -2,7 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { biggestChanges, formatDelta, formatSize, isBuildCommand, leadingCd, normalizeName, snapshotOf } from '../hooks/sizes'
+import { biggestChanges, buildToolOf, formatDelta, formatSize, isBuildCommand, leadingCd, normalizeName, snapshotOf } from '../hooks/sizes'
+import { fakeHub } from './hub'
 
 const NOW = 1_800_000_000_000
 const KB = 1024
@@ -156,6 +157,11 @@ test('which commands are builds', () => {
   expect(leadingCd('cd web && npm run build')).toBe('web')
   expect(leadingCd('cd "my app"; yarn build')).toBe('my app')
   expect(leadingCd('npm run build')).toBeUndefined()
+  expect(buildToolOf('sudo -E NODE_ENV=production pnpm build')).toBe('pnpm')
+  expect(buildToolOf('npx webpack --mode production')).toBe('npx')
+  expect(buildToolOf('vite build && echo done')).toBe('vite')
+  expect(leadingCd('cd web')).toBeUndefined()
+  expect(leadingCd('echo hi && cd web && npm run build')).toBeUndefined()
 })
 
 test('hashed file names are compared across builds, sizes and deltas are printed plainly', () => {
@@ -173,4 +179,42 @@ test('hashed file names are compared across builds, sizes and deltas are printed
   const before = snapshotOf([{ path: 'a-AbCdEf12.js', size: 100 * KB, mtimeMs: 0 }, { path: 'b.css', size: 10 * KB, mtimeMs: 0 }], 'dist', 1)
   const after = snapshotOf([{ path: 'a-ZzYyXx34.js', size: 130 * KB, mtimeMs: 0 }, { path: 'b.css', size: 10 * KB, mtimeMs: 0 }, { path: 'c.js', size: 5 * KB, mtimeMs: 0 }], 'dist', 2)
   expect(biggestChanges(before, after)).toEqual(['a-[hash].js +30 KB', 'c.js +5 KB'])
+})
+
+test('with mods-hub: says hello, publishes build.result for every build and sends the growth warning through the hub with the same toast as a fallback', async ($, on) => {
+  const disk = bundle(300)
+  const build = { fails: false }
+  const { clock, seen } = project(on, disk, build)
+  const hub = fakeHub(on, {}, clock)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['build.result'], consumes: [] }])
+
+  await run($, clock)
+  Object.assign(disk, bundle(340))
+  await run($, clock)
+  expect(hub.published).toEqual([
+    { topic: 'build.result', data: { tool: 'npm', outcome: 'passed', durationMs: 0, command: 'npm run build' } },
+    { topic: 'build.result', data: { tool: 'npm', outcome: 'passed', durationMs: 0, command: 'npm run build' } },
+  ])
+  expect(hub.notified).toHaveLength(1)
+  expect(hub.notified[0]).toMatchObject({ level: 'warning' })
+  expect(hub.notified[0]?.title).toContain('bundle grew +40 KB')
+  expect(seen.toasts).toEqual([])
+
+  hub.published.length = 0
+  build.fails = true
+  await run($, clock)
+  await run($, clock, 'npm run dev')
+  expect(hub.published).toEqual([{ topic: 'build.result', data: { tool: 'npm', outcome: 'failed', durationMs: 0, command: 'npm run build' } }])
+})
+
+test('without mods-hub the growth warning is the same toast', async ($, on) => {
+  const disk = bundle(300)
+  const { clock, seen } = project(on, disk)
+  await run($, clock)
+  Object.assign(disk, bundle(340))
+  await run($, clock)
+  expect(seen.toasts).toHaveLength(1)
+  expect(seen.toasts[0]).toContain('bundle grew +40 KB')
 })

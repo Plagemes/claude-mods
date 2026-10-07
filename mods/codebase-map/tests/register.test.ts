@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { buildMap, parseMeta } from '../hooks/map'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const FILES = [
@@ -162,4 +163,39 @@ test('/map show reuses the saved map without rebuilding', async ($, on) => {
   expect(state.runs.length).toBe(1)
   const odd = await $.command.run(run('everything'))
   expect(odd.text).toContain('Unknown argument')
+})
+
+test('with mods-hub: says hello, and shares the fact codebase-map.summary when a map is built and when a saved one is loaded', async ($, on) => {
+  const state = world(on, FILES)
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('fs.exists', () => ({ value: false }))
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
+  expect(hub.facts.size).toBe(0)
+
+  await $.command.run(run())
+  expect(state.writes.has(`${ROOT}/.claude/codebase-map.md`)).toBe(true)
+  expect(hub.facts.get('summary')).toEqual({ files: 7, dirs: 5, source: 'git', generatedAt: Date.UTC(2026, 9, 7, 9, 30), file: '.claude/codebase-map.md', isTruncated: false })
+})
+
+test('with mods-hub: a map saved by an earlier session is shared at start', async ($, on) => {
+  world(on, FILES)
+  const hub = fakeHub(on)
+  const saved = buildMap(FILES, { name: 'shop', depth: 3, maxChars: 6000, now: 123, source: 'git' }).markdown
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('fs.exists', () => ({ value: true }))
+  on('fs.read', ($, e) => (e.path.endsWith('plugin.json') ? { value: '{"version":"1.0.0"}' } : { value: saved }))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.facts.get('summary')).toMatchObject({ files: 7, dirs: 5, generatedAt: 123, source: 'git' })
+})
+
+test('without mods-hub /map is unchanged and shares nothing', async ($, on) => {
+  const state = world(on, FILES)
+  const ran = await $.command.run(run())
+  expect(ran.text).toContain('Mapped 7 files in 5 dirs (git ls-files)')
+  expect(state.writes.size).toBe(1)
 })

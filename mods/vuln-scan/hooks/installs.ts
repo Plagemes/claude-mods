@@ -1,26 +1,17 @@
+import { simpleCommands } from './shared/shell'
+
 /** The package managers whose installs are audited, by the auditor that checks them. */
 export type Manager = 'npm' | 'pnpm' | 'yarn' | 'pip' | 'cargo'
 
 /** One install a shell command ran: which manager, in which folder (relative to where the command started, '' for there). */
 export type Install = { manager: Manager; dir: string }
 
-const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const PREFIXES = new Set(['sudo', 'command', 'exec', 'time', 'nohup', 'env'])
 const NPM_VERBS = new Set(['install', 'i', 'in', 'ins', 'inst', 'insta', 'instal', 'isnt', 'isnta', 'isntal', 'isntall', 'add', 'ci', 'update', 'up', 'upgrade'])
 const PNPM_VERBS = new Set(['install', 'i', 'add', 'update', 'up', 'upgrade'])
 const YARN_VERBS = new Set(['install', 'add', 'up', 'upgrade'])
 const PIP = /^pip(?:3(?:\.\d+)?)?$/
 const PYTHON = /^python(?:3(?:\.\d+)?)?$/
 const HELP = new Set(['-h', '--help', '--version', '-V', '--dry-run'])
-
-/** The words of a simple command, past env assignments and wrappers such as `sudo`. */
-const wordsOf = (part: string): string[] => {
-  const words = part.trim().split(/\s+/).filter(word => word !== '')
-  let start = 0
-  while (start < words.length && (ASSIGNMENT.test(words[start] as string) || PREFIXES.has(words[start] as string))) start += 1
-  return words.slice(start)
-}
 
 const verbOf = (args: readonly string[]): string | undefined => args.find(arg => !arg.startsWith('-'))
 
@@ -56,22 +47,29 @@ const changeDir = (dir: string, to: string): string => {
 }
 
 /**
- * The installs a shell command runs, in order, following `cd` between
- * them (`cd web && npm install` installs in `web`). Quoted text is never
- * read as a command; each manager is listed once per folder.
+ * The installs a shell command runs, in order, following `cd` between them (`cd web && npm install` installs in
+ * `web`). Commands come from the shared shell reader, so quoted text is never read as a command, wrappers
+ * (`sudo`, `env`, `timeout`…) are peeled and `bash -c "…"` scripts are opened (a `cd` inside one does not leak out
+ * of it); each manager is listed once per folder.
  */
 export const installsIn = (command: string): Install[] => {
   const found: Install[] = []
-  let dir = ''
-  const bare = command.replace(QUOTED, match => match.replace(/[;&|\n]/g, ' '))
-  for (const part of bare.split(/\|\||&&|[;|&\n()]/)) {
-    const words = wordsOf(part)
-    if (words[0] === 'cd' || words[0] === 'pushd') {
-      dir = changeDir(dir, (words[1] ?? '').replace(/^["']|["']$/g, ''))
-      continue
+  const add = (install: Install): void => {
+    if (!found.some(one => one.manager === install.manager && one.dir === install.dir)) found.push(install)
+  }
+  // The folder each script (the line itself is script 0, each nested one a new number) is in: a nested script starts where its parent was.
+  const dirs = new Map<number, string>([[0, '']])
+  let last = ''
+  for (const { argv, script } of simpleCommands(command)) {
+    if (!dirs.has(script)) dirs.set(script, last)
+    const dir = dirs.get(script) ?? ''
+    if (argv[0] === 'cd' || argv[0] === 'pushd') {
+      dirs.set(script, changeDir(dir, argv[1] ?? ''))
+    } else {
+      const manager = installOf(argv)
+      if (manager !== undefined) add({ manager, dir })
     }
-    const manager = installOf(words)
-    if (manager !== undefined && !found.some(one => one.manager === manager && one.dir === dir)) found.push({ manager, dir })
+    last = dirs.get(script) ?? ''
   }
   return found
 }

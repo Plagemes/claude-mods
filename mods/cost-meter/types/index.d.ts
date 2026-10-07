@@ -5,7 +5,7 @@ export type Spend = {
   tokens: number
   /** Completed turns counted, subagents' included. */
   turns: number
-  /** True once a turn ran on a model the price table does not know (priced as a Sonnet). */
+  /** True once a turn ran on a model the price table does not know (priced as an Opus 5.5). */
   hasUnpricedModel: boolean
 }
 

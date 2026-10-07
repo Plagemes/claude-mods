@@ -1,25 +1,20 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer, ToolCallInput, ToolCallResult } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderInput, Timer, ToolCallInput, ToolCallResult } from 'claude-code'
 
 import type { TestWatchPlan, TestWatchRun } from '../types'
 import { basename, dirname, extension, hasPackage, isAbsolute, isNotInstalled, join, relativeTo } from './project'
 import type { Level, Project } from './project'
-import {
-  PYTHON_EXTENSIONS,
-  SCRIPT_EXTENSIONS,
-  commandFor,
-  isTestFile,
-  pythonTestLookups,
-  scriptTestLookups,
-  statusOf,
-  stemOf,
-  stripAnsi,
-  summarize,
-} from './runners'
+import { PYTHON_EXTENSIONS, SCRIPT_EXTENSIONS, commandFor, pythonTestLookups, scriptTestLookups, statusOf, stemOf } from './runners'
 import type { Lookup, Runner } from './runners'
+import { countsOf, isTestFile, stripAnsi } from './shared/test-runners'
 
 const PANE = 'tests-last'
 const COMMAND = 'tests-last'
+/** The hub's shared panel, and this mod's tab in it (order 100: Tests, per the platform's tab order). */
+const HUB_PANE = 'claude-mods'
+const TAB = { id: 'tests', title: 'Tests', order: 100, command: COMMAND } as const
+/** How much of a command line goes into a `test.result` event. */
+const MAX_EVENT_COMMAND = 200
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit'])
 const SKIPPED_PATH = /(^|\/)(node_modules|\.git)\//
 const MAX_LEVELS = 40
@@ -61,12 +56,13 @@ export const register: Register = (on, options) => {
   }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: COMMAND, description: 'Show the output of the last test-watch run' })
+    await $.command.register({ name: 'tests-last', description: 'Show the output of the last test-watch run' })
+    await greetHub($)
     return next(e)
   })
 
-  on('command.run', { command: COMMAND }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Tests' })
+  on('command.run', { command: 'tests-last' }, async $ => {
+    if (!(await hubShowTab($, TAB.id))) await $.ui.open({ id: PANE, title: 'Tests' })
     return {}
   })
 
@@ -85,54 +81,70 @@ export const register: Register = (on, options) => {
     return ran
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Code, Text } = $.ui.resolve(e)
-    const run = await read($, last)
-    const running = await read($, isRunning)
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTests($, e, settings, false))
 
-    const close = <Button key="close" label="Close" role="dismiss" onPress={() => void $.ui.close({ id: PANE })} />
-    if (run === null) {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text bold>{running ? '⧗ Running tests…' : 'No test run yet'}</Text>
-          <Text dimColor>
-            Edit a file that has tests beside it (name.test.ts, test_name.py, name_test.go…) and they run{' '}
-            {settings.debounceMs / 1000}s after the edits settle.
-          </Text>
-          {close}
-        </Box>
-      )
-    }
+  // The Tests tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
+  on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
+    if (!(await hubTabIs($, TAB.id))) return next(e)
+    const { Box } = $.ui.resolve(e)
 
-    const color = run.outcome === 'passed' ? 'success' : 'error'
-    const meta = `${run.plans.map(plan => plan.runner).join(', ')} · ${(run.durationMs / 1000).toFixed(1)}s`
     return (
-      <Box flexDirection="column" gap={1}>
-        <Box flexDirection="row" justifyContent="space-between" gap={2}>
-          <Text bold color={color}>
-            {statusOf(run)}
-          </Text>
-          <Text dimColor>{running ? '⧗ running again…' : meta}</Text>
-        </Box>
-        <Text dimColor wrap="truncate-end">
-          {run.targets.join(', ')}
-        </Text>
-        <Code source={run.output === '' ? '(no output)' : run.output} />
-        <Box flexDirection="row" gap={2}>
-          {!running && (
-            <Button
-              key="rerun"
-              label="Run again"
-              hotkey="r"
-              variant="primary"
-              onPress={() => void execute($, run.plans, run.targets, settings)}
-            />
-          )}
-          {close}
-        </Box>
+      <Box flexDirection="column">
+        {await next(e)}
+        {await drawTests($, e, settings, true)}
       </Box>
     )
   })
+}
+
+/** The last run: this mod's own pane, or its tab in the hub's panel (`isTab`, no Close button). */
+const drawTests = async ($: EngineInterface, e: RenderInput<'Pane'>, settings: Settings, isTab: boolean): Promise<RenderElement> => {
+  const { Box, Button, Code, Text } = $.ui.resolve(e)
+  const run = await read($, last)
+  const running = await read($, isRunning)
+
+  const close = isTab ? null : <Button key="close" label="Close" role="dismiss" onPress={() => void $.ui.close({ id: PANE })} />
+  if (run === null) {
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold>{running ? '⧗ Running tests…' : 'No test run yet'}</Text>
+        <Text dimColor>
+          Edit a file that has tests beside it (name.test.ts, test_name.py, name_test.go…) and they run{' '}
+          {settings.debounceMs / 1000}s after the edits settle.
+        </Text>
+        {close}
+      </Box>
+    )
+  }
+
+  const color = run.outcome === 'passed' ? 'success' : 'error'
+  const meta = `${run.plans.map(plan => plan.runner).join(', ')} · ${(run.durationMs / 1000).toFixed(1)}s`
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Box flexDirection="row" justifyContent="space-between" gap={2}>
+        <Text bold color={color}>
+          {statusOf(run)}
+        </Text>
+        <Text dimColor>{running ? '⧗ running again…' : meta}</Text>
+      </Box>
+      <Text dimColor wrap="truncate-end">
+        {run.targets.join(', ')}
+      </Text>
+      <Code source={run.output === '' ? '(no output)' : run.output} />
+      <Box flexDirection="row" gap={2}>
+        {!running && (
+          <Button
+            key="rerun"
+            label="Run again"
+            hotkey="r"
+            variant="primary"
+            onPress={() => void execute($, run.plans, run.targets, settings)}
+          />
+        )}
+        {close}
+      </Box>
+    </Box>
+  )
 }
 
 /** Runs the tests related to the files edited since the last run, unless a run is in flight. */
@@ -181,7 +193,7 @@ const execute = async (
         const ran = await $.process.run(plan.argv, { cwd: plan.cwd, timeoutMs: settings.timeoutMs, env: RUN_ENV })
         const text = stripAnsi([ran.stdout, ran.stderr].filter(Boolean).join('\n')).trim()
         outputs.push(`${header}\n${text}`)
-        const counts = summarize(plan.runner, text)
+        const counts = countsOf(plan.runner, text)
         if (counts.passed !== null) passed = (passed ?? 0) + counts.passed
         if (counts.failed !== null) failed = (failed ?? 0) + counts.failed
         if (ran.exitCode !== 0) hasFailed = true
@@ -204,9 +216,51 @@ const execute = async (
     }
     await update($, last, () => run)
     $.ui.status(statusOf(run))
+    await publishRun($, run)
   } finally {
     isBusy = false
     await update($, isRunning, () => false)
+  }
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+const ownVersion = async ($: EngineInterface): Promise<string> => {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello and the Tests tab in its panel. */
+const greetHub = async ($: EngineInterface): Promise<void> => {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['test.result'], consumes: [] }, TAB)
+}
+
+/**
+ * A finished run on the hub's bus: `test.result` (richer than the hub's own sensor, which only sees the
+ * test commands Claude runs) and the fact `test-watch.plan` (what ran, where). Nothing happens without the hub.
+ */
+const publishRun = async ($: EngineInterface, run: TestWatchRun): Promise<void> => {
+  const runners = [...new Set(run.plans.map(plan => plan.runner))]
+  const isPublished = await hubPublish($, {
+    topic: 'test.result',
+    data: {
+      runner: runners.join('+'),
+      outcome: run.outcome,
+      passed: run.passed,
+      failed: run.failed,
+      durationMs: run.durationMs,
+      command: run.plans.map(plan => plan.argv.map(arg => relativeTo(plan.cwd, arg)).join(' ')).join(' ; ').slice(0, MAX_EVENT_COMMAND),
+    },
+  })
+  if (!isPublished) return
+  try {
+    await $.mods.share({ name: 'plan', value: { runners, targets: run.targets, plans: run.plans.map(plan => ({ runner: plan.runner, cwd: plan.cwd })) } })
+  } catch {
+    // The hub refused the fact: the event is out, which is what matters.
   }
 }
 
@@ -330,3 +384,100 @@ const editedFile = (e: ToolCallInput, ran: ToolCallResult): string | undefined =
   const path = 'file_path' in e ? e.file_path : undefined
   return typeof path === 'string' && path !== '' ? path : undefined
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

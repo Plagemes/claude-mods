@@ -42,3 +42,5 @@ When Claude runs `kubectl apply`, `replace` or `delete`, this mod first runs a s
 - Limits:
   - Only commands Claude runs through Bash are checked. Commands run inside scripts or Makefiles aren't seen.
   - The diff shows what the API server would change. Admission webhooks that act only on the real write aren't covered.
+- With [mods-hub](../mods-hub) installed, every held or blocked change is published as `risk.blocked` (severity high on production, medium elsewhere) for guardian and audit-trail, and every kubectl change that goes ahead (approved, or run without a possible dry run outside production) as `deploy.started` (verb and namespace, context) for every session. Without the hub nothing changes.
+- The kubectl reader keeps its own lexer for now (heredoc manifests, `cd`, `cat file |` feeding `-f -`); `shared/shell.ts` does not expose those yet.

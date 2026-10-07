@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 
 import type { TfPlan as Plan, TfPlanAction as Action, TfPlanResource as Resource } from '../types'
-import { ACTION_ORDER, countsOf, parsePlanCommand, parsePlanJson, parsePlanText, shortCounts } from './plan'
+import { ACTION_ORDER, countsOf, environmentOf, parsePlanCommand, parsePlanJson, parsePlanText, shortCounts } from './plan'
 import type { PlanCommand } from './plan'
 
 const PANE = 'tfplan'
@@ -69,8 +69,34 @@ async function record($: EngineInterface, plan: Plan, previous: Plan | undefined
   else if (plan.isNoChanges) $.ui.status('✓ tf plan: no changes')
   else $.ui.status(`${danger.length > 0 ? '⚠ ' : ''}tf plan: ${shortCounts(plan.resources)} · /tfplan`)
   if (danger.length > (previous === undefined ? 0 : risky(previous).length)) {
-    $.ui.toast(`${plan.tool} plan ${describeRisk(danger.map(resource => ({ ...resource, detail: null })), LISTED_IN_TOAST)}. /tfplan`, { timeoutMs: 8_000 })
+    // A warning through the hub (your phone channel while you are away: the plan may be waiting for an apply); a toast without it.
+    await hubNotify($, { level: 'warning', title: `${plan.tool} plan ${describeRisk(danger.map(resource => ({ ...resource, detail: null })), LISTED_IN_TOAST)}. /tfplan` }, { timeoutMs: 8_000 })
   }
+}
+
+/**
+ * A plan with changes means an apply may follow: tell mods-hub's bus (`deploy.started`, which prod-guard and guardian read)
+ * once per plan command, with the plan's folder as the target and the environment its path names. Nothing without the hub.
+ */
+async function announcePlan($: EngineInterface, plan: Plan): Promise<void> {
+  if (plan.error !== null || plan.isNoChanges) return
+  await hubPublish($, { topic: 'deploy.started', data: { target: `${plan.tool}:${plan.dir}`, environment: environmentOf(plan.dir) } })
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['deploy.started'], consumes: [] })
 }
 
 /** Reads the saved plan file with `show -json` for exact addresses and reasons; keeps the text reading when that fails. */
@@ -112,6 +138,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'tfplan', description: 'Show the last terraform/tofu plan: resources to create, change and destroy' })
+    await greetHub($)
     return next(e)
   })
 
@@ -135,6 +162,7 @@ export const register: Register = on => {
       const base = joinPath(await $.session.cwd(), command.cd)
       const plan: Plan = { tool: command.tool, command: e.command, dir: joinPath(base, command.chdir), source: 'text', at: await $.clock.now(), ...parsed }
       await record($, plan, undefined)
+      await announcePlan($, plan)
       if (command.out !== undefined && parsed.error === null) $.clock.after(0, () => void refine($, host, seq, command, base, plan))
 
       const danger = risky(plan)
@@ -231,3 +259,100 @@ export const register: Register = on => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

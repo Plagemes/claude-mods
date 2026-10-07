@@ -1,0 +1,17 @@
+{
+  "name": "mods-hub",
+  "version": "1.0.0",
+  "description": "The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#mods-hub",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "core", "event-bus", "notifications", "panel"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "idleMinutes": { "type": "number", "title": "Idle after (minutes)", "description": "Minutes without a prompt or command before you count as idle.", "default": 10 },
+    "awayMinutes": { "type": "number", "title": "Away after (minutes)", "description": "Minutes without a prompt or command before you count as away; notifications routed 'away' then reach your channels.", "default": 30 },
+    "sensors": { "type": "boolean", "title": "Built-in events", "description": "Publish test.result, cost.update, error.repeated, context.pressure and session events from what the session does, so the bus is useful before other mods publish.", "default": true },
+    "captureToasts": { "type": "boolean", "title": "Collect other mods' toasts", "description": "Keep every mod's toasts in the Home tab's Recent list (and hold them there while Silent is on).", "default": true }
+  }
+}

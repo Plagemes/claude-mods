@@ -27,3 +27,4 @@ Draws a one-line band above the prompt with a 20-cell bar, the percentage of the
 - Hooks `session.measure`, which the engine raises after every turn with the live context fill, so the figure is the one the status line shows rather than a sum of per-turn usage.
 - Draws through a `ui.render` hook on the `AbovePrompt` band; the state lives in `$.state`, so a hot reload keeps it.
 - The band stays out of the way while a survey holds the band, and draws nothing until the engine has reported a fill.
+- With [mods-hub](../mods-hub) installed the mod says hello (it reads `context.pressure`) and, when the engine has no reading yet (the mod was reloaded in the middle of a session), starts the gauge from the hub's last `context.pressure` event if it is under ten minutes old. After that `session.measure` is the only source, as before. Without the hub nothing changes.

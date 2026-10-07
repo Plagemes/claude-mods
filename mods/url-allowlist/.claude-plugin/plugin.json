@@ -1,6 +1,6 @@
 {
   "name": "url-allowlist",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Restricts WebFetch to the domains you allow.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#url-allowlist",

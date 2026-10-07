@@ -1,0 +1,33 @@
+{
+  "name": "email-digest",
+  "version": "1.0.0",
+  "description": "Daily or weekly email summaries in plain language for clients and managers who don't live in chat.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#email-digest",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "team", "email", "digest", "report"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "provider": { "type": "string", "title": "Email provider", "description": "resend (API), sendgrid (API) or smtp (through curl).", "options": ["resend", "sendgrid", "smtp"], "default": "resend" },
+    "resendApiKey": { "type": "string", "title": "Resend API key", "description": "Needed when the provider is resend. Create a sending-only key.", "sensitive": true, "default": "" },
+    "sendgridApiKey": { "type": "string", "title": "SendGrid API key", "description": "Needed when the provider is sendgrid (Mail Send permission only).", "sensitive": true, "default": "" },
+    "smtpUrl": { "type": "string", "title": "SMTP address", "description": "For smtp: smtps://smtp.example.com:465 (implicit TLS) or smtp://smtp.example.com:587 (STARTTLS). Plain, unencrypted SMTP is refused.", "default": "" },
+    "smtpUser": { "type": "string", "title": "SMTP user", "description": "Leave empty for a relay that needs no login.", "default": "" },
+    "smtpPassword": { "type": "string", "title": "SMTP password", "description": "Passed to curl on its standard input, never on the command line.", "sensitive": true, "default": "" },
+    "from": { "type": "string", "title": "Sender", "description": "The From address, e.g. Acme Studio <digest@acme.com>. The domain must be verified with your provider.", "default": "" },
+    "replyTo": { "type": "string", "title": "Reply-To", "description": "Where replies go. Optional.", "default": "" },
+    "recipients": { "type": "string", "title": "Recipients", "description": "Default recipients, comma separated. A project can have its own list: /digest recipients, or the pane.", "default": "" },
+    "frequency": { "type": "string", "title": "Send automatically", "description": "off (send by hand), daily, weekly, or both (the weekly one replaces the daily on its day).", "options": ["off", "daily", "weekly", "both"], "default": "off" },
+    "sendAt": { "type": "string", "title": "Send at", "description": "Local time, HH:MM. A session opened up to 6 hours late still sends; later, that day is skipped.", "default": "18:00" },
+    "weeklyDay": { "type": "string", "title": "Weekly digest on", "description": "mon, tue, wed, thu, fri, sat or sun.", "default": "fri" },
+    "skipWeekends": { "type": "boolean", "title": "No daily digest on weekends", "description": "Saturday and Sunday are skipped by the daily schedule.", "default": true },
+    "tone": { "type": "string", "title": "Tone", "description": "client: plain words, no jargon. manager: counts and risks. technical: hashes, authors, CI and test details.", "options": ["client", "manager", "technical"], "default": "client" },
+    "language": { "type": "string", "title": "Language", "description": "Language of the digest's own words (commit messages stay as written).", "options": ["en", "it"], "default": "en" },
+    "includeCost": { "type": "boolean", "title": "Cost line", "description": "Add the AI usage cost of the period to the digest. Off by default: clients rarely want it.", "default": false },
+    "signature": { "type": "string", "title": "Signature", "description": "Closing text, e.g. your name and studio.", "default": "" },
+    "projectName": { "type": "string", "title": "Project name", "description": "Name used in the subject. Empty: the project folder's name.", "default": "" },
+    "journalDir": { "type": "string", "title": "Journal folder", "description": "Where session-journal writes its day files, relative to the project root.", "default": ".claude/journal" },
+    "timezone": { "type": "string", "title": "Time zone", "description": "IANA zone for the send time and the days covered, e.g. Europe/Rome. Empty: this machine's.", "default": "" }
+  }
+}

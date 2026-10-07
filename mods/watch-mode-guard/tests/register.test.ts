@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { findNeverEnding, segmentsOf } from '../hooks/detect'
+import { fakeHub } from './hub'
 
 /** The engine under the plugin: every Bash call that reaches it succeeds, and the commands that reached it are kept. */
 const engine = (on: On) => {
@@ -213,7 +214,8 @@ test('segmentsOf splits at connectors outside quotes and marks what is sent to t
     { words: ['sleep', '1'], isBackground: true },
     { words: ['npm', 'run', 'dev'], isBackground: false },
   ])
-  expect(segmentsOf('npm start > out.log 2>&1')).toEqual([{ words: ['npm', 'start', '>', 'out.log', '2>&1'], isBackground: false }])
+  // The shared shell reader sets redirections apart from the words.
+  expect(segmentsOf('npm start > out.log 2>&1')).toEqual([{ words: ['npm', 'start'], isBackground: false }])
 })
 
 test('regression: explicit one-shot flags, build scripts, help output and look-alikes are not refused', () => {
@@ -258,4 +260,39 @@ test('regression: a Bash call with a short timeout of its own is bounded and let
   expect(short.deny).toBeUndefined()
   expect(long.deny).toContain('npm run dev')
   expect(ran).toEqual(['npm run dev'])
+})
+
+test('regression: a never-ending command inside bash -lc or sh -c is caught', () => {
+  expect(blocked('bash -lc "cd web && npm run dev"')).toBe('npm run dev')
+  expect(blocked("sh -c 'vitest'")).toBe('vitest')
+  expect(blocked('bash -c "npm run dev" &')).toBeUndefined()
+  expect(blocked('timeout 60 bash -c "npm run dev"')).toBeUndefined()
+  expect(blocked('bash -c "npm run build"')).toBeUndefined()
+})
+
+test('the shared shell reader: substitutions, heredocs fed to a shell, groups and pipelines sent to the background', () => {
+  expect(blocked('echo "$(npm run dev)"')).toBe('npm run dev')
+  expect(blocked('bash <<EOF\ncd web\nnpm run dev\nEOF')).toBe('npm run dev')
+  expect(blocked(`su -c 'tail -f /var/log/app.log' app`)).toBe('tail -f /var/log/app.log')
+  expect(blocked('(cd web && npm run dev) & sleep 5')).toBeUndefined()
+  expect(blocked('npm run dev | tee dev.log &')).toBeUndefined()
+  expect(blocked('timeout 30 bash <<EOF\nnpm run dev\nEOF')).toBeUndefined()
+  expect(blocked('watch -n 2 kubectl get pods')).toBe('watch kubectl get pods')
+})
+
+test('with mods-hub: a refusal is published as risk.blocked', async ($, on) => {
+  engine(on)
+  mock.env(on, {})
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect((await $.tool.call({ tool: 'Bash', command: 'cd web && npm run dev' })).deny).toContain('watch-mode-guard')
+  expect((await $.tool.call({ tool: 'Bash', command: 'npm run build' })).deny).toBeUndefined()
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: { guard: 'watch-mode-guard', tool: 'Bash', reason: 'never-ending: npm run dev keeps running in the foreground', severity: 'low', command: 'cd web && npm run dev' },
+    },
+  ])
 })

@@ -50,3 +50,4 @@ achievements counts what you and Claude do: prompts, commits, test runs, edits, 
   - Commits, pushes and test runs are seen only when Claude runs them through Bash, not when you run them in another terminal.
   - Days and hours are in your machine's time zone.
   - Flawless day is awarded once the day is over, on your next activity.
+- With [mods-hub](../mods-hub) installed, what other mods report counts too (read every 15 s): commits published as `git.commit` (commit-composer's, made without Bash), test runs published as `test.result` by test-watch or quick-commands, and CI runs (`ci.result`, from ci-watch) count toward the Git and Tests achievements, a red run turning green toward Bug squasher. The hub's own test reports are the Bash runs already counted. An unlock becomes a `success` notice (held while Silent; the hub holds the sound at night). Without the hub nothing changes.

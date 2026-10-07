@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { formatSize, isHeavyWrite, parseDf, shortage } from '../hooks/disk'
+import { fakeHub } from './hub'
 
 const dfOutput = (availableKb: number, usedPercent: number, totalKb = 100 * 1024 * 1024) =>
   `Filesystem     1024-blocks      Used Available Capacity Mounted on\n/dev/nvme0n1p2 ${totalKb} ${totalKb - availableKb} ${availableKb} ${usedPercent}% /home\n`
@@ -142,8 +143,10 @@ test('isHeavyWrite knows installs, builds, pulls and clones, and not the rest', 
     'brew install node',
     './gradlew build',
     'dotnet publish -c Release',
+    'cd web && FOO=1 sudo -E npm ci | tail',
+    "bash -c 'cargo build --release'",
   ]
-  const light = ['ls', 'git status', 'git commit -m fix', 'npm test', 'cat package.json', 'docker ps', 'cargo --version']
+  const light = ['ls', 'git status', 'git commit -m fix', 'git commit -m "npm install && docker build x"', 'echo npm install', 'npm test', 'cat package.json', 'docker ps', 'cargo --version']
   expect(heavy.filter(command => !isHeavyWrite(command))).toEqual([])
   expect(light.filter(command => isHeavyWrite(command))).toEqual([])
 })
@@ -154,4 +157,38 @@ test('parseDf reads the last line of POSIX df and formatSize picks the unit', ()
   expect(parseDf('nonsense')).toBeUndefined()
   expect([formatSize(300 * 1024), formatSize(1.5 * GB), formatSize(2.5 * 1024 * GB)]).toEqual(['300 MB', '1.5 GB', '2.5 TB'])
   expect(shortage({ totalKb: 10 * GB, availableKb: 3 * GB, usedPercent: 70, mount: '/' }, 2, 95)).toBeUndefined()
+})
+
+test('with mods-hub: says hello; a heavy command on a nearly full disk is a warning notice and risk.blocked once per reading, a command that failed for space an error', async ($, on) => {
+  const w = world(on, { stdout: FULL_DISK })
+  const hub = fakeHub(on, {}, w.clock)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+
+  const ran = await $.tool.call({ tool: 'Bash', command: 'npm install' })
+  await $.tool.call({ tool: 'Bash', command: 'npm run build' })
+  expect(ran.context?.[0]).toContain('only 1.4 GB free')
+  expect(hub.notified).toHaveLength(1)
+  expect(hub.notified[0]).toMatchObject({ level: 'warning' })
+  expect(hub.notified[0]?.title).toContain('disk nearly full: only 1.4 GB free of 100.0 GB on /home (99% used)')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'disk-guard', tool: 'Bash', reason: 'a heavy command is about to run on a nearly full disk: only 1.4 GB free of 100.0 GB on /home (99% used)', severity: 'medium', path: '/work/app' } },
+  ])
+  expect(w.toasts).toEqual([])
+})
+
+test('with mods-hub, a failure for lack of space is an error notice and a high risk.blocked', async ($, on) => {
+  const w = world(on, { stdout: FULL_DISK }, { text: 'npm ERR! ENOSPC: no space left on device', isError: true })
+  const hub = fakeHub(on, {}, w.clock)
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(hub.notified).toEqual([{ level: 'error', title: expect.stringContaining('disk full: only 1.4 GB free') }])
+  expect(hub.published).toMatchObject([{ topic: 'risk.blocked', data: { severity: 'high' } }])
+})
+
+test('without mods-hub the warning is the same toast', async ($, on) => {
+  const w = world(on, { stdout: FULL_DISK })
+  await $.tool.call({ tool: 'Bash', command: 'npm install' })
+  expect(w.toasts).toHaveLength(1)
+  expect(w.toasts[0]).toContain('disk nearly full: only 1.4 GB free')
 })

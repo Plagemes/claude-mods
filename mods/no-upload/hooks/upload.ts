@@ -171,7 +171,7 @@ const uploadsOf = (command: Simple): Upload[] => {
   const [first = '', ...rest] = command.words
   const tool = first.replace(/^.*\//, '')
   const found: Upload[] = []
-  const devTcp = command.words.flatMap(word => [...word.matchAll(/\/dev\/(?:tcp|udp)\/([^/\s]+)\/\d+/g)].map(match => (match[1] as string).toLowerCase()))
+  const devTcp = [...command.words, ...command.redirects].flatMap(word => [...word.matchAll(/\/dev\/(?:tcp|udp)\/([^/\s]+)\/\d+/g)].map(match => (match[1] as string).toLowerCase()))
   found.push(...devTcp.map(host => ({ tool: 'bash', host, how: 'a /dev/tcp redirect' })))
   if (tool === 'curl') found.push(...curlUploads(command.words))
   else if (tool === 'wget') found.push(...wgetUploads(command.words))

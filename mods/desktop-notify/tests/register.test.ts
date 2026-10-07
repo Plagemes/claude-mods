@@ -1,5 +1,9 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
+
+import type { ModsNotice } from '../types/mods-hub'
+import { fakeHub } from './hub'
 
 type Run = { argv: readonly string[]; env?: Record<string, string> }
 
@@ -109,4 +113,135 @@ test('minSeconds sets the threshold', { options: { minSeconds: 5, attention: tru
   await $.turn.complete({ ...longTurn, durationMs: 6_000 })
 
   expect(runs).toHaveLength(1)
+})
+
+const notice = (fields: Partial<ModsNotice>): ModsNotice => ({
+  id: 'n1', level: 'success', title: 'x', source: 'ci-watch', at: 0, targets: ['desktop'], held: false, ...fields,
+})
+
+const start = ($: Engine) => $.session.start({ cwd: '/home/me/shop', surface: 'terminal', isInteractive: true })
+
+test('with mods-hub: registers the desktop pull channel and shows what the hub queued for it', async ($, on) => {
+  const clock = mock.clock(on)
+  const runs = host(on, 'linux')
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const hub = fakeHub(on)
+
+  await start($)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+  expect(hub.channels).toEqual([{ id: 'desktop', title: 'Desktop', audience: 'me', delivery: 'pull', status: 'connected' }])
+
+  await clock.advance(5_000)
+  expect(runs).toHaveLength(0) // nothing queued yet
+
+  hub.outbox.push(notice({ title: '❌ CI failed on main: test (failure)', body: 'run 8' }), notice({ id: 'n2', title: 'Budget at 80%' }))
+  await clock.advance(5_000)
+
+  expect(runs.map(run => run.argv.at(-1))).toEqual(['❌ CI failed on main: test (failure): run 8', 'Budget at 80%'])
+  expect(runs[0]?.argv).toContain('Claude Code · shop')
+  expect(hub.drains[0]).toEqual({ channel: 'desktop', after: null })
+
+  // The next collection acknowledges what was shown, which the hub then drops: nothing is shown twice.
+  await clock.advance(5_000)
+  expect(hub.drains.at(-1)).toEqual({ channel: 'desktop', after: 'n2' })
+  expect(hub.outbox).toEqual([])
+  expect(runs).toHaveLength(2)
+})
+
+test('with mods-hub: a second session start does not start a second collector, and its own turn notice still goes straight out', async ($, on) => {
+  const clock = mock.clock(on)
+  const runs = host(on, 'linux')
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const hub = fakeHub(on)
+
+  await start($)
+  await start($)
+  hub.outbox.push(notice({ title: 'once' }))
+  await clock.advance(5_000)
+  expect(runs.map(run => run.argv.at(-1))).toEqual(['once'])
+
+  await $.turn.complete(longTurn)
+  expect(runs.at(-1)?.argv.at(-1)).toBe('Finished in 1m 35s: All 12 tests pass now.')
+  expect(hub.notified).toEqual([])
+})
+
+test('with mods-hub on a host with no notifier: the channel is unconfigured and nothing is collected', async ($, on) => {
+  const clock = mock.clock(on)
+  const runs = host(on, 'plan9')
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const hub = fakeHub(on)
+
+  await start($)
+  hub.outbox.push(notice({ title: 'ignored' }))
+  await clock.advance(10_000)
+
+  expect(hub.channels).toEqual([{ id: 'desktop', title: 'Desktop', audience: 'me', delivery: 'pull', status: 'unconfigured', detail: 'no desktop notifier for this OS' }])
+  expect(runs).toHaveLength(0)
+})
+
+test('without mods-hub: session start does nothing and there is no timer', async ($, on) => {
+  const clock = mock.clock(on)
+  const runs = host(on, 'linux')
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await start($)
+  await clock.advance(60_000)
+
+  expect(runs).toHaveLength(0)
+})
+
+test('with mods-hub: a notice the notifier fails on stays queued and is shown on a later collection, once', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, {})
+  on('session.cwd', () => ({ value: '/home/me/shop' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const shown: string[] = []
+  let isBroken = true
+  on('process.run', (_$, e) => {
+    const ok = { value: { exitCode: 0, stdout: e.argv[0] === 'uname' ? 'Linux\n' : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    if (e.argv[0] === 'uname') return ok
+    if (isBroken) return { value: { exitCode: 1, stdout: '', stderr: 'no notification daemon', isStdoutTruncated: false, isStderrTruncated: false } }
+    shown.push(String(e.argv.at(-1)))
+    return ok
+  })
+  const hub = fakeHub(on)
+
+  await start($)
+  hub.outbox.push(notice({ title: 'Deploy failed' }), notice({ id: 'n2', title: 'Budget at 80%' }))
+  await clock.advance(5_000)
+  expect(shown).toEqual([])
+  expect(hub.drains.at(-1)).toEqual({ channel: 'desktop', after: null })
+  expect(hub.outbox.map(one => one.id)).toEqual(['n1', 'n2'])
+  expect(hub.statuses.at(-1)).toMatchObject({ id: 'desktop', status: 'error' })
+
+  isBroken = false
+  await clock.advance(5_000)
+  expect(shown).toEqual(['Deploy failed', 'Budget at 80%'])
+  expect(hub.statuses.at(-1)).toMatchObject({ id: 'desktop', status: 'connected' })
+  await clock.advance(5_000)
+  expect(hub.drains.at(-1)).toEqual({ channel: 'desktop', after: 'n2' })
+  expect(shown).toHaveLength(2)
+})
+
+test('with mods-hub: a notice the notifier keeps refusing is given up after five tries, so the next one is not held back', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, {})
+  on('session.cwd', () => ({ value: '/home/me/shop' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const shown: string[] = []
+  on('process.run', (_$, e) => {
+    const done = (exitCode: number, stdout = '') => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+    if (e.argv[0] === 'uname') return done(0, 'Linux\n')
+    if (String(e.argv.at(-1)).startsWith('poison')) return done(1)
+    shown.push(String(e.argv.at(-1)))
+    return done(0)
+  })
+  const hub = fakeHub(on)
+
+  await start($)
+  hub.outbox.push(notice({ title: 'poison' }), notice({ id: 'n2', title: 'after it' }))
+  for (let tick = 0; tick < 4; tick += 1) await clock.advance(5_000)
+  expect(shown).toEqual([])
+  await clock.advance(5_000)
+  expect(shown).toEqual(['after it'])
 })

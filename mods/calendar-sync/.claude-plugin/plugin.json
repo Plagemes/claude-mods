@@ -1,0 +1,30 @@
+{
+  "name": "calendar-sync",
+  "version": "1.0.0",
+  "description": "Reads your calendar (private iCal link) so notifications and questions respect meetings and time off, and suggests slots for long jobs.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#calendar-sync",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "productivity", "calendar", "ical", "presence"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "icsUrl": {
+      "type": "string",
+      "title": "Private iCal (ICS) address",
+      "description": "Google: calendar settings > Secret address in iCal format. Outlook: Publish calendar (ICS link). Apple: Public calendar link. Treat it like a password.",
+      "sensitive": true,
+      "default": ""
+    },
+    "refreshMinutes": { "type": "number", "title": "Refresh every (minutes)", "description": "How often the calendar is read again (all sessions share one copy).", "default": 15 },
+    "timezone": { "type": "string", "title": "Time zone", "description": "IANA zone for all-day events, floating times and working hours, e.g. Europe/Rome. Empty: this machine's zone.", "default": "" },
+    "workHours": { "type": "string", "title": "Working hours", "description": "Free slots are offered inside these hours, HH:MM-HH:MM.", "default": "09:00-18:00" },
+    "workDays": { "type": "string", "title": "Working days", "description": "Days free slots are offered on: mon-fri, or a list like mon,tue,thu.", "default": "mon-fri" },
+    "minSlotMinutes": { "type": "number", "title": "Shortest free slot (minutes)", "description": "Shorter gaps are not listed as free time.", "default": 30 },
+    "meetingPresence": { "type": "boolean", "title": "Meetings make me away", "description": "While you are in a meeting, tell the hub you are away (needs mods-hub).", "default": true },
+    "outOfOffice": { "type": "boolean", "title": "Time off holds notifications", "description": "Out-of-office or vacation events put the hub in a Night-like hold: only critical notices reach your channels (needs mods-hub).", "default": true },
+    "offKeywords": { "type": "string", "title": "Extra out-of-office words", "description": "Comma separated words that make an event count as time off, besides vacation, ferie, out of office, PTO, holiday, sick, urlaub...", "default": "" },
+    "myEmail": { "type": "string", "title": "Your email address", "description": "Events you declined (matched on this address) are ignored. Optional.", "default": "" },
+    "statusLine": { "type": "boolean", "title": "Status line", "description": "Show 'In a meeting until 15:00' or 'Next in 20m: Standup' in the status line.", "default": true }
+  }
+}

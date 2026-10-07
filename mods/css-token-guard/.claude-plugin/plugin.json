@@ -1,6 +1,6 @@
 {
   "name": "css-token-guard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Flags hard-coded hex colors and pixel values where your design tokens should be used.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#css-token-guard",

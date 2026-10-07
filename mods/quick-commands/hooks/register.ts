@@ -1,4 +1,7 @@
-import type { EngineInterface, PluginOptions, Register } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register, ToolCallResult } from 'claude-code'
+
+import { checkCountsOf, toolOf } from './results'
+import { isTestCommand, summarizeRun } from './shared/test-runners'
 
 type Kind = 'test' | 'lint' | 'build' | 'typecheck'
 type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
@@ -61,6 +64,12 @@ const LOCKFILES: readonly (readonly [string, PackageManager])[] = [
 const EXEC: Record<PackageManager, string> = { npm: 'npx', pnpm: 'pnpm exec', yarn: 'yarn', bun: 'bunx' }
 /** What `npm init` writes as the test script; it is a placeholder, not a test suite. */
 const PLACEHOLDER_SCRIPT = /no test specified/
+/** A command asked for this long ago and never run is forgotten. */
+const PENDING_MS = 30 * 60_000
+const MAX_EVENT_COMMAND = 200
+
+/** The command each kind asked Claude to run, waiting for the Bash call that runs it (mods-hub reports its result). */
+type Pending = Map<Kind, { command: string; at: number }>
 
 const exists = async ($: EngineInterface, cwd: string, name: string): Promise<boolean> => {
   try {
@@ -189,11 +198,75 @@ const promptFor = (kind: Kind, command: string, focus: string): string => {
   return `Run the ${noun} with \`${command}\` and ${fix}.${scope}`
 }
 
+// ── mods-hub: the result of the command quick-commands asked for, on the bus ────────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+const ownVersion = async ($: EngineInterface): Promise<string> => {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+const greetHub = async ($: EngineInterface): Promise<void> => {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['test.result', 'build.result', 'lint.result', 'typecheck.result'], consumes: [] })
+}
+
+/** What Bash printed, stdout and stderr. */
+const outputOf = (ran: ToolCallResult): string => {
+  const result = ran.result as { stdout?: unknown; stderr?: unknown } | undefined
+  if (result !== undefined && result !== null && typeof result === 'object' && typeof result.stdout === 'string') {
+    return `${result.stdout}\n${typeof result.stderr === 'string' ? result.stderr : ''}`
+  }
+  return typeof ran.text === 'string' ? ran.text : ''
+}
+
+/**
+ * The result of a check Claude ran because of /t, /l, /b or /tc, on the hub's bus: `build.result`, `lint.result`,
+ * `typecheck.result` (errors and warnings read from the output), and `test.result` for a test command the hub's
+ * own sensor does not recognize (a custom `testCommand`); the hub reports the usual runners itself.
+ */
+const publishResult = async ($: EngineInterface, asked: { kind: Kind; command: string }, command: string, output: string, hasFailed: boolean, durationMs: number): Promise<void> => {
+  const { kind } = asked
+  const tool = toolOf(asked.command)
+  const short = command.slice(0, MAX_EVENT_COMMAND)
+  const outcome = hasFailed ? 'failed' : 'passed'
+  if (kind === 'test') {
+    if (isTestCommand(command)) return
+    const summary = summarizeRun(command, output, hasFailed)
+    await hubPublish($, { topic: 'test.result', data: { runner: summary.runner ?? tool, outcome: summary.outcome, passed: summary.passed, failed: summary.failed, durationMs, command: short } })
+  } else if (kind === 'build') {
+    const { errors } = checkCountsOf(output, hasFailed)
+    await hubPublish($, { topic: 'build.result', data: { tool, outcome, durationMs, command: short, errors } })
+  } else if (kind === 'lint') {
+    await hubPublish($, { topic: 'lint.result', data: { tool, ...checkCountsOf(output, hasFailed) } })
+  } else {
+    await hubPublish($, { topic: 'typecheck.result', data: { tool, errors: checkCountsOf(output, hasFailed).errors } })
+  }
+}
+
+/** The asked-for command this Bash call runs (`cd web && npm run lint` runs `npm run lint`), taken off the waiting list. */
+const takePending = (pending: Pending, command: string, now: number): { kind: Kind; command: string } | undefined => {
+  for (const [kind, asked] of pending) {
+    if (now - asked.at > PENDING_MS) pending.delete(kind)
+    else if (command.includes(asked.command)) {
+      pending.delete(kind)
+      return { kind, command: asked.command }
+    }
+  }
+  return undefined
+}
+
 const run = async (
   $: EngineInterface,
   options: PluginOptions,
   kind: Kind,
   focus: string,
+  pending: Pending,
 ): Promise<{ text: string }> => {
   const command = await commandFor($, options, kind)
 
@@ -202,6 +275,8 @@ const run = async (
       text: `No ${KINDS[kind].noun} command found. Set "${KINDS[kind].option}" in this mod's settings, or add a script or Makefile target.`,
     }
   }
+
+  if ((await hubMode($)) !== undefined) pending.set(kind, { command, at: await $.clock.now() })
 
   // Queued from a timer, after this command's own dispatch has ended: the prompt then starts a turn of its own.
   $.clock.after(1, () => {
@@ -212,6 +287,8 @@ const run = async (
 }
 
 export const register: Register = (on, options) => {
+  const pending: Pending = new Map()
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 't',
@@ -233,12 +310,125 @@ export const register: Register = (on, options) => {
       description: 'Run the type checker and fix type errors',
       argumentHint: '[what to check]',
     })
+    await greetHub($)
 
     return next(e)
   })
 
-  on('command.run', { command: 't' }, ($, e) => run($, options, 'test', e.args.trim()))
-  on('command.run', { command: 'l' }, ($, e) => run($, options, 'lint', e.args.trim()))
-  on('command.run', { command: 'b' }, ($, e) => run($, options, 'build', e.args.trim()))
-  on('command.run', { command: 'tc' }, ($, e) => run($, options, 'typecheck', e.args.trim()))
+  on('command.run', { command: 't' }, ($, e) => run($, options, 'test', e.args.trim(), pending))
+  on('command.run', { command: 'l' }, ($, e) => run($, options, 'lint', e.args.trim(), pending))
+  on('command.run', { command: 'b' }, ($, e) => run($, options, 'build', e.args.trim(), pending))
+  on('command.run', { command: 'tc' }, ($, e) => run($, options, 'typecheck', e.args.trim(), pending))
+
+  // With mods-hub only (nothing waits otherwise): the Bash call that runs an asked-for command, and its result.
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    if (pending.size === 0) return next(e)
+    const startedAt = await $.clock.now()
+    const ran = await next(e)
+    const asked = ran.deny === undefined ? takePending(pending, e.command, startedAt) : undefined
+    if (asked === undefined) return ran
+    const durationMs = (await $.clock.now()) - startedAt
+    const command = e.command
+    const output = outputOf(ran)
+    const hasFailed = ran.isError === true
+    $.clock.after(0, () => void publishResult($, asked, command, output, hasFailed, durationMs))
+    return ran
+  })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

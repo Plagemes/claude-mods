@@ -8,14 +8,17 @@ const DEFINITION_CHARS = 500
 const TERM_CHARS = 60
 const TERM_WORDS = 6
 const LISTED_MAX = 200
+/** The fact shared with mods-hub keeps each definition short and the whole under the hub's 16 000 characters. */
+const FACT_DEFINITION_CHARS = 200
+const FACT_CHARS = 15_000
 
 type Source = '/define' | typeof JSON_FILE | typeof MARKDOWN_FILE
 /** One term: the names it is matched by (the term and any alias in parentheses) and its definition. */
 type Entry = { term: string; names: string[]; definition: string; source: Source }
 type Settings = { maxTerms: number; repeat: boolean }
 type FileCache = Map<string, { mtimeMs: number; entries: Entry[] }>
-/** What this load remembers: parsed files by mtime, and what this conversation was already told. */
-type Memory = { files: FileCache; told: Map<string, string> }
+/** What this load remembers: parsed files by mtime, what this conversation was already told, and the fact last shared with mods-hub. */
+type Memory = { files: FileCache; told: Map<string, string>; isHubbed: boolean; shared: string | undefined }
 
 function readSettings(options: PluginOptions): Settings {
   const max = typeof options.maxTermsPerPrompt === 'number' ? Math.floor(options.maxTermsPerPrompt) : DEFAULT_MAX_TERMS
@@ -211,7 +214,9 @@ async function glossaryCommand($: EngineInterface, args: string, files: FileCach
 
 /** The entries to define for `text`, at most `maxTerms`; marks them told so a conversation hears each once. */
 async function termsFor($: EngineInterface, text: string, memory: Memory, settings: Settings): Promise<Entry[]> {
-  const found = mentioned(await loadGlossary($, memory.files), text)
+  const all = await loadGlossary($, memory.files)
+  await shareTerms($, memory, all)
+  const found = mentioned(all, text)
   const fresh = settings.repeat ? found : found.filter(entry => memory.told.get(keyOf(entry.term)) !== entry.definition)
   const chosen = fresh.slice(0, settings.maxTerms)
   for (const entry of chosen) memory.told.set(keyOf(entry.term), entry.definition)
@@ -219,21 +224,84 @@ async function termsFor($: EngineInterface, text: string, memory: Memory, settin
   return chosen
 }
 
+/** Shares the glossary as it is now, after a command changed it; nothing without a hub. */
+async function refreshTerms($: EngineInterface, memory: Memory): Promise<void> {
+  if (memory.isHubbed) await shareTerms($, memory, await loadGlossary($, memory.files))
+}
+
+/** The fact `glossary.terms`: every term with a short definition and where it came from, cut to the hub's limit. */
+function factOf(entries: readonly Entry[]): { count: number; isCut: boolean; terms: { term: string; definition: string; source: Source }[] } {
+  const fact = { count: entries.length, isCut: false, terms: [] as { term: string; definition: string; source: Source }[] }
+  let size = JSON.stringify(fact).length
+  for (const entry of entries) {
+    const definition = entry.definition.length > FACT_DEFINITION_CHARS ? `${entry.definition.slice(0, FACT_DEFINITION_CHARS - 1)}…` : entry.definition
+    const term = { term: entry.term, definition, source: entry.source }
+    size += JSON.stringify(term).length + 1
+    if (size > FACT_CHARS) {
+      fact.isCut = true
+      break
+    }
+    fact.terms.push(term)
+  }
+  return fact
+}
+
+/** Puts the glossary on mods-hub's blackboard (read by other mods as `glossary.terms`) when it changed; nothing without a hub. */
+async function shareTerms($: EngineInterface, memory: Memory, entries: readonly Entry[]): Promise<void> {
+  if (!memory.isHubbed) return
+  const fact = factOf(entries)
+  const json = JSON.stringify(fact)
+  if (json === memory.shared) return
+  try {
+    await $.mods.share({ name: 'terms', value: fact })
+    memory.shared = json
+  } catch {
+    // The hub refused the fact or went away: the glossary still works for this mod.
+  }
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed, and shares the terms. */
+async function greetHub($: EngineInterface, memory: Memory): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  memory.isHubbed = true
+  await hubHello($, { version: await ownVersion($), publishes: [], consumes: [] })
+  await shareTerms($, memory, await loadGlossary($, memory.files))
+}
+
 export const register: Register = (on, options) => {
   const settings = readSettings(options)
-  const memory: Memory = { files: new Map(), told: new Map() }
+  const memory: Memory = { files: new Map(), told: new Map(), isHubbed: false, shared: undefined }
 
   on('session.start', async ($, e, next) => {
     memory.told.clear()
     await $.command.register({ name: 'define', description: 'Add a term to the project glossary', argumentHint: '<term> = <meaning>' })
     await $.command.register({ name: 'glossary', description: 'List glossary terms, or remove one', argumentHint: '[remove <term>]' })
+    await greetHub($, memory)
 
     return next(e)
   })
 
-  on('command.run', { command: 'define' }, async ($, e) => ({ text: await define($, e.args) }))
+  on('command.run', { command: 'define' }, async ($, e) => {
+    const text = await define($, e.args)
+    await refreshTerms($, memory)
+    return { text }
+  })
 
-  on('command.run', { command: 'glossary' }, async ($, e) => ({ text: await glossaryCommand($, e.args, memory.files) }))
+  on('command.run', { command: 'glossary' }, async ($, e) => {
+    const text = await glossaryCommand($, e.args, memory.files)
+    await refreshTerms($, memory)
+    return { text }
+  })
 
   on('prompt.submit', async ($, e, next) => {
     const text = e.text.trim()
@@ -265,3 +333,100 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

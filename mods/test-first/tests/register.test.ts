@@ -2,6 +2,8 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const BAND = {
   plugin: 'test-first',
   component: 'AbovePrompt',
@@ -16,14 +18,14 @@ const BAND = {
 } as const
 
 /** The engine beneath the plugin: tool calls that reach it are counted, Bash fails while `bash.fails`. */
-const engine = (on: On) => {
+const engine = (on: On, below = 'nothing beneath') => {
   const reached: string[] = []
   const bash = { fails: false }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/repo' }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
-  on('ui.render', () => ({ type: 'Box' }))
+  on('ui.render', () => ({ type: 'Box', props: { key: 'below' }, children: [{ type: 'Text', props: {}, children: [below] }] }))
   on('tool.call', ($, e) => {
     reached.push(e.tool === 'Bash' ? e.command : 'file_path' in e ? String(e.file_path) : e.tool)
     if (e.tool === 'Bash' && bash.fails) return { isError: true, result: 'Exit code 1', text: 'Exit code 1\nTests  1 failed (1)' }
@@ -44,7 +46,7 @@ test('locks production code each turn until a test file has been edited', async 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
 
   const on_ = await tdd($, 'on')
-  expect(on_.text).toBe('test-first: TDD mode on. Production code stays locked each turn until a test is written.')
+  expect(on_.text).toBe('TDD mode on. Production code stays locked each turn until a test is written.')
   expect(on_.context?.[0]).toContain('red → green → refactor')
 
   const locked = await edit($, '/repo/src/app.ts')
@@ -134,4 +136,43 @@ test('regression: a command that only names a runner does not count as a test ru
   await $.tool.call({ tool: 'Bash', command: 'CI=1 npm run test:unit 2>&1 | tail -5' })
   await newTurn($, 'turn-3')
   expect((await edit($, '/repo/src/app.ts')).deny).toBeDefined()
+})
+
+test('regression: the TDD band keeps the bands beneath it on screen', async ($, on) => {
+  engine(on, 'engine band')
+  await tdd($, 'on')
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ type: 'Text', text: 'TDD' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub: a red run test-watch reported opens the code, and a locked edit is published as risk.blocked', async ($, on) => {
+  const { reached } = engine(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: ['test.result'] }])
+  // A red run from before TDD mode was turned on says nothing about this cycle.
+  hub.events.push({ topic: 'test.result', source: 'test-watch', at: 1, data: { runner: 'vitest', outcome: 'failed', passed: 0, failed: 1 } })
+  await tdd($, 'on')
+  await newTurn($, 't1')
+
+  const locked = await edit($, '/repo/src/cart.ts')
+  expect(locked.deny).toContain('stays locked')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'test-first', tool: 'Edit', reason: 'TDD mode: production code locked until a test is written', severity: 'low', path: 'src/cart.ts' } },
+  ])
+
+  // The hub's own report of a Bash run is not taken twice; test-watch's run of the edited test is.
+  hub.events.push({ topic: 'test.result', source: 'mods-hub', at: 2, data: { runner: 'vitest', outcome: 'passed', passed: 3, failed: 0 } })
+  hub.events.push({ topic: 'test.result', source: 'test-watch', at: 3, data: { runner: 'vitest', outcome: 'failed', passed: 2, failed: 1, command: 'vitest run src/cart.test.ts' } })
+  const opened = await edit($, '/repo/src/cart.ts')
+  expect(opened.deny).toBeUndefined()
+  expect(reached).toContain('/repo/src/cart.ts')
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await band.find({ type: 'Text', text: /make the failing test pass/ }))?.text).toContain('vitest run src/cart.test.ts ✗')
+  await band.unmount()
 })

@@ -1,6 +1,6 @@
+import { simpleCommands } from './shared/shell'
+
 const FETCH_PROGRAMS = new Set(['curl', 'wget', 'http', 'https', 'httpie', 'xh', 'xhs'])
-const WRAPPERS = new Set(['sudo', 'env', 'time', 'nohup', 'nice', 'exec', 'timeout', 'stdbuf', 'xargs', 'do', 'then', 'else'])
-const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-n', '-I', '-L', '-P'])
 const URL_WITH_SCHEME = /^([a-z][a-z0-9+.-]*):\/\/([^/?#\\]*)/i
 const BARE_HOST = /^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#]|$)/i
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
@@ -21,61 +21,6 @@ const VALUE_OPTIONS: Record<'curl' | 'wget', ReadonlySet<string>> = {
 const CLUSTER_ENDING_IN_VALUE_OPTION = /^-[A-Za-z]*[AbcCdDeEFHKmoPQrTuUwxXyYz]$/
 const LOOP_START = /(?:^|[;&|(\n"']\s*)(?:for|while|until)\b/
 const POLITE = /\bsleep\b|\bwait\b|--limit-rate|--rate\b|--wait\b/
-
-const basename = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
-
-/** Words of each simple command, quotes resolved. */
-const simpleCommands = (command: string): string[][] => {
-  const commands: string[][] = [[]]
-  let word: string | undefined
-  let index = 0
-  const endWord = (): void => {
-    if (word !== undefined) commands.at(-1)?.push(word)
-    word = undefined
-  }
-  while (index < command.length) {
-    const char = command[index] ?? ''
-    if (char === "'" || char === '"') {
-      let close = index + 1
-      while (close < command.length && command[close] !== char) close += char === '"' && command[close] === '\\' ? 2 : 1
-      if (close >= command.length) break
-      const inner = command.slice(index + 1, close)
-      word = (word ?? '') + (char === '"' ? inner.replace(/\\(["\\$`])/g, '$1') : inner)
-      index = close + 1
-    } else if (char === '\\') {
-      word = (word ?? '') + (command[index + 1] ?? '')
-      index += 2
-    } else if (/[ \t]/.test(char)) {
-      endWord()
-      index += 1
-    } else if ('|;&\n(){}<>'.includes(char)) {
-      endWord()
-      if (commands.at(-1)?.length !== 0) commands.push([])
-      index += 1
-    } else {
-      word = (word ?? '') + char
-      index += 1
-    }
-  }
-  endWord()
-  return commands.filter(words => words.length > 0)
-}
-
-const programOf = (words: readonly string[]): { name: string; args: string[] } | undefined => {
-  let index = 0
-  while (index < words.length) {
-    const word = words[index] ?? ''
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) index += 1
-    else if (WRAPPERS.has(basename(word))) {
-      const wrapper = basename(word)
-      index += 1
-      while (words[index]?.startsWith('-') === true) index += WRAPPER_OPTIONS_WITH_VALUE.has(words[index] ?? '') && wrapper === 'sudo' ? 2 : 1
-      if (wrapper === 'timeout') index += 1
-    } else break
-  }
-  const name = basename(words[index] ?? '')
-  return name === '' ? undefined : { name, args: words.slice(index + 1) }
-}
 
 /** The host of a URL, lower-cased, without userinfo or port; undefined when it cannot be told. */
 export const hostOf = (url: string): string | undefined => {
@@ -110,16 +55,20 @@ const targetsOf = (name: string, args: readonly string[]): string[] => {
   return target === undefined || target.startsWith(':') ? [] : [name === 'https' || name === 'xhs' ? `https://${target.replace(/^[a-z]+:\/\//i, '')}` : target]
 }
 
-/** The external hosts a command sends curl, wget or httpie requests to, once per mention. */
+/**
+ * The external hosts a command sends curl, wget or httpie requests to, once per mention. The shared shell reader
+ * splits the line, peels wrappers (`sudo`, `env`, `time`, `timeout`, `xargs`) and reads `bash -c "…"`, `su -c`,
+ * `eval`, `$(…)`, backticks and heredocs fed to a shell.
+ */
 export const externalHosts = (command: string): string[] =>
-  simpleCommands(command).flatMap(words => {
-    const program = programOf(words)
-    if (program === undefined || !FETCH_PROGRAMS.has(program.name)) return []
-    return targetsOf(program.name, program.args).flatMap(url => {
-      const host = hostOf(url)
-      return host === undefined || isLocalHost(host) ? [] : [host]
-    })
-  })
+  simpleCommands(command).flatMap(({ name, argv }) =>
+    FETCH_PROGRAMS.has(name)
+      ? targetsOf(name, argv.slice(1)).flatMap(url => {
+          const host = hostOf(url)
+          return host === undefined || isLocalHost(host) ? [] : [host]
+        })
+      : [],
+  )
 
 export type LoopUse = { iterations: number | undefined }
 
@@ -128,7 +77,7 @@ export type LoopUse = { iterations: number | undefined }
  * in the command slows them down. Undefined for a polite loop (one that sleeps or waits) or none.
  */
 export const loopOfFetches = (command: string): LoopUse | undefined => {
-  const text = /\b(?:ba|z)?sh\s+-c\b|\beval\b/.test(command) ? command : command.replace(/"[^"]*"|'[^']*'/g, '""')
+  const text = /\b(?:ba|z|da|k)?sh\s+(?:-[a-zA-Z]+\s+)*-[a-zA-Z]*c[a-zA-Z]*\b|\beval\b/.test(command) ? command : command.replace(/"[^"]*"|'[^']*'/g, '""')
   const start = LOOP_START.exec(text)
   const fetches = /\b(?:curl|wget|http|https|httpie|xh)\b/
   if (start !== null) {

@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'regression-guard'
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 12)
@@ -82,6 +84,29 @@ function world(on: On) {
 
 const baseline = ($: Engine, args = '') =>
   $.command.run({ command: 'baseline', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
+
+/** Box props that size a box: the engine refuses its own nodes under any of them, and the band then disappears. */
+const SIZE_PROPS = ['width', 'minWidth', 'maxWidth', 'height', 'minHeight', 'maxHeight', 'flexBasis']
+type DrawnNode = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+
+/** The elements above the first Text showing `text`, outermost first; undefined when the tree draws no such Text. */
+const ancestorsOf = (node: unknown, text: string, above: DrawnNode[] = []): DrawnNode[] | undefined => {
+  if (typeof node !== 'object' || node === null) return undefined
+  const element = node as DrawnNode
+  const children = element.children ?? []
+  if (element.type === 'Text' && children.includes(text)) return above
+  for (const child of children) {
+    const found = ancestorsOf(child, text, [...above, element])
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+/** The size props set on any Box above the engine's band; a line says so when the band is not drawn at all. */
+const sizedAbove = (tree: unknown): string[] => {
+  const above = ancestorsOf(tree, 'engine band')
+  if (above === undefined) return ['no engine band drawn']
+  return above.flatMap(box => (box.type === 'Box' ? SIZE_PROPS.filter(prop => box.props?.[prop] !== undefined).map(prop => `Box ${prop}`) : []))
+}
 
 test('a test that passed at the session start and fails later raises the band, the status and a note for Claude', async ($, on) => {
   const { seen, clock } = world(on)
@@ -189,4 +214,80 @@ test('with tellClaude off the test result is left as the runner printed it', { o
   const run = await $.tool.call({ tool: 'Bash', command: 'npm test' })
   expect(run.context).toBeUndefined()
   expect(seen.statuses.at(-1)).toBe('⚠ 2 regressions')
+})
+
+test('the engine band is not drawn under a Box with a size prop', async ($, on) => {
+  const { seen } = world(on)
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  seen.output = BROKEN
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  for (const surface of SURFACES) {
+    const band = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'fix' })).toBeDefined()
+    expect(sizedAbove(await band.drawn())).toEqual([])
+    await band.unmount()
+  }
+})
+
+test('with mods-hub: publishes the regression, notifies an error that lists the tests, and still tells Claude', async ($, on) => {
+  const { seen, clock } = world(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.regression-guard.regressed'], consumes: [] }])
+
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await clock.advance(60_000)
+  seen.output = BROKEN
+  const second = await $.tool.call({ tool: 'Bash', command: 'npm test' })
+
+  expect(second.context?.[0]).toStartWith('regression-guard: 2 tests that passed earlier in this session now fail')
+  expect(hub.published).toEqual([
+    {
+      topic: 'x.regression-guard.regressed',
+      data: { count: 2, total: 2, tests: ['src/cart.test.ts › cart › applies discounts', 'src/user.test.ts › user › has a name'], command: 'npm test' },
+    },
+  ])
+  expect(hub.notified).toEqual([
+    {
+      level: 'error',
+      title: '⚠ 2 tests that passed earlier this session now fail',
+      body: 'src/cart.test.ts › cart › applies discounts\nsrc/user.test.ts › user › has a name',
+      topic: 'x.regression-guard.regressed',
+    },
+  ])
+  expect(seen.toasts).toEqual([])
+  expect(seen.statuses.at(-1)).toBe('⚠ 2 regressions')
+})
+
+test('with mods-hub: a run that fixes every regression is a success notice, and a run that adds none publishes nothing', async ($, on) => {
+  const { seen } = world(on)
+  const hub = fakeHub(on)
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  seen.output = BROKEN
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await $.tool.call({ tool: 'Bash', command: 'npm test' }) // the same two again: not new
+  expect(hub.published).toHaveLength(1)
+  expect(hub.notified).toHaveLength(1)
+
+  seen.output = GREEN
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+
+  expect(hub.notified.at(-1)).toEqual({ level: 'success', title: '✓ Every regression passes again', topic: 'x.regression-guard.regressed' })
+  expect(hub.published).toHaveLength(1)
+  expect(seen.toasts).toEqual([])
+})
+
+test('with mods-hub: a long list of regressions is cut to five in the notice and twenty in the event', async ($, on) => {
+  const { seen } = world(on)
+  const hub = fakeHub(on)
+  const names = Array.from({ length: 25 }, (_, i) => `t${String(i).padStart(2, '0')}`)
+  seen.output = `PASS src/a.test.ts\n${names.map(name => `  ✓ ${name} (1 ms)`).join('\n')}\nTests: 25 passed, 25 total`
+  await $.tool.call({ tool: 'Bash', command: 'npx jest --verbose' })
+  seen.output = `FAIL src/a.test.ts\n${names.map(name => `  ✕ ${name} (1 ms)`).join('\n')}\nTests: 25 failed, 25 total`
+  await $.tool.call({ tool: 'Bash', command: 'npx jest --verbose' })
+
+  expect((hub.published[0]?.data as { tests: string[]; count: number }).tests).toHaveLength(20)
+  expect((hub.published[0]?.data as { count: number }).count).toBe(25)
+  expect(hub.notified[0]?.body?.split('\n')).toHaveLength(6)
+  expect(hub.notified[0]?.body?.endsWith('…and 20 more')).toBe(true)
 })

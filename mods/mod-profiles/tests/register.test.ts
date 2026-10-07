@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'mod-profiles'
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 12)
@@ -155,4 +157,30 @@ test('reports unknown profiles, failed switches and usage, and lists in text wit
   expect(w.commands).toEqual([])
   expect((await profiles($, 'delete quiet')).text).toBe('✓ Deleted profile quiet.')
   expect((await profiles($, 'rename x')).text).toBe('✗ Unknown action "rename". Usage: /profile-mods [save|use|delete <name> | list]')
+})
+
+test('with mods-hub: says hello and publishes mod.installed for each mod a profile switches on, with the listed version', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on, {}, w.clock)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['mod.installed'], consumes: [] }])
+
+  await profiles($, 'save work')
+  w.installed.set('focus-timer', { scope: 'user', enabled: false })
+  w.installed.set('celebrate', { scope: 'project', enabled: true })
+  hub.published.length = 0
+
+  await profiles($, 'use work')
+  expect(hub.published).toEqual([{ topic: 'mod.installed', data: { name: 'focus-timer', version: '1.0.0' } }])
+  hub.published.length = 0
+  await profiles($, 'use work')
+  expect(hub.published).toEqual([])
+})
+
+test('without mods-hub switching a profile works exactly as before', async ($, on) => {
+  const w = world(on)
+  await profiles($, 'save work')
+  w.installed.set('focus-timer', { scope: 'user', enabled: false })
+  expect((await profiles($, 'use work')).text).toContain('Switched to work: enabled focus-timer')
 })

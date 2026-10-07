@@ -1,6 +1,6 @@
 {
   "name": "screenshot-check",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "After UI edits, takes a Playwright screenshot of the page and shows it to Claude.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#screenshot-check",

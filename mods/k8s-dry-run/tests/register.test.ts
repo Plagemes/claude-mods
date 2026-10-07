@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { findKubectl, findKubectls, objectName, parseDiff, previewArgv } from '../hooks/kubectl'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'k8s-dry-run'
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 14, bodyColumns: 110, scroll: { offset: 0, bodyRows: 14 }, view: {} } as const
@@ -251,4 +252,22 @@ test('a second change in the same command is refused, and wrappers or bash -c do
   expect(w.executed).toEqual([])
   expect(findKubectls("cd deploy && sh -lc 'kubectl apply -f web.yaml'")).toMatchObject([{ verb: 'apply', words: ['apply', '-f', 'web.yaml'], cd: 'deploy' }])
   expect(findKubectls('nice -n 5 kubectl delete pod x')[0]?.words).toEqual(['delete', 'pod', 'x'])
+})
+
+test('with mods-hub: a held change is published as risk.blocked, and the approved run as deploy.started', async ($, on) => {
+  const w = world(on, 'prod-eu')
+  const hub = fakeHub(on, {}, w.clock)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked', 'deploy.started'], consumes: [] }])
+
+  const held = await bash($, 'kubectl apply -n shop -f k8s/')
+  expect(held.deny).toContain('held for approval')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'k8s-dry-run', tool: 'Bash', reason: 'held for approval: 2 objects would change', severity: 'high', command: 'kubectl apply -n shop -f k8s/' } },
+  ])
+
+  await slash($, 'k8s-approve')
+  await bash($, 'kubectl apply -n shop -f k8s/')
+  expect(w.executed).toEqual(['kubectl apply -n shop -f k8s/'])
+  expect(hub.published.at(-1)).toEqual({ topic: 'deploy.started', data: { target: 'kubectl apply -n shop', environment: 'prod-eu' }, scope: 'global' })
 })

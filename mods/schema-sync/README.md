@@ -41,3 +41,4 @@ When Claude edits a Prisma schema (`*.prisma`) or a file your `drizzle.config` n
 - Limits:
   - The migration check is offline by design: it needs no database or shadow database. It assumes the schema matched its migrations when the session first saw it. Drift that already existed before the session isn't detected (`prisma migrate status` finds that).
   - Projects with no migrations folder (`db push` workflows) only get the client regenerated.
+- With [mods-hub](../mods-hub) installed: the greeting says it publishes `build.result` (`tool: prisma`, one per `prisma generate` it runs, with outcome, duration and command), and a failed generate goes through `notify` at `warning` level instead of the 8-second toast. Without the hub the toast is unchanged.

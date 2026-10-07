@@ -42,3 +42,4 @@ variants, `/50` opacity, arbitrary `[#hex]`) and inline `style={{ color, backgro
   semi-transparent background over white. Fixes move only the lightness (HSL) to the nearest passing value.
 - Limits: it cannot see the rendered page, so a color without a background in the same rule, gradients and
   images are skipped; `:disabled` rules are exempt, as WCAG allows. Tailwind uses the default v3 palette.
+- With [mods-hub](https://github.com/plagemes/claude-mods/tree/main/mods/mods-hub) installed it publishes `lint.result` (`tool: contrast-checker`, the file, and how many findings) after each edit with findings and sends its warning through `notify` instead of a toast. Without the hub nothing changes; the mod stands alone.

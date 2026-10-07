@@ -1,3 +1,5 @@
+import { MAX_NESTING, simpleCommands as readCommands, shellScriptArg } from './shared/shell'
+
 /** The git subcommand, past global options such as -C dir and -c key=value. */
 const gitSubcommand = (words: readonly string[]): string | undefined => {
   for (let index = 1; index < words.length; index += 1) {
@@ -13,72 +15,15 @@ export type Additions = { files: string[]; folders: string[]; isGitAdd: boolean 
 
 type Simple = { words: string[]; redirects: string[] }
 
-/** Index of the quote that closes the one at `start`, a backslash inside double quotes escaping the next character; -1 when it never closes. */
-const closingQuote = (text: string, start: number): number => {
-  const quote = text[start]
-  for (let index = start + 1; index < text.length; index += 1) {
-    if (quote === '"' && text[index] === '\\') index += 1
-    else if (text[index] === quote) return index
-  }
-  return -1
-}
-
-/** Splits a command line into simple commands: words with quotes resolved, and the targets of > and >>. */
-export const simpleCommands = (command: string): Simple[] => {
-  const commands: Simple[] = [{ words: [], redirects: [] }]
-  let word: string | undefined
-  let isRedirect = false
-  let index = 0
-
-  const endWord = (): void => {
-    if (word === undefined) return
-    const current = commands.at(-1)
-    if (isRedirect) current?.redirects.push(word)
-    else current?.words.push(word)
-    word = undefined
-    isRedirect = false
-  }
-
-  while (index < command.length) {
-    const char = command[index] ?? ''
-    if (char === "'" || char === '"') {
-      const close = closingQuote(command, index)
-      if (close < 0) break
-      const inner = command.slice(index + 1, close)
-      word = (word ?? '') + (char === '"' ? inner.replace(/\\(["\\$`])/g, '$1') : inner)
-      index = close + 1
-    } else if (char === '\\') {
-      word = (word ?? '') + (command[index + 1] ?? '')
-      index += 2
-    } else if (/\s/.test(char) && char !== '\n') {
-      endWord()
-      index += 1
-    } else if (char === '|' || char === ';' || char === '&' || char === '\n' || char === '(' || char === ')') {
-      endWord()
-      if (commands.at(-1)?.words.length !== 0) commands.push({ words: [], redirects: [] })
-      index += 1
-    } else if (char === '>') {
-      // "2>file": the number belongs to the operator. ">&2" duplicates a descriptor and names no file.
-      if (word !== undefined && /^\d+$/.test(word)) word = undefined
-      endWord()
-      index += command[index + 1] === '>' ? 2 : 1
-      if (command[index] === '&') {
-        index += 1
-        while (/[\d-]/.test(command[index] ?? '')) index += 1
-      } else {
-        isRedirect = true
-      }
-    } else if (char === '<') {
-      endWord()
-      index += 1
-    } else {
-      word = (word ?? '') + char
-      index += 1
-    }
-  }
-  endWord()
-  return commands.filter(simple => simple.words.length > 0 || simple.redirects.length > 0)
-}
+/**
+ * The simple commands of a line, as the shared shell reader splits them (pipelines and lists, wrappers such as
+ * `sudo` and `timeout` peeled): their words, and the files their `>` and `>>` redirects write. Commands nested in
+ * `bash -c`, `eval` or `$()` are not listed here: `additionsOf` opens those scripts itself.
+ */
+export const simpleCommands = (command: string): Simple[] =>
+  readCommands(command)
+    .filter(simple => simple.depth === 0)
+    .map(simple => ({ words: simple.argv, redirects: simple.redirects.filter(redirect => redirect.op.includes('>') && redirect.target !== '').map(redirect => redirect.target) }))
 
 const basename = (path: string): string => path.replace(/\/+$/, '').slice(path.replace(/\/+$/, '').lastIndexOf('/') + 1)
 const hasGlob = (path: string): boolean => /[*?[{]/.test(path)
@@ -166,12 +111,19 @@ const downloads = (program: string, words: readonly string[], cwd: string, addit
 }
 
 /** What the command adds to the disk, as far as its words say; `cd` earlier in the line moves where relative paths point. */
-export const additionsOf = (command: string, startDirectory: string): Additions => {
+export const additionsOf = (command: string, startDirectory: string, depth = 0): Additions => {
   const additions: Additions = { files: [], folders: [], isGitAdd: false }
   let cwd = startDirectory
-  for (const { words, redirects } of simpleCommands(command)) {
+  for (const { redirects, words } of simpleCommands(command)) {
     const program = basename(words[0] ?? '')
-    if (program === 'cd' && words[1] !== undefined && !isUnknown(words[1])) cwd = absolute(words[1], cwd)
+    const script = program === 'eval' ? words.slice(1).join(' ') : shellScriptArg(words)
+    if (script !== undefined && depth < MAX_NESTING) {
+      // `bash -c "cp big.mp4 public/"`, `sh -lc '…'`, `eval '…'`: the script's own commands add the files.
+      const inner = additionsOf(script, cwd, depth + 1)
+      additions.files.push(...inner.files)
+      additions.folders.push(...inner.folders)
+      additions.isGitAdd ||= inner.isGitAdd
+    } else if (program === 'cd' && words[1] !== undefined && !isUnknown(words[1])) cwd = absolute(words[1], cwd)
     else if (program === 'cp' || program === 'mv' || program === 'install') moves(program, words, cwd, additions)
     else if (program === 'curl' || program === 'wget') downloads(program, words, cwd, additions)
     else if (program === 'git' && gitSubcommand(words) === 'add') additions.isGitAdd = true

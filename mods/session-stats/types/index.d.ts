@@ -22,8 +22,23 @@ export type SessionStatsData = {
   busyMs: number
 }
 
+/** What mods-hub's events add to the dashboard: test runs, the hub's turn and tool counts, and its priced session cost. */
+export type SessionStatsHub = {
+  /** `test.result` events seen, and how many of them were not a pass. */
+  runs: number
+  failedRuns: number
+  lastRun: { runner: string; outcome: string; passed: number | null; failed: number | null } | null
+  /** `turn.finished` events seen, and the tool calls they report. */
+  turns: number
+  tools: number
+  /** The latest `cost.update`: the session's cost and the last turn's, as the hub priced them. */
+  sessionUsd: number | null
+  turnUsd: number | null
+  isEstimate: boolean
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    'session-stats': { stats: SessionStatsData }
+    'session-stats': { stats: SessionStatsData; hub: SessionStatsHub }
   }
 }

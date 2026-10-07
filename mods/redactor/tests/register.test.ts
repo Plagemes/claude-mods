@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 type AppendInput = Parameters<Engine['session']['append']>[0]
 
 const AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'
@@ -154,4 +156,45 @@ test('keeps dates on diff lines and digit-free sk- class names visible', async (
   await append($, toolResult('+2024-01-15 10:30:00 deploy\n.sk-button-hover-variant-large-size {}'))
   expect(lastRow(rows)).toContain('+2024-01-15 10:30:00')
   expect(lastRow(rows)).toContain('sk-button-hover-variant-large-size')
+})
+
+test('with mods-hub: each kind masked in a tool result is published as secret.detected, never the value', async ($, on) => {
+  const rows = recordRows(on)
+  quietStatus(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['secret.detected', 'risk.blocked'], consumes: [] }])
+  await append($, toolResult(`key ${AWS_KEY}, a@acme.io and b@acme.io`))
+  await append($, toolResult('nothing to hide'))
+  expect(lastRow(rows)).toContain('nothing to hide')
+  expect(hub.published).toEqual([
+    { topic: 'secret.detected', data: { kind: 'aws-key', where: 'result', action: 'redacted' } },
+    { topic: 'secret.detected', data: { kind: 'email', where: 'result', action: 'redacted' } },
+  ])
+  expect(JSON.stringify(hub.published)).not.toContain(AWS_KEY)
+})
+
+test('with mods-hub: a broken allowlist is reported through the hub', { options: { allowlist: '([' } }, async ($, on) => {
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.notified.map(notice => notice.level)).toEqual(['warning'])
+  expect(hub.notified[0]?.title).toContain('Allowlist ignored')
+})
+
+test('with mods-hub: a refused masks-to-disk write is published as risk.blocked', async ($, on) => {
+  recordRows(on)
+  quietStatus(on)
+  on('fs.read', () => ({ value: `AWS_KEY=${AWS_KEY}\n` }))
+  on('tool.call', () => ({ result: 'ok' }))
+  const hub = fakeHub(on)
+  await append($, toolResult(`AWS_KEY=${AWS_KEY}`))
+  expect((await $.tool.call({ tool: 'Write', file_path: '/repo/.env', content: 'AWS_KEY=[REDACTED:aws-key]\nX=[REDACTED:aws-key]\n' })).deny).toContain('redactor')
+  expect(hub.published.filter(event => event.topic === 'risk.blocked')).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: { guard: 'redactor', tool: 'Write', reason: 'masks-to-disk: the write would put [REDACTED:…] markers over real values', severity: 'medium', path: '/repo/.env' },
+    },
+  ])
 })

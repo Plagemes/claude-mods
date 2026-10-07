@@ -1,4 +1,5 @@
 import type { TfPlan, TfPlanAction, TfPlanResource } from '../types'
+import { simpleCommands } from './shared/shell'
 
 /** How a Bash command ran a plan: which tool, in which folder, and the plan file it wrote. */
 export type PlanCommand = {
@@ -18,9 +19,6 @@ export type ParsedPlan = Pick<TfPlan, 'resources' | 'summary' | 'isNoChanges' | 
 export const ACTION_ORDER: readonly TfPlanAction[] = ['destroy', 'replace', 'update', 'create', 'import', 'move', 'read']
 
 const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]/g
-const SEPARATORS = new Set(['&&', '||', ';', '|', '\n'])
-const WRAPPERS = new Set(['time', 'env', 'command', 'nice', 'nohup'])
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const HEADER =
   /^\s*#\s+(.+?)\s+(will be created|will be updated in-place|will be destroyed|must be replaced|is tainted, so must be replaced|will be replaced, as requested|will be read during apply|will be imported|has moved to\s+\S+)\s*$/
 const DEPOSED = /\s+\(deposed object [^)]*\)$/
@@ -55,94 +53,38 @@ const JSON_REASONS: Record<string, string> = {
 
 export const stripAnsi = (text: string): string => text.replace(ANSI, '')
 
-/** Splits a command line into words and separators, honouring quotes and backslashes. */
-const tokenize = (command: string): string[] => {
-  const tokens: string[] = []
-  let word = ''
-  let hasWord = false
-  let quote: '"' | "'" | null = null
-  const flush = () => {
-    if (hasWord) tokens.push(word)
-    word = ''
-    hasWord = false
-  }
-  for (let i = 0; i < command.length; i += 1) {
-    const char = command[i] ?? ''
-    if (quote !== null) {
-      if (char === quote) quote = null
-      else if (char === '\\' && quote === '"' && i + 1 < command.length) word += command[++i] ?? ''
-      else word += char
-      continue
-    }
-    if (char === '"' || char === "'") {
-      quote = char
-      hasWord = true
-    } else if (char === '\\' && i + 1 < command.length) {
-      word += command[++i] ?? ''
-      hasWord = true
-    } else if (char === ' ' || char === '\t') {
-      flush()
-    } else if (char === '\n' || char === ';') {
-      flush()
-      tokens.push(char)
-    } else if ((char === '&' || char === '|') && command[i + 1] === char) {
-      flush()
-      tokens.push(char + char)
-      i += 1
-    } else if (char === '|') {
-      flush()
-      tokens.push('|')
-    } else {
-      word += char
-      hasWord = true
-    }
-  }
-  flush()
-  return tokens
-}
-
 const joinPath = (base: string | undefined, next: string): string =>
   base === undefined || next.startsWith('/') || next.startsWith('~') ? next : `${base.replace(/\/$/, '')}/${next}`
 
 /**
- * The plan a Bash command runs, if it runs one: `terraform plan`, `tofu plan`,
- * after `cd dir &&`, with `-chdir=dir` and `-out=file` read off the words.
+ * The plan a Bash command runs, if it runs one: `terraform plan`, `tofu plan`, after `cd dir &&`, with `-chdir=dir`
+ * and `-out=file` read off the words. Commands come from the shared shell reader (wrappers and `NAME=value` peeled,
+ * pipelines, `bash -c "…"` opened).
  */
 export const parsePlanCommand = (command: string): PlanCommand | undefined => {
-  const segments: string[][] = [[]]
-  for (const token of tokenize(command)) {
-    if (SEPARATORS.has(token)) segments.push([])
-    else segments.at(-1)?.push(token)
-  }
-
   let cd: string | undefined
-  for (const segment of segments) {
-    let words = segment
-    while (words.length > 0 && (ASSIGNMENT.test(words[0] ?? '') || WRAPPERS.has(words[0] ?? ''))) words = words.slice(1)
-    const head = words[0]
-    if (head === undefined) continue
-    if (head === 'cd' || head === 'pushd') {
-      const target = words[1]
+  for (const { name, argv } of simpleCommands(command)) {
+    if (name === 'cd' || name === 'pushd') {
+      const target = argv[1]
       if (target !== undefined && target !== '-') cd = joinPath(cd, target)
       continue
     }
-    const name = head.slice(head.lastIndexOf('/') + 1)
     if (name !== 'terraform' && name !== 'tofu') continue
 
     let chdir: string | undefined
     let index = 1
-    for (; index < words.length && (words[index] ?? '').startsWith('-'); index += 1) {
-      const option = /^--?chdir=(.+)$/.exec(words[index] ?? '')
+    for (; index < argv.length && (argv[index] ?? '').startsWith('-'); index += 1) {
+      const option = /^--?chdir=(.+)$/.exec(argv[index] ?? '')
       if (option !== null) chdir = option[1]
     }
-    if (words[index] !== 'plan') continue
+    if (argv[index] !== 'plan') continue
 
     let out: string | undefined
-    for (let i = index + 1; i < words.length; i += 1) {
-      const word = words[i] ?? ''
+    for (let i = index + 1; i < argv.length; i += 1) {
+      const word = argv[i] ?? ''
       const inline = /^--?out=(.+)$/.exec(word)
       if (inline !== null) out = inline[1]
-      else if ((word === '-out' || word === '--out') && words[i + 1] !== undefined) out = words[i + 1]
+      else if ((word === '-out' || word === '--out') && argv[i + 1] !== undefined) out = argv[i + 1]
     }
     return { tool: name, cd, chdir, out }
   }
@@ -272,3 +214,13 @@ export const shortCounts = (resources: readonly TfPlanResource[]): string => {
   ].filter(part => part !== null)
   return parts.length === 0 ? 'no changes' : parts.join(' ')
 }
+
+const ENVIRONMENTS: readonly [RegExp, string][] = [
+  [/(?:^|[^a-z])(?:prod|production|prd|live)(?:[^a-z]|$)/i, 'production'],
+  [/(?:^|[^a-z])(?:stage|staging|stg|preprod|pre-prod)(?:[^a-z]|$)/i, 'staging'],
+  [/(?:^|[^a-z])(?:dev|development)(?:[^a-z]|$)/i, 'development'],
+  [/(?:^|[^a-z])(?:test|testing|qa|sandbox)(?:[^a-z]|$)/i, 'test'],
+]
+
+/** The environment a plan's folder names (`envs/prod`, `stacks/staging-eu`), or `unspecified` when it names none. */
+export const environmentOf = (dir: string): string => ENVIRONMENTS.find(([pattern]) => pattern.test(dir))?.[1] ?? 'unspecified'

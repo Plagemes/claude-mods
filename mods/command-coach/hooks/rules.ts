@@ -1,3 +1,5 @@
+import { simpleCommands } from './shared/shell'
+
 /** What the session has shown so far; every rule reads these and nothing else. */
 export type Signals = {
   /** Commands whose output was very long. */
@@ -12,6 +14,8 @@ export type Signals = {
   editedFiles: number
   /** Tool calls that failed. */
   failures: number
+  /** Times mods-hub saw one command fail three times in a row (its `error.repeated`); absent without the hub. */
+  repeatedErrors?: number
   /** How full the context window is, 0 to 100, when known. */
   contextPercent?: number
   /** How long the session has been running. */
@@ -97,8 +101,11 @@ export const RULES: readonly Rule[] = [
   {
     id: 'error-feed',
     mod: 'error-feed',
-    isDue: s => s.failures >= THRESHOLDS.failures,
-    tip: s => `${s.failures} tool calls have failed so far. The error-feed mod collects every failure in one pane, and /rewind goes back if Claude took a wrong turn.`,
+    isDue: s => s.failures >= THRESHOLDS.failures || (s.repeatedErrors ?? 0) > 0,
+    tip: s =>
+      s.failures >= THRESHOLDS.failures
+        ? `${s.failures} tool calls have failed so far. The error-feed mod collects every failure in one pane, and /rewind goes back if Claude took a wrong turn.`
+        : `The same command has failed over and over. The error-feed mod collects every failure in one pane, and /rewind goes back if Claude took a wrong turn.`,
   },
 ]
 
@@ -124,7 +131,22 @@ export const isTestPrompt = (text: string): boolean => TEST_PROMPT.test(text)
 
 const GIT_COMMIT = /\bgit\s+(?:-[Cc]\s+\S+\s+)*commit(?![\w-])/
 
-export const isGitCommit = (command: string): boolean => GIT_COMMIT.test(command)
+/** Git options that take the next word as their value, so it is not the subcommand. */
+const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
+
+/** Does a command the shell reader finds run `git commit`, whatever options precede it (`git --no-pager commit`, `sudo git commit`)? */
+const runsGitCommit = (command: string): boolean =>
+  simpleCommands(command).some(({ name, argv }) => {
+    if (name !== 'git') return false
+    for (let i = 1; i < argv.length; i += 1) {
+      const arg = argv[i] ?? ''
+      if (GIT_OPTIONS_WITH_VALUE.has(arg)) i += 1
+      else if (!arg.startsWith('-')) return arg === 'commit'
+    }
+    return false
+  })
+
+export const isGitCommit = (command: string): boolean => GIT_COMMIT.test(command) || runsGitCommit(command)
 
 /** Is this command output long enough to matter for the context? */
 export const isLongOutput = (text: string): boolean => text.length >= LONG_OUTPUT_CHARS || text.split('\n').length >= LONG_OUTPUT_LINES

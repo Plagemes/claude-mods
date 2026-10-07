@@ -1,0 +1,146 @@
+{
+  "name": "discord-bridge",
+  "version": "1.0.0",
+  "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#discord-bridge",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "notifications",
+    "discord",
+    "team",
+    "remote-control"
+  ],
+  "dependencies": [
+    "mods-hub"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "botToken": {
+      "type": "string",
+      "title": "Bot token",
+      "description": "Your Discord bot's token (a secret). Needed to read the channel, ask and take commands. Optional here: export DISCORD_BOT_TOKEN instead.",
+      "sensitive": true,
+      "default": ""
+    },
+    "channelId": {
+      "type": "string",
+      "title": "Channel id",
+      "description": "The one channel to post to and read (digits; Developer Mode → right-click the channel → Copy Channel ID). The bot needs View Channel and Read Message History there. Also /discord channel <id>.",
+      "default": ""
+    },
+    "ownerId": {
+      "type": "string",
+      "title": "Owner user id",
+      "description": "Your Discord user id (digits): the only one that can command Claude, answer or approve. Everyone else in the channel may only ask. Also /discord owner <id>.",
+      "default": ""
+    },
+    "webhookUrl": {
+      "type": "string",
+      "title": "Webhook URL (post only)",
+      "description": "A channel webhook URL (a secret). With only this, Claude posts to the channel but cannot read it, ask or take commands. Optional: export DISCORD_WEBHOOK_URL instead.",
+      "sensitive": true,
+      "default": ""
+    },
+    "notifyMode": {
+      "type": "string",
+      "title": "When to notify (without a hub)",
+      "description": "Only used while mods-hub does not answer: off silences the channel; anything else posts team news.",
+      "options": [
+        "away",
+        "always",
+        "off"
+      ],
+      "default": "away"
+    },
+    "interaction": {
+      "type": "string",
+      "title": "Interaction (without a hub)",
+      "description": "Only used while mods-hub does not answer: may Claude ask you things. auto = only while you are away.",
+      "options": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "default": "auto"
+    },
+    "awayMinutes": {
+      "type": "number",
+      "title": "Away after (minutes, without a hub)",
+      "description": "Only used without the hub: minutes without typing after which you count as away.",
+      "default": 10
+    },
+    "quietHours": {
+      "type": "string",
+      "title": "Quiet hours (without a hub)",
+      "description": "Only used without the hub: hours when nothing is asked, like 23-8 (empty: none).",
+      "default": "23-8"
+    },
+    "pin": {
+      "type": "string",
+      "title": "PIN",
+      "description": "A PIN that \"stop all\" from the channel needs (a secret; empty: none).",
+      "sensitive": true,
+      "default": ""
+    },
+    "confirmPrompts": {
+      "type": "boolean",
+      "title": "Confirm prompts from the channel",
+      "description": "Ask \"Run this?\" (reply yes / no, or react ✅ / ❌) before a prompt from Discord starts a turn (only when Interaction allows questions).",
+      "default": true
+    },
+    "remoteApprovals": {
+      "type": "boolean",
+      "title": "Answer permission prompts from the channel",
+      "description": "While you are away and Interaction allows it, permission prompts are posted for you to answer with yes / no or a reaction.",
+      "default": true
+    },
+    "memberTrigger": {
+      "type": "string",
+      "title": "Member trigger words",
+      "description": "Channel members' messages starting with one of these (comma-separated) are questions for Claude; @mentions of the bot count too.",
+      "default": "?,claude"
+    },
+    "memberRate": {
+      "type": "number",
+      "title": "Member questions per 10 minutes",
+      "description": "Per member.",
+      "default": 5
+    },
+    "memberDailyCap": {
+      "type": "number",
+      "title": "Member questions per day",
+      "description": "For all members together.",
+      "default": 40
+    },
+    "shareCodeWithMembers": {
+      "type": "boolean",
+      "title": "Share code with members",
+      "description": "Let answers to members include short code snippets.",
+      "default": false
+    },
+    "maxMessageChars": {
+      "type": "number",
+      "title": "Message length cap",
+      "description": "Longest text posted, in characters (Discord allows 2000).",
+      "default": 1900
+    },
+    "maxFileMb": {
+      "type": "number",
+      "title": "File size cap (MB)",
+      "description": "Largest file send_file may post.",
+      "default": 8
+    },
+    "pollSeconds": {
+      "type": "number",
+      "title": "Poll every (seconds)",
+      "description": "How often the polling session reads the channel while you are away or a question is open (three times slower otherwise).",
+      "default": 5
+    }
+  }
+}

@@ -7,13 +7,13 @@
       "id": "core",
       "title": "Core",
       "tagline": "The mod store and essentials.",
-      "count": 1
+      "count": 3
     },
     {
       "id": "security",
       "title": "Security & Guardrails",
       "tagline": "Stop dangerous actions before they happen.",
-      "count": 10
+      "count": 11
     },
     {
       "id": "git",
@@ -25,13 +25,13 @@
       "id": "cost",
       "title": "Cost, Tokens & Context",
       "tagline": "Know what every turn costs and keep context lean.",
-      "count": 10
+      "count": 11
     },
     {
       "id": "productivity",
       "title": "Productivity",
       "tagline": "Shortcuts, panes and timers for a faster flow.",
-      "count": 10
+      "count": 11
     },
     {
       "id": "quality",
@@ -43,7 +43,7 @@
       "id": "observability",
       "title": "Panes & Dashboards",
       "tagline": "See what Claude is doing, live.",
-      "count": 10
+      "count": 11
     },
     {
       "id": "prompting",
@@ -55,19 +55,19 @@
       "id": "notifications",
       "title": "Notifications & Audio",
       "tagline": "Know when it is done, wherever you are.",
-      "count": 10
+      "count": 14
     },
     {
       "id": "memory",
       "title": "Memory & Knowledge",
       "tagline": "Remember decisions, notes and context across sessions.",
-      "count": 10
+      "count": 11
     },
     {
       "id": "team",
       "title": "Team & Docs",
       "tagline": "Changelogs, standups, reviews and handoffs.",
-      "count": 10
+      "count": 13
     },
     {
       "id": "stacks",
@@ -103,7 +103,7 @@
       "id": "agents",
       "title": "Agents & Orchestration",
       "tagline": "Scope, queue and supervise Claude's work.",
-      "count": 10
+      "count": 14
     },
     {
       "id": "learning",
@@ -136,7 +136,7 @@
       "category": "core",
       "tier": "complex",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
-      "version": "1.1.2",
+      "version": "1.2.0",
       "keywords": [
         "claude-mods",
         "core",
@@ -149,11 +149,29 @@
       "since": "1.0.0"
     },
     {
+      "name": "mods-hub",
+      "category": "core",
+      "tier": "complex",
+      "description": "The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "core",
+        "event-bus",
+        "notifications",
+        "panel"
+      ],
+      "commands": [
+        "/hub"
+      ],
+      "since": "2.0.0"
+    },
+    {
       "name": "secret-shield",
       "category": "security",
       "tier": "simple",
       "description": "Blocks edits and writes that would commit API keys, tokens or private keys.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -168,7 +186,7 @@
       "category": "security",
       "tier": "simple",
       "description": "Protects .env files, SSH keys and credential stores from being read or modified.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -183,7 +201,7 @@
       "category": "security",
       "tier": "simple",
       "description": "Blocks catastrophic shell commands like rm -rf /, mkfs, dd to disks and chmod -R 777.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -198,7 +216,7 @@
       "category": "security",
       "tier": "simple",
       "description": "Forbids force-pushing to protected branches and suggests --force-with-lease.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -213,7 +231,7 @@
       "category": "security",
       "tier": "simple",
       "description": "Stops production-affecting commands (terraform apply, kubectl on prod, DROP TABLE) unless explicitly allowed.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -228,7 +246,7 @@
       "category": "security",
       "tier": "complex",
       "description": "Masks secrets and personal data in tool results before the model ever reads them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -244,7 +262,7 @@
       "category": "security",
       "tier": "complex",
       "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
-      "version": "1.0.2",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -261,7 +279,7 @@
       "category": "security",
       "tier": "simple",
       "description": "Blocks piping downloaded scripts straight into a shell.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -276,7 +294,7 @@
       "category": "security",
       "tier": "complex",
       "description": "Flags typosquatted or brand-new packages before npm, pip or cargo installs them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -292,7 +310,7 @@
       "category": "security",
       "tier": "simple",
       "description": "Prevents hand-editing lockfiles; they must change through the package manager.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "security",
@@ -307,7 +325,7 @@
       "category": "git",
       "tier": "simple",
       "description": "Shows the current branch, ahead/behind and dirty file count in the status line.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "git",
@@ -322,7 +340,7 @@
       "category": "git",
       "tier": "complex",
       "description": "Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "git",
@@ -340,7 +358,7 @@
       "category": "git",
       "tier": "complex",
       "description": "/commit writes a Conventional Commit message from your staged diff and commits it.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "git",
@@ -374,7 +392,7 @@
       "category": "git",
       "tier": "simple",
       "description": "Warns you the moment Claude starts editing files directly on main or master.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "git",
@@ -389,7 +407,7 @@
       "category": "git",
       "tier": "complex",
       "description": "A live pane listing changed files with +/- line counts, updated after every edit.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "git",
@@ -406,7 +424,7 @@
       "category": "git",
       "tier": "complex",
       "description": "/pr-desc drafts a pull request title and description from your branch diff.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "git",
@@ -423,7 +441,7 @@
       "category": "git",
       "tier": "complex",
       "description": "Detects merge-conflict markers and walks you through resolving each one.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "git",
@@ -455,7 +473,7 @@
       "category": "git",
       "tier": "simple",
       "description": "Warns before node_modules, build output, OS junk or huge files get staged.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "git",
@@ -470,7 +488,7 @@
       "category": "cost",
       "tier": "simple",
       "description": "Live session cost estimate in the status line, from real token usage.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -487,7 +505,7 @@
       "category": "cost",
       "tier": "complex",
       "description": "Set a token or dollar budget per session; get warned at 80% and stopped at 100%.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -505,7 +523,7 @@
       "category": "cost",
       "tier": "simple",
       "description": "A slim band above the prompt showing how full the context window is.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -523,7 +541,7 @@
       "category": "cost",
       "tier": "simple",
       "description": "Shows what share of input tokens came from the prompt cache.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -539,7 +557,7 @@
       "category": "cost",
       "tier": "simple",
       "description": "Times every turn and tells you when one runs long.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -555,7 +573,7 @@
       "category": "cost",
       "tier": "simple",
       "description": "Stops full reads of huge files and nudges toward offset/limit or grep.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -586,7 +604,7 @@
       "category": "cost",
       "tier": "complex",
       "description": "Tracks spend per day and week across sessions with a /spend report.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -603,7 +621,7 @@
       "category": "cost",
       "tier": "complex",
       "description": "Suggests a cheaper model when your prompt is simple, and a stronger one when it is hard.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -620,7 +638,7 @@
       "category": "cost",
       "tier": "simple",
       "description": "Suggests /compact at natural breakpoints, before the context gets tight.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "cost",
@@ -675,7 +693,7 @@
       "category": "productivity",
       "tier": "complex",
       "description": "A live pane of Claude's current task list with progress.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -692,7 +710,7 @@
       "category": "productivity",
       "tier": "complex",
       "description": "A Pomodoro timer in the status line with focus and break cycles.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -709,7 +727,7 @@
       "category": "productivity",
       "tier": "complex",
       "description": "A persistent per-project notes pane you can type into without leaving Claude Code.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -781,7 +799,7 @@
       "category": "productivity",
       "tier": "simple",
       "description": "Short aliases like /t, /l and /b that run your test, lint and build commands.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -802,7 +820,7 @@
       "category": "productivity",
       "tier": "simple",
       "description": "Reminds you about uncommitted changes after a stretch of inactivity.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -833,7 +851,7 @@
       "category": "quality",
       "tier": "complex",
       "description": "Runs the linter on each edited file and hands the errors straight back to Claude.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -848,7 +866,7 @@
       "category": "quality",
       "tier": "complex",
       "description": "Runs the tests related to what changed and shows pass/fail in the status line.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -865,7 +883,7 @@
       "category": "quality",
       "tier": "complex",
       "description": "Type-checks the project at the end of every editing turn so errors never slip by.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -882,7 +900,7 @@
       "category": "quality",
       "tier": "simple",
       "description": "Blocks Claude from silencing tests with .skip, .only, xit or skip markers.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -898,7 +916,7 @@
       "category": "quality",
       "tier": "simple",
       "description": "Notices every TODO, FIXME and HACK Claude adds and lists them at turn end.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -916,7 +934,7 @@
       "category": "quality",
       "tier": "simple",
       "description": "Warns when console.log, print, debugger or dbg! statements are left in code.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -931,7 +949,7 @@
       "category": "quality",
       "tier": "simple",
       "description": "Flags new any types, @ts-ignore and eslint-disable comments as Claude writes them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -946,7 +964,7 @@
       "category": "quality",
       "tier": "simple",
       "description": "Warns when an edited file grows past a size that hurts readability.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -961,7 +979,7 @@
       "category": "quality",
       "tier": "complex",
       "description": "A TDD mode: no production code changes until a test has been written or changed.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "quality",
@@ -978,7 +996,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "A timeline pane of every tool call with duration, status and input summary.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "observability",
@@ -995,7 +1013,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "A pane of every file read, edited or created in the session, with counts.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1012,7 +1030,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "/session-stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1029,7 +1047,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "Watch running subagents live: type, status, duration and last activity.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1046,7 +1064,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "Collects every failed command and tool error in one pane.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1114,7 +1132,7 @@
       "category": "observability",
       "tier": "simple",
       "description": "Keeps a log of every tool call that was denied, and why.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1131,7 +1149,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "A sparkline of tokens per turn right above the prompt.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1244,7 +1262,7 @@
       "category": "prompting",
       "tier": "complex",
       "description": "/persona switches Claude between reviewer, architect, teacher and other roles.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "prompting",
@@ -1281,7 +1299,7 @@
       "category": "prompting",
       "tier": "complex",
       "description": "Detects your stack and gives Claude the right conventions for it.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "prompting",
@@ -1298,7 +1316,7 @@
       "category": "prompting",
       "tier": "simple",
       "description": "Gently flags vague prompts like 'fix it' and suggests what to add.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "prompting",
@@ -1313,7 +1331,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Plays a chime when a long turn finishes.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1328,7 +1346,7 @@
       "category": "notifications",
       "tier": "complex",
       "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1345,7 +1363,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Pings you with a sound and toast when Claude is waiting on your approval.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1360,7 +1378,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "A short buzz when a command or test run fails.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1375,7 +1393,7 @@
       "category": "notifications",
       "tier": "complex",
       "description": "Posts to Slack, Discord, Teams or ntfy when a long task finishes.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1392,7 +1410,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Native desktop notifications when Claude finishes or needs you.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1407,7 +1425,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Alerts you when a single command has been running too long.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1422,7 +1440,7 @@
       "category": "notifications",
       "tier": "complex",
       "description": "/ci-watch follows your GitHub Actions run and tells you the moment it passes or fails.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1439,7 +1457,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Reminds you to stand up and stretch every 50 minutes of active work.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1454,7 +1472,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Celebrates when failing tests go green again.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -1469,7 +1487,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "/decide records an Architecture Decision Record in docs/decisions.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1487,7 +1505,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "Writes a dated journal entry of what was done when the session ends.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1504,7 +1522,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "Teaches Claude your project's vocabulary and injects definitions when you use the terms.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1542,7 +1560,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "Shows what you were working on last time when a new session starts.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1559,7 +1577,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "When Claude fixes a mistake, offers to save the lesson to CLAUDE.md.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1574,7 +1592,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "/map builds a compact map of your repository and gives it to Claude.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1629,7 +1647,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1647,7 +1665,7 @@
       "category": "team",
       "tier": "complex",
       "description": "Keeps CHANGELOG.md's Unreleased section up to date as you commit.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "team",
@@ -1664,7 +1682,7 @@
       "category": "team",
       "tier": "complex",
       "description": "Warns when public APIs, CLI flags or env vars change but the docs do not.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "team",
@@ -1679,7 +1697,7 @@
       "category": "team",
       "tier": "complex",
       "description": "/standup summarises what you did yesterday, from git history, ready to paste.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "team",
@@ -1696,7 +1714,7 @@
       "category": "team",
       "tier": "complex",
       "description": "Adds a dedicated code-reviewer subagent and a /review command.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "team",
@@ -1728,7 +1746,7 @@
       "category": "team",
       "tier": "complex",
       "description": "/issue turns the current conversation into a well-structured GitHub issue.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "team",
@@ -1745,7 +1763,7 @@
       "category": "team",
       "tier": "complex",
       "description": "/handoff writes a handoff note so a teammate can pick up exactly where you left off.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "team",
@@ -1762,7 +1780,7 @@
       "category": "team",
       "tier": "simple",
       "description": "Flags hard-coded user-facing strings in UI components.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "team",
@@ -1777,7 +1795,7 @@
       "category": "team",
       "tier": "simple",
       "description": "Prevents editing database migrations that already exist; write a new one instead.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "team",
@@ -1810,7 +1828,7 @@
       "category": "stacks",
       "tier": "complex",
       "description": "Catches React hook mistakes as Claude writes them: missing effect deps, setState in render, conditional hooks.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "stacks",
@@ -1825,7 +1843,7 @@
       "category": "stacks",
       "tier": "simple",
       "description": "Flags missing or needless \"use client\" and server-only imports leaking into client components in Next.js.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "stacks",
@@ -1840,7 +1858,7 @@
       "category": "stacks",
       "tier": "simple",
       "description": "Blocks pip install outside an active virtualenv so system Python stays clean.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "stacks",
@@ -1855,7 +1873,7 @@
       "category": "stacks",
       "tier": "simple",
       "description": "Warns when your Node version doesn't match .nvmrc, .node-version or package.json engines.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "stacks",
@@ -1870,7 +1888,7 @@
       "category": "stacks",
       "tier": "complex",
       "description": "After Django model changes, checks for missing migrations and offers to create them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "stacks",
@@ -1915,7 +1933,7 @@
       "category": "stacks",
       "tier": "complex",
       "description": "After Prisma or Drizzle schema edits, regenerates the client and warns when a migration is missing.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "stacks",
@@ -1930,7 +1948,7 @@
       "category": "stacks",
       "tier": "simple",
       "description": "Keeps .env.example in sync with the environment variables your code actually reads.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "stacks",
@@ -1945,7 +1963,7 @@
       "category": "stacks",
       "tier": "complex",
       "description": "Detects which monorepo package you're in and scopes test, lint and build commands to it.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "stacks",
@@ -1962,7 +1980,7 @@
       "category": "devops",
       "tier": "simple",
       "description": "Flags Dockerfile smells: :latest tags, running as root, apt without cleanup, ADD instead of COPY.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -1977,7 +1995,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "Turns kubectl apply into a server-side dry run with a diff you approve first.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -1995,7 +2013,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "Shows terraform plan as a clear pane of resources to create, change and destroy.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -2012,7 +2030,7 @@
       "category": "devops",
       "tier": "simple",
       "description": "Checks edited GitHub Actions workflows and warns about actions not pinned to a version.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -2027,7 +2045,7 @@
       "category": "devops",
       "tier": "simple",
       "description": "Before a dev server starts, tells you if the port is already taken and by which process.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -2042,7 +2060,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "Starts your dev server in the background and shows its errors in a live pane.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -2059,7 +2077,7 @@
       "category": "devops",
       "tier": "simple",
       "description": "Warns before commands that create expensive cloud resources like GPU instances or large databases.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -2091,7 +2109,7 @@
       "category": "devops",
       "tier": "simple",
       "description": "Blocks docker system prune -a --volumes and volume deletion that can wipe local databases.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -2106,7 +2124,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "Shows a pre-deploy checklist (tests, branch, changelog) and asks you to confirm before deploying.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "devops",
@@ -2123,7 +2141,7 @@
       "category": "data",
       "tier": "simple",
       "description": "Flags UPDATE and DELETE without WHERE in .sql files and in queries inside your code.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "data",
@@ -2155,7 +2173,7 @@
       "category": "data",
       "tier": "simple",
       "description": "Blocks database seed, reset and drop commands unless DATABASE_URL points at your own machine.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "data",
@@ -2187,7 +2205,7 @@
       "category": "data",
       "tier": "simple",
       "description": "Spots database queries inside loops, the classic N+1 problem, as Claude writes them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "data",
@@ -2236,7 +2254,7 @@
       "category": "data",
       "tier": "complex",
       "description": "Dumps your local database before every migration so a bad one is one command away from undo.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "data",
@@ -2289,7 +2307,7 @@
       "category": "frontend",
       "tier": "simple",
       "description": "Flags accessibility misses as Claude writes UI: images without alt, unlabeled buttons, clickable divs.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2305,7 +2323,7 @@
       "category": "frontend",
       "tier": "complex",
       "description": "After UI edits, takes a Playwright screenshot of the page and shows it to Claude.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2322,7 +2340,7 @@
       "category": "frontend",
       "tier": "simple",
       "description": "Compares bundle size after each build and warns when it grows.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2338,7 +2356,7 @@
       "category": "frontend",
       "tier": "simple",
       "description": "Flags hard-coded hex colors and pixel values where your design tokens should be used.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2354,7 +2372,7 @@
       "category": "frontend",
       "tier": "complex",
       "description": "/lighthouse runs Lighthouse on a URL and shows performance, a11y, SEO and best-practice scores in a pane.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2371,7 +2389,7 @@
       "category": "frontend",
       "tier": "simple",
       "description": "Warns when large images, videos or fonts are added to the project.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2387,7 +2405,7 @@
       "category": "frontend",
       "tier": "simple",
       "description": "Reminds you to add a story when Claude creates a new component without one.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2403,7 +2421,7 @@
       "category": "frontend",
       "tier": "complex",
       "description": "Checks that the colors Claude changes in CSS meet WCAG AA contrast.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2418,7 +2436,7 @@
       "category": "frontend",
       "tier": "simple",
       "description": "Flags colors added without a dark-mode variant in projects that support a dark theme.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2434,7 +2452,7 @@
       "category": "frontend",
       "tier": "complex",
       "description": "/components lists your existing UI components so Claude reuses them instead of creating duplicates.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -2470,7 +2488,7 @@
       "category": "api",
       "tier": "complex",
       "description": "Warns when your API routes change but openapi.yaml doesn't.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "api",
@@ -2486,7 +2504,7 @@
       "category": "api",
       "tier": "simple",
       "description": "Restricts WebFetch to the domains you allow.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "api",
@@ -2504,7 +2522,7 @@
       "category": "api",
       "tier": "simple",
       "description": "/offline blocks every network call — fetches, curl, installs, git push — until you turn it back on.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "api",
@@ -2540,7 +2558,7 @@
       "category": "api",
       "tier": "simple",
       "description": "Stops Claude from hammering external APIs with curl loops.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "api",
@@ -2627,7 +2645,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "/scope locks Claude to the files you name; edits outside the scope are blocked.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2645,7 +2663,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "/second-opinion has a different model critique Claude's last answer or plan.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2663,7 +2681,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2681,7 +2699,7 @@
       "category": "agents",
       "tier": "simple",
       "description": "Caps how many subagents can run at the same time.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2696,7 +2714,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "/queue lines up prompts that run one after another whenever Claude is free.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2713,7 +2731,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "Runs your queued tasks at a scheduled time, like overnight, and leaves you a report.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2730,7 +2748,7 @@
       "category": "agents",
       "tier": "simple",
       "description": "Stops Claude when it repeats the same failing command three times and suggests a different approach.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2745,7 +2763,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "At the end of each editing turn, has the model double-check it actually did what you asked.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2760,7 +2778,7 @@
       "category": "agents",
       "tier": "simple",
       "description": "Asks for confirmation when a single turn tries to modify more than N files.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2862,7 +2880,7 @@
       "category": "learning",
       "tier": "simple",
       "description": "Suggests Claude Code commands and mods that fit the way you work.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "learning",
@@ -2879,7 +2897,7 @@
       "category": "learning",
       "tier": "simple",
       "description": "One tip a day about Claude Code shortcuts and features you might not know.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "learning",
@@ -2930,7 +2948,7 @@
       "category": "learning",
       "tier": "complex",
       "description": "Claude proposes, you type: edits become diffs you apply yourself, for deliberate practice.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "learning",
@@ -2964,7 +2982,7 @@
       "category": "compliance",
       "tier": "simple",
       "description": "Warns when a dependency with a copyleft license (GPL, AGPL) lands in a permissively licensed project.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -2979,7 +2997,7 @@
       "category": "compliance",
       "tier": "simple",
       "description": "Flags log statements that print emails, passwords, tokens or other personal data.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -3011,7 +3029,7 @@
       "category": "compliance",
       "tier": "simple",
       "description": "Blocks adding analytics and tracking SDKs that haven't been approved.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -3026,7 +3044,7 @@
       "category": "compliance",
       "tier": "simple",
       "description": "Blocks commands that upload files to external services like pastebins and file-sharing sites.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -3041,7 +3059,7 @@
       "category": "compliance",
       "tier": "simple",
       "description": "Flags weak cryptography: MD5 or SHA1 for passwords, Math.random for tokens, ECB mode, hard-coded IVs.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -3073,7 +3091,7 @@
       "category": "compliance",
       "tier": "simple",
       "description": "Writes every action Claude takes to an append-only JSONL audit log.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -3090,7 +3108,7 @@
       "category": "compliance",
       "tier": "complex",
       "description": "After installs, runs npm audit or pip-audit and shows any vulnerabilities in a pane.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -3107,7 +3125,7 @@
       "category": "compliance",
       "tier": "simple",
       "description": "Flags pasted code that carries someone else's license or copyright header.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -3122,7 +3140,7 @@
       "category": "performance",
       "tier": "complex",
       "description": "/bench runs your benchmarks before and after a change and compares the numbers.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3139,7 +3157,7 @@
       "category": "performance",
       "tier": "simple",
       "description": "Points out your slowest tests after each test run.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3156,7 +3174,7 @@
       "category": "performance",
       "tier": "complex",
       "description": "Detects tests that pass and fail at random and keeps a list of the suspects.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3173,7 +3191,7 @@
       "category": "performance",
       "tier": "simple",
       "description": "Flags event listeners, intervals and subscriptions created without cleanup.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3205,7 +3223,7 @@
       "category": "performance",
       "tier": "complex",
       "description": "/profile runs a command under a profiler and shows the hottest functions.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3222,7 +3240,7 @@
       "category": "performance",
       "tier": "simple",
       "description": "Automatically retries commands that failed because of a temporary network error.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3237,7 +3255,7 @@
       "category": "performance",
       "tier": "simple",
       "description": "Warns when the disk is nearly full before builds, installs and docker pulls.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3252,7 +3270,7 @@
       "category": "performance",
       "tier": "complex",
       "description": "Remembers which tests passed at the start of the session and warns if any of them now fail.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3269,7 +3287,7 @@
       "category": "performance",
       "tier": "simple",
       "description": "Blocks watch-mode and never-ending commands run in the foreground, where they'd hang the turn.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "performance",
@@ -3301,7 +3319,7 @@
       "category": "ecosystem",
       "tier": "complex",
       "description": "/mod-doctor checks your installed mods for outdated versions, conflicts and load errors.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -3318,7 +3336,7 @@
       "category": "ecosystem",
       "tier": "complex",
       "description": "Switch between sets of mods — work, personal, demo — with one command.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -3335,7 +3353,7 @@
       "category": "ecosystem",
       "tier": "simple",
       "description": "Exports and imports your mods' configuration so you can move it between machines.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -3353,7 +3371,7 @@
       "category": "ecosystem",
       "tier": "simple",
       "description": "/quiet silences toasts and sounds from every mod while you focus.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -3370,7 +3388,7 @@
       "category": "ecosystem",
       "tier": "complex",
       "description": "Unlock achievements as you work: first commit, 100 green test runs, a week-long streak and more.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -3404,7 +3422,7 @@
       "category": "ecosystem",
       "tier": "simple",
       "description": "Sound packs for Claude Code events: minimal, retro or nature.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -3421,7 +3439,7 @@
       "category": "ecosystem",
       "tier": "complex",
       "description": "/daily-goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -3447,6 +3465,307 @@
       ],
       "commands": [
         "/replay"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "mod-advisor",
+      "category": "core",
+      "tier": "complex",
+      "description": "Recommends the right mods for your project and for what you're asking, with the commands to type, and installs them in one click.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "core",
+        "recommendations",
+        "discovery"
+      ],
+      "commands": [
+        "/mods-advisor"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "smart-router",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "routing",
+        "subagents",
+        "cost"
+      ],
+      "commands": [
+        "/route",
+        "/router"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "whatsapp-bridge",
+      "category": "notifications",
+      "tier": "complex",
+      "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "whatsapp",
+        "remote-control",
+        "openwa"
+      ],
+      "commands": [
+        "/wa"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "autopilot",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Give it a goal and success criteria; it plans, delegates, verifies and retries until the criteria pass or it needs you.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "automation",
+        "verification"
+      ],
+      "commands": [
+        "/autopilot"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "project-brain",
+      "category": "memory",
+      "tier": "complex",
+      "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "memory",
+        "knowledge-graph",
+        "recall",
+        "learning"
+      ],
+      "commands": [
+        "/brain"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "context-optimizer",
+      "category": "cost",
+      "tier": "complex",
+      "description": "Keeps the context lean automatically: trims noise, picks the right moment to compact and shows the tokens it saved.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "cost",
+        "context",
+        "compact"
+      ],
+      "commands": [
+        "/ctx"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "workflow-studio",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Build, save and share reusable workflows — release, dependency update, security audit — and run them with one command.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "workflows",
+        "automation"
+      ],
+      "commands": [
+        "/recipe"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "mission-control",
+      "category": "observability",
+      "tier": "complex",
+      "description": "One dashboard for every Claude session on your machine: what each is doing, cost, blockers, with pause and priorities.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "observability",
+        "sessions",
+        "dashboard"
+      ],
+      "commands": [
+        "/mission"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "session-sync",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Coordinates sessions working on the same repo: file leases against conflicts, overlap warnings and hand-offs.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "sessions",
+        "conflicts"
+      ],
+      "commands": [
+        "/sync",
+        "/handoff-to"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "team-hub",
+      "category": "team",
+      "tier": "simple",
+      "description": "A shared panel of team conventions, recommended mods, budgets and rules, synced through the repo.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team",
+        "conventions",
+        "onboarding",
+        "policy"
+      ],
+      "commands": [
+        "/team"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "telegram-bridge",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "telegram",
+        "remote-control"
+      ],
+      "commands": [
+        "/telegram"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "slack-bridge",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Posts progress and reports to Slack and takes questions and commands from a channel, through the mods-hub channel system.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "slack",
+        "team",
+        "remote-control"
+      ],
+      "commands": [
+        "/slack"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "discord-bridge",
+      "category": "notifications",
+      "tier": "simple",
+      "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "discord",
+        "team",
+        "remote-control"
+      ],
+      "commands": [
+        "/discord"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "calendar-sync",
+      "category": "productivity",
+      "tier": "simple",
+      "description": "Reads your calendar (private iCal link) so notifications and questions respect meetings and time off, and suggests slots for long jobs.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "productivity",
+        "calendar",
+        "ical",
+        "presence"
+      ],
+      "commands": [
+        "/calendar"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "email-digest",
+      "category": "team",
+      "tier": "simple",
+      "description": "Daily or weekly email summaries in plain language for clients and managers who don't live in chat.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team",
+        "email",
+        "digest",
+        "report"
+      ],
+      "commands": [
+        "/digest"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "issue-pilot",
+      "category": "team",
+      "tier": "complex",
+      "description": "Picks up a GitHub, Jira or Linear issue, sizes it with smart-router, works it in a dedicated session and opens the PR.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "team",
+        "issues",
+        "github",
+        "jira",
+        "linear"
+      ],
+      "commands": [
+        "/issues"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "guardian",
+      "category": "security",
+      "tier": "complex",
+      "description": "One security policy for every guard mod — permissive, standard or strict — plus a project safety score.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "security",
+        "policy",
+        "guard"
+      ],
+      "commands": [
+        "/guardian"
       ],
       "since": "2.0.0"
     }

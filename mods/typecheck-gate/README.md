@@ -22,7 +22,7 @@ When a turn of Claude's edited TypeScript or Python files, typecheck-gate runs y
 
 ## Usage
 - Status line: `⧗ typecheck: running tsc…`, then `✓ types: clean (tsc)` or `✗ types: 4 type errors (tsc)`.
-- Toast: `typecheck-gate: 4 type errors (tsc)`. In autofix mode it reads `… asking Claude to fix them (round 1 of 3)`.
+- Toast: `4 type errors (tsc)`. In autofix mode it reads `… asking Claude to fix them (round 1 of 3)`.
 - `/typecheck` checks every TS and Python file edited this session right away, or the working directory's `tsconfig.json` project if none were edited. It prints the errors in the transcript, where Claude reads them too.
 
 ## Configuration
@@ -42,3 +42,4 @@ When a turn of Claude's edited TypeScript or Python files, typecheck-gate runs y
   - Python files are checked only when the project configures pyright or mypy.
   - Edits made through Bash don't trigger a check.
   - If a check is still running when the next turn ends, those edits are checked after the following turn.
+- With [mods-hub](../mods-hub) installed, every check is published as `typecheck.result` (checker, error count, files), which autopilot reads, and the toasts become hub notices: the errors (and "over to you" after the last autofix round) at `error`, so they reach your channels while you are away; "asking Claude to fix them" at `info`. Without the hub nothing changes.

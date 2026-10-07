@@ -1,0 +1,124 @@
+{
+  "name": "issue-pilot",
+  "version": "1.0.0",
+  "description": "Picks up a GitHub, Jira or Linear issue, sizes it with smart-router, works it in a dedicated session and opens the PR.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#issue-pilot",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "team", "issues", "github", "jira", "linear"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "provider": {
+      "type": "string",
+      "title": "Issue tracker",
+      "description": "auto: Linear when its key is set, else Jira when it is configured, else GitHub when the git remote is on GitHub.",
+      "default": "auto",
+      "options": ["auto", "github", "jira", "linear"]
+    },
+    "assignedToMe": {
+      "type": "boolean",
+      "title": "Only my issues",
+      "description": "List the open issues assigned to you (switchable in the Issues tab).",
+      "default": true
+    },
+    "label": {
+      "type": "string",
+      "title": "Label filter",
+      "description": "Only issues with this label (switchable in the Issues tab).",
+      "default": ""
+    },
+    "milestone": {
+      "type": "string",
+      "title": "Milestone filter",
+      "description": "Only issues in this milestone (GitHub), fix version (Jira) or cycle/project (Linear).",
+      "default": ""
+    },
+    "autoPR": {
+      "type": "boolean",
+      "title": "Open the draft PR without asking",
+      "description": "When autopilot reports the issue done and the tests pass, commit, push and open the draft PR on its own. Off: it waits for your click.",
+      "default": false
+    },
+    "startComment": {
+      "type": "boolean",
+      "title": "Comment when starting",
+      "description": "Post a short \"working on it\" comment on the issue when you press Start.",
+      "default": false
+    },
+    "finishComment": {
+      "type": "boolean",
+      "title": "Comment when the PR opens",
+      "description": "Post a summary comment with the PR link on the issue.",
+      "default": true
+    },
+    "inProgressLabel": {
+      "type": "string",
+      "title": "In-progress label (GitHub)",
+      "description": "Added to a GitHub issue when you start it; created if the repository lacks it. Empty: no label.",
+      "default": "in progress"
+    },
+    "testCommand": {
+      "type": "string",
+      "title": "Test command",
+      "description": "Run before the PR opens. Empty: detected (npm/pnpm/yarn/bun test, pytest, go test, cargo test).",
+      "default": ""
+    },
+    "baseBranch": {
+      "type": "string",
+      "title": "PR base branch",
+      "description": "Empty: the repository's default branch.",
+      "default": ""
+    },
+    "jiraBaseUrl": {
+      "type": "string",
+      "title": "Jira URL",
+      "description": "Your Jira Cloud site, e.g. https://acme.atlassian.net",
+      "default": ""
+    },
+    "jiraEmail": {
+      "type": "string",
+      "title": "Jira account email",
+      "description": "The email of the account the API token belongs to.",
+      "default": ""
+    },
+    "jiraApiToken": {
+      "type": "string",
+      "title": "Jira API token",
+      "description": "Create one at id.atlassian.com → Security → API tokens. Kept in secure storage.",
+      "sensitive": true,
+      "default": ""
+    },
+    "jiraJql": {
+      "type": "string",
+      "title": "Extra JQL",
+      "description": "Added to the search with AND, e.g. project = SHOP.",
+      "default": ""
+    },
+    "jiraStartStatus": {
+      "type": "string",
+      "title": "Jira status on Start",
+      "description": "The transition taken when you start an issue.",
+      "default": "In Progress"
+    },
+    "jiraReviewStatus": {
+      "type": "string",
+      "title": "Jira status when the PR opens",
+      "description": "The transition taken when the draft PR opens (skipped when the workflow has none by this name).",
+      "default": "In Review"
+    },
+    "linearApiKey": {
+      "type": "string",
+      "title": "Linear API key",
+      "description": "A personal API key (Linear → Settings → Security & access). Kept in secure storage.",
+      "sensitive": true,
+      "default": ""
+    },
+    "linearReviewState": {
+      "type": "string",
+      "title": "Linear state when the PR opens",
+      "description": "The workflow state set when the draft PR opens (skipped when the team has none by this name).",
+      "default": "In Review"
+    }
+  }
+}

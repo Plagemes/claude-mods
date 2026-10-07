@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 const ROOT = '/home/me/shop'
 
 const GLOSSARY_MD = `# Glossary
@@ -127,4 +129,27 @@ test('works quietly with no glossary at all', async ($, on) => {
   expect(await ask($, seen, 'Hello there')).toEqual([])
   expect((await $.command.run(typed('glossary', ''))).text).toContain('no terms yet')
   expect(seen.statuses).toEqual([])
+})
+
+test('with mods-hub: says hello and keeps the fact glossary.terms current as terms are defined, edited and removed', async ($, on) => {
+  const hub = fakeHub(on)
+  const seen = world(on, { 'GLOSSARY.md': GLOSSARY_MD })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+
+  const first = hub.facts.get('terms') as { count: number; terms: { term: string; definition: string; source: string }[] }
+  expect(first.count).toBe(6)
+  expect(first.terms[0]).toEqual({ term: 'Tenant', definition: 'A customer organisation with its own isolated data.', source: 'GLOSSARY.md' })
+
+  await $.command.run(typed('define', 'Shard = A slice of the tenants table.'))
+  const defined = hub.facts.get('terms') as { count: number; terms: { term: string; source: string }[] }
+  expect(defined.count).toBe(7)
+  expect(defined.terms[0]).toMatchObject({ term: 'Shard', source: '/define' })
+
+  seen.files.set(`${ROOT}/GLOSSARY.md`, `${GLOSSARY_MD}\n- **Cart**: What a visitor is about to buy.\n`)
+  await ask($, seen, 'Open the cart')
+  expect((hub.facts.get('terms') as { count: number }).count).toBe(8)
+
+  await $.command.run(typed('glossary', 'remove shard'))
+  expect((hub.facts.get('terms') as { count: number }).count).toBe(7)
 })

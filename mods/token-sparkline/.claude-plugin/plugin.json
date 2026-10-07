@@ -1,6 +1,6 @@
 {
   "name": "token-sparkline",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A sparkline of tokens per turn right above the prompt.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#token-sparkline",

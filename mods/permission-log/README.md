@@ -36,3 +36,4 @@ No configuration needed.
 - Hooks `tool.check`, the engine's own allow/ask/deny verdict, and logs a `deny` with the rule that decided it. A call seen by both hooks is logged once, by its tool-call id.
 - Keeps the last 200 entries in `$.state`, so the log survives a plugin reload but not a new session.
 - Limits: the prompt-rejection check depends on the engine's wording, so a build that words it differently simply logs fewer of those; it never blocks or changes a call.
+- With [mods-hub](../mods-hub) installed, `/denied` also reads the guards' `risk.blocked` reports: each refusal names the guard and severity behind it (`[rm-rf-guard · high]`), and what guards reported without a refused tool call here (a redacted edit, a blocked prompt) is listed under "Also reported by guards". Without the hub nothing changes.

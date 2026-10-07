@@ -1,7 +1,7 @@
 # mod-store
 > An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.
 
-**Category:** Core · **Version:** 1.1.2
+**Category:** Core · **Version:** 1.2.0
 
 ## What it does
 `/mods` opens a store pane listing every mod of the collection, grouped by category, with what you already have installed and what has an update. Search as you type, filter by category (or by *Installed* / *Updates*), open a mod to read its README, then install, update or uninstall it with one key. The catalog is cached, so the store still opens offline, and a session start tells you once when a new update is out.
@@ -39,6 +39,7 @@ In the pane (keys work while it has the keyboard; Tab walks the controls, Esc cl
 - Fetches `.claude-plugin/marketplace.json` (and `catalog.json` for category titles, when present) raw from GitHub with `$.http.fetch`, caches it in `$.store` with its timestamp, and falls back to that cache when GitHub cannot be reached.
 - Installed versions and every change go through the `claude plugin` CLI (`list`, `marketplace add/update`, `install`, `update`, `uninstall`, all with `--json`) via `$.process.run`; there is no `$` API for plugins. The marketplace is added on first install.
 - Changes take effect after `/reload-plugins`. Installs come from the marketplace's default branch whatever `branch` says, and every step runs the `claude` CLI: the session's own binary when the engine names it, else the one the desktop app installed (under `%APPDATA%\Claude\claude-code` on Windows, `~/Library/Application Support/Claude/claude-code` on macOS), else `claude` from PATH. If none is found, the pane says "install status unknown" and shows why.
+- With [mods-hub](../mods-hub) installed every mod the store installs or updates (one by one, or with install-all / update-all) is also published as `mod.installed` (name and version) on the hub's bus, for mod-advisor and mod-doctor; a failed install, an uninstall and an update that found nothing new publish nothing. The store keeps running `claude plugin list --json` itself rather than reading the hub's cached list: its install, update and uninstall need each mod's scope and whether your organization manages it, which the hub's list does not carry. The store stays its own pane in every case. Without the hub nothing changes.
 
 ## What it fetches, runs and sends
 mod-store has no telemetry and sends none of your data anywhere. This is everything it reaches outside the session.
@@ -74,4 +75,6 @@ Each request has a 15 s timeout. The answers are cached in `$.store` on this mac
 
 mod-store does not hook tool calls, prompts or files.
 
-**Local data**: it reads the list of installed plugins through the CLI, and keeps the catalog cache, the README cache and the last update toast in `$.store` and `$.state`.
+**mods-hub** (`$.mods`, only when [mods-hub](../mods-hub) is installed): at session start it says hello to the hub with its version, and after each successful install or update it publishes `mod.installed` with that mod's name and version. Both go only to the hub's bus; without the hub nothing is sent.
+
+**Local data**: it reads the list of installed plugins through the CLI and its own `.claude-plugin/plugin.json` (for its version, when the hub is installed), and keeps the catalog cache, the README cache and the last update toast in `$.store` and `$.state`.

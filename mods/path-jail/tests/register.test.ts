@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { fromGitBash, writeTargets } from '../hooks/bash'
+import { fakeHub } from './hub'
 
 type Entry = { kind: 'dir' | 'file'; link?: string }
 
@@ -182,4 +183,50 @@ test('the Bash reader sees through bash -lc and wrapper options', () => {
   expect(paths('timeout 5 rm -rf /opt/x')).toEqual(['/opt/x'])
   expect(paths('nice -n 10 rm /opt/y')).toEqual(['/opt/y'])
   expect(paths('sudo rm /etc/z')).toEqual(['/etc/z'])
+})
+
+test('the shared shell reader: eval, su -c, xargs, GNU time and scripts fed to a shell are read too', () => {
+  const paths = (command: string) => writeTargets(command).map(target => target.path)
+  expect(paths(`eval "rm /etc/a"`)).toEqual(['/etc/a'])
+  expect(paths(`su -c 'touch /etc/b' root`)).toEqual(['/etc/b'])
+  expect(paths('ls | xargs -0 rm -f /etc/c')).toEqual(['/etc/c'])
+  expect(paths('time -o t.txt rm /etc/d')).toEqual(['/etc/d'])
+  expect(paths('bash <<EOF\ncd /etc\ntouch e\nEOF')).toEqual(['e'])
+  expect(writeTargets('bash <<EOF\ncd /etc\ntouch e\nEOF')[0]?.cdChain).toEqual(['/etc'])
+  expect(paths('sh <<< "rm /etc/f"')).toEqual(['/etc/f'])
+  expect(paths("cat <<'EOF' > notes.md\nrm /etc/g\nEOF")).toEqual(['notes.md'])
+  expect(paths(`echo '$(rm /etc/h)' > notes.txt`)).toEqual(['notes.txt'])
+})
+
+test('with mods-hub: each deny is published as risk.blocked, with the path', async ($, on) => {
+  world(on)
+  const hub = fakeHub(on)
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: '/etc/hosts', content: 'x' }))).toContain('outside the allowed folders')
+  expect(denial(await $.tool.call({ tool: 'Bash', command: 'cp src/app.ts "$OUT_DIR/app.ts"' }))).toContain('shell expansion')
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: '/proj/src/new.ts', content: 'x' }))).toBeUndefined()
+  expect(hub.published.map(event => event.data)).toEqual([
+    { guard: 'path-jail', tool: 'Write', reason: 'outside-jail: Write resolves to /etc/hosts, outside the allowed folders', severity: 'high', path: '/etc/hosts' },
+    {
+      guard: 'path-jail',
+      tool: 'Bash',
+      reason: expect.stringMatching(/^unverifiable-write: cp: .*shell expansion/),
+      severity: 'medium',
+      path: '$OUT_DIR/app.ts',
+      command: 'cp src/app.ts "$OUT_DIR/app.ts"',
+    },
+  ])
+})
+
+test('a $ in an Edit/Write file name is a plain character (Remix/TanStack routes), not a shell expansion', async ($, on) => {
+  world(on)
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: '/proj/src/$slug.tsx', content: 'x' }))).toBeUndefined()
+  expect(denial(await $.tool.call({ tool: 'Edit', file_path: '/proj/src/posts.$id.tsx', old_string: 'a', new_string: 'b' }))).toBeUndefined()
+  // Still placed by its real path: a literal $ name outside the project is refused for being outside.
+  expect(denial(await $.tool.call({ tool: 'Write', file_path: '/etc/$x', content: 'x' }))).toContain('outside the allowed folders')
+  // In Bash a bare $VAR is still an expansion the jail cannot check.
+  expect(denial(await $.tool.call({ tool: 'Bash', command: 'touch src/$NAME.tsx' }))).toContain('shell expansion')
 })

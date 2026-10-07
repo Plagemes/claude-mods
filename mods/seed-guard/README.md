@@ -30,6 +30,7 @@ The target is read, in this order, from `DATABASE_URL=...` in the command (or an
 | `denyUnknown` | boolean | `false` | Also refuse when no `DATABASE_URL` can be found at all. Off by default: the tool then uses its own config (`database.yml`, `settings.py`), which usually means a local database. |
 
 ## How it works
-- A `tool.call` guard on `Bash` reads the command line like a shell (quotes respected, `npx`/`bundle exec`/`pnpm exec` wrappers skipped, `bash -c "…"` and `eval` strings read too), matches it against the destructive commands above, and resolves the database URL with `$.env` and `$.fs.read`. It never runs anything.
+- A `tool.call` guard on `Bash` reads the command line with the shared claude-mods shell reader (quotes respected, `sudo`/`env`/`time` and `npx`/`bundle exec`/`pnpm exec` wrappers skipped, `bash -c "…"`, `eval`, `$(…)` and heredocs fed to a shell read too, a nested script starting where its parent runs), matches it against the destructive commands above, and resolves the database URL with `$.env` and `$.fs.read`. It never runs anything.
 - It fails closed: if the check itself throws, a command that mentions seed, reset, drop, fresh, flush or wipe is refused; other commands are not affected.
+- With [mods-hub](../mods-hub) installed, every deny is also published as `risk.blocked` (rule `remote-environment`, `remote-database` or `unknown-database`, severity, the command with credentials masked). Without the hub nothing changes.
 - Limits: commands run inside `docker compose exec` or over `ssh` use that machine's own environment and are not checked; a URL that is built at run time (`${HOST}`) cannot be resolved (see `denyUnknown`); a database named only in `database.yml` or `settings.py` is not read.

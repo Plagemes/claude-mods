@@ -1,3 +1,5 @@
+import { lineFinder } from './shared/line-index'
+
 export type Finding = {
   line: number
   /** What is wrong, as shown to Claude. */
@@ -68,22 +70,6 @@ const classGroups = (text: string): Group[] => {
     if (current === undefined || index < current.start) groups.push({ start: index, end: index + match[0].length, text: match[0].slice(1, -1) })
   }
   return groups
-}
-
-/** The 1-based line of an offset, by a binary search over the line starts (a big file has thousands of lookups). */
-export const lineFinder = (text: string): ((offset: number) => number) => {
-  const starts = [0]
-  for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', index + 1)) starts.push(index + 1)
-  return offset => {
-    let low = 0
-    let high = starts.length - 1
-    while (low < high) {
-      const middle = (low + high + 1) >> 1
-      if ((starts[middle] ?? 0) <= offset) low = middle
-      else high = middle - 1
-    }
-    return low + 1
-  }
 }
 
 /** A Tailwind utility with the parts that matter: its variants (hover, dark, ...), property family and color. */

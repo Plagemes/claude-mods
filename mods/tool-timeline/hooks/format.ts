@@ -61,3 +61,39 @@ export const durationOf = (call: ToolTimelineCall): number | null =>
 /** Fits `text` into `width` cells, padding or cutting it with an ellipsis. */
 export const fit = (text: string, width: number): string =>
   text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text.padEnd(width)
+
+/** A turn that ended, as the hub's `turn.finished` tells it. */
+export type TurnMark = { at: number; durationMs: number; tools: number; isAborted: boolean }
+
+/** The `turn.finished` events in the hub's feed, as marks; anything else in the feed, or a payload of another shape, is skipped. */
+export const turnMarksOf = (feed: readonly { topic: string; at: number; data: unknown }[]): TurnMark[] =>
+  feed.flatMap(({ topic, at, data }) => {
+    if (topic !== 'turn.finished' || typeof data !== 'object' || data === null) return []
+    const { durationMs, tools, isAborted } = data as { durationMs?: unknown; tools?: unknown; isAborted?: unknown }
+    return typeof durationMs === 'number' && typeof tools === 'number' ? [{ at, durationMs, tools, isAborted: isAborted === true }] : []
+  })
+
+/**
+ * Where each turn ended on the timeline: the id of the last call that began before the turn finished and after the
+ * previous turn's end. A turn that made no calls leaves no mark.
+ */
+export const turnEnds = (calls: readonly ToolTimelineCall[], marks: readonly TurnMark[]): Map<string, TurnMark> => {
+  const ends = new Map<string, TurnMark>()
+  let after = -1
+  for (const mark of [...marks].sort((a, b) => a.at - b.at)) {
+    let last = -1
+    calls.forEach((call, index) => {
+      if (call.startedAt <= mark.at) last = index
+    })
+    const call = calls[last]
+    if (call !== undefined && last > after) {
+      ends.set(call.id, mark)
+      after = last
+    }
+  }
+  return ends
+}
+
+/** `turn · 12 tools · 2m05s`, `· interrupted` when it was stopped. */
+export const describeTurn = ({ tools, durationMs, isAborted }: TurnMark): string =>
+  `turn · ${tools} tool${tools === 1 ? '' : 's'} · ${formatDuration(durationMs)}${isAborted ? ' · interrupted' : ''}`

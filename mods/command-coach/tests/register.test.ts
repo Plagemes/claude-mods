@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 import { RULES, dueRules, isGitCommit, isInstalled, isLongOutput, isTestPrompt, messageOf } from '../hooks/rules'
 import type { Signals } from '../hooks/rules'
 
@@ -343,6 +345,9 @@ test('the pattern helpers', () => {
   expect(isGitCommit('git commit-tree abc')).toBe(false)
   expect(isGitCommit('git status')).toBe(false)
   expect(isGitCommit('echo git commit')).toBe(true)
+  expect(isGitCommit('git --no-pager commit -m x')).toBe(true)
+  expect(isGitCommit('sudo git -c user.name=x commit -m x')).toBe(true)
+  expect(isGitCommit('git --no-pager log')).toBe(false)
 
   expect(isLongOutput('x'.repeat(6000))).toBe(true)
   expect(isLongOutput('line\n'.repeat(120))).toBe(true)
@@ -377,4 +382,59 @@ test('regression: a turn ends without waiting for the installed-plugins check', 
   release()
   await clock.settle()
   expect(toasts[0]).toContain('output-trimmer')
+})
+
+test('with mods-hub: says hello, tips go out as info notices, a recommended mod is published, and the hub\'s plugin list replaces the CLI call', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  // The CLI would say output-trimmer is installed; the hub's list is the one used.
+  w.plugins = ['output-trimmer']
+  on('mods.installed', () => ({ value: { hello: [], plugins: [{ name: 'quick-commands', marketplace: 'm', version: '1', isEnabled: true }], listedAt: 5 } }))
+  await startSession($)
+  expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['mod.recommended'], consumes: ['error.repeated'] }])
+
+  await longOutputs($, w, 3)
+  await endTurn($)
+  expect(w.toasts).toEqual([])
+  expect(hub.notified).toHaveLength(1)
+  expect(hub.notified[0]).toMatchObject({ level: 'info' })
+  expect(hub.notified[0]?.title).toContain('/plugin install output-trimmer@claude-mods')
+  expect(hub.published).toEqual([
+    { topic: 'mod.recommended', data: { name: 'output-trimmer', reason: '3 commands printed very long output and all of it went into the context. The output-trimmer mod keeps the head, tail and error lines.' } },
+  ])
+})
+
+test('with mods-hub: a mod the hub lists as installed is not recommended', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('mods.installed', () => ({ value: { hello: [], plugins: [{ name: 'output-trimmer', marketplace: 'm', version: '1', isEnabled: true }], listedAt: 5 } }))
+  await startSession($)
+  await longOutputs($, w, 3)
+  await endTurn($)
+  expect(hub.notified).toEqual([])
+  expect(hub.published).toEqual([])
+})
+
+test('with mods-hub: a command that failed over and over (error.repeated) is the error-feed tip at once', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on)
+  on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
+  on('mods.installed', () => ({ value: { hello: [], plugins: [], listedAt: 5 } }))
+  await startSession($)
+  await endTurn($)
+  expect(hub.notified).toEqual([])
+
+  hub.events.push({ topic: 'error.repeated', data: { signature: 'npm test', count: 3, tool: 'Bash' }, at: 1, source: 'mods-hub' })
+  await endTurn($)
+  expect(hub.notified[0]?.title).toContain('The same command has failed over and over')
+  expect(hub.published).toMatchObject([{ topic: 'mod.recommended', data: { name: 'error-feed' } }])
+})
+
+test('without mods-hub the tip is the same toast and nothing is published', async ($, on) => {
+  const w = world(on)
+  await longOutputs($, w, 3)
+  await endTurn($)
+  expect(w.toasts).toHaveLength(1)
 })

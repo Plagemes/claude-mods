@@ -1,0 +1,55 @@
+{
+  "name": "context-optimizer",
+  "version": "1.0.0",
+  "description": "Keeps the context lean automatically: trims noise, picks the right moment to compact and shows the tokens it saved.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#context-optimizer",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "cost", "context", "compact"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "trimAboveChars": {
+      "type": "number",
+      "title": "Trim tool results longer than (characters)",
+      "description": "A tool result longer than this is cut to its head, its tail and the lines that mention errors before Claude reads it. 0 turns trimming off.",
+      "default": 10000
+    },
+    "trimTools": {
+      "type": "string",
+      "title": "Tools whose results are trimmed",
+      "description": "Comma-separated tool names; mcp__* stands for every MCP tool. Read and Edit are never trimmed. Bash is left to output-trimmer when it is installed.",
+      "default": "Bash,Grep,Glob,WebFetch,WebSearch,mcp__*"
+    },
+    "suggestAt": {
+      "type": "number",
+      "title": "Suggest compacting from (% full)",
+      "description": "From this context fill on, a task boundary (a commit, green tests, a cleared todo list, a new topic) is reported as a good moment to /compact.",
+      "default": 55
+    },
+    "autoCompact": {
+      "type": "boolean",
+      "title": "Compact automatically",
+      "description": "At a good moment, run /compact with a focus by itself once the session has been idle for idleSeconds. Off: it only suggests.",
+      "default": false
+    },
+    "idleSeconds": {
+      "type": "number",
+      "title": "Idle before auto-compact (seconds)",
+      "description": "How long nothing may happen after a turn before autoCompact runs /compact.",
+      "default": 45
+    },
+    "carryOver": {
+      "type": "boolean",
+      "title": "Carry-over across /compact",
+      "description": "Before a compaction, keep a short note of decisions, open todos and files in play, and give it back to Claude with the next prompt.",
+      "default": true
+    },
+    "dedupeReads": {
+      "type": "boolean",
+      "title": "Dedupe repeated reads",
+      "description": "When Claude reads the same unchanged file range again before any compaction, replace the copy with a one-line note pointing at the earlier read.",
+      "default": true
+    }
+  }
+}

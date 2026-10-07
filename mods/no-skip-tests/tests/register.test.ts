@@ -2,6 +2,8 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
+
 type World = { files: Record<string, string>; unreadable: Set<string> }
 
 const answerEngine = (on: On, files: Record<string, string> = {}): World => {
@@ -113,3 +115,33 @@ test('Windows paths with backslashes are recognised as test files', async ($, on
   const result = await edit($, 'C:\\repo\\tests\\test_api.py', 'def test_a():', '@pytest.mark.skip\ndef test_a():')
   expect(result.deny).toContain('@pytest.mark.skip')
 })
+
+test('regression: SKIP-OK does not carry into a turn the person did not start', async ($, on) => {
+  answerEngine(on)
+  const skip = () => edit($, '/p/a.test.ts', "it('x')", "it.skip('x')")
+  await $.prompt.submit({ text: 'please skip the flaky test, SKIP-OK', wait: false, origin: { kind: 'composer' } })
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await skip()).deny).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect((await skip()).deny).toContain('SKIP-OK')
+})
+
+test('with mods-hub: a refused edit is published as risk.blocked', async ($, on) => {
+  answerEngine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  const result = await edit($, '/p/a.test.ts', "it('works', () => {", "it.only('works', () => {")
+  expect(result.deny).toContain('no-skip-tests')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'no-skip-tests', tool: 'Edit', reason: 'adds .skip / .only to a test file', severity: 'low', path: '/p/a.test.ts' } },
+  ])
+
+  await edit($, '/p/a.test.ts', 'a', 'b')
+  expect(hub.published).toHaveLength(1)
+})
+

@@ -16,6 +16,8 @@ export type PrDescriberDraft = {
   /** The pull request template followed, if any. */
   templateSource: string | null
   hasUncommitted: boolean
+  /** When the description was written (ms); a later `git.commit` on the branch makes it stale (mods-hub). */
+  draftedAt: number
 }
 
 declare module 'claude-code' {

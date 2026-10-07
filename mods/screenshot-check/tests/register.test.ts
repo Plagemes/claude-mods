@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { captureNote, cellsFor, cliArgs, parseCapture } from '../hooks/capture'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'screenshot-check'
 const ROOT = '/work/web'
@@ -190,4 +191,23 @@ test('a dev server still compiling its first page when the probe gives up is use
   const pending = screenshot($)
   await state.clock.advance(1500)
   expect((await pending).text).toContain('Captured http://localhost:3000/ at desktop and mobile widths')
+})
+
+test('with mods-hub: each screenshot is published, and a build that failed after the edits skips the auto capture', { options: { auto: true, delaySeconds: 5 } }, async ($, on) => {
+  const state = world(on)
+  const hub = fakeHub(on, {}, state.clock)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['screenshot.taken'], consumes: ['build.result'] }])
+  await screenshot($)
+  expect(hub.published.map(event => event.topic)).toEqual(['screenshot.taken', 'screenshot.taken'])
+  expect(hub.published[0]?.data).toEqual({ path: `${DIR}/${STAMP}-desktop.png`, url: 'http://localhost:3000/', width: 1280, height: 800, purpose: 'on request' })
+
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/src/App.tsx`, old_string: 'a', new_string: 'b' })
+  hub.events.push({ topic: 'build.result', source: 'quick-commands', at: state.clock.now(), data: { tool: 'npm', outcome: 'failed', errors: 3 } })
+  await state.clock.advance(5500)
+  expect(state.runs.filter(run => run.argv[0] === 'node')).toHaveLength(1)
+  expect(hub.notified).toEqual([{ level: 'info', title: '📸 No screenshots: npm failed after your edits', topic: 'build.result' }])
 })

@@ -33,6 +33,7 @@ env-guard: Read of /repo/.env (an environment file) is blocked. Ask the user for
 | `allowed` | string | empty | Comma-separated globs that are never blocked, e.g. `.env.test,fixtures/*.pem`. |
 
 ## How it works
-- Two `tool.call` guards: one for the file tools (it also resolves the real path, so a symlink named `notes.txt` that points at `.env` is caught), one for `Bash` (a small shell lexer finds the file arguments of reader/copy/edit commands and redirections, also inside the script handed to `bash -c "…"` or `eval`).
+- Two `tool.call` guards: one for the file tools (it also resolves the real path, so a symlink named `notes.txt` that points at `.env` is caught), one for `Bash` (the shared claude-mods shell reader finds the file arguments of reader/copy/edit commands and redirections, also inside `$(…)`, `bash -c "…"`, `su -c`, `eval`, a heredoc fed to a shell, and a shell further along such as `docker exec app sh -c "…"`).
 - Both fail closed: if the check itself throws, the call is denied.
+- With [mods-hub](../mods-hub) installed, every deny is also published as `risk.blocked` (rule such as `env-file` or `ssh-key`, severity `high`, the path and command with secrets masked), for guardian, audit-trail and permission-log. Without the hub nothing changes.
 - Limits: a deny-list, so it is best effort. A script that opens a secret (`python -c "open('.env')"`), a glob that expands to one (`cat .e*`) or a `Grep` with no `path` that happens to walk into one is not seen.

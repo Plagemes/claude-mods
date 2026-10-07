@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 
 import { analyze, boundNames } from '../hooks/analyze'
 import { scan } from '../hooks/scan'
+import { fakeHub } from './hub'
 
 const at = (source: string, needle: string): number => source.slice(0, source.indexOf(needle)).split('\n').length
 const rules = (source: string) => analyze(source).map(issue => `${issue.line} ${issue.rule}`)
@@ -203,6 +204,28 @@ test('notes new issues on the edit result once, with file:line, and shows them i
   expect(w.runs).toEqual([])
 })
 
+test('with mods-hub: each file\'s new issues are published as lint.result (rules-of-hooks mistakes as errors), once', async ($, on) => {
+  const w = world(on, { '/app/src/List.tsx': ISSUE_FREE, '/app/src/Search.tsx': ISSUE_FREE })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
+
+  const first = await $.tool.call({ tool: 'Write', file_path: '/app/src/List.tsx', content: RENDER })
+  expect(first.context).toHaveLength(1)
+  await $.tool.call({ tool: 'Write', file_path: '/app/src/Search.tsx', content: CONDITIONAL })
+  const again = await $.tool.call({ tool: 'Edit', file_path: '/app/src/List.tsx', old_string: 'rows', new_string: 'rows' })
+  expect(again.context ?? []).toEqual([])
+
+  expect(hub.published).toEqual([
+    { topic: 'lint.result', data: { tool: 'react-doctor', errors: 0, warnings: 5, files: ['/app/src/List.tsx'] } },
+    { topic: 'lint.result', data: { tool: 'react-doctor', errors: 5, warnings: 0, files: ['/app/src/Search.tsx'] } },
+  ])
+  expect(hub.notified).toEqual([])
+  expect(w.statuses.at(-1)).toBe('⚛ 10 React issues · List.tsx, Search.tsx')
+})
+
 test('checks hooks files that import react, and skips other scripts', async ($, on) => {
   const hook = "import { useEffect } from 'react'\nexport function useTicker(ms) {\n  useEffect(() => {\n    const id = setInterval(tick, ms)\n    return () => clearInterval(id)\n  }, [])\n}\n"
   world(on, {})
@@ -252,4 +275,18 @@ test('treats a file ESLint ignores as not linted, and checks it itself', async (
   expect(w.runs).toHaveLength(1)
   expect(ran.context?.[0]?.startsWith('react-doctor found React issues in src/Profile.tsx:')).toBe(true)
   expect(ran.context?.[0]).toContain('useEffect in Profile is missing dependencies: userId, onLoad')
+})
+
+test('regression: a 300 KB file of components is analysed in well under a second', () => {
+  const unit = (i: number) =>
+    `function Row${i}({ rows, id }) {\n  const [count, setCount] = useState(0)\n  useEffect(() => { load(id) }, [])\n  return <ul>{rows.map(row => <li>{row.label}</li>)}</ul>\n}\n`
+  let source = ''
+  for (let i = 0; source.length < 300_000; i += 1) source += unit(i)
+  const started = performance.now()
+  const issues = analyze(source)
+  const ranged = analyze(source, { from: 100, to: 200 })
+  expect(performance.now() - started).toBeLessThan(500)
+  expect(issues.length).toBeGreaterThan(1000)
+  expect(issues.at(-1)?.line).toBeGreaterThan(source.split('\n').length - 10)
+  expect(ranged.every(issue => issue.line >= 96 && issue.line <= 205)).toBe(true)
 })

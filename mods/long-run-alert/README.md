@@ -25,3 +25,4 @@ Nothing to run. Watch for the toast in the top right of the transcript when a bu
 - Hooks `tool.call` for Bash, starts a `$.clock.after` (or `$.clock.every` with `repeat`) timer, and cancels it when the command's result comes back or the dispatch is aborted.
 - The toast is a plain display call; it never touches the command or its result.
 - Limit: it measures wall-clock time of the tool call, so time Claude spends waiting for your permission approval counts too.
+- With **mods-hub** installed the alert is a hub notification at level `warning`: a toast, plus your phone channels while you are away, held while Silent. Without the hub it is the plain toast, as before.

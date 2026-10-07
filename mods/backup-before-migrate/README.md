@@ -46,3 +46,5 @@ lets the migration run. Claude is told where the backup is, and `/db-restore` pr
   later stay), `mysqldump --single-transaction --routines --triggers`, and `sqlite3 .backup`. The folder gets a
   `.gitignore` so dumps are never committed. Limits: a database named only in framework config (Django
   `settings.py`, Rails `database.yml`) without `DATABASE_URL` is not found, except for the default SQLite files.
+- A `DATABASE_URL` the command sets for itself is read with the shell lexer every Claude Mod shares (`shared/shell.ts`), so `env DATABASE_URL=… prisma migrate` counts too.
+- With [mods-hub](../mods-hub) installed, each backup is published as `x.backup-before-migrate.saved` (file, database, size, migration) for every session, and the toasts become hub notices: a backup at `info`, a migration that runs without one at `warning`, so it reaches your channels while you are away. Without the hub nothing changes.

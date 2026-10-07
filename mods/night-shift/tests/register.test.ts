@@ -3,6 +3,7 @@ import type { Engine, MockClock } from 'claude-code/testing'
 import type { On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
 
 import { changedBetween, nextOccurrence, parseClock, parseShiftArgs, snapshotOf } from '../hooks/shift'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const BASE = 'abc1234def5678'
@@ -254,4 +255,56 @@ test('the pane lists tasks and schedules on terminal and desktop', async ($, on)
   expect(seen.submitted.map(one => one.text)).toEqual(['Bump dependencies'])
   expect((await ui.find({ key: 'headline' }))?.text).toContain('Running task 1 of 1')
   await ui.unmount()
+})
+
+test('with mods-hub: /night-shift away starts the shift once you leave, publishes its tasks, and the end reaches your channels', async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on, {}, seen.clock)
+  await start($)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['task.started', 'task.finished'], consumes: ['session.away', 'control.stop', 'control.pause'] }])
+  await shift($, 'add Write tests for the cart')
+  expect(await shift($, 'away')).toContain('The shift starts once you are away')
+  expect(seen.statuses.at(-1)).toBe('🌙 night shift when you are away · 1 task')
+
+  await seen.clock.advance(3 * MINUTE)
+  expect(seen.submitted).toEqual([])
+
+  hub.mode = { ...hub.mode, presence: 'away' }
+  await seen.clock.advance(MINUTE + 1_000)
+  expect(seen.submitted.map(one => one.text)).toEqual(['Write tests for the cart'])
+  expect(hub.notified[0]?.title).toContain('night shift started: 1 task')
+  const [started] = hub.published
+  expect(started?.topic).toBe('task.started')
+  expect((started?.data as { title: string }).title).toBe('Write tests for the cart')
+
+  await $.turn.start({ text: 'Write tests for the cart', turnId: 't1' })
+  await $.turn.complete(ended('t1', 'answer'))
+  await seen.clock.advance(4_000)
+  expect(hub.published.at(-1)).toEqual({ topic: 'task.finished', data: { id: (started?.data as { id: string }).id, title: 'Write tests for the cart', outcome: 'ok' } })
+  expect(hub.notified.at(-1)).toEqual({ level: 'success', title: '🌙 night shift over: 1/1 done · .claude/night-shift/2026-10-08.md', topic: 'task.finished' })
+})
+
+test('with mods-hub: a stop raised through the hub ends the shift after the current task', async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on, {}, seen.clock)
+  await start($)
+  await shift($, 'add Write tests for the cart')
+  await shift($, 'add Update the README')
+  await shift($, 'now')
+  await seen.clock.advance(1_000)
+  expect(seen.submitted).toHaveLength(1)
+  await $.turn.start({ text: 'Write tests for the cart', turnId: 't1' })
+  hub.events.push({ topic: 'control.stop', source: 'telegram-bridge', at: seen.clock.now() + 1, data: { id: 'c1', scope: 'all', reason: 'enough', by: 'owner via telegram', session: 's1' } })
+  await seen.clock.advance(MINUTE)
+  await $.turn.complete(ended('t1', 'answer'))
+  await seen.clock.advance(4_000)
+  expect(seen.submitted).toHaveLength(1)
+  expect(hub.notified.at(-1)?.level).toBe('error')
+  expect(seen.files.get(REPORT)).toContain('stopped by owner via telegram')
+})
+
+test('without mods-hub, /night-shift away says it needs the hub', async ($, on) => {
+  world(on)
+  await start($)
+  expect(await shift($, 'away')).toContain('needs mods-hub')
 })

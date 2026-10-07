@@ -1,6 +1,6 @@
 {
   "name": "no-skip-tests",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Blocks Claude from silencing tests with .skip, .only, xit or skip markers.",
   "author": {
     "name": "Plagemes",

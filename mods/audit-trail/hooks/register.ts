@@ -9,7 +9,16 @@ type Outcome = 'ok' | 'error' | 'denied'
 type Fields = Readonly<Record<string, string | number | undefined>>
 type Pending = { directory: string; day: string; line: string }
 /** Everything that changes while the module is loaded: lines waiting for the disk, and the write in flight. */
-type Trail = { pending: Pending[]; isScheduled: boolean; writing: Promise<void> | undefined; sessionId: string | undefined; hasWarned: boolean }
+type Trail = {
+  pending: Pending[]
+  isScheduled: boolean
+  writing: Promise<void> | undefined
+  sessionId: string | undefined
+  hasWarned: boolean
+  /** mods-hub is installed, and how far its bus was read into the log. */
+  hasHub: boolean
+  eventsSeenAt: number
+}
 
 const DEFAULT_DIRECTORY = '.claude/audit'
 const MAX_SUMMARY_LENGTH = 200
@@ -20,6 +29,9 @@ const MAX_PARTS = 100
 /** Claude Code's wording when the person answers "no" at a permission prompt, or a permission rule refuses the call. */
 const PERMISSION_REFUSAL = /^(?:The user doesn't want to proceed|Permission (?:to use .+|for this action) has been denied)/
 const ABSOLUTE_PATH = /^(?:[\\/]|[A-Za-z]:[\\/])/
+/** How often, with mods-hub installed, the bus's new events are written to the log. */
+const EVENT_POLL_MS = 10_000
+const MAX_EVENTS_READ = 50
 
 const pad = (n: number): string => String(n).padStart(2, '0')
 
@@ -167,16 +179,67 @@ const describeDay = (day: string, directory: string, totals: DayTotals): string 
     `${totals.kinds.tool ?? 0} tool calls (${totals.denied} denied, ${totals.errors} failed)`,
     `${totals.kinds.prompt ?? 0} prompts`,
     `${totals.kinds.turn ?? 0} turns`,
+    ...(totals.kinds.event === undefined ? [] : [`${totals.kinds.event} mods-hub events`]),
   ].join(' · ')
   return [`${totals.entries} entries logged today (${day}): ${detail}`, ...totals.paths].join('\n')
 }
 
+// ── mods-hub: everything on the bus goes in the log too ─────────────────────────────────────────────
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+const ownVersion = async ($: EngineInterface): Promise<string> => {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello, and the bus read into the log every 10 seconds. */
+const greetHub = async ($: EngineInterface, trail: Trail, settings: Settings): Promise<void> => {
+  trail.hasHub = (await hubMode($)) !== undefined
+  if (!trail.hasHub) return
+  trail.eventsSeenAt = await $.clock.now()
+  await hubHello($, { version: await ownVersion($), publishes: [], consumes: ['*', 'risk.blocked'] })
+  $.clock.every(EVENT_POLL_MS, () => void logEvents($, trail, settings))
+}
+
+/**
+ * The bus's events since the last look, one line each (`kind: event`): topic, the mod that published it (stamped
+ * by the hub), and its payload masked and cut to one line. A guard's `risk.blocked` keeps the guard, the severity
+ * and the reason as fields of their own, with the outcome `denied`.
+ */
+const logEvents = async ($: EngineInterface, trail: Trail, settings: Settings): Promise<void> => {
+  if (!trail.hasHub) return
+  let events
+  try {
+    events = await $.mods.recent({ since: trail.eventsSeenAt, limit: MAX_EVENTS_READ })
+  } catch {
+    return
+  }
+  for (const event of events) {
+    trail.eventsSeenAt = Math.max(trail.eventsSeenAt, event.at)
+    const data = (typeof event.data === 'object' && event.data !== null ? event.data : {}) as Record<string, unknown>
+    const field = (key: string): string | undefined => (typeof data[key] === 'string' ? clip(redact(String(data[key])), MAX_SUMMARY_LENGTH) : undefined)
+    const guarded = event.topic === 'risk.blocked' ? { guard: field('guard'), severity: field('severity'), reason: field('reason'), outcome: 'denied' } : {}
+    await record($, trail, settings, {
+      kind: 'event',
+      topic: event.topic,
+      source: event.source,
+      summary: clip(redact(JSON.stringify(event.data)), MAX_SUMMARY_LENGTH),
+      ...guarded,
+    })
+  }
+}
+
 export const register: Register = (on, options) => {
   const settings: Settings = { directory: String(options.directory ?? DEFAULT_DIRECTORY), prompts: modeOf(options.prompts) }
-  const trail: Trail = { pending: [], isScheduled: false, writing: undefined, sessionId: undefined, hasWarned: false }
+  const trail: Trail = { pending: [], isScheduled: false, writing: undefined, sessionId: undefined, hasWarned: false, hasHub: false, eventsSeenAt: 0 }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'audit', description: "Shows how many actions today's audit log holds, and where it is." })
+    await greetHub($, trail, settings)
     return next(e)
   })
 
@@ -220,14 +283,113 @@ export const register: Register = (on, options) => {
 
   // A session that ends has about a second and a half; the lines still waiting are written before it closes.
   on('session.end', async ($, e, next) => {
+    await logEvents($, trail, settings)
     await flush($, trail)
     return next(e)
   })
 
   on('command.run', { command: 'audit' }, async $ => {
+    await logEvents($, trail, settings)
     await flush($, trail)
     const directory = await resolveDirectory($, settings.directory)
     const day = localDay(await $.clock.now())
     return { text: describeDay(day, directory, await readDay($, directory, day)) }
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

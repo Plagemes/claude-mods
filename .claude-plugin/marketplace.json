@@ -13,7 +13,7 @@
       "name": "mod-store",
       "source": "./mods/mod-store",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
-      "version": "1.1.2",
+      "version": "1.2.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -28,10 +28,29 @@
       "homepage": "https://plagemes.github.io/claude-mods/#mod-store"
     },
     {
+      "name": "mods-hub",
+      "source": "./mods/mods-hub",
+      "description": "The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "core",
+      "keywords": [
+        "claude-mods",
+        "core",
+        "event-bus",
+        "notifications",
+        "panel"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#mods-hub"
+    },
+    {
       "name": "secret-shield",
       "source": "./mods/secret-shield",
       "description": "Blocks edits and writes that would commit API keys, tokens or private keys.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -49,7 +68,7 @@
       "name": "env-guard",
       "source": "./mods/env-guard",
       "description": "Protects .env files, SSH keys and credential stores from being read or modified.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -67,7 +86,7 @@
       "name": "rm-rf-guard",
       "source": "./mods/rm-rf-guard",
       "description": "Blocks catastrophic shell commands like rm -rf /, mkfs, dd to disks and chmod -R 777.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -85,7 +104,7 @@
       "name": "force-push-guard",
       "source": "./mods/force-push-guard",
       "description": "Forbids force-pushing to protected branches and suggests --force-with-lease.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -103,7 +122,7 @@
       "name": "prod-guard",
       "source": "./mods/prod-guard",
       "description": "Stops production-affecting commands (terraform apply, kubectl on prod, DROP TABLE) unless explicitly allowed.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -121,7 +140,7 @@
       "name": "redactor",
       "source": "./mods/redactor",
       "description": "Masks secrets and personal data in tool results before the model ever reads them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -140,7 +159,7 @@
       "name": "path-jail",
       "source": "./mods/path-jail",
       "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
-      "version": "1.0.2",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -158,7 +177,7 @@
       "name": "curl-pipe-guard",
       "source": "./mods/curl-pipe-guard",
       "description": "Blocks piping downloaded scripts straight into a shell.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -176,7 +195,7 @@
       "name": "dependency-sentinel",
       "source": "./mods/dependency-sentinel",
       "description": "Flags typosquatted or brand-new packages before npm, pip or cargo installs them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -195,7 +214,7 @@
       "name": "lockfile-guard",
       "source": "./mods/lockfile-guard",
       "description": "Prevents hand-editing lockfiles; they must change through the package manager.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -213,7 +232,7 @@
       "name": "git-status-line",
       "source": "./mods/git-status-line",
       "description": "Shows the current branch, ahead/behind and dirty file count in the status line.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -231,7 +250,7 @@
       "name": "auto-checkpoint",
       "source": "./mods/auto-checkpoint",
       "description": "Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -249,7 +268,7 @@
       "name": "commit-composer",
       "source": "./mods/commit-composer",
       "description": "/commit writes a Conventional Commit message from your staged diff and commits it.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -285,7 +304,7 @@
       "name": "main-branch-warn",
       "source": "./mods/main-branch-warn",
       "description": "Warns you the moment Claude starts editing files directly on main or master.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -303,7 +322,7 @@
       "name": "diff-pane",
       "source": "./mods/diff-pane",
       "description": "A live pane listing changed files with +/- line counts, updated after every edit.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -321,7 +340,7 @@
       "name": "pr-describer",
       "source": "./mods/pr-describer",
       "description": "/pr-desc drafts a pull request title and description from your branch diff.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -339,7 +358,7 @@
       "name": "conflict-helper",
       "source": "./mods/conflict-helper",
       "description": "Detects merge-conflict markers and walks you through resolving each one.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -375,7 +394,7 @@
       "name": "gitignore-guard",
       "source": "./mods/gitignore-guard",
       "description": "Warns before node_modules, build output, OS junk or huge files get staged.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -393,7 +412,7 @@
       "name": "cost-meter",
       "source": "./mods/cost-meter",
       "description": "Live session cost estimate in the status line, from real token usage.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -411,7 +430,7 @@
       "name": "token-budget",
       "source": "./mods/token-budget",
       "description": "Set a token or dollar budget per session; get warned at 80% and stopped at 100%.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -430,7 +449,7 @@
       "name": "context-gauge",
       "source": "./mods/context-gauge",
       "description": "A slim band above the prompt showing how full the context window is.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -449,7 +468,7 @@
       "name": "cache-hit-meter",
       "source": "./mods/cache-hit-meter",
       "description": "Shows what share of input tokens came from the prompt cache.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -468,7 +487,7 @@
       "name": "turn-timer",
       "source": "./mods/turn-timer",
       "description": "Times every turn and tells you when one runs long.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -487,7 +506,7 @@
       "name": "big-read-guard",
       "source": "./mods/big-read-guard",
       "description": "Stops full reads of huge files and nudges toward offset/limit or grep.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -524,7 +543,7 @@
       "name": "daily-spend",
       "source": "./mods/daily-spend",
       "description": "Tracks spend per day and week across sessions with a /spend report.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -542,7 +561,7 @@
       "name": "model-advisor",
       "source": "./mods/model-advisor",
       "description": "Suggests a cheaper model when your prompt is simple, and a stronger one when it is hard.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -560,7 +579,7 @@
       "name": "compact-coach",
       "source": "./mods/compact-coach",
       "description": "Suggests /compact at natural breakpoints, before the context gets tight.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -617,7 +636,7 @@
       "name": "todo-pane",
       "source": "./mods/todo-pane",
       "description": "A live pane of Claude's current task list with progress.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -635,7 +654,7 @@
       "name": "focus-timer",
       "source": "./mods/focus-timer",
       "description": "A Pomodoro timer in the status line with focus and break cycles.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -653,7 +672,7 @@
       "name": "scratchpad",
       "source": "./mods/scratchpad",
       "description": "A persistent per-project notes pane you can type into without leaving Claude Code.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -727,7 +746,7 @@
       "name": "quick-commands",
       "source": "./mods/quick-commands",
       "description": "Short aliases like /t, /l and /b that run your test, lint and build commands.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -746,7 +765,7 @@
       "name": "idle-nudge",
       "source": "./mods/idle-nudge",
       "description": "Reminds you about uncommitted changes after a stretch of inactivity.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -783,7 +802,7 @@
       "name": "lint-on-save",
       "source": "./mods/lint-on-save",
       "description": "Runs the linter on each edited file and hands the errors straight back to Claude.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -801,7 +820,7 @@
       "name": "test-watch",
       "source": "./mods/test-watch",
       "description": "Runs the tests related to what changed and shows pass/fail in the status line.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -819,7 +838,7 @@
       "name": "typecheck-gate",
       "source": "./mods/typecheck-gate",
       "description": "Type-checks the project at the end of every editing turn so errors never slip by.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -837,7 +856,7 @@
       "name": "no-skip-tests",
       "source": "./mods/no-skip-tests",
       "description": "Blocks Claude from silencing tests with .skip, .only, xit or skip markers.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -856,7 +875,7 @@
       "name": "todo-tracker",
       "source": "./mods/todo-tracker",
       "description": "Notices every TODO, FIXME and HACK Claude adds and lists them at turn end.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -875,7 +894,7 @@
       "name": "debug-catcher",
       "source": "./mods/debug-catcher",
       "description": "Warns when console.log, print, debugger or dbg! statements are left in code.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -893,7 +912,7 @@
       "name": "no-any",
       "source": "./mods/no-any",
       "description": "Flags new any types, @ts-ignore and eslint-disable comments as Claude writes them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -911,7 +930,7 @@
       "name": "file-size-watch",
       "source": "./mods/file-size-watch",
       "description": "Warns when an edited file grows past a size that hurts readability.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -929,7 +948,7 @@
       "name": "test-first",
       "source": "./mods/test-first",
       "description": "A TDD mode: no production code changes until a test has been written or changed.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -947,7 +966,7 @@
       "name": "tool-timeline",
       "source": "./mods/tool-timeline",
       "description": "A timeline pane of every tool call with duration, status and input summary.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -965,7 +984,7 @@
       "name": "files-touched",
       "source": "./mods/files-touched",
       "description": "A pane of every file read, edited or created in the session, with counts.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -983,7 +1002,7 @@
       "name": "session-stats",
       "source": "./mods/session-stats",
       "description": "/session-stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1001,7 +1020,7 @@
       "name": "subagent-monitor",
       "source": "./mods/subagent-monitor",
       "description": "Watch running subagents live: type, status, duration and last activity.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1019,7 +1038,7 @@
       "name": "error-feed",
       "source": "./mods/error-feed",
       "description": "Collects every failed command and tool error in one pane.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1091,7 +1110,7 @@
       "name": "permission-log",
       "source": "./mods/permission-log",
       "description": "Keeps a log of every tool call that was denied, and why.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1109,7 +1128,7 @@
       "name": "token-sparkline",
       "source": "./mods/token-sparkline",
       "description": "A sparkline of tokens per turn right above the prompt.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1235,7 +1254,7 @@
       "name": "persona-switch",
       "source": "./mods/persona-switch",
       "description": "/persona switches Claude between reviewer, architect, teacher and other roles.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1271,7 +1290,7 @@
       "name": "stack-detector",
       "source": "./mods/stack-detector",
       "description": "Detects your stack and gives Claude the right conventions for it.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1289,7 +1308,7 @@
       "name": "prompt-lint",
       "source": "./mods/prompt-lint",
       "description": "Gently flags vague prompts like 'fix it' and suggests what to add.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1307,7 +1326,7 @@
       "name": "done-chime",
       "source": "./mods/done-chime",
       "description": "Plays a chime when a long turn finishes.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1325,7 +1344,7 @@
       "name": "speak-summary",
       "source": "./mods/speak-summary",
       "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1343,7 +1362,7 @@
       "name": "permission-ping",
       "source": "./mods/permission-ping",
       "description": "Pings you with a sound and toast when Claude is waiting on your approval.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1361,7 +1380,7 @@
       "name": "error-buzz",
       "source": "./mods/error-buzz",
       "description": "A short buzz when a command or test run fails.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1379,7 +1398,7 @@
       "name": "webhook-notify",
       "source": "./mods/webhook-notify",
       "description": "Posts to Slack, Discord, Teams or ntfy when a long task finishes.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1397,7 +1416,7 @@
       "name": "desktop-notify",
       "source": "./mods/desktop-notify",
       "description": "Native desktop notifications when Claude finishes or needs you.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1415,7 +1434,7 @@
       "name": "long-run-alert",
       "source": "./mods/long-run-alert",
       "description": "Alerts you when a single command has been running too long.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1433,7 +1452,7 @@
       "name": "ci-watch",
       "source": "./mods/ci-watch",
       "description": "/ci-watch follows your GitHub Actions run and tells you the moment it passes or fails.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1451,7 +1470,7 @@
       "name": "break-reminder",
       "source": "./mods/break-reminder",
       "description": "Reminds you to stand up and stretch every 50 minutes of active work.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1469,7 +1488,7 @@
       "name": "celebrate",
       "source": "./mods/celebrate",
       "description": "Celebrates when failing tests go green again.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1487,7 +1506,7 @@
       "name": "decision-log",
       "source": "./mods/decision-log",
       "description": "/decide records an Architecture Decision Record in docs/decisions.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1505,7 +1524,7 @@
       "name": "session-journal",
       "source": "./mods/session-journal",
       "description": "Writes a dated journal entry of what was done when the session ends.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1523,7 +1542,7 @@
       "name": "glossary",
       "source": "./mods/glossary",
       "description": "Teaches Claude your project's vocabulary and injects definitions when you use the terms.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1559,7 +1578,7 @@
       "name": "resume-brief",
       "source": "./mods/resume-brief",
       "description": "Shows what you were working on last time when a new session starts.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1577,7 +1596,7 @@
       "name": "lessons-learned",
       "source": "./mods/lessons-learned",
       "description": "When Claude fixes a mistake, offers to save the lesson to CLAUDE.md.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1595,7 +1614,7 @@
       "name": "codebase-map",
       "source": "./mods/codebase-map",
       "description": "/map builds a compact map of your repository and gives it to Claude.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1649,7 +1668,7 @@
       "name": "recall",
       "source": "./mods/recall",
       "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1667,7 +1686,7 @@
       "name": "changelog-keeper",
       "source": "./mods/changelog-keeper",
       "description": "Keeps CHANGELOG.md's Unreleased section up to date as you commit.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1685,7 +1704,7 @@
       "name": "readme-sync",
       "source": "./mods/readme-sync",
       "description": "Warns when public APIs, CLI flags or env vars change but the docs do not.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1703,7 +1722,7 @@
       "name": "standup",
       "source": "./mods/standup",
       "description": "/standup summarises what you did yesterday, from git history, ready to paste.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1721,7 +1740,7 @@
       "name": "review-agent",
       "source": "./mods/review-agent",
       "description": "Adds a dedicated code-reviewer subagent and a /review command.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1757,7 +1776,7 @@
       "name": "issue-drafter",
       "source": "./mods/issue-drafter",
       "description": "/issue turns the current conversation into a well-structured GitHub issue.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1775,7 +1794,7 @@
       "name": "handoff",
       "source": "./mods/handoff",
       "description": "/handoff writes a handoff note so a teammate can pick up exactly where you left off.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1793,7 +1812,7 @@
       "name": "i18n-guard",
       "source": "./mods/i18n-guard",
       "description": "Flags hard-coded user-facing strings in UI components.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1811,7 +1830,7 @@
       "name": "migration-guard",
       "source": "./mods/migration-guard",
       "description": "Prevents editing database migrations that already exist; write a new one instead.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1848,7 +1867,7 @@
       "name": "react-doctor",
       "source": "./mods/react-doctor",
       "description": "Catches React hook mistakes as Claude writes them: missing effect deps, setState in render, conditional hooks.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1866,7 +1885,7 @@
       "name": "next-guard",
       "source": "./mods/next-guard",
       "description": "Flags missing or needless \"use client\" and server-only imports leaking into client components in Next.js.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1884,7 +1903,7 @@
       "name": "venv-guard",
       "source": "./mods/venv-guard",
       "description": "Blocks pip install outside an active virtualenv so system Python stays clean.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1902,7 +1921,7 @@
       "name": "node-version-check",
       "source": "./mods/node-version-check",
       "description": "Warns when your Node version doesn't match .nvmrc, .node-version or package.json engines.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1920,7 +1939,7 @@
       "name": "django-migrate-watch",
       "source": "./mods/django-migrate-watch",
       "description": "After Django model changes, checks for missing migrations and offers to create them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1974,7 +1993,7 @@
       "name": "schema-sync",
       "source": "./mods/schema-sync",
       "description": "After Prisma or Drizzle schema edits, regenerates the client and warns when a migration is missing.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1992,7 +2011,7 @@
       "name": "env-example-sync",
       "source": "./mods/env-example-sync",
       "description": "Keeps .env.example in sync with the environment variables your code actually reads.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2010,7 +2029,7 @@
       "name": "monorepo-scope",
       "source": "./mods/monorepo-scope",
       "description": "Detects which monorepo package you're in and scopes test, lint and build commands to it.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2028,7 +2047,7 @@
       "name": "docker-lint",
       "source": "./mods/docker-lint",
       "description": "Flags Dockerfile smells: :latest tags, running as root, apt without cleanup, ADD instead of COPY.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2046,7 +2065,7 @@
       "name": "k8s-dry-run",
       "source": "./mods/k8s-dry-run",
       "description": "Turns kubectl apply into a server-side dry run with a diff you approve first.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2064,7 +2083,7 @@
       "name": "terraform-plan-pane",
       "source": "./mods/terraform-plan-pane",
       "description": "Shows terraform plan as a clear pane of resources to create, change and destroy.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2082,7 +2101,7 @@
       "name": "ci-yaml-check",
       "source": "./mods/ci-yaml-check",
       "description": "Checks edited GitHub Actions workflows and warns about actions not pinned to a version.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2100,7 +2119,7 @@
       "name": "port-check",
       "source": "./mods/port-check",
       "description": "Before a dev server starts, tells you if the port is already taken and by which process.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2118,7 +2137,7 @@
       "name": "dev-server-pane",
       "source": "./mods/dev-server-pane",
       "description": "Starts your dev server in the background and shows its errors in a live pane.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2136,7 +2155,7 @@
       "name": "cloud-cost-warn",
       "source": "./mods/cloud-cost-warn",
       "description": "Warns before commands that create expensive cloud resources like GPU instances or large databases.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2172,7 +2191,7 @@
       "name": "docker-prune-guard",
       "source": "./mods/docker-prune-guard",
       "description": "Blocks docker system prune -a --volumes and volume deletion that can wipe local databases.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2190,7 +2209,7 @@
       "name": "deploy-checklist",
       "source": "./mods/deploy-checklist",
       "description": "Shows a pre-deploy checklist (tests, branch, changelog) and asks you to confirm before deploying.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2208,7 +2227,7 @@
       "name": "sql-safety",
       "source": "./mods/sql-safety",
       "description": "Flags UPDATE and DELETE without WHERE in .sql files and in queries inside your code.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2244,7 +2263,7 @@
       "name": "seed-guard",
       "source": "./mods/seed-guard",
       "description": "Blocks database seed, reset and drop commands unless DATABASE_URL points at your own machine.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2280,7 +2299,7 @@
       "name": "n-plus-one-hint",
       "source": "./mods/n-plus-one-hint",
       "description": "Spots database queries inside loops, the classic N+1 problem, as Claude writes them.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2336,7 +2355,7 @@
       "name": "backup-before-migrate",
       "source": "./mods/backup-before-migrate",
       "description": "Dumps your local database before every migration so a bad one is one command away from undo.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2391,7 +2410,7 @@
       "name": "a11y-guard",
       "source": "./mods/a11y-guard",
       "description": "Flags accessibility misses as Claude writes UI: images without alt, unlabeled buttons, clickable divs.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2410,7 +2429,7 @@
       "name": "screenshot-check",
       "source": "./mods/screenshot-check",
       "description": "After UI edits, takes a Playwright screenshot of the page and shows it to Claude.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2428,7 +2447,7 @@
       "name": "bundle-size-watch",
       "source": "./mods/bundle-size-watch",
       "description": "Compares bundle size after each build and warns when it grows.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2447,7 +2466,7 @@
       "name": "css-token-guard",
       "source": "./mods/css-token-guard",
       "description": "Flags hard-coded hex colors and pixel values where your design tokens should be used.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2466,7 +2485,7 @@
       "name": "lighthouse-run",
       "source": "./mods/lighthouse-run",
       "description": "/lighthouse runs Lighthouse on a URL and shows performance, a11y, SEO and best-practice scores in a pane.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2484,7 +2503,7 @@
       "name": "heavy-asset-warn",
       "source": "./mods/heavy-asset-warn",
       "description": "Warns when large images, videos or fonts are added to the project.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2503,7 +2522,7 @@
       "name": "storybook-nudge",
       "source": "./mods/storybook-nudge",
       "description": "Reminds you to add a story when Claude creates a new component without one.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2522,7 +2541,7 @@
       "name": "contrast-checker",
       "source": "./mods/contrast-checker",
       "description": "Checks that the colors Claude changes in CSS meet WCAG AA contrast.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2540,7 +2559,7 @@
       "name": "dark-mode-check",
       "source": "./mods/dark-mode-check",
       "description": "Flags colors added without a dark-mode variant in projects that support a dark theme.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2559,7 +2578,7 @@
       "name": "component-catalog",
       "source": "./mods/component-catalog",
       "description": "/components lists your existing UI components so Claude reuses them instead of creating duplicates.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2597,7 +2616,7 @@
       "name": "openapi-sync",
       "source": "./mods/openapi-sync",
       "description": "Warns when your API routes change but openapi.yaml doesn't.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2616,7 +2635,7 @@
       "name": "url-allowlist",
       "source": "./mods/url-allowlist",
       "description": "Restricts WebFetch to the domains you allow.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2635,7 +2654,7 @@
       "name": "offline-mode",
       "source": "./mods/offline-mode",
       "description": "/offline blocks every network call — fetches, curl, installs, git push — until you turn it back on.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2673,7 +2692,7 @@
       "name": "rate-limit-guard",
       "source": "./mods/rate-limit-guard",
       "description": "Stops Claude from hammering external APIs with curl loops.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2767,7 +2786,7 @@
       "name": "scope-lock",
       "source": "./mods/scope-lock",
       "description": "/scope locks Claude to the files you name; edits outside the scope are blocked.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2786,7 +2805,7 @@
       "name": "second-opinion",
       "source": "./mods/second-opinion",
       "description": "/second-opinion has a different model critique Claude's last answer or plan.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2805,7 +2824,7 @@
       "name": "parallel-explore",
       "source": "./mods/parallel-explore",
       "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2824,7 +2843,7 @@
       "name": "subagent-cap",
       "source": "./mods/subagent-cap",
       "description": "Caps how many subagents can run at the same time.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2842,7 +2861,7 @@
       "name": "task-queue",
       "source": "./mods/task-queue",
       "description": "/queue lines up prompts that run one after another whenever Claude is free.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2860,7 +2879,7 @@
       "name": "night-shift",
       "source": "./mods/night-shift",
       "description": "Runs your queued tasks at a scheduled time, like overnight, and leaves you a report.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2878,7 +2897,7 @@
       "name": "loop-breaker",
       "source": "./mods/loop-breaker",
       "description": "Stops Claude when it repeats the same failing command three times and suggests a different approach.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2896,7 +2915,7 @@
       "name": "self-check",
       "source": "./mods/self-check",
       "description": "At the end of each editing turn, has the model double-check it actually did what you asked.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2914,7 +2933,7 @@
       "name": "edit-limit",
       "source": "./mods/edit-limit",
       "description": "Asks for confirmation when a single turn tries to modify more than N files.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3022,7 +3041,7 @@
       "name": "command-coach",
       "source": "./mods/command-coach",
       "description": "Suggests Claude Code commands and mods that fit the way you work.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3040,7 +3059,7 @@
       "name": "shortcut-tips",
       "source": "./mods/shortcut-tips",
       "description": "One tip a day about Claude Code shortcuts and features you might not know.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3094,7 +3113,7 @@
       "name": "pair-mode",
       "source": "./mods/pair-mode",
       "description": "Claude proposes, you type: edits become diffs you apply yourself, for deliberate practice.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3130,7 +3149,7 @@
       "name": "license-checker",
       "source": "./mods/license-checker",
       "description": "Warns when a dependency with a copyleft license (GPL, AGPL) lands in a permissively licensed project.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3148,7 +3167,7 @@
       "name": "pii-in-logs",
       "source": "./mods/pii-in-logs",
       "description": "Flags log statements that print emails, passwords, tokens or other personal data.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3184,7 +3203,7 @@
       "name": "tracker-guard",
       "source": "./mods/tracker-guard",
       "description": "Blocks adding analytics and tracking SDKs that haven't been approved.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3202,7 +3221,7 @@
       "name": "no-upload",
       "source": "./mods/no-upload",
       "description": "Blocks commands that upload files to external services like pastebins and file-sharing sites.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3220,7 +3239,7 @@
       "name": "crypto-guard",
       "source": "./mods/crypto-guard",
       "description": "Flags weak cryptography: MD5 or SHA1 for passwords, Math.random for tokens, ECB mode, hard-coded IVs.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3256,7 +3275,7 @@
       "name": "audit-trail",
       "source": "./mods/audit-trail",
       "description": "Writes every action Claude takes to an append-only JSONL audit log.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3274,7 +3293,7 @@
       "name": "vuln-scan",
       "source": "./mods/vuln-scan",
       "description": "After installs, runs npm audit or pip-audit and shows any vulnerabilities in a pane.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3292,7 +3311,7 @@
       "name": "copyright-guard",
       "source": "./mods/copyright-guard",
       "description": "Flags pasted code that carries someone else's license or copyright header.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3310,7 +3329,7 @@
       "name": "benchmark-compare",
       "source": "./mods/benchmark-compare",
       "description": "/bench runs your benchmarks before and after a change and compares the numbers.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3328,7 +3347,7 @@
       "name": "slow-test-flag",
       "source": "./mods/slow-test-flag",
       "description": "Points out your slowest tests after each test run.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3346,7 +3365,7 @@
       "name": "flaky-detector",
       "source": "./mods/flaky-detector",
       "description": "Detects tests that pass and fail at random and keeps a list of the suspects.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3364,7 +3383,7 @@
       "name": "leak-hint",
       "source": "./mods/leak-hint",
       "description": "Flags event listeners, intervals and subscriptions created without cleanup.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3400,7 +3419,7 @@
       "name": "profile-run",
       "source": "./mods/profile-run",
       "description": "/profile runs a command under a profiler and shows the hottest functions.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3418,7 +3437,7 @@
       "name": "net-retry",
       "source": "./mods/net-retry",
       "description": "Automatically retries commands that failed because of a temporary network error.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3436,7 +3455,7 @@
       "name": "disk-guard",
       "source": "./mods/disk-guard",
       "description": "Warns when the disk is nearly full before builds, installs and docker pulls.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3454,7 +3473,7 @@
       "name": "regression-guard",
       "source": "./mods/regression-guard",
       "description": "Remembers which tests passed at the start of the session and warns if any of them now fail.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3472,7 +3491,7 @@
       "name": "watch-mode-guard",
       "source": "./mods/watch-mode-guard",
       "description": "Blocks watch-mode and never-ending commands run in the foreground, where they'd hang the turn.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3508,7 +3527,7 @@
       "name": "mod-doctor",
       "source": "./mods/mod-doctor",
       "description": "/mod-doctor checks your installed mods for outdated versions, conflicts and load errors.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3526,7 +3545,7 @@
       "name": "mod-profiles",
       "source": "./mods/mod-profiles",
       "description": "Switch between sets of mods — work, personal, demo — with one command.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3544,7 +3563,7 @@
       "name": "settings-sync",
       "source": "./mods/settings-sync",
       "description": "Exports and imports your mods' configuration so you can move it between machines.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3562,7 +3581,7 @@
       "name": "quiet-mode",
       "source": "./mods/quiet-mode",
       "description": "/quiet silences toasts and sounds from every mod while you focus.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3580,7 +3599,7 @@
       "name": "achievements",
       "source": "./mods/achievements",
       "description": "Unlock achievements as you work: first commit, 100 green test runs, a week-long streak and more.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3616,7 +3635,7 @@
       "name": "soundpack",
       "source": "./mods/soundpack",
       "description": "Sound packs for Claude Code events: minimal, retro or nature.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3634,7 +3653,7 @@
       "name": "daily-goal",
       "source": "./mods/daily-goal",
       "description": "/daily-goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3665,6 +3684,322 @@
         "pane"
       ],
       "homepage": "https://plagemes.github.io/claude-mods/#session-replay"
+    },
+    {
+      "name": "mod-advisor",
+      "source": "./mods/mod-advisor",
+      "description": "Recommends the right mods for your project and for what you're asking, with the commands to type, and installs them in one click.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "core",
+      "keywords": [
+        "claude-mods",
+        "core",
+        "recommendations",
+        "discovery"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#mod-advisor"
+    },
+    {
+      "name": "smart-router",
+      "source": "./mods/smart-router",
+      "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "agents",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "routing",
+        "subagents",
+        "cost"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#smart-router"
+    },
+    {
+      "name": "whatsapp-bridge",
+      "source": "./mods/whatsapp-bridge",
+      "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "whatsapp",
+        "remote-control",
+        "openwa"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#whatsapp-bridge"
+    },
+    {
+      "name": "autopilot",
+      "source": "./mods/autopilot",
+      "description": "Give it a goal and success criteria; it plans, delegates, verifies and retries until the criteria pass or it needs you.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "agents",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "automation",
+        "verification"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#autopilot"
+    },
+    {
+      "name": "project-brain",
+      "source": "./mods/project-brain",
+      "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "memory",
+      "keywords": [
+        "claude-mods",
+        "memory",
+        "knowledge-graph",
+        "recall",
+        "learning"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#project-brain"
+    },
+    {
+      "name": "context-optimizer",
+      "source": "./mods/context-optimizer",
+      "description": "Keeps the context lean automatically: trims noise, picks the right moment to compact and shows the tokens it saved.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "cost",
+      "keywords": [
+        "claude-mods",
+        "cost",
+        "context",
+        "compact"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#context-optimizer"
+    },
+    {
+      "name": "workflow-studio",
+      "source": "./mods/workflow-studio",
+      "description": "Build, save and share reusable workflows — release, dependency update, security audit — and run them with one command.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "agents",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "workflows",
+        "automation"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#workflow-studio"
+    },
+    {
+      "name": "mission-control",
+      "source": "./mods/mission-control",
+      "description": "One dashboard for every Claude session on your machine: what each is doing, cost, blockers, with pause and priorities.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "observability",
+      "keywords": [
+        "claude-mods",
+        "observability",
+        "sessions",
+        "dashboard"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#mission-control"
+    },
+    {
+      "name": "session-sync",
+      "source": "./mods/session-sync",
+      "description": "Coordinates sessions working on the same repo: file leases against conflicts, overlap warnings and hand-offs.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "agents",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "sessions",
+        "conflicts"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#session-sync"
+    },
+    {
+      "name": "team-hub",
+      "source": "./mods/team-hub",
+      "description": "A shared panel of team conventions, recommended mods, budgets and rules, synced through the repo.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
+      "keywords": [
+        "claude-mods",
+        "team",
+        "conventions",
+        "onboarding",
+        "policy"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#team-hub"
+    },
+    {
+      "name": "telegram-bridge",
+      "source": "./mods/telegram-bridge",
+      "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "telegram",
+        "remote-control"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#telegram-bridge"
+    },
+    {
+      "name": "slack-bridge",
+      "source": "./mods/slack-bridge",
+      "description": "Posts progress and reports to Slack and takes questions and commands from a channel, through the mods-hub channel system.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "slack",
+        "team",
+        "remote-control"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#slack-bridge"
+    },
+    {
+      "name": "discord-bridge",
+      "source": "./mods/discord-bridge",
+      "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "notifications",
+      "keywords": [
+        "claude-mods",
+        "notifications",
+        "discord",
+        "team",
+        "remote-control"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#discord-bridge"
+    },
+    {
+      "name": "calendar-sync",
+      "source": "./mods/calendar-sync",
+      "description": "Reads your calendar (private iCal link) so notifications and questions respect meetings and time off, and suggests slots for long jobs.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "productivity",
+      "keywords": [
+        "claude-mods",
+        "productivity",
+        "calendar",
+        "ical",
+        "presence"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#calendar-sync"
+    },
+    {
+      "name": "email-digest",
+      "source": "./mods/email-digest",
+      "description": "Daily or weekly email summaries in plain language for clients and managers who don't live in chat.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
+      "keywords": [
+        "claude-mods",
+        "team",
+        "email",
+        "digest",
+        "report"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#email-digest"
+    },
+    {
+      "name": "issue-pilot",
+      "source": "./mods/issue-pilot",
+      "description": "Picks up a GitHub, Jira or Linear issue, sizes it with smart-router, works it in a dedicated session and opens the PR.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "team",
+      "keywords": [
+        "claude-mods",
+        "team",
+        "issues",
+        "github",
+        "jira",
+        "linear"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#issue-pilot"
+    },
+    {
+      "name": "guardian",
+      "source": "./mods/guardian",
+      "description": "One security policy for every guard mod — permissive, standard or strict — plus a project safety score.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Plagemes",
+        "url": "https://github.com/plagemes"
+      },
+      "category": "security",
+      "keywords": [
+        "claude-mods",
+        "security",
+        "policy",
+        "guard"
+      ],
+      "homepage": "https://plagemes.github.io/claude-mods/#guardian"
     }
   ]
 }

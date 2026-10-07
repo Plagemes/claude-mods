@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { parseConflicts } from '../hooks/conflicts'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'conflict-helper'
 const PANE_PROPS = {
@@ -203,4 +204,25 @@ test('parses conflict blocks, diff3 bases included', () => {
   expect(parseConflicts(diff3)).toEqual([{ line: 1, oursLabel: 'ours', theirsLabel: 'theirs', ours: 'a', theirs: 'c' }])
   expect(parseConflicts(CONFLICTED)).toHaveLength(2)
   expect(parseConflicts('no conflicts\n=======\n')).toEqual([])
+})
+
+test('with mods-hub: says hello, publishes x.conflict-helper.found once, and sends the notices through notify instead of toasts', async ($, on) => {
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  const repo = world(on, { operation: 'MERGE_HEAD' })
+  repo.unmerged.add('src/client.ts')
+
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.conflict-helper.found'], consumes: [] }])
+
+  await bash($, 'git merge feature/retry')
+  await bash($, 'git status')
+  expect(hub.published).toEqual([{ topic: 'x.conflict-helper.found', data: { files: 1, hunks: 2, operation: 'merge', paths: ['src/client.ts'] } }])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'conflict-helper: 1 conflicted file. Run /conflicts to resolve.' }])
+
+  repo.unmerged.clear()
+  await bash($, 'git add -A')
+  expect(hub.notified.at(-1)).toEqual({ level: 'info', title: 'conflict-helper: all conflicts resolved' })
+  expect(repo.toasts).toEqual([])
 })

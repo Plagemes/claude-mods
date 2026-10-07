@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { installsIn, lookupOf } from '../hooks/install'
+import { fakeHub } from './hub'
 import { isPermissive, kindOf, licenseOfNpm, licenseOfPackageJson, licenseOfPypi, licenseOfPyproject, licenseOfText } from '../hooks/licenses'
 
 const MIT_PROJECT = { 'package.json': JSON.stringify({ name: 'app', license: 'MIT' }) }
@@ -272,4 +273,55 @@ test('install commands: what counts as a project dependency', () => {
   expect(lookupOf({ ecosystem: 'npm', name: '@s/p', version: '^1.0.0', isDev: false })).toEqual({ url: 'https://registry.npmjs.org/@s%2fp/latest', key: 'npm:@s/p@latest' })
   expect(lookupOf({ ecosystem: 'npm', name: 'p', version: 'beta', isDev: false }).url).toBe('https://registry.npmjs.org/p/beta')
   expect(lookupOf({ ecosystem: 'pypi', name: 'p', isDev: false }).url).toBe('https://pypi.org/pypi/p/json')
+})
+
+test('regression: installs behind bash -lc, eval and wrappers with options are read', () => {
+  const names = (command: string) => installsIn(command).map(r => `${r.ecosystem}:${r.name}`)
+  expect(names('bash -lc "npm install left-pad"')).toEqual(['npm:left-pad'])
+  expect(names(`sh -ec 'cd web && pip install requests'`)).toEqual(['pypi:requests'])
+  expect(names(`eval "yarn add react"`)).toEqual(['npm:react'])
+  expect(names('timeout 120 npm i lodash')).toEqual(['npm:lodash'])
+  expect(names('env -u PROXY CI=1 nice -n 5 pnpm add zod')).toEqual(['npm:zod'])
+  expect(names('sudo -u me -H pip install flask')).toEqual(['pypi:flask'])
+  expect(names('bash ./install.sh npm')).toEqual([])
+})
+
+test('with mods-hub: says hello, publishes risk.blocked for each license worth a look, and warns through the hub with the same toast as a fallback', async ($, on) => {
+  const seen = world(on, MIT_PROJECT, { ...npm('gpl-lib', 'GPL-3.0-only'), ...npm('nolicense', undefined), ...npm('left-pad', 'MIT') })
+  const hub = fakeHub(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+
+  const result = await bash($, 'npm install gpl-lib nolicense left-pad')
+  expect(result.context?.[0]).toContain('this project is licensed MIT')
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'license-checker', tool: 'Bash', reason: 'gpl-lib is GPL-3.0-only (copyleft), but your project is MIT', severity: 'medium' } },
+    { topic: 'risk.blocked', data: { guard: 'license-checker', tool: 'Bash', reason: 'nolicense declares no license, but your project is MIT', severity: 'low' } },
+  ])
+  expect(hub.notified).toEqual([{ level: 'warning', title: '⚠ gpl-lib is GPL-3.0-only (copyleft) and 1 more, but your project is MIT' }])
+  expect(seen.toasts).toEqual([])
+})
+
+test('with mods-hub, permissive packages publish nothing and say nothing', async ($, on) => {
+  const seen = world(on, MIT_PROJECT, { ...npm('left-pad', 'MIT'), ...npm('gpl-lib', 'GPL-3.0-only') })
+  const hub = fakeHub(on)
+  await bash($, 'npm i left-pad')
+  expect(hub.published).toEqual([])
+  expect(hub.notified).toEqual([])
+  expect(seen.toasts).toEqual([])
+})
+
+test('without mods-hub the warning is the toast as before', async ($, on) => {
+  const seen = world(on, MIT_PROJECT, npm('gpl-lib', 'GPL-3.0-only'))
+  await bash($, 'npm install gpl-lib')
+  expect(seen.toasts).toEqual(['⚠ gpl-lib is GPL-3.0-only (copyleft), but your project is MIT'])
+})
+
+test('installs are read with the shared shell reader: compound lines, substitutions and nested scripts', () => {
+  const names = (command: string) => installsIn(command).map(r => `${r.ecosystem}:${r.name}`)
+  expect(names('cd web && npm install left-pad | tee log')).toEqual(['npm:left-pad'])
+  expect(names('bash -c "cd web && pnpm add zod"')).toEqual(['npm:zod'])
+  expect(names('xargs -n1 pip install < reqs.txt')).toEqual([])
+  expect(names('npm install $(cat deps.txt)')).toEqual([])
 })

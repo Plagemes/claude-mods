@@ -2,6 +2,8 @@ import type { On, PromptOrigin } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 type Sent = { origin?: PromptOrigin; turnId?: string; attachments?: { type: 'image' }[] }
 
 /** Stands in for the engine: toasts are recorded and the prompt enters as typed. */
@@ -57,6 +59,19 @@ test('shows a tip for a vague prompt and lets it through', async ($, on) => {
 
   expect(result.text).toBe('fix it')
   expect(toasts).toEqual(['Say what to change and where: a file, a function or an error message.'])
+})
+
+test('with mods-hub: the tip is an info notification instead of a toast, and the prompt still goes through', async ($, on) => {
+  const toasts = engine(on)
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+
+  expect((await send($, 'fix it')).text).toBe('fix it')
+  expect(toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'info', title: 'Say what to change and where: a file, a function or an error message.' }])
 })
 
 test('flags the usual vague prompts, each with the tip that fits', async ($, on) => {

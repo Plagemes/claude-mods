@@ -1,5 +1,5 @@
 import { lightnessOf, parseColor } from './color'
-import { lineFinder } from './tailwind'
+import { lineFinder } from './shared/line-index'
 import type { Finding } from './tailwind'
 
 export type Decl = { prop: string; value: string; line: number }

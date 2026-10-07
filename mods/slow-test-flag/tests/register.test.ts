@@ -2,7 +2,9 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { formatMs, parseTimings, runnerOf, slowest } from '../hooks/durations'
+import { fakeHub } from './hub'
+
+import { formatMs, isTestCommand, parseTimings, runnerOf, slowest } from '../hooks/durations'
 
 const PYTEST_DURATIONS = `============================= test session starts ==============================
 collected 12 items
@@ -272,4 +274,84 @@ test('parseTimings skips very long lines instead of backtracking over them', () 
   const timings = parseTimings(`✓ a${' '.repeat(100_000)}x\n0.1s call x${' '.repeat(100_000)}y\n  ✓ renders (120 ms)`)
   expect(Date.now() - started).toBeLessThan(1_000)
   expect(timings.map(timing => timing.name)).toEqual(['renders'])
+})
+
+test('regression: a command that only names a runner is not a test run', () => {
+  for (const command of ['cat jest.config.js', 'npm i -D vitest', 'git commit -m "add jest"', 'tail -50 pytest.log', 'pip install pytest']) {
+    expect(isTestCommand(command)).toBe(false)
+  }
+  expect(runnerOf('cat jest.config.js', '')).toBeUndefined()
+  for (const command of ['cd web && npx vitest run', 'poetry run pytest --durations=10', 'yarn test:unit', 'cargo +nightly nextest run', 'tox -e py311']) {
+    expect(isTestCommand(command)).toBe(true)
+  }
+  expect(runnerOf('cd web && npx vitest run', '')).toBe('vitest')
+})
+
+const SETTLE_MS = 250
+
+/** The Bash run, after which mods-hub (as its sensor does) records `test.result` for `command` with `durationMs`. */
+const hubbedRun = async ($: Engine, hub: ReturnType<typeof fakeHub>, clock: { now: () => number; advance: (ms: number) => Promise<void> }, command: string, durationMs?: number) => {
+  await $.tool.call({ tool: 'Bash', command })
+  if (durationMs !== undefined) {
+    hub.events.push({ topic: 'test.result', data: { runner: 'pytest', outcome: 'passed', passed: 12, failed: 0, durationMs, command }, at: clock.now(), source: 'mods-hub' })
+  }
+  await clock.advance(SETTLE_MS)
+}
+
+test('with mods-hub: says hello, notifies the slowest tests as one info notice with the run\'s total time, and keeps the status line', async ($, on) => {
+  const { toasts, statuses, clock } = world(on, { text: PYTEST_DURATIONS })
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['test.result'] }])
+
+  await hubbedRun($, hub, clock, 'pytest --durations=10', 2410)
+
+  expect(hub.notified).toEqual([
+    {
+      level: 'info',
+      title: 'slowest tests in that run (2.41 s in all):',
+      body: [' 1.   1.52 s  tests/test_api.py::test_login', ' 2.   300 ms  tests/test_db.py::test_connect [setup]', ' 3.   210 ms  tests/test_db.py::TestQueries::test_join'].join('\n'),
+      topic: 'test.result',
+    },
+  ])
+  expect(toasts).toEqual([])
+  expect(statuses).toEqual(['🐢 slowest test: 1.52 s · tests/test_api.py::test_login'])
+  expect((await slowTests($)).text).toContain('Slowest tests in the last run, pytest --durations=10')
+})
+
+test('with mods-hub but no test.result for the call, or one for another run: the output alone is read', async ($, on) => {
+  const { clock } = world(on, { text: JEST_VERBOSE })
+  const hub = fakeHub(on)
+  hub.events.push({ topic: 'test.result', data: { runner: 'vitest', outcome: 'passed', passed: 3, failed: 0, durationMs: 9_000, command: 'vitest run' }, at: 1_000_100, source: 'test-watch' })
+
+  await hubbedRun($, hub, clock, 'npx jest --verbose')
+
+  expect(hub.notified).toHaveLength(1)
+  expect(hub.notified[0]?.title).toBe('slowest tests in that run:')
+  expect(hub.notified[0]?.body).toContain('totals with tax  (cart.test.ts)')
+})
+
+test('with mods-hub: the flag suggestion is an info notice too, once per runner', async ($, on) => {
+  const { toasts, clock } = world(on, { text: PYTEST_PLAIN })
+  const hub = fakeHub(on)
+
+  await hubbedRun($, hub, clock, 'pytest -q', 1_000)
+  await hubbedRun($, hub, clock, 'pytest tests/test_api.py', 1_000)
+
+  expect(hub.notified).toEqual([{ level: 'info', title: 'no per-test times in that output: run pytest with --durations=10 to see the slowest tests', topic: 'test.result' }])
+  expect(toasts).toEqual([])
+})
+
+test('with mods-hub: commands that are not test runs are left alone, and the status of a run with nothing slow is cleared', { options: { thresholdMs: 10_000 } }, async ($, on) => {
+  const { statuses, clock } = world(on, { text: JEST_VERBOSE })
+  const hub = fakeHub(on)
+
+  await hubbedRun($, hub, clock, 'cat results.txt')
+  expect(statuses).toEqual([])
+
+  await hubbedRun($, hub, clock, 'jest --verbose', 7_100)
+  expect(hub.notified).toEqual([])
+  expect(statuses).toEqual([undefined])
 })

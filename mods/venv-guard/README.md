@@ -31,6 +31,7 @@ An install passes when the command activates or names an environment itself:
 | `allowGlobal` | boolean | `false` | Turn the guard off and let `pip install` run outside a virtualenv. |
 
 ## How it works
-- A `tool.call` guard on `Bash` splits the command line the way a shell would (quotes respected, so `echo "pip install x"` is ignored, and here-document bodies are text) and checks each `pip install` against what runs before it in the same line, then against `VIRTUAL_ENV` and `CONDA_PREFIX` of the session's environment.
+- A `tool.call` guard on `Bash` splits the command line with the shared claude-mods shell reader (quotes respected, so `echo "pip install x"` is ignored, here-document bodies are text, wrappers such as `sudo`/`timeout` are peeled, and `bash -c "…"`, `eval`, `$(…)` and heredocs fed to a shell are read) and checks each `pip install` against what runs before it in the same line, then against `VIRTUAL_ENV` and `CONDA_PREFIX` of the session's environment.
 - It fails closed: if the check itself throws, a command that mentions pip is refused; other commands are not affected.
+- With [mods-hub](../mods-hub) installed, every deny is also published as `risk.blocked` (rule `no-virtualenv`, severity `low`, or `system-wide-install`, severity `medium`; the command with secrets masked). Without the hub nothing changes.
 - Limits: the Bash tool does not keep an activated shell between calls, so an activation in an earlier call does not count; it reads text only and cannot see what a script or `make` target runs.

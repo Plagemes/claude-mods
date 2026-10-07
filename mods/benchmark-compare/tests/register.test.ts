@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { GO_BENCH } from './fixtures'
+import { fakeHub } from './hub'
 
 const PANE_PROPS = { title: 'Benchmarks', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 
@@ -165,5 +166,37 @@ test('a command that needs a shell runs through sh -c', { options: { regressionP
   await state.clock.advance(0)
   // The baseline's command is reused; at 10% the 23% slowdown still counts.
   expect(state.runs[1]?.argv).toEqual(['sh', '-c', 'cd strs && go test -bench=.'])
+  expect(state.toasts.at(-1)).toBe('Benchmarks: 1 slower · 1 faster · 3 same')
+})
+
+test('with mods-hub: says hello and publishes x.benchmark-compare.result for each comparison (the toast stays: it is the command\'s own answer)', async ($, on) => {
+  const hub = fakeHub(on)
+  const state = world(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.benchmark-compare.result'], consumes: [] }])
+
+  await bench($, 'baseline')
+  await state.clock.advance(0)
+  expect(hub.published).toEqual([])
+  state.output.text = GO_BENCH_AFTER
+  await bench($)
+  await state.clock.advance(0)
+
+  expect(hub.published).toEqual([
+    {
+      topic: 'x.benchmark-compare.result',
+      data: {
+        command: 'go test -bench=. -benchmem -run=^$ ./...',
+        branch: 'main',
+        baselineBranch: 'main',
+        summary: '1 slower · 1 faster · 3 same',
+        benchmarks: 5,
+        slower: 1,
+        faster: 1,
+        same: 3,
+        isNew: 0,
+      },
+    },
+  ])
   expect(state.toasts.at(-1)).toBe('Benchmarks: 1 slower · 1 faster · 3 same')
 })

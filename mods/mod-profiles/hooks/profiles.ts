@@ -65,6 +65,7 @@ export function parseInstalled(stdout: string): ModProfilesPlugin[] {
       id,
       scope: typeof record.scope === 'string' ? record.scope : 'user',
       isEnabled: record.enabled !== false,
+      ...(typeof record.version === 'string' ? { version: record.version } : {}),
     }
     return [plugin]
   })

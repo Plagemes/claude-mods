@@ -1,6 +1,6 @@
 {
   "name": "leak-hint",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Flags event listeners, intervals and subscriptions created without cleanup.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#leak-hint",

@@ -128,3 +128,16 @@ test('finds installs in shell commands, following cd and skipping quoted text', 
   expect(installsIn('echo "npm install x" && pip --version && cargo install ripgrep && pip install --help')).toEqual([])
   expect(installsIn('poetry add httpx; uv pip install rich')).toEqual([{ manager: 'pip', dir: '' }])
 })
+
+test('regression: installs behind bash -lc and wrappers with options are found', () => {
+  expect(installsIn('bash -lc "cd web && npm ci"')).toEqual([{ manager: 'npm', dir: 'web' }])
+  expect(installsIn(`cd api && sh -ec 'pip install -r requirements.txt'`)).toEqual([{ manager: 'pip', dir: 'api' }])
+  expect(installsIn('sudo -u ci timeout 300 npm install')).toEqual([{ manager: 'npm', dir: '' }])
+  expect(installsIn('env -u PROXY nice -n 5 pnpm add zod')).toEqual([{ manager: 'pnpm', dir: '' }])
+  expect(installsIn('git commit -m "npm install && pip install x"')).toEqual([])
+  expect(installsIn('bash ./setup.sh')).toEqual([])
+  // The shared shell reader: a cd inside a nested script does not leak out of it, and a script starts where its parent was.
+  expect(installsIn("bash -c 'cd web && npm ci' && pnpm install")).toEqual([{ manager: 'npm', dir: 'web' }, { manager: 'pnpm', dir: '' }])
+  expect(installsIn('cd api && bash -c "pip install x"')).toEqual([{ manager: 'pip', dir: 'api' }])
+  expect(installsIn('npm install $(cat pkgs) | tee log')).toEqual([{ manager: 'npm', dir: '' }])
+})

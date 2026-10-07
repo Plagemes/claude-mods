@@ -30,6 +30,7 @@ curl -fsSLo script.sh https://example.com/install.sh, inspect it (less script.sh
 | `allowedHosts` | string | empty | Comma-separated hostnames whose scripts may be piped into a shell, e.g. `sh.rustup.rs,get.docker.com`. |
 
 ## How it works
-- A `tool.call` guard on `Bash`. A small shell lexer splits the line into pipelines, so it can tell a pipe into a shell that reads its program from stdin (`sh`, `bash -s`, `python -`) from one that only reads data (`python parse.py`, `bash -c '…'`).
+- A `tool.call` guard on `Bash`. The shared claude-mods shell reader splits the line into pipelines (also inside `bash -c`, `eval`, `su -c`, `$(…)` and heredocs fed to a shell, with wrappers like `sudo -E` or `timeout` peeled), so it can tell a pipe into a shell that reads its program from stdin (`sh`, `bash -s`, `python -`) from one that only reads data (`python parse.py`, `bash -c '…'`).
 - It fails closed: if the check itself throws, the command is denied.
+- With [mods-hub](../mods-hub) installed, every deny is also published as `risk.blocked` (rule `pipe-to-interpreter` or `run-substitution`, severity `high`, the command with secrets masked). Without the hub nothing changes.
 - Limits: it reads command text only. A download written to disk by one command and run by another (`curl -o x … && bash x`) is allowed on purpose, that is the recommended flow, and tools it does not know as downloaders are not seen.

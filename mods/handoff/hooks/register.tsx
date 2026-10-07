@@ -2,18 +2,22 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { HandoffView } from '../types'
-import { composeNote, handoffPrompt, missingSections, sectionsOf, stampOf } from './note'
-import type { GitFacts } from './note'
+import { composeNote, decisionsOf, handoffPrompt, missingSections, sectionsOf, stampOf } from './note'
+import type { Decision, GitFacts } from './note'
 
 const PANE = 'handoff'
 const GIT_TIMEOUT_MS = 10_000
+/** mods-hub's heartbeat file: one entry per live session, with its last global events. */
+const HUB_SESSIONS = '.claude/claude-mods/hub/sessions.json'
+/** Decisions recorded in the last day count as this work's. */
+const DECISION_WINDOW_MS = 24 * 3_600_000
 const STATUS_LINES = 40
 const STAT_LINES = 30
 const MAX_SUFFIX = 20
 
 const viewAtom = atom({ plugin: 'handoff', key: 'view' } as const, null)
 
-type Settings = { dir: string; copy: boolean }
+type Settings = { dir: string; copy: boolean; isHubbed: boolean }
 
 /** A failure's detail is a lowercase clause; as a command answer it starts a sentence. */
 const asSentence = (clause: string): string => clause.charAt(0).toUpperCase() + clause.slice(1)
@@ -43,6 +47,47 @@ async function gitFacts($: EngineInterface): Promise<GitFacts | undefined> {
   }
 }
 
+/**
+ * The decisions the hub has seen recorded (`decision.recorded`) in the last day: this session's, and those other
+ * sessions on the same project published for everyone (the hub's sessions.json); nothing without the hub.
+ */
+async function hubDecisions($: EngineInterface, root: string, now: number): Promise<Decision[]> {
+  const since = now - DECISION_WINDOW_MS
+  const events: unknown[] = []
+  try {
+    events.push(...(await $.mods.recent({ topic: 'decision.recorded' })))
+  } catch {
+    return []
+  }
+  try {
+    const home = await $.env.get('HOME')
+    const sessions: unknown = home === undefined || home === '' ? {} : JSON.parse(await $.fs.read(`${home}/${HUB_SESSIONS}`))
+    for (const entry of typeof sessions === 'object' && sessions !== null ? Object.values(sessions) : []) {
+      const { cwd, events: own } = (entry ?? {}) as { cwd?: unknown; events?: unknown }
+      if (typeof cwd === 'string' && (cwd === root || cwd.startsWith(`${root}/`)) && Array.isArray(own)) events.push(...own)
+    }
+  } catch {
+    // No heartbeat file: this session's decisions are enough.
+  }
+  return decisionsOf(events, since)
+}
+
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** With mods-hub installed: hello (this mod reads `decision.recorded`, and the other sessions' heartbeats). */
+async function greetHub($: EngineInterface, settings: Settings): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  settings.isHubbed = await hubHello($, { version: await ownVersion($), publishes: [], consumes: ['decision.recorded', 'session.ended'] })
+}
+
 /** `.claude/handoff/2026-10-07-1342.md`, or `-2`, `-3`… when that minute already has one. */
 async function freePath($: EngineInterface, dir: string, stamp: string): Promise<string> {
   for (let n = 1; n <= MAX_SUFFIX; n += 1) {
@@ -59,7 +104,8 @@ async function writeHandoff($: EngineInterface, settings: Settings, note: string
   }
   await set({ status: 'writing', text: '', path: '', isCopied: false, detail: 'Reading the session and git…' })
   const facts = await gitFacts($)
-  const reply = await $.model.fork({ prompt: handoffPrompt(facts, note) })
+  const decisions = settings.isHubbed ? await hubDecisions($, await $.session.root(), await $.clock.now()) : []
+  const reply = await $.model.fork({ prompt: handoffPrompt(facts, note, decisions) })
   if (!reply.isAnswered) {
     const why =
       reply.reason === 'nothing-to-fork' ? 'nothing to hand off yet: this conversation has no work in it.'
@@ -85,6 +131,7 @@ export const register: Register = (on, options) => {
   const settings: Settings = {
     dir: String(options.dir ?? '').trim().replace(/^\.\/|\/+$/g, '') || '.claude/handoff',
     copy: options.copy !== false,
+    isHubbed: false,
   }
 
   on('session.start', async ($, e, next) => {
@@ -93,6 +140,7 @@ export const register: Register = (on, options) => {
       description: 'Write a handoff note (goal, status, changes, next steps) to .claude/handoff and copy it',
       argumentHint: '[what to stress]',
     })
+    await greetHub($, settings)
     return next(e)
   })
 
@@ -138,3 +186,100 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Routes a notification through the hub (channels, silent, night, presence), or shows it as a toast when there is
+ * no hub: `title — body`, for `fallback.timeoutMs` when given (the toast's own option).
+ */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0], fallback: { timeoutMs?: number } = {}): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    const text = input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`
+    if (fallback.timeoutMs === undefined) $.ui.toast(text)
+    else $.ui.toast(text, { timeoutMs: fallback.timeoutMs })
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Puts a fact on the hub's blackboard as `<this mod>.<name>`; false when there is no hub or it refused the fact. */
+async function hubShareFact($: EngineInterface, input: Parameters<HubMods['share']>[0]): Promise<boolean> {
+  try {
+    await $.mods.share(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A fact from the hub's blackboard by its full key (`stack-detector.stack`); undefined when there is no hub or no such fact. */
+async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<ReturnType<HubMods['read']>> | undefined> {
+  try {
+    return (await $.mods.read({ key })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

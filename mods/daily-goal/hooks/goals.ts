@@ -82,16 +82,21 @@ export function markAsked(entries: readonly DailyGoalEntry[], day: string): Dail
 export const clearGoal = (entries: readonly DailyGoalEntry[], day: string): DailyGoalEntry[] =>
   entries.filter(entry => entry.date !== day)
 
+/** Whether the goal was set before `hour` o'clock on `day` (a goal set on another day counts as set before). */
+const wasSetBefore = (entry: DailyGoalEntry, day: string, hour: number): boolean =>
+  localDate(entry.setAt) !== day || new Date(entry.setAt).getHours() < hour
+
 /**
  * What the band should ask now: first a goal from an earlier day (at most a
- * week back) left open, then today's once it is `askAfterHour` or later.
+ * week back) left open, then today's once it is `askAfterHour` or later (and only when it was set before that hour; a goal set later is asked about the next day).
  */
 export function questionFor(entries: readonly DailyGoalEntry[], today: string, hour: number, askAfterHour: number): DailyGoalQuestion | null {
   const oldest = daysBefore(today, ASK_BACK_DAYS)
   const earlier = entries.filter(entry => entry.date < today && entry.date >= oldest && entry.status === 'open').at(-1)
   if (earlier !== undefined) return { date: earlier.date, text: earlier.text, isToday: false }
   const current = entryFor(entries, today)
-  if (current?.status === 'open' && current.isAsked !== true && hour >= askAfterHour) return { date: today, text: current.text, isToday: true }
+  // A goal set after `askAfterHour` is not asked about the minute it is set: it waits for tomorrow, like any earlier goal.
+  if (current?.status === 'open' && current.isAsked !== true && hour >= askAfterHour && wasSetBefore(current, today, askAfterHour)) return { date: today, text: current.text, isToday: true }
 
   return null
 }

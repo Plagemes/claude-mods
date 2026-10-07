@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+import { fakeHub } from './hub'
+
 const PLUGIN = 'subagent-monitor'
 const PANE = 'subagent-monitor'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -103,6 +105,43 @@ test('shows an empty state before any subagent runs', async ($, on) => {
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps })
     expect(await ui.find({ type: 'Text', text: /No subagents yet/ })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('with mods-hub: shows the tier smart-router routed an agent to, and publishes agent.finished for the agents it did not route', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const hub = fakeHub(on, {}, clock)
+  let next = 0
+  on('agent.spawn', () => ({ model: 'haiku', agentId: `agent-${(next += 1)}` }))
+  on('agent.list', () => ({ value: [] }))
+  on('ui.panes', () => ({ value: [] }))
+  on('ui.status', () => ({ value: undefined }))
+  on('turn.complete', () => ({ text: '' }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['agent.finished'], consumes: ['agent.routed'] }])
+
+  const spawn = (description: string) =>
+    $.agent.spawn({ tool_use_id: 'toolu', prompt: description, description, subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'opus', background: true, fork: false })
+  const finish = (agentId: string) =>
+    $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 't', agentId, reason: 'answer', usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'haiku' } })
+
+  await spawn('Find auth handlers')
+  await spawn('Plan the refactor')
+  hub.events.push({ topic: 'agent.routed', source: 'smart-router', at: clock.now(), data: { agentType: 'Explore', tier: 'deep', model: 'opus', reason: 'architecture', agentId: 'agent-2' } })
+  await clock.advance(3_000)
+  await finish('agent-1')
+  await finish('agent-2')
+  await clock.advance(0)
+
+  expect(hub.published).toEqual([{ topic: 'agent.finished', data: { agentType: 'Explore', outcome: 'ok', durationMs: 3_000, agentId: 'agent-1' } }])
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps })
+    expect((await ui.find({ type: 'Box', key: 'agent:agent-2' }))?.text).toContain('deep · 0 tools')
+    expect((await ui.find({ type: 'Box', key: 'agent:agent-1' }))?.text).not.toContain('deep')
     await ui.unmount()
   }
 })

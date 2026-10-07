@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeHub } from './hub'
 import { hasStoryIn, isComponentPath, storyExtension, storyFor } from '../hooks/paths'
 
 const ROOT = '/repo'
@@ -77,6 +78,24 @@ test('a new component without a story raises a toast and the band, and the band 
   expect(seen.prompts[0]?.text).toContain('- src/components/Button.tsx (story file: Button.stories.tsx)')
   expect(seen.prompts[0]?.text).toContain('following the stories this project already has')
   expect(await band.find({ key: 'ask' })).toBeUndefined()
+})
+
+test('with mods-hub: the toast is an info notification, and the band is unchanged', async ($, on) => {
+  const seen = project(on, [`${ROOT}/.storybook/main.ts`, `${ROOT}/src/components/Card.tsx`])
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+
+  await write($, `${ROOT}/src/components/Button.tsx`)
+  await $.turn.complete(TURN)
+
+  expect(seen.toasts).toEqual([])
+  expect(hub.notified).toEqual([{ level: 'info', title: 'Button.tsx has no story yet' }])
+  for (const surface of ['terminal', 'desktop'] as const) {
+    expect(await bandText($, surface, 'Button.tsx has no story')).toBeDefined()
+  }
 })
 
 test('a story written in the same turn, or already next to the component, means no nudge', async ($, on) => {

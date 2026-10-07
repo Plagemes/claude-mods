@@ -1,6 +1,6 @@
 {
   "name": "storybook-nudge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Reminds you to add a story when Claude creates a new component without one.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#storybook-nudge",

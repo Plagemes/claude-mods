@@ -1,10 +1,9 @@
+import { simpleCommands } from './shared/shell'
+
 const URL_START = /^([a-z][a-z0-9+.-]*):\/\/([^/?#\\]*)/i
 const HOSTNAME = /^[a-z0-9._-]+$/
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/
 const FETCH_PROGRAMS = new Set(['curl', 'wget', 'http', 'https', 'httpie'])
-const WRAPPERS = new Set(['sudo', 'env', 'time', 'nohup', 'nice', 'command', 'exec', 'timeout', 'stdbuf'])
-const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U'])
-
 /**
  * The host a URL points at, lower-cased: undefined when it cannot be told with certainty (userinfo tricks are
  * seen through, but escapes, backslashes, odd characters and expansions give no host). A URL with no scheme
@@ -46,72 +45,14 @@ export const matchesAny = (host: string, entries: readonly string[]): boolean =>
 
 // ── URLs in shell commands ──────────────────────────────────────────────────
 
-const basename = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
-
-/** Words of each simple command, quotes resolved. */
-const simpleCommands = (command: string): string[][] => {
-  const commands: string[][] = [[]]
-  let word: string | undefined
-  let index = 0
-  const endWord = (): void => {
-    if (word !== undefined) commands.at(-1)?.push(word)
-    word = undefined
-  }
-  while (index < command.length) {
-    const char = command[index] ?? ''
-    if (char === "'" || char === '"') {
-      let close = index + 1
-      while (close < command.length && command[close] !== char) close += char === '"' && command[close] === '\\' ? 2 : 1
-      if (close >= command.length) break
-      const inner = command.slice(index + 1, close)
-      word = (word ?? '') + (char === '"' ? inner.replace(/\\(["\\$`])/g, '$1') : inner)
-      index = close + 1
-    } else if (char === '\\') {
-      word = (word ?? '') + (command[index + 1] ?? '')
-      index += 2
-    } else if (/[ \t]/.test(char)) {
-      endWord()
-      index += 1
-    } else if ('|;&\n()<>'.includes(char)) {
-      endWord()
-      if (commands.at(-1)?.length !== 0) commands.push([])
-      index += 1
-    } else {
-      word = (word ?? '') + char
-      index += 1
-    }
-  }
-  endWord()
-  return commands.filter(words => words.length > 0)
-}
-
-/** The fetching program of a simple command and the words after it, past env assignments and wrappers such as sudo. */
-const programOf = (words: readonly string[]): { name: string; args: readonly string[] } | undefined => {
-  let index = 0
-  while (index < words.length) {
-    const word = words[index] ?? ''
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) index += 1
-    else if (WRAPPERS.has(basename(word))) {
-      const wasTimeout = basename(word) === 'timeout'
-      index += 1
-      while (words[index]?.startsWith('-') === true) index += WRAPPER_OPTIONS_WITH_VALUE.has(words[index] ?? '') ? 2 : 1
-      if (wasTimeout) index += 1
-    } else break
-  }
-  const name = basename(words[index] ?? '')
-  return name === '' ? undefined : { name, args: words.slice(index + 1) }
-}
-
-const MAX_NESTING = 2
-
-/** Every `scheme://` URL passed to curl, wget or httpie in a command (also inside `bash -c "..."`). */
-export const urlsInCommand = (command: string, depth = 0): string[] =>
-  simpleCommands(command).flatMap(words => {
-    const program = programOf(words)
-    if (program === undefined) return []
-    if (FETCH_PROGRAMS.has(program.name)) {
-      return program.args.flatMap((word, index) => (/^[a-z][a-z0-9+.-]*:\/\//i.test(word) ? [word] : word === '--url' && program.args[index + 1] !== undefined ? [program.args[index + 1] ?? ''] : []))
-    }
-    const script = program.args[program.args.indexOf('-c') + 1]
-    return depth < MAX_NESTING && /^(?:ba|z|da)?sh$/.test(program.name) && program.args.includes('-c') && script !== undefined ? urlsInCommand(script, depth + 1) : []
+/**
+ * Every `scheme://` URL passed to curl, wget or httpie in a command. The shared shell reader splits the line,
+ * peels wrappers (`sudo`, `env`, `time`, `timeout`, `xargs`) and reads `bash -c "..."`, `su -c`, `eval`, `$(...)`,
+ * backticks and heredocs fed to a shell.
+ */
+export const urlsInCommand = (command: string): string[] =>
+  simpleCommands(command).flatMap(({ name, argv }) => {
+    if (!FETCH_PROGRAMS.has(name)) return []
+    const args = argv.slice(1)
+    return args.flatMap((word, index) => (/^[a-z][a-z0-9+.-]*:\/\//i.test(word) ? [word] : word === '--url' && args[index + 1] !== undefined ? [args[index + 1] ?? ''] : []))
   })

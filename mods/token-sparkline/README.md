@@ -30,3 +30,4 @@ tokens/turn ▂▃▂▅▃▂█▃▄ last 31.2k · avg 22.4k · max 88.0k  Hi
 - A `turn.complete` hook reads the turn's `usage` (summed over its API requests) and keeps the last 40 values in session state; subagents' turns and turns with no usage (an interrupt, an API error) are skipped.
 - A `ui.render` hook on `AbovePrompt` draws the line sized to the band's width and hands the rest of the band to whatever else draws there.
 - Limits: the line starts empty in each new session; prompt-cache reads make `total` and `input` much larger than what is billed at full price.
+- With [mods-hub](../mods-hub) installed the band also shows what the last turn cost, read from the hub's `cost.update` (the shared price table, `~` when the model was priced as a guess): `… max 88.0k · $0.42`. The figure is read while drawing, so the band redraws when the hub prices the next turn. Without the hub the band shows tokens only.

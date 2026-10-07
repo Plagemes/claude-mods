@@ -2,7 +2,8 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptOrigin } from 'claude-code'
 
-import { applyChanges, exportableOptions, looksSecret, parseExport, planImport, stamp } from '../hooks/sync'
+import { applyChanges, applyHubChanges, exportableOptions, looksSecret, parseExport, planHubImport, planImport, portableHubPrefs, stamp } from '../hooks/sync'
+import { fakeHub } from './hub'
 
 const HOME = '/home/ana'
 const SETTINGS = `${HOME}/.claude/settings.json`
@@ -249,4 +250,105 @@ test('parseExport, planImport and applyChanges work on plain data', () => {
   expect(plan.changes).toEqual([{ key: 'a', plugin: 'a', option: 'm', before: 2, after: 3 }]) // the bare key is the one that exists
   expect(applyChanges({ x: 1, pluginConfigs: { a: { options: { n: 1, m: 2 } } } }, plan.changes)).toEqual({ x: 1, pluginConfigs: { a: { options: { n: 1, m: 3 } } } })
   expect(stamp(NOW)).toBe('20261007-123005')
+})
+
+const HUB_PREFS = `${HOME}/.claude/claude-mods/hub/prefs.json`
+const hubPrefs = (extra: Record<string, unknown> = {}) => ({
+  interaction: 'auto',
+  silentUntil: 99,
+  isSilent: true,
+  isNightOn: true,
+  quietHours: '22:00-07:00',
+  presence: 'away',
+  routes: { info: 'terminal', success: 'away', warning: 'away', error: 'away', critical: 'always' },
+  channels: { telegram: { isEnabled: true, minLevel: 'warning' } },
+  ...extra,
+})
+
+test('with mods-hub: /mods-export also writes the hub\'s portable preferences, without Silent and presence', async ($, on) => {
+  const files = world(on, new Map([[SETTINGS, JSON.stringify(settingsOf())], [HUB_PREFS, JSON.stringify(hubPrefs())]]))
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: HOME, surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+
+  const shown = await run($, 'mods-export', '')
+  expect(shown.text).toContain('Exported 5 settings of 3 mods')
+  expect(shown.text).toContain('Also exported the preferences of mods-hub')
+  const written = json(files, EXPORT)
+  expect(written.hub.prefs).toEqual({
+    interaction: 'auto',
+    isNightOn: true,
+    quietHours: '22:00-07:00',
+    routes: { info: 'terminal', success: 'away', warning: 'away', error: 'away', critical: 'always' },
+    channels: { telegram: { isEnabled: true, minLevel: 'warning' } },
+  })
+  expect(written.hub.prefs.isSilent).toBeUndefined()
+  expect(written.hub.prefs.presence).toBeUndefined()
+})
+
+test('with mods-hub: only the hub preferences can be exported when no mod has settings', async ($, on) => {
+  const files = world(on, new Map([[SETTINGS, JSON.stringify({ theme: 'dark' })], [HUB_PREFS, JSON.stringify(hubPrefs())]]))
+  const shown = await run($, 'mods-export', '')
+  expect(shown.text).toContain(`Exported the hub's preferences to ${EXPORT}.`)
+  expect(Object.keys(json(files, EXPORT).pluginConfigs)).toEqual([])
+})
+
+const EXPORT_WITH_HUB = JSON.stringify({
+  format: 'claude-mods-settings',
+  version: 1,
+  exportedAt: '2026-09-30T08:00:00.000Z',
+  marketplace: 'claude-mods',
+  pluginConfigs: { 'done-chime': { options: { seconds: 45 } } },
+  hub: { prefs: { interaction: 'on', quietHours: '23:00-06:00', routes: { warning: 'always', bogus: 'x' }, channels: { slack: { isEnabled: true, minLevel: 'error' }, 'Bad Id': { isEnabled: true } } } },
+})
+
+test('with mods-hub: /mods-import lists the hub changes, applies them only with --yes after a backup, and keeps the hub\'s own state', async ($, on) => {
+  const writes: string[] = []
+  const original = JSON.stringify(hubPrefs())
+  const files = world(on, new Map([[SETTINGS, JSON.stringify(settingsOf())], [HUB_PREFS, original], [EXPORT, EXPORT_WITH_HUB]]), writes)
+
+  const shown = await run($, 'mods-import', EXPORT)
+  expect(writes).toEqual([])
+  expect(shown.text).toBe(
+    [
+      `6 changes from ${EXPORT} (exported 2026-09-30):`,
+      '  done-chime.seconds: 30 → 45',
+      `mods-hub preferences (${HUB_PREFS}):`,
+      '  interaction: "auto" → "on"',
+      '  quietHours: "22:00-07:00" → "23:00-06:00"',
+      '  routes.warning: "away" → "always"',
+      '  channels.slack.isEnabled: (not set) → true',
+      '  channels.slack.minLevel: (not set) → "error"',
+      `Nothing has been changed. To apply, run: /mods-import ${EXPORT} --yes (your settings.json is backed up first).`,
+    ].join('\n'),
+  )
+
+  const applied = await run($, 'mods-import', `${EXPORT} --yes`)
+  const backup = `${HUB_PREFS}.bak-20261007-123005`
+  expect(writes).toEqual([`${SETTINGS}.bak-20261007-123005`, SETTINGS, backup, HUB_PREFS])
+  expect(files.get(backup)).toBe(original)
+  expect(applied.text).toContain('Applied 1 change to')
+  expect(applied.text).toContain(`Applied 5 mods-hub preferences to ${HUB_PREFS} (backup: ${backup})`)
+  const merged = json(files, HUB_PREFS)
+  expect(merged).toMatchObject({ interaction: 'on', quietHours: '23:00-06:00', isSilent: true, presence: 'away', silentUntil: 99 })
+  expect(merged.routes).toEqual({ info: 'terminal', success: 'away', warning: 'always', error: 'away', critical: 'always' })
+  expect(merged.channels).toEqual({ telegram: { isEnabled: true, minLevel: 'warning' }, slack: { isEnabled: true, minLevel: 'error' } })
+})
+
+test('/mods-import leaves the hub preferences out where the hub is not installed (no prefs.json), and says so', async ($, on) => {
+  const writes: string[] = []
+  world(on, new Map([[SETTINGS, JSON.stringify(settingsOf())], [EXPORT, EXPORT_WITH_HUB]]), writes)
+  const applied = await run($, 'mods-import', `${EXPORT} --yes`)
+  expect(applied.text).toContain(`mods-hub is not installed here (no ${HUB_PREFS}), so they were left out.`)
+  expect(writes).not.toContain(HUB_PREFS)
+})
+
+test('hub preferences: portableHubPrefs keeps the known and valid, planHubImport and applyHubChanges merge them', () => {
+  expect(portableHubPrefs({ interaction: 'maybe', routes: { info: 'terminal', nope: 'x' }, isSilent: true })).toEqual({ routes: { info: 'terminal' } })
+  expect(portableHubPrefs('x')).toBeUndefined()
+  expect(portableHubPrefs({ isSilent: true })).toBeUndefined()
+  const plan = planHubImport({ routes: { info: 'terminal' } }, { routes: { info: 'terminal', error: 'always' } })
+  expect(plan).toEqual({ changes: [{ path: 'routes.error', before: undefined, after: 'always' }], unchanged: 1 })
+  expect(applyHubChanges({ routes: { info: 'terminal' }, isSilent: false }, plan.changes)).toEqual({ routes: { info: 'terminal', error: 'always' }, isSilent: false })
 })

