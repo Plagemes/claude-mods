@@ -1,4 +1,5 @@
 {
+  "version": "2.0.0",
   "categories": [
     {
       "id": "core",
@@ -54,6 +55,56 @@
       "id": "team",
       "title": "Team & Docs",
       "tagline": "Changelogs, standups, reviews and handoffs."
+    },
+    {
+      "id": "stacks",
+      "title": "Languages & Frameworks",
+      "tagline": "Guardrails that know your stack."
+    },
+    {
+      "id": "devops",
+      "title": "DevOps & Cloud",
+      "tagline": "Containers, CI, infra and deploys without surprises."
+    },
+    {
+      "id": "data",
+      "title": "Databases & Data",
+      "tagline": "Safer queries, schemas and test data."
+    },
+    {
+      "id": "frontend",
+      "title": "Frontend & Accessibility",
+      "tagline": "Pixels, bundles and a11y, checked as you go."
+    },
+    {
+      "id": "api",
+      "title": "APIs & Network",
+      "tagline": "Talk to the web on your terms."
+    },
+    {
+      "id": "agents",
+      "title": "Agents & Orchestration",
+      "tagline": "Scope, queue and supervise Claude's work."
+    },
+    {
+      "id": "learning",
+      "title": "Learning & Onboarding",
+      "tagline": "Understand the code, not just ship it."
+    },
+    {
+      "id": "compliance",
+      "title": "Privacy & Compliance",
+      "tagline": "Licenses, personal data and audit trails."
+    },
+    {
+      "id": "performance",
+      "title": "Performance & Reliability",
+      "tagline": "Fast, stable and regression-free."
+    },
+    {
+      "id": "ecosystem",
+      "title": "Mod Ecosystem",
+      "tagline": "Make, manage and personalise your mods."
     }
   ],
   "mods": [
@@ -769,6 +820,806 @@
       "tier": "simple",
       "description": "Shows who owns a file (from CODEOWNERS) as Claude edits it.",
       "spec": "Parse CODEOWNERS (root, .github/, docs/) with gitignore-style patterns, last match wins. On Edit/Write show status 'owners: @team-x' for the file, and /owners <path>."
+    },
+    {
+      "name": "react-doctor",
+      "category": "stacks",
+      "tier": "complex",
+      "description": "Catches React hook mistakes as Claude writes them: missing effect deps, setState in render, conditional hooks.",
+      "spec": "After Edit/Write on .jsx/.tsx: lightweight parse (regex + brace matching) of changed components: hooks called conditionally or in loops, useEffect/useMemo/useCallback dependency arrays missing identifiers used inside, setState called at render top level, missing key in .map JSX. Add context note listing issues (file:line). If eslint-plugin-react-hooks is installed, prefer running eslint on the file and parsing results.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "next-guard",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Flags missing or needless \"use client\" and server-only imports leaking into client components in Next.js.",
+      "spec": "Only when package.json has next. After Edit/Write in app/ or src/app: component using useState/useEffect/onClick/browser APIs without 'use client' -> note; file with 'use client' importing server-only modules (fs, server-only, next/headers, db clients) -> note; 'use client' in a file with no client features -> hint.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "venv-guard",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Blocks pip install outside an active virtualenv so system Python stays clean.",
+      "spec": "tool.call on Bash: pip/pip3/python -m pip install (not with --user? still block) when no VIRTUAL_ENV in env, no .venv/venv in project activated in the command (e.g. `source .venv/bin/activate &&`, `.venv/bin/pip`), and not uv/poetry/pipx. Deny with how to create/activate a venv or use uv. userConfig allowGlobal.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "node-version-check",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Warns when your Node version doesn't match .nvmrc, .node-version or package.json engines.",
+      "spec": "At session.start (and before npm/pnpm/yarn install commands) run `node --version`, compare with .nvmrc/.node-version/.tool-versions/engines.node semver range (implement a small semver range check for ^, ~, >=, x). Toast + status warning once; context note on install commands.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "django-migrate-watch",
+      "category": "stacks",
+      "tier": "complex",
+      "description": "After Django model changes, checks for missing migrations and offers to create them.",
+      "spec": "Only in Django projects (manage.py). After edits to */models.py or models/ package, debounce, run `python manage.py makemigrations --check --dry-run` (with project venv python if found) and if changes pending, band with 'Create migrations' button ($.prompt.submit asking to run makemigrations and review) and status. Timeout + silent on errors.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "go-mod-tidy",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Runs go mod tidy when Claude changes Go imports, so go.mod and go.sum stay in sync.",
+      "spec": "After Edit/Write on .go files where the import block changed (compare old/new import sets), debounce 2s and run `go mod tidy` in the module root (nearest go.mod) with timeout; toast result; context note if it changed go.mod.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "strict-types",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Adds declare(strict_types=1) to new PHP files and from __future__ import annotations to new Python files.",
+      "spec": "tool.call on Write for new files: .php -> insert declare(strict_types=1); after <?php opening line if missing; .py -> insert `from __future__ import annotations` after module docstring/shebang/encoding if missing (userConfig python on/off, default off for py>=3.14? default on). Rewrite via next({...e, content}).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "schema-sync",
+      "category": "stacks",
+      "tier": "complex",
+      "description": "After Prisma or Drizzle schema edits, regenerates the client and warns when a migration is missing.",
+      "spec": "Detect prisma/schema.prisma or drizzle config. After edits to the schema: run `npx prisma generate` (or drizzle-kit generate --check style) with timeout; then check migration status (`prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel ... --exit-code` or `prisma migrate status`) and show band 'Schema changed without migration' with button to ask Claude to create one.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "env-example-sync",
+      "category": "stacks",
+      "tier": "simple",
+      "description": "Keeps .env.example in sync with the environment variables your code actually reads.",
+      "spec": "After Edit/Write on source files, detect newly added env var reads (process.env.X, import.meta.env.X, os.environ['X'], os.getenv('X'), env('X'), ENV['X'], os.Getenv(\"X\")). If .env.example (or .env.sample) exists and lacks X, append `X=` with a comment `# added by env-example-sync`. Toast. userConfig file name, ignore list. Never touch .env.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "monorepo-scope",
+      "category": "stacks",
+      "tier": "complex",
+      "description": "Detects which monorepo package you're in and scopes test, lint and build commands to it.",
+      "spec": "Detect workspaces (pnpm-workspace.yaml, package.json workspaces, turbo.json, nx.json, lerna). Track the package of the most recently edited files. Status shows '📦 @app/web'. tool.call on Bash: rewrite root-level `pnpm test`/`npm test`/`turbo run test`/`nx test` into filtered versions (`pnpm --filter <pkg> test`, `turbo run test --filter=<pkg>`, `nx test <project>`) when userConfig autoScope is on; otherwise add a context hint. /scope-pkg shows/sets package.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "docker-lint",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Flags Dockerfile smells: :latest tags, running as root, apt without cleanup, ADD instead of COPY.",
+      "spec": "After Edit/Write on Dockerfile*/*.dockerfile: rules: FROM x:latest or no tag; no USER (non-root) instruction; apt-get install without --no-install-recommends or without rm -rf /var/lib/apt/lists; ADD for local files; curl|sh; secrets in ENV/ARG names; multiple RUN apt-get update separate from install. If hadolint is installed run it instead/also. Context note list.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "k8s-dry-run",
+      "category": "devops",
+      "tier": "complex",
+      "description": "Turns kubectl apply into a server-side dry run with a diff you approve first.",
+      "spec": "tool.call on Bash kubectl apply/replace/delete (not already --dry-run): first run `kubectl diff -f ...` (same args) via $.process.run, show diff summary in a Pane (Code diff), deny the original call with a message containing the diff summary and instructions: re-run with the same command after the user confirms, OR user presses 'Approve' in pane which stores an approval token for that exact command (one-time) so the next identical call passes. Fail closed for prod contexts (reuse simple prod regex) and open otherwise.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "terraform-plan-pane",
+      "category": "devops",
+      "tier": "complex",
+      "description": "Shows terraform plan as a clear pane of resources to create, change and destroy.",
+      "spec": "After Bash `terraform plan` (or tofu) completes: run `terraform show -json <planfile>` if -out used, else parse plan text output (lines '# x will be created/updated/destroyed/replaced', summary 'Plan: a to add, b to change, c to destroy'). Pane /tfplan with grouped lists, destroy in red, counts header. Toast if anything will be destroyed.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "ci-yaml-check",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Checks edited GitHub Actions workflows and warns about actions not pinned to a version.",
+      "spec": "After Edit/Write on .github/workflows/*.yml: run actionlint if available; else built-in checks: `uses:` without @ref or @main/@master (warn; suggest SHA pin), missing `permissions:` block, `pull_request_target` with checkout of PR head, secrets echoed. YAML parse basic (indentation tabs). Context note.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "port-check",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Before a dev server starts, tells you if the port is already taken and by which process.",
+      "spec": "tool.call on Bash commands that start servers (npm run dev/start, vite, next dev, rails s, python manage.py runserver, flask run, uvicorn, php artisan serve, --port N): determine port (flag or default per tool), check with `lsof -nP -iTCP:<port> -sTCP:LISTEN` (or `ss -ltnp`) and if in use add a context note + toast naming the process (pid, command). Do not block.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "dev-server-pane",
+      "category": "devops",
+      "tier": "complex",
+      "description": "Starts your dev server in the background and shows its errors in a live pane.",
+      "spec": "/dev [command]: detect dev command (package.json dev/start, manage.py runserver, rails s, etc.), start via $.process.spawn (streaming) keeping a ring buffer of the last 500 lines; Pane shows status (running/exited, port detected from output URL), last lines with errors highlighted, Buttons Restart / Stop / 'Ask Claude to fix' (submit last error block). /dev stop. Stop on session.end.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "cloud-cost-warn",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Warns before commands that create expensive cloud resources like GPU instances or large databases.",
+      "spec": "tool.call on Bash: aws ec2 run-instances with instance types p*/g*/x*/*.metal or large sizes (>= 8xlarge), aws rds create-db-instance, gcloud compute instances create with --accelerator or large machine types, az vm create with N-series, eksctl/gcloud container clusters create. Deny once with estimated hourly cost range (embedded rough table) unless prompt contains 'COST-OK'.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "log-tail",
+      "category": "devops",
+      "tier": "complex",
+      "description": "/tail follows a log file or container in a live pane, with an errors-only filter.",
+      "spec": "/tail <path|docker:container|compose:service>: spawn `tail -n 200 -F path` or `docker logs -f --tail 200 x` via $.process.spawn; ring buffer 1000 lines; Pane with filter Input (substring/regex), 'Errors only' toggle, pause/resume, 'Send selection to Claude'. /tail stop. Multiple tails by id.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "docker-prune-guard",
+      "category": "devops",
+      "tier": "simple",
+      "description": "Blocks docker system prune -a --volumes and volume deletion that can wipe local databases.",
+      "spec": "tool.call on Bash: docker system prune with --volumes or -a, docker volume prune/rm, docker compose down -v / --volumes, podman equivalents. Deny with what would be lost and safer alternative; allow if prompt has 'PRUNE-OK'.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "deploy-checklist",
+      "category": "devops",
+      "tier": "complex",
+      "description": "Shows a pre-deploy checklist (tests, branch, changelog) and asks you to confirm before deploying.",
+      "spec": "tool.call on Bash deploy commands (vercel --prod, netlify deploy --prod, fly deploy, firebase deploy, gcloud app deploy, kubectl rollout, cap production deploy, npm publish, userConfig extra regex). Gather: current branch (must be main/master or userConfig), uncommitted changes, last test run result in session, CHANGELOG touched. Deny with checklist and open a Pane with Buttons 'Deploy anyway' (one-time approval for that exact command) / Cancel. .catch fails closed.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "sql-safety",
+      "category": "data",
+      "tier": "simple",
+      "description": "Flags UPDATE and DELETE without WHERE in .sql files and in queries inside your code.",
+      "spec": "After Edit/Write: scan added SQL in .sql files and string literals/template literals containing SQL in code: UPDATE ... SET without WHERE, DELETE FROM without WHERE, DROP TABLE/DATABASE, TRUNCATE. userConfig mode warn (context note) or block (deny). Ignore migrations directories for DROP (configurable).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "query-explain",
+      "category": "data",
+      "tier": "complex",
+      "description": "/explain-query runs EXPLAIN on your local database and explains the plan in plain words.",
+      "spec": "/explain-query <sql> (or selection): detect local DB from DATABASE_URL in .env (only localhost/127.0.0.1/sqlite files; refuse others) and run EXPLAIN (ANALYZE only if userConfig and query is SELECT) via psql/mysql/sqlite3 CLI. Then $.model.complete to summarise bottlenecks (seq scans, missing indexes) with index suggestions. Pane with raw plan (Code) and explanation.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "seed-guard",
+      "category": "data",
+      "tier": "simple",
+      "description": "Blocks database seed, reset and drop commands unless DATABASE_URL points at your own machine.",
+      "spec": "tool.call on Bash: prisma migrate reset, prisma db push --force-reset, rails db:reset/db:drop/db:seed, php artisan migrate:fresh/db:seed, django flush, knex seed:run, sequelize db:seed, npm run seed/db:reset. Read DATABASE_URL from command env prefix, process env ($.env) or .env file; allow only localhost/127.0.0.1/::1/sqlite/docker service names in userConfig allowHosts. Deny otherwise. .catch fails closed.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "schema-pane",
+      "category": "data",
+      "tier": "complex",
+      "description": "A pane of your local database's tables and columns, ready to hand to Claude as context.",
+      "spec": "/schema: connect via CLI to local DB (DATABASE_URL in .env, local only) and list tables, columns, types, PK/FK, indexes (information_schema for postgres/mysql, sqlite_master+pragma for sqlite). Pane with expandable tables and a Button 'Send to Claude' (prompt.fill compact schema text) and 'Inject in context' toggle (prompt.compose session section, capped).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "n-plus-one-hint",
+      "category": "data",
+      "tier": "simple",
+      "description": "Spots database queries inside loops, the classic N+1 problem, as Claude writes them.",
+      "spec": "After edits: heuristic per language: inside for/forEach/map/while bodies (brace or indentation tracking) detect await prisma.x.find*, .objects.get/filter, Model.find/where, db.query, .findOne, repository.find, session.query. Context note with file:line and suggestion (include/select_related/batching).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "migration-namer",
+      "category": "data",
+      "tier": "simple",
+      "description": "Gives new migrations consistent, descriptive, timestamped names.",
+      "spec": "tool.call on Write of a new file in a migrations directory: if name lacks timestamp or is generic (migration.sql, new, temp, update), deny with a suggested name following the directory's existing convention (detect pattern from sibling files: 0001_x.py, 20240101120000_x.sql, YYYYMMDDHHMMSS_x.rb). Also /migration-name <description> returns a name.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "query-result-cap",
+      "category": "data",
+      "tier": "simple",
+      "description": "Adds a LIMIT to ad-hoc SELECTs Claude runs in psql, mysql or sqlite so results don't flood the context.",
+      "spec": "tool.call on Bash psql -c/-command, mysql -e, sqlite3 '...': if the SQL is a SELECT without LIMIT/TOP/FETCH FIRST and without aggregate-only, rewrite to append LIMIT <userConfig default 50> via next({...e, command}); add context note. Handle quoting carefully; if unsure, leave untouched.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "backup-before-migrate",
+      "category": "data",
+      "tier": "complex",
+      "description": "Dumps your local database before every migration so a bad one is one command away from undo.",
+      "spec": "tool.call on Bash migration commands (prisma migrate dev/deploy, rails db:migrate, alembic upgrade, django migrate, knex migrate:latest, php artisan migrate, goose up, flyway migrate): for local DBs only, first run pg_dump/mysqldump/sqlite3 .backup into .claude/db-backups/<timestamp>.sql(.gz) (keep last N), then run the migration. /db-backups lists, /db-restore <n> prints the exact restore command (does not run it automatically). Skip with toast if dump tool missing.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "csv-peek",
+      "category": "data",
+      "tier": "simple",
+      "description": "/peek shows a CSV or JSONL file's columns, sample rows and inferred types without reading the whole file.",
+      "spec": "/peek <path> [rows]: read first ~64KB via $.fs (bytes range if possible) and count lines cheaply via `wc -l`; parse CSV (quotes, delimiter sniffing , ; \\t |) or JSONL; infer types per column (int, float, bool, date, string, empty%). Return Markdown table of columns + first 5 rows. Also tool.call on Read of .csv > 1MB without limit: deny suggesting /peek.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "fixture-factory",
+      "category": "data",
+      "tier": "complex",
+      "description": "/fixtures generates realistic test data that matches your schema or types.",
+      "spec": "/fixtures <model|type|table> [count]: locate definition (Prisma model, TS interface/type, Pydantic/dataclass, Django model, SQL CREATE TABLE) via grep in project; $.model.complete to produce N realistic records respecting types/constraints/relations as JSON; validate JSON; Pane preview with Save (writes fixtures/<name>.json or tests/fixtures) and Insert into prompt.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "a11y-guard",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Flags accessibility misses as Claude writes UI: images without alt, unlabeled buttons, clickable divs.",
+      "spec": "After Edit/Write on jsx/tsx/vue/svelte/html: added <img> without alt, <button> with no text and no aria-label, icon-only links, onClick on div/span without role+tabIndex+key handler, <input> without label/aria-label, positive tabIndex, autoFocus misuse. Context note list; userConfig block mode.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "screenshot-check",
+      "category": "frontend",
+      "tier": "complex",
+      "description": "After UI edits, takes a Playwright screenshot of the page and shows it to Claude.",
+      "spec": "/screenshot [url] and optional auto mode after UI file edits (debounced): detect running dev server URL (port-check style or userConfig baseUrl); run a small Playwright script via $.process.run (node -e with playwright if installed in project, else npx playwright screenshot) at desktop and mobile widths, save to .claude/screenshots/. Attach to the conversation: use $.prompt.submit with attachments if API supports images (inspect types for attachments/image), else tell the model the file path to Read. Pane shows Image on terminal where supported.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "bundle-size-watch",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Compares bundle size after each build and warns when it grows.",
+      "spec": "After Bash build commands (npm run build, vite build, next build, webpack): measure total and per-file sizes of output dir (dist/, build/, .next/static) via `du`/fs listing (gzip estimate optional via `gzip -c | wc -c` for top 10 files), store last in $.store per project; status '📦 412 KB (+18 KB)'; toast if growth > userConfig % (default 5).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "css-token-guard",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Flags hard-coded hex colors and pixel values where your design tokens should be used.",
+      "spec": "Only if the project has tokens (CSS custom properties in a tokens/variables file, tailwind config theme, theme.ts). After edits to css/scss/jsx/tsx: added literal #hex/rgb()/hsl() colors (and optional px spacing) not in allowlist -> context note suggesting the closest existing token by color distance (parse var definitions for hex values).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "lighthouse-run",
+      "category": "frontend",
+      "tier": "complex",
+      "description": "/lighthouse runs Lighthouse on a URL and shows performance, a11y, SEO and best-practice scores in a pane.",
+      "spec": "/lighthouse <url> [mobile|desktop]: run `npx lighthouse <url> --output=json --quiet --chrome-flags=\"--headless\"` with timeout (detect CHROME_PATH / playwright chromium); parse categories and top 5 failing audits with savings. Pane: score tiles colored, audits list, Button 'Ask Claude to fix top issues'. Store last result for comparison and show deltas.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "heavy-asset-warn",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Warns when large images, videos or fonts are added to the project.",
+      "spec": "After Write or Bash commands that add files (cp/mv/curl -o/wget into public/, assets/, static/, src/): stat new files; image > 300KB, video > 2MB, font > 200KB (userConfig) -> toast + context note suggesting compression/format (webp/avif, woff2). Also on git add of such files.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "storybook-nudge",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Reminds you to add a story when Claude creates a new component without one.",
+      "spec": "Only if .storybook/ exists. After Write of a new component file (PascalCase .tsx/.jsx/.vue/.svelte under components/), check for sibling *.stories.* ; if absent, at turn.complete toast and band Button 'Ask Claude to add stories' ($.prompt.submit).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "contrast-checker",
+      "category": "frontend",
+      "tier": "complex",
+      "description": "Checks that the colors Claude changes in CSS meet WCAG AA contrast.",
+      "spec": "After CSS/SCSS/styled/tailwind edits: extract color/background-color pairs within the same rule block (and CSS variables resolved from :root and dark theme blocks); compute WCAG contrast ratio (implement relative luminance), flag < 4.5 (normal text) / < 3 (large text if font-size >= 24px or bold >= 18.66px). Context note with ratio and a suggested adjusted color that passes (lighten/darken in HSL until passing).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "dark-mode-check",
+      "category": "frontend",
+      "tier": "simple",
+      "description": "Flags colors added without a dark-mode variant in projects that support a dark theme.",
+      "spec": "Detect dark mode support (prefers-color-scheme in CSS, tailwind darkMode, [data-theme=dark]). After edits: tailwind classes like bg-white/text-gray-900 added without dark: counterpart on the same element; CSS color literals in rules not overridden in a dark block. Context note.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "component-catalog",
+      "category": "frontend",
+      "tier": "complex",
+      "description": "/components lists your existing UI components so Claude reuses them instead of creating duplicates.",
+      "spec": "Scan component dirs (components/, src/components, ui/, app/components; configurable) for exported components with props (parse export function X({ a, b }: Props) / interface XProps). /components Pane with searchable list and props. prompt.compose section (session scope, capped ~3k chars) listing names + one-line purpose (from JSDoc or first comment). Before Write of a new component whose name is similar (Levenshtein) to an existing one, add context note.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "http-client",
+      "category": "api",
+      "tier": "complex",
+      "description": "/http sends a request and shows the formatted response in a pane, like a tiny Postman in your terminal.",
+      "spec": "/http <METHOD> <url> [json body] [-H 'K: V']: $.http.fetch with timeout; Pane shows status, time, headers (collapsible), body pretty-printed (JSON/Markdown/Code). Buttons: Copy as curl, Send to Claude, Repeat. History of last 20 in $.store; /http history. Refuse to send headers named Authorization to non-https unless localhost.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "openapi-sync",
+      "category": "api",
+      "tier": "complex",
+      "description": "Warns when your API routes change but openapi.yaml doesn't.",
+      "spec": "Detect spec file (openapi.yaml/json, swagger.*). Track edits to route definitions (express app.get/router.post, fastify, Next route handlers app/**/route.ts, FastAPI @app.get, Flask @route, Django urls.py, Laravel routes/*.php, Go mux HandleFunc). At turn.complete, if routes added/removed/changed paths not present in spec and spec not edited, band listing them with 'Ask Claude to update the spec'.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "url-allowlist",
+      "category": "api",
+      "tier": "simple",
+      "description": "Restricts WebFetch to the domains you allow.",
+      "spec": "tool.call guard on WebFetch (and optionally curl/wget in Bash): userConfig allowlist (default: docs domains like developer.mozilla.org, docs.python.org, github.com, raw.githubusercontent.com, npmjs.com, pypi.org, stackoverflow.com, docs.anthropic.com... ) and mode allow|block-list. Deny other hosts with message; /allow-host <host> adds for the session.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "offline-mode",
+      "category": "api",
+      "tier": "simple",
+      "description": "/offline blocks every network call — fetches, curl, installs, git push — until you turn it back on.",
+      "spec": "/offline on|off toggles $.state flag; status '✈ offline'. When on: deny WebFetch, WebSearch, Bash with curl/wget/http/npm|pnpm|yarn|pip install/git push|pull|fetch|clone/ssh/scp/docker pull; $.http fetches by this plugin n/a. Message explains how to turn off.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "mock-server",
+      "category": "api",
+      "tier": "complex",
+      "description": "/mock starts a fake API server from your OpenAPI spec so you can build the frontend before the backend.",
+      "spec": "/mock [spec] [port]: start `npx @stoplight/prism-cli mock <spec> -p <port>` via $.process.spawn (or fallback: tiny built-in mock using node -e script generated at runtime that serves examples from the spec as JSON). Status shows '🧪 mock :4010'; Pane with recent requests from output; /mock stop. Stop on session.end.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "rate-limit-guard",
+      "category": "api",
+      "tier": "simple",
+      "description": "Stops Claude from hammering external APIs with curl loops.",
+      "spec": "Track Bash calls hitting external http(s) hosts (curl/wget/http/httpie) per host in a sliding 60s window; above userConfig N (default 20) deny further calls to that host for 60s with message. Also detect `for`/`while` loops containing curl in a single command and add a context warning.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "jwt-decode",
+      "category": "api",
+      "tier": "simple",
+      "description": "/jwt decodes a JSON Web Token locally — header, claims, expiry — without sending it anywhere.",
+      "spec": "/jwt <token> (or selection/clipboard? selection via $.ui.selection): base64url-decode header and payload, pretty JSON, show iat/nbf/exp as dates with 'expired N min ago'/'valid for', alg warnings (none, HS256 with weak?). Never logs/stores the token. Output via command text.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "status-check",
+      "category": "api",
+      "tier": "simple",
+      "description": "/status checks whether GitHub, npm, PyPI or the Anthropic API are having an outage before you blame your code.",
+      "spec": "/status: fetch Statuspage JSON endpoints (https://www.githubstatus.com/api/v2/status.json, https://status.npmjs.org/api/v2/status.json, https://status.anthropic.com/api/v2/status.json, https://status.python.org/api/v2/status.json, plus userConfig extra) in parallel with timeouts; show indicator per service. Also: when a Bash command fails with network-ish errors (ETIMEDOUT, 503 from registry), check the relevant status page and add a context note if there's an incident.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "graphql-context",
+      "category": "api",
+      "tier": "complex",
+      "description": "Gives Claude a compact summary of your GraphQL schema when you work on queries and resolvers.",
+      "spec": "Find schema (*.graphql, schema.gql, introspection json, codegen config). Parse types/queries/mutations (lightweight SDL parser: type/input/enum/interface/union blocks, fields with args and types). When prompt or edited files involve .graphql/gql`` or resolvers, add prompt.submit context (once per conversation) with compact schema (Query/Mutation fields + referenced types, capped). /gql-schema shows it.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "curl-to-code",
+      "category": "api",
+      "tier": "simple",
+      "description": "/curl2code turns a curl command into fetch, axios, Python requests or Go code.",
+      "spec": "/curl2code [lang] <curl ...>: parse curl args (-X, -H, -d/--data/--data-raw/--json, -u, -F, URL, --compressed, -k) into a request model; emit code for fetch (default, or detect project language), axios, python requests, go net/http. Return fenced code; Button-less (command text). Pure parser module with tests.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "scope-lock",
+      "category": "agents",
+      "tier": "complex",
+      "description": "/scope locks Claude to the files you name; edits outside the scope are blocked.",
+      "spec": "/scope <glob...> sets allowed globs in $.state (also /scope off, /scope show); status '🔒 scope: src/auth/**'. Guard Edit/Write/NotebookEdit and Bash write targets (simple redirection/mv/cp/rm parsing) outside allowed globs -> deny with scope info. prompt.compose section telling the model the scope. Implement glob matching (**, *, ?) in a pure module.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "second-opinion",
+      "category": "agents",
+      "tier": "complex",
+      "description": "/second-opinion has a different model critique Claude's last answer or plan.",
+      "spec": "/second-opinion [focus]: collect last assistant answer + the user prompt it answered (+ diff of files edited in that turn, capped); $.model.complete with a different model (userConfig, default the 'other' tier: if session model is opus use sonnet, else opus) and a critical-review system prompt; Pane shows agreement level, concerns, suggestions, Buttons 'Send to Claude' and Copy.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "parallel-explore",
+      "category": "agents",
+      "tier": "complex",
+      "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
+      "spec": "/explore <question>: decide 3 angles via $.model.complete (or fixed: 'where is it implemented', 'how is it tested/used', 'related config/docs'); $.agent.spawn three read-only Explore-type agents (use built-in subagent type if available; inspect types) in parallel; show progress in Pane; when done, merge via $.model.complete into one answer with file references; Button 'Send to Claude'.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "subagent-cap",
+      "category": "agents",
+      "tier": "simple",
+      "description": "Caps how many subagents can run at the same time.",
+      "spec": "Guard Agent/Task tool calls: count running agents via $.agent.list() (or track spawn/complete events); deny when >= userConfig max (default 3) with message to wait or raise the cap. Status shows 'agents 2/3'.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "task-queue",
+      "category": "agents",
+      "tier": "complex",
+      "description": "/queue lines up prompts that run one after another whenever Claude is free.",
+      "spec": "/queue add <prompt>, /queue list, /queue remove <n>, /queue clear, /queue pause|resume. Stored in $.store per project. On turn.complete (main loop, not aborted) and when idle, $.prompt.submit the next item (as user's words), mark running; status '⏭ queue 3'. Pane /queue shows items with up/down/remove Buttons.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "night-shift",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Runs your queued tasks at a scheduled time, like overnight, and leaves you a report.",
+      "spec": "/night-shift at <HH:MM> | now | off, uses task-queue's own store? (cannot read other plugins' store) -> keeps its own queue: /night-shift add <prompt>. $.clock.every(60s) checks time; when due and session idle, submits items one by one (each after previous turn.complete), records outcome (duration, files changed via git diff --stat, last answer summary) and writes .claude/night-shift/<date>.md report; toast in the morning on next prompt. Safety: refuses to start if git tree is dirty unless userConfig allowDirty.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "loop-breaker",
+      "category": "agents",
+      "tier": "simple",
+      "description": "Stops Claude when it repeats the same failing command three times and suggests a different approach.",
+      "spec": "Track Bash commands (normalized) and their failure; also identical Edit attempts failing. On the 3rd identical failing call within a turn, deny further identical calls with a message telling the model to step back, read the error, and try a different approach; toast to the user. Reset on prompt.submit.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "self-check",
+      "category": "agents",
+      "tier": "complex",
+      "description": "At the end of each editing turn, has the model double-check it actually did what you asked.",
+      "spec": "On turn.complete of main-loop turns that edited files (and not triggered by itself): $.model.fork with a checklist prompt: did it satisfy each requirement of the user's last prompt, any TODOs left, tests run? Expect JSON {complete:boolean, gaps:[...]}. If gaps, band with the gaps and Buttons 'Fix gaps' ($.prompt.submit listing them) / Dismiss. userConfig mode notify|auto (auto submits once, max 1 round).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "edit-limit",
+      "category": "agents",
+      "tier": "simple",
+      "description": "Asks for confirmation when a single turn tries to modify more than N files.",
+      "spec": "Count distinct files modified via Edit/Write/NotebookEdit in the current turn; when about to exceed userConfig max (default 15), deny with message asking the model to summarise its plan and ask the user; allow if the latest prompt contains 'EDITS-OK' or after the user raises the cap via /edit-limit <n>.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "agent-presets",
+      "category": "agents",
+      "tier": "complex",
+      "description": "Ready-made subagents for focused jobs: debugger, test writer, doc writer and migrator.",
+      "spec": "$.agent.register four agent types with carefully written prompts and minimal tool sets: debugger (reproduce, isolate, minimal fix, regression test), test-writer (tests only, no src edits), doc-writer (docs/README/docstrings only), migrator (mechanical refactors across files with verification). Also a tool.call guard enforcing each preset's write scope for calls made by those agents (agentId tracking). /presets lists them with how to invoke.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "explain-diff",
+      "category": "learning",
+      "tier": "complex",
+      "description": "/explain-diff explains in plain words what changed in the last turn and why.",
+      "spec": "Track files edited in the last turn with before/after (git diff for tracked files or captured old/new strings). /explain-diff [level]: $.model.complete (or fork for context) to explain per file: what changed, why, risks, how to test; beginner|expert level. Pane with Markdown and per-file Code diff toggles.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "quiz-me",
+      "category": "learning",
+      "tier": "complex",
+      "description": "/quiz asks you questions about the code Claude just wrote, to check you really understand it.",
+      "spec": "/quiz [n]: based on last turn's diff (or a file argument), $.model.complete generates n multiple-choice questions JSON {q, options[4], answer, why}. Pane shows one question at a time with option Buttons, feedback and explanation, score at end; store score history in $.store; /quiz stats.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "learning-mode",
+      "category": "learning",
+      "tier": "simple",
+      "description": "Claude explains the why behind each change and leaves small TODOs for you to complete yourself.",
+      "spec": "/learning on|off; when on, prompt.compose adds instructions: explain reasoning briefly, and for small well-scoped pieces leave `TODO(you):` markers with hints instead of writing them (max 2 per task), never in security-critical code. Status '🎓 learning'. On turn.complete count TODO(you) added and toast.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "onboarding-tour",
+      "category": "learning",
+      "tier": "complex",
+      "description": "/tour walks a newcomer through the repository step by step.",
+      "spec": "/tour: build an outline (entry points, main modules, data flow, how to run tests) via $.model.fork or from codebase scan (README, package.json scripts, top-level dirs) with $.model.complete; Pane shows step N of M with title, explanation (Markdown), file references with Buttons 'Open in prompt' (@path), Next/Back; progress saved in $.store so /tour resumes.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "command-coach",
+      "category": "learning",
+      "tier": "simple",
+      "description": "Suggests Claude Code commands and mods that fit the way you work.",
+      "spec": "Observe patterns: many long Bash outputs -> suggest output-trimmer; repeated manual git commits -> /commit; frequent 'run the tests' prompts -> quick-commands; high context -> /compact; long sessions -> /resume-brief etc. At most one tip per session (or per 2 hours), via toast, with a rule table in a pure module; /coach shows all current suggestions. Track shown tips in $.store to avoid repeats.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "shortcut-tips",
+      "category": "learning",
+      "tier": "simple",
+      "description": "One tip a day about Claude Code shortcuts and features you might not know.",
+      "spec": "At session.start, if not shown today, toast a tip from a built-in list of ~40 accurate Claude Code tips (keyboard shortcuts like esc esc, ctrl+o, ctrl+r, shift+tab modes, @ mentions, # memory, ! bash mode, /compact, /resume, /rewind, /add-dir, /model, /agents, /hooks, /plugin, /mods). Only include tips you can verify from the types or `claude --help` output; store index in $.store; /tip shows the next one.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "why-log",
+      "category": "learning",
+      "tier": "complex",
+      "description": "Records why each file was changed; /why shows the reasoning behind any file's edits.",
+      "spec": "On each successful Edit/Write record {file, time, turn prompt (first 200 chars), short rationale}. Rationale: at turn.complete, $.model.complete over the last assistant text + edited file list to produce one-line reason per file (batch, small model). Store per project in $.store (cap 2000). /why <file> lists the history; /why shows last turn.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "cheatsheet",
+      "category": "learning",
+      "tier": "simple",
+      "description": "/cheat shows a quick reference for git, docker, regex, tmux and more, offline.",
+      "spec": "/cheat <topic> [query]: embedded concise cheatsheets (git, docker, regex, tmux, vim, bash, sql, curl, kubectl, npm) as Markdown in pure modules; filter lines by query; /cheat lists topics. No network.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "pair-mode",
+      "category": "learning",
+      "tier": "complex",
+      "description": "Claude proposes, you type: edits become diffs you apply yourself, for deliberate practice.",
+      "spec": "/pair on|off. When on: deny Edit/Write/NotebookEdit with a message instructing the model to present the change as a unified diff in its answer for the user to apply; prompt.compose section explaining pair mode. Band shows 'Pair mode: you drive' with Off Button. /pair check runs git diff to show what the user changed and asks Claude ($.prompt.submit) to review it.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "skill-tracker",
+      "category": "learning",
+      "tier": "simple",
+      "description": "Tracks which languages and tools you've worked with each week.",
+      "spec": "On successful Edit/Write record file extension -> language and Bash tool names (git, docker, kubectl, npm, cargo...) counts per ISO week in $.store. /skills shows this week and last 8 weeks top languages/tools as text bars.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "license-checker",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Warns when a dependency with a copyleft license (GPL, AGPL) lands in a permissively licensed project.",
+      "spec": "Read project license (LICENSE file / package.json license / pyproject). On npm/pnpm/yarn add and pip install commands (after success) look up each package's license: npm registry metadata, PyPI JSON (info.license / classifiers) via $.http.fetch with timeout; if GPL/AGPL/LGPL/SSPL/unknown and project is MIT/Apache/BSD, toast + context note. Cache results in $.store.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "pii-in-logs",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Flags log statements that print emails, passwords, tokens or other personal data.",
+      "spec": "After edits: added logging calls (console.*, logger.*, log.*, print, puts, fmt.Print*, System.out) whose arguments reference identifiers like password, passwd, secret, token, apiKey, ssn, creditCard, email, phone, dob, req.body, user (whole object). Context note per line; userConfig block mode.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "data-map",
+      "category": "compliance",
+      "tier": "complex",
+      "description": "/data-map lists where your code collects, stores and sends personal data — a head start for GDPR.",
+      "spec": "/data-map: grep project for personal-data signals (form fields/models with email, name, phone, address, birth, ip, location, cookie, analytics calls, third-party SDKs) and storage/sending sinks; then $.model.complete to organise into a table: data item, where collected (file:line), where stored, sent to, legal-basis hint. Pane + Save to docs/data-map.md.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "tracker-guard",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Blocks adding analytics and tracking SDKs that haven't been approved.",
+      "spec": "Guard installs (npm/pnpm/yarn add, pip install, script tags in edits) of known tracking packages (google-analytics, gtag, @segment, mixpanel, amplitude, hotjar, fullstory, posthog, @sentry? (no—error tracking allowed by default), facebook pixel, tiktok, clarity) and Edit/Write adding their script URLs. userConfig approved list. Deny with reason.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "no-upload",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Blocks commands that upload files to external services like pastebins and file-sharing sites.",
+      "spec": "tool.call on Bash: curl/wget with -F/--upload-file/-T/--data-binary @file to non-allowlisted hosts; known paste/share hosts (pastebin, transfer.sh, 0x0.st, file.io, gist create via gh with secrets?, termbin via nc); scp/rsync to remote hosts not in allowlist. Deny unless prompt contains 'UPLOAD-OK'. userConfig allowHosts.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "crypto-guard",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Flags weak cryptography: MD5 or SHA1 for passwords, Math.random for tokens, ECB mode, hard-coded IVs.",
+      "spec": "After edits: md5/sha1 used near password/hash context, createHash('md5'|'sha1'), hashlib.md5/sha1, Math.random()/random.random() for token/secret/id/otp/nonce, AES ECB, static IV/nonce literals, bcrypt rounds < 10, jwt alg none, verify=False/rejectUnauthorized:false. Context note; userConfig block.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "sbom",
+      "category": "compliance",
+      "tier": "complex",
+      "description": "/sbom generates a software bill of materials with every dependency and its license.",
+      "spec": "/sbom [cyclonedx|spdx|md]: read lockfiles (package-lock.json v2/v3, pnpm-lock.yaml, yarn.lock, poetry.lock, uv.lock, requirements.txt, Cargo.lock, go.sum) with pure parsers to list name@version; licenses from node_modules/*/package.json when present, else 'unknown' (optional registry lookup with userConfig). Write sbom.cdx.json (CycloneDX 1.5 minimal valid) or Markdown table; Pane summary with license counts.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "audit-trail",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Writes every action Claude takes to an append-only JSONL audit log.",
+      "spec": "Hook tool.call (after next) and prompt.submit and turn.complete: append JSON lines {ts, session, kind, tool, summary of input (paths, command truncated), outcome (ok/error/denied), user prompt hash or text per userConfig} to .claude/audit/YYYY-MM-DD.jsonl via $.fs (append = read+write or append API if exists). Redact secrets with simple patterns. /audit shows today's count and path.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "vuln-scan",
+      "category": "compliance",
+      "tier": "complex",
+      "description": "After installs, runs npm audit or pip-audit and shows any vulnerabilities in a pane.",
+      "spec": "After successful dependency installs (npm/pnpm/yarn install|add, pip install, uv add, poetry add, cargo add) run the right auditor with --json (npm audit --json, pnpm audit --json, pip-audit -f json, cargo audit --json if installed) with timeout; parse severities; status '🛡 2 high'; Pane /vulns listing package, severity, advisory, fix version, Button 'Ask Claude to fix'.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "copyright-guard",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Flags pasted code that carries someone else's license or copyright header.",
+      "spec": "After Edit/Write: added text containing 'Copyright (c)', 'SPDX-License-Identifier', 'Licensed under', 'GNU General Public License', 'All rights reserved' where holder/license differs from the project's (read LICENSE and package.json). Context note asking to verify provenance; toast.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "benchmark-compare",
+      "category": "performance",
+      "tier": "complex",
+      "description": "/bench runs your benchmarks before and after a change and compares the numbers.",
+      "spec": "/bench [command]: detect benchmark command (package.json bench script, vitest bench, pytest-benchmark, go test -bench, cargo bench, hyperfine). /bench baseline stores results (parse ops/sec, ns/op, mean ms per benchmark) in $.store per project+branch; /bench runs again and shows a Pane table with deltas colored (regression > userConfig %).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "slow-test-flag",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Points out your slowest tests after each test run.",
+      "spec": "After test-runner Bash commands complete, parse durations from output (jest/vitest per-test ms with --verbose or file times, pytest --durations output, go test per-package times, cargo test timings if present) and show the top 5 slowest in a toast/status; /slow-tests lists the last run's top 10. If runner lacks durations, suggest the flag (pytest --durations=10).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "flaky-detector",
+      "category": "performance",
+      "tier": "complex",
+      "description": "Detects tests that pass and fail at random and keeps a list of the suspects.",
+      "spec": "Parse failing test names from runner output (jest/vitest/pytest/go/cargo/rspec). Record per test pass/fail history in $.store per project (only when the file wasn't edited between runs: track edit times). A test that failed and later passed with no edits to it or its source in between is marked flaky. /flaky Pane lists suspects with flip counts; context note when a known flaky test fails ('known flaky').",
+      "since": "2.0.0"
+    },
+    {
+      "name": "leak-hint",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Flags event listeners, intervals and subscriptions created without cleanup.",
+      "spec": "After edits: in React useEffect bodies adding addEventListener/setInterval/setTimeout/subscribe/on( without a returned cleanup; in classes/components adding listeners without matching remove in dispose/componentWillUnmount/onDestroy; Node: process.on/emitter.on in request handlers. Context note.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "outdated-deps",
+      "category": "performance",
+      "tier": "complex",
+      "description": "/outdated shows stale dependencies and how risky each upgrade is.",
+      "spec": "/outdated: run npm/pnpm/yarn outdated --json, pip list --outdated --format=json (in venv), cargo outdated if installed, go list -u -m -json all; classify patch/minor/major (semver), flag deprecated packages; Pane table sorted by risk with Buttons 'Upgrade all patch/minor' (submits prompt to Claude to do it and run tests) and per-row Copy command.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "profile-run",
+      "category": "performance",
+      "tier": "complex",
+      "description": "/profile runs a command under a profiler and shows the hottest functions.",
+      "spec": "/profile <command>: node -> `node --cpu-prof --cpu-prof-dir=.claude/profiles` then parse .cpuprofile (aggregate self time per function, top 15); python -> `python -m cProfile -o file` then `python -c pstats` to print top cumulative; go -> suggest pprof. Pane table: function, file:line, self ms, total %; Button 'Ask Claude to optimise top 3'.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "net-retry",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Automatically retries commands that failed because of a temporary network error.",
+      "spec": "tool.call on Bash: await next; if failed and output matches transient patterns (ETIMEDOUT, ECONNRESET, EAI_AGAIN, 'network timeout', 'Could not resolve host', 502/503/504 from registries, 'Temporary failure in name resolution') and the command is idempotent-ish (installs, git fetch/pull/clone, curl GET, docker pull), retry up to userConfig (default 2) with backoff via $.clock.sleep (budget-aware), returning the last result plus a context note listing retries.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "disk-guard",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Warns when the disk is nearly full before builds, installs and docker pulls.",
+      "spec": "Before Bash commands that write lots (install, build, docker build/pull, cargo build, git clone): `df -Pk .` parse available; if < userConfig GB (default 2) or > 95% used, add context note + toast with top space hogs suggestion (node_modules, ~/.cache, docker system df). Cache df result 60s.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "regression-guard",
+      "category": "performance",
+      "tier": "complex",
+      "description": "Remembers which tests passed at the start of the session and warns if any of them now fail.",
+      "spec": "Parse test results (names + pass/fail) from test-runner outputs. First full run in session = baseline (store set of passing names). Later runs: any baseline-passing test now failing -> band 'Regressions: N' listing names with Button 'Ask Claude to fix regressions'; status '⚠ 2 regressions'. /baseline reset.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "watch-mode-guard",
+      "category": "performance",
+      "tier": "simple",
+      "description": "Blocks watch-mode and never-ending commands run in the foreground, where they'd hang the turn.",
+      "spec": "tool.call on Bash (not run_in_background): jest --watch/--watchAll, vitest without run/--run (when vitest default is watch in non-CI), tsc -w/--watch, nodemon, webpack --watch, npm run dev/start/serve, vite (dev), next dev, rails s, docker compose up without -d, tail -f, python -m http.server. Deny suggesting run_in_background: true or the non-watch variant (vitest run, jest --ci).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "mod-maker",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "/new-mod scaffolds a new Claude Code mod with manifest, hooks, test and README, ready to fill in.",
+      "spec": "/new-mod <name> [description] [--kind guard|status|pane|command]: write mods/<name> (if cwd is a claude-mods-style repo with mods/) or ./<name> with .claude-plugin/plugin.json, hooks/hooks.json, hooks/register.ts(x) template for the chosen kind, tests/register.test.ts that passes, README.md template, types/index.d.ts for pane kind. Validate name (kebab, not existing). Then run `claude plugin validate` and report. Templates must themselves pass validate/test — verify by generating each kind in the scratchpad and running check-mod.sh.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "mod-doctor",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "/mod-doctor checks your installed mods for outdated versions, conflicts and load errors.",
+      "spec": "/mod-doctor: `claude plugin list --json` (+ marketplace list) via $.process.run; for each claude-mods plugin compare installed version vs marketplace.json (fetch raw from GitHub, cache); detect known conflicts (table: e.g. output-trimmer + redactor both rewrite results — fine; two plugins registering the same command name -> from `claude plugin list` details if available; multiple status-line mods) and disabled plugins; read debug hints if available. Pane report with severity and fix actions (update via CLI, disable).",
+      "since": "2.0.0"
+    },
+    {
+      "name": "mod-profiles",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "Switch between sets of mods — work, personal, demo — with one command.",
+      "spec": "/profile-mods save <name> (records currently enabled plugins from `claude plugin list --json`), /profile-mods use <name> (enable/disable via `claude plugin enable|disable <id>` to match, then suggest /reload-plugins or run it via $.command.run), /profile-mods list|delete. Stored in $.store. Never touches non-plugin settings. Pane for list with Use buttons.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "settings-sync",
+      "category": "ecosystem",
+      "tier": "simple",
+      "description": "Exports and imports your mods' configuration so you can move it between machines.",
+      "spec": "/mods-export writes a JSON of pluginConfigs entries for installed claude-mods plugins (read ~/.claude/settings.json via $.fs; exclude userConfig fields marked secret / keys containing token|secret|key|password) to ~/claude-mods-settings.json; /mods-import <path> merges them back into ~/.claude/settings.json after showing a summary and requiring '/mods-import <path> --yes'. Back up settings.json first.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "quiet-mode",
+      "category": "ecosystem",
+      "tier": "simple",
+      "description": "/quiet silences toasts and sounds from every mod while you focus.",
+      "spec": "/quiet [minutes] toggles $.state; while on, hook ui.toast and audio.play events (all plugins' calls pass through the chain; inspect types for how to intercept another plugin's $.ui.toast — e.g. on('ui.toast') returning without next) to drop them, except this plugin's own; status '🔕 quiet 25m'; auto-off timer. If intercepting other plugins' toasts is impossible, document the limitation honestly.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "achievements",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "Unlock achievements as you work: first commit, 100 green test runs, a week-long streak and more.",
+      "spec": "Define ~25 achievements in a pure table (first commit via Claude, 10/100 commits, 100 green test runs, first PR description, zero-error day, 7-day streak, night owl (after midnight), refactor 20 files, first mod installed via mod-store...) with progress counters in $.store (global). Hook relevant events to increment. Unlock -> toast '🏆 Unlocked: X' (+ optional sound). /achievements Pane grid with locked/unlocked and progress bars.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "streaks",
+      "category": "ecosystem",
+      "tier": "simple",
+      "description": "Shows your consecutive days of coding with Claude in the status line.",
+      "spec": "Record active local dates (a prompt sent) in $.store; compute current and longest streak; status '🔥 12-day streak' shown at session start for 10 seconds then cleared (userConfig persistent); toast on milestones (7, 30, 100). /streak shows calendar of last 30 days.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "soundpack",
+      "category": "ecosystem",
+      "tier": "simple",
+      "description": "Sound packs for Claude Code events: minimal, retro or nature.",
+      "spec": "Generate small valid WAV assets programmatically for 3 packs × 4 events (turn done, error, permission needed, tests green) — keep total assets < 600KB. userConfig pack + per-event toggles + volume. Hook turn.complete (long turns), Bash errors, classic.PermissionRequest/Notification, test green. Play non-blocking. Note macOS-only playback honestly.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "daily-goal",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "/goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.",
+      "spec": "/goal <text> stores today's goal per project in $.store; AbovePrompt band shows '🎯 Goal: …' with Buttons Done / Edit / Hide; prompt.compose adds the goal as context (session scope, short). On first session after 18:00 (userConfig) or next day start, ask via band whether it was achieved; keep a history; /goal history shows last 14 days with ✓/✗.",
+      "since": "2.0.0"
+    },
+    {
+      "name": "session-replay",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "/replay steps through the session — prompts, tool calls, edits — in a pane, like a video timeline.",
+      "spec": "Build a timeline from $.session.messages() (prompts, assistant texts, tool uses with inputs) plus own recorded tool results/durations. /replay Pane: one step per page with type icon, time, content (Markdown for text, Code for commands/diffs), Prev/Next/First/Last Buttons and hotkeys, step counter, filter by type (Select). Export /replay export writes .claude/replays/<ts>.md.",
+      "since": "2.0.0"
     }
   ]
 }

@@ -51,7 +51,7 @@ const marketplace = {
   owner: AUTHOR,
   metadata: {
     description: 'A curated collection of Claude Code mods: guardrails, git, cost, productivity, quality, dashboards and more.',
-    version: '1.0.0',
+    version: catalog.version ?? '1.0.0',
   },
   plugins: mods.map(m => ({
     name: m.name,
@@ -66,11 +66,12 @@ const marketplace = {
 }
 
 const siteData = {
+  version: catalog.version ?? '1.0.0',
   repository: REPO,
   marketplace: MARKETPLACE,
   categories: catalog.categories.map(c => ({ ...c, count: mods.filter(m => m.category === c.id).length })),
-  mods: mods.map(({ name, category, tier, description, version, keywords, commands }) =>
-    ({ name, category, tier, description, version, keywords, commands })),
+  mods: mods.map(({ name, category, tier, description, version, keywords, commands, since = '1.0.0' }) =>
+    ({ name, category, tier, description, version, keywords, commands, since })),
 }
 
 const readmeCatalog = [
