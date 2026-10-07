@@ -1,0 +1,37 @@
+{
+  "name": "vuln-scan",
+  "version": "1.0.0",
+  "description": "After installs, runs npm audit or pip-audit and shows any vulnerabilities in a pane.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#vuln-scan",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "compliance", "security", "dependencies"],
+  "userConfig": {
+    "autoScan": {
+      "type": "boolean",
+      "title": "Audit after installs",
+      "description": "Run the matching auditor after each successful npm/pnpm/yarn, pip/uv/poetry or cargo install.",
+      "default": true
+    },
+    "timeoutSeconds": {
+      "type": "number",
+      "title": "Audit timeout (seconds)",
+      "description": "How long one auditor may run before it is stopped.",
+      "default": 120
+    },
+    "pipAudit": {
+      "type": "string",
+      "title": "pip-audit command",
+      "description": "How to run pip-audit when the virtualenv has none, e.g. \"uvx pip-audit\".",
+      "default": "pip-audit"
+    },
+    "lookupSeverity": {
+      "type": "boolean",
+      "title": "Rate Python advisories",
+      "description": "pip-audit reports no severity: ask osv.dev for each advisory's rating.",
+      "default": true
+    }
+  },
+  "types": "./types/index.d.ts"
+}
