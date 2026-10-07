@@ -43,7 +43,7 @@ export type Row =
 export type ModsCommand =
   | { kind: 'open'; query?: string }
   | { kind: 'refresh' }
-  | { kind: 'update-all' }
+  | { kind: 'install-all' | 'update-all' }
   | { kind: 'install' | 'update' | 'uninstall'; name: string }
   | { kind: 'usage'; reason: string }
 
@@ -347,6 +347,14 @@ export function parseArgs(args: string): ModsCommand {
   const verb = first.toLowerCase()
   const tail = rest.join(' ')
   const action = ACTIONS[verb]
+  // `install all` and `update all` (or `*`) read as the bulk commands, so no mod can be named `all`.
+  const isAll = tail.toLowerCase() === 'all' || tail === '*'
+  if (action === 'install' && isAll) {
+    return { kind: 'install-all' }
+  }
+  if (action === 'update' && isAll) {
+    return { kind: 'update-all' }
+  }
   if (action !== undefined) {
     return isModName(tail)
       ? { kind: action, name: tail }
@@ -356,6 +364,7 @@ export function parseArgs(args: string): ModsCommand {
   return verb === '' ? { kind: 'open' }
     : verb === 'search' ? { kind: 'open', query: tail }
     : verb === 'refresh' ? { kind: 'refresh' }
+    : verb === 'install-all' ? { kind: 'install-all' }
     : verb === 'update-all' ? { kind: 'update-all' }
     : { kind: 'open', query: args.trim() }
 }
@@ -370,9 +379,9 @@ export function formatAge(ms: number): string {
 
 export const plural = (count: number, word: string, words = `${word}s`): string => `${count} ${count === 1 ? word : words}`
 
-/** The line a person types to install the mod in a terminal session. */
-export const installLine = (name: string, repository: string): string =>
-  `/plugin install ${name} --marketplace ${repository}`
+/** The line a person types to install the mod in a session that has the marketplace added. */
+export const installLine = (name: string, marketplace: string): string =>
+  `/plugin install ${name}@${marketplace}`
 
 const folderOf = (mod: StoreMod): string => mod.path ?? `mods/${mod.name}`
 
