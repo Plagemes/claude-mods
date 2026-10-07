@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { appsSummary, parsePending } from '../hooks/parse'
+import { fakeHub } from './hub'
 
 const PLUGIN = 'django-migrate-watch'
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100, scroll: { offset: 0, bodyRows: 12 }, view: {} } as const
@@ -147,4 +148,22 @@ test('reads Django 4 and 5 dry-run output', () => {
   expect(parsePending(django4)).toEqual([{ app: 'blog', file: 'blog/migrations/0002_post_slug.py', operations: ['Add field slug to post', 'Alter field title on post'] }])
   expect(appsSummary(parsePending(PENDING))).toBe('shop (2), accounts (1)')
   expect(parsePending('No changes detected\n')).toEqual([])
+})
+
+test('with mods-hub: says hello, publishes x.django-migrate-watch.missing and warns once per new set of missing migrations', async ($, on) => {
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const w = world(on, DJANGO)
+
+  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.django-migrate-watch.missing'], consumes: [] }])
+
+  await edit($, '/proj/shop/models.py')
+  await w.clock.advance(3000)
+  await edit($, '/proj/shop/models.py')
+  await w.clock.advance(3000)
+
+  expect(w.statuses.at(-1)).toBe('⚠ migrations missing: shop (2), accounts (1)')
+  expect(hub.published).toEqual([{ topic: 'x.django-migrate-watch.missing', data: { root: '/proj', apps: [{ app: 'shop', operations: 2 }, { app: 'accounts', operations: 1 }] } }])
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'Django models changed without migrations: shop (2), accounts (1)' }])
 })

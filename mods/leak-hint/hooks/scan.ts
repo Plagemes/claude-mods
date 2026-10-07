@@ -1,4 +1,5 @@
 import { closingBrace, mask } from './mask'
+import { lineFinder, lineText } from './shared/line-index'
 
 /** One place where something is started that nothing visibly stops. `key` says which, so an edit can be told from what was there. */
 export type Leak = { line: number; key: string; message: string }
@@ -116,29 +117,20 @@ const firstOfEach = (hits: readonly Hit[]): Hit[] => [...new Map(hits.map(hit =>
 
 class Source {
   readonly masked: string
-  private readonly lineStarts: number[] = [0]
+  private readonly lineFor: (offset: number) => number
 
   constructor(readonly original: string) {
     this.masked = mask(original)
-    for (let i = 0; i < original.length; i++) if (original[i] === '\n') this.lineStarts.push(i + 1)
+    this.lineFor = lineFinder(original)
   }
 
   lineOf(index: number): number {
-    let low = 0
-    let high = this.lineStarts.length - 1
-    while (low < high) {
-      const middle = Math.ceil((low + high) / 2)
-      if ((this.lineStarts[middle] ?? 0) <= index) low = middle
-      else high = middle - 1
-    }
-    return low + 1
+    return this.lineFor(index)
   }
 
   /** The trimmed line an offset is on, which names a finding without its line number. */
   textOfLine(index: number): string {
-    const start = this.lineStarts[this.lineOf(index) - 1] ?? 0
-    const end = this.original.indexOf('\n', start)
-    return this.original.slice(start, end === -1 ? undefined : end).trim()
+    return lineText(this.original, this.lineOf(index)).trim()
   }
 
   leak(rule: string, index: number, message: string): Leak {

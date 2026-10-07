@@ -10,6 +10,7 @@ type Git = { ok: boolean; out: string; err: string }
 const PLUGIN = 'conflict-helper'
 const PANE = 'conflicts'
 const GIT_TIMEOUT_MS = 20_000
+const MAX_PUBLISHED_PATHS = 20
 const SECTION_ID = 'conflict-helper:markers'
 /** Git commands after which conflicts may appear or go away. */
 const GIT_STATE_CHANGE = /\bgit\s+(?:-C\s+\S+\s+)?(?:merge|rebase|pull|cherry-pick|revert|am|stash\s+(?:pop|apply)|checkout|switch|restore|add|rm|commit|reset|mergetool)\b/
@@ -60,7 +61,7 @@ const findConflicts = async ($: EngineInterface, root: string): Promise<Conflict
   )
 }
 
-/** Rescans and publishes (a notice given replaces the shown one, null clears it); says so in a toast and the status line when conflicts appear or are all gone. */
+/** Rescans and publishes (a notice given replaces the shown one, null clears it); says so in a notification (a toast without mods-hub) and the status line when conflicts appear or are all gone. */
 const scan = async ($: EngineInterface, notice?: Notice | null): Promise<View> => {
   const top = await git($, undefined, ['rev-parse', '--show-toplevel'])
   if (!top.ok) return update($, view, () => EMPTY_VIEW)
@@ -76,10 +77,16 @@ const scan = async ($: EngineInterface, notice?: Notice | null): Promise<View> =
   const hadConflicts = before.repo === root && before.files.length > 0
   if (files.length > 0) {
     $.ui.status(`conflicts: ${files.length} file${files.length === 1 ? '' : 's'} · /conflicts`)
-    if (!hadConflicts) $.ui.toast(`${PLUGIN}: ${files.length} conflicted file${files.length === 1 ? '' : 's'}. Run /conflicts to resolve.`)
+    if (!hadConflicts) {
+      await hubPublish($, {
+        topic: 'x.conflict-helper.found',
+        data: { files: files.length, hunks: files.reduce((sum, file) => sum + file.hunks.length, 0), operation, paths: files.slice(0, MAX_PUBLISHED_PATHS).map(file => file.path) },
+      })
+      await hubNotify($, { level: 'warning', title: `${PLUGIN}: ${files.length} conflicted file${files.length === 1 ? '' : 's'}. Run /conflicts to resolve.` })
+    }
   } else {
     $.ui.status(undefined)
-    if (hadConflicts) $.ui.toast(`${PLUGIN}: all conflicts resolved`)
+    if (hadConflicts) await hubNotify($, { level: 'info', title: `${PLUGIN}: all conflicts resolved` })
   }
   return next
 }
@@ -119,11 +126,28 @@ const sideHint = (operation: string | null): string =>
     ? 'During a rebase, ours is the branch you are rebasing onto and theirs is your commit being replayed.'
     : 'Ours is your current branch (HEAD); theirs is the incoming change.'
 
+/** This mod's version, from its manifest, for the hub's list of who is on the bus. */
+async function ownVersion($: EngineInterface): Promise<string> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** Says hello to mods-hub when it is installed. */
+async function greetHub($: EngineInterface): Promise<void> {
+  if ((await hubMode($)) === undefined) return
+  await hubHello($, { version: await ownVersion($), publishes: ['x.conflict-helper.found'], consumes: [] })
+}
+
 export const register: Register = (on, options) => {
   const isGuarding = options.guard !== false
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'conflicts', description: 'conflict-helper: list merge conflicts and resolve them' })
+    await greetHub($)
     return next(e)
   })
 
@@ -225,3 +249,76 @@ export const register: Register = (on, options) => {
     )
   })
 }
+
+// #region @vendored shared/hub-client.ts sha256:d76b7319c8a3: edit the source, then run `node scripts/sync-shared.mjs`.
+// mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
+
+type HubMods = EngineInterface['mods']
+
+/** Publishes an event on the hub's bus; false when there is no hub or it refused the event. */
+async function hubPublish($: EngineInterface, input: Parameters<HubMods['publish']>[0]): Promise<boolean> {
+  try {
+    await $.mods.publish(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Routes a notification through the hub (channels, silent, night, presence), or shows a toast when there is no hub. */
+async function hubNotify($: EngineInterface, input: Parameters<HubMods['notify']>[0]): Promise<void> {
+  try {
+    await $.mods.notify(input)
+  } catch {
+    $.ui.toast(input.body === undefined || input.body === '' ? input.title : `${input.title} — ${input.body}`)
+  }
+}
+
+/** The global mode (presence, silent, night, interaction), or undefined when there is no hub. */
+async function hubMode($: EngineInterface): Promise<Awaited<ReturnType<HubMods['mode']>> | undefined> {
+  try {
+    return await $.mods.mode()
+  } catch {
+    return undefined
+  }
+}
+
+/** Announces this mod to the hub, with its panel tab when it has one; call once from `session.start`. */
+async function hubHello($: EngineInterface, hello: Parameters<HubMods['hello']>[0], tab?: Parameters<HubMods['registerTab']>[0]): Promise<boolean> {
+  try {
+    await $.mods.hello(hello)
+    if (tab !== undefined) await $.mods.registerTab(tab)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Opens the shared panel on this mod's tab; false when there is no hub (open your own pane then). */
+async function hubShowTab($: EngineInterface, id: string): Promise<boolean> {
+  try {
+    return (await $.mods.showTab({ id })).isPlaced
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stops, pauses or resumes the automatic work (`control.stop` / `control.pause` / `control.resume`) in this session
+ * or, with `scope: 'all'`, in every session; false when there is no hub (stop what you run yourself then).
+ */
+async function hubStop($: EngineInterface, input: Parameters<HubMods['stop']>[0]): Promise<boolean> {
+  try {
+    await $.mods.stop(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Whether the shared panel shows tab `id` now; read while drawing, it subscribes the drawing. */
+async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
+  const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
+  return value === id
+}
+// #endregion @vendored shared/hub-client.ts

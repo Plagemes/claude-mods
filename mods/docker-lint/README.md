@@ -34,3 +34,4 @@ Multi-stage builds are understood: a `FROM build` that names an earlier stage is
 - Hooks `tool.call` for `Edit`, `MultiEdit` and `Write`. After a successful change to a Dockerfile it reads the file, joins continuation lines, and checks each instruction; it never blocks anything.
 - hadolint is run once per edit with a 15 second limit (`hadolint --format json`); if it is not installed it is not asked again for the session.
 - Limits: it reads the whole file, so existing problems are listed again on every edit of that file. It does not resolve `ARG` values in `FROM`, `.dockerignore`, or Compose files.
+- With [mods-hub](https://github.com/plagemes/claude-mods/tree/main/mods/mods-hub) installed it publishes `lint.result` (`tool: docker-lint`, the file, and how many findings) after each edit with findings and sends its warning through `notify` instead of a toast. Without the hub nothing changes; the mod stands alone.

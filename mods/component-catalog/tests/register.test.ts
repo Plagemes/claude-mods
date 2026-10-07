@@ -2,7 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { catalogSection, levenshtein, parseComponents, similarComponents } from '../hooks/catalog'
+import { catalogSection, factOf, levenshtein, parseComponents, similarComponents } from '../hooks/catalog'
+import { fakeHub } from './hub'
 
 const ROOT = '/work/shop'
 const BUTTON = [
@@ -213,4 +214,33 @@ test('/components opens a searchable pane on terminal and desktop; mention puts 
   ])
   const searched = await $.command.run(components('user'))
   expect(searched.text).toContain('1 match "user"')
+})
+
+test('with mods-hub: says hello and shares the catalog as the fact component-catalog.components, kept current as components are written', async ($, on) => {
+  const hub = fakeHub(on)
+  world(on)
+  await start($)
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
+  expect(hub.facts.get('components')).toEqual({
+    count: 3,
+    dirs: ['src/components'],
+    isCut: false,
+    components: [
+      { name: 'Avatar', path: 'src/components/Avatar.vue', props: 2 },
+      { name: 'Button', path: 'src/components/Button.tsx', props: 3 },
+      { name: 'UserCard', path: 'src/components/users/UserCard.tsx', props: 2 },
+    ],
+  })
+
+  await $.tool.call({ tool: 'Write', file_path: `${ROOT}/src/components/Badge.tsx`, content: 'export const Badge = ({ label }: { label: string }) => <span>{label}</span>' })
+  expect((hub.facts.get('components') as { count: number }).count).toBe(4)
+})
+
+test('the shared fact is cut to the hub\'s size limit', () => {
+  const many = Array.from({ length: 500 }, (_, index) => ({ name: `Component${index}`, path: `src/components/Component${index}.tsx`, purpose: '', props: [], framework: 'react' as const }))
+  const fact = factOf({ components: many, dirs: ['src/components'], isCut: false }, 2_000)
+  expect(fact.count).toBe(500)
+  expect(fact.isCut).toBe(true)
+  expect(fact.components.length).toBeLessThan(500)
+  expect(JSON.stringify(fact).length).toBeLessThanOrEqual(2_000)
 })

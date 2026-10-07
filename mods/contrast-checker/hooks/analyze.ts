@@ -1,5 +1,6 @@
 import { adjustToPass, contrast, over, parseColor, ratioText, toHex } from './color'
-import { backgroundColor, collectVariables, factsOf, fontSizePx, fullSelector, isBold, isDarkBlock, isLargeText, lineFinder, lookupFor, parseBlocks, resolveValue } from './css'
+import { backgroundColor, collectVariables, factsOf, fontSizePx, fullSelector, isBold, isDarkBlock, isLargeText, lookupFor, parseBlocks, resolveValue } from './css'
+import { lineFinder } from './shared/line-index'
 import type { Block, Decl, Variables } from './css'
 import { classAttributes, classColors } from './tailwind'
 

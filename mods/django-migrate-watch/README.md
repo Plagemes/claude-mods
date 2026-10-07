@@ -37,3 +37,4 @@ When Claude edits a `models.py` (or a file in a `models/` package) in a Django p
 - Limits:
   - When the check itself fails (settings error, database unreachable, Django not installed), the mod stays silent and writes the reason to the debug log.
   - Models defined outside `models.py` / `models/` aren't watched.
+- With [mods-hub](https://github.com/plagemes/claude-mods/tree/main/mods/mods-hub) installed it publishes `x.django-migrate-watch.missing` (project root, apps and operation counts) whenever the set of missing migrations is new or changed, and sends a warning through `notify` so you hear about it away from the terminal. Without the hub only the band and the status line show, as before.

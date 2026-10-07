@@ -4,6 +4,7 @@ import type { On } from 'claude-code'
 
 import { adviceFor, heavyKind, limitsFrom } from '../hooks/assets'
 import { additionsOf, simpleCommands } from '../hooks/commands'
+import { fakeHub } from './hub'
 
 const NOW = 1_800_000_000_000
 const KB = 1024
@@ -166,4 +167,25 @@ test('regression: commands behind sh -c, eval and wrappers with options are read
   expect(additionsOf('env -u PROXY LANG=C nice -n 5 cp a.png static/', '/app').files).toEqual(['/app/static', '/app/static/a.png'])
   expect(additionsOf('bash -c "git add -A"', '/app').isGitAdd).toBe(true)
   expect(additionsOf('bash script.sh', '/app')).toEqual({ files: [], folders: [], isGitAdd: false })
+})
+
+test('with mods-hub: says hello, sends the warning through notify (no toast) and publishes risk.blocked per heavy asset', async ($, on) => {
+  const hub = fakeHub(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const seen = project(on, { '/app/public/img/hero.png': { size: 1.8 * MB } })
+
+  await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
+
+  const result = await bash($, 'cp ~/Downloads/hero.png public/img/hero.png')
+
+  expect(noteOf(result)).toContain('heavy-asset-warn: a heavy asset was added to the project.')
+  expect(hub.notified).toEqual([{ level: 'warning', title: 'public/img/hero.png is 1.8 MB, over the 300 KB image limit' }])
+  expect(seen.toasts).toEqual([])
+  expect(hub.published).toEqual([
+    {
+      topic: 'risk.blocked',
+      data: { guard: 'heavy-asset-warn', tool: 'Bash', reason: 'image of 1.8 MB is over the 300 KB limit', severity: 'low', path: '/app/public/img/hero.png' },
+    },
+  ])
 })

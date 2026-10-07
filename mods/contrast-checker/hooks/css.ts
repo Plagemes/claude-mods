@@ -233,22 +233,6 @@ export const lookupFor = (blocks: readonly Block[], index: number, variables: Va
   return (theme === 'dark' ? variables.dark.get(name) : undefined) ?? variables.light.get(name)
 }
 
-/** Line numbers by offset for one text: the newlines are found once, then each lookup is a binary search. */
-export const lineFinder = (text: string): ((offset: number) => number) => {
-  const newlines: number[] = []
-  for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) newlines.push(at)
-  return offset => {
-    let low = 0
-    let high = newlines.length
-    while (low < high) {
-      const middle = (low + high) >> 1
-      if ((newlines[middle] ?? Infinity) < offset) low = middle + 1
-      else high = middle
-    }
-    return low + 1
-  }
-}
-
 /** The selector a nested rule really has: `.nav` › `a` › `&:hover` → `.nav a:hover`. */
 export const fullSelector = (blocks: readonly Block[], index: number): string => {
   const chain: string[] = []

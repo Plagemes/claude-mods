@@ -485,3 +485,23 @@ export const catalogSection = (components: readonly Component[], dirs: readonly 
   }
   return `${head}\n${lines.join('\n')}`
 }
+
+/** What the hub's blackboard fact `component-catalog.components` holds: names and places, cut to fit the hub's limit. */
+export const FACT_CHARS = 15_000
+
+export type ComponentFact = { count: number; dirs: string[]; isCut: boolean; components: { name: string; path: string; props: number }[] }
+
+export const factOf = (scan: { components: readonly Component[]; dirs: readonly string[]; isCut: boolean }, maxChars = FACT_CHARS): ComponentFact => {
+  const fact: ComponentFact = { count: scan.components.length, dirs: [...scan.dirs], isCut: scan.isCut, components: [] }
+  let size = JSON.stringify(fact).length
+  for (const component of scan.components) {
+    const entry = { name: component.name, path: component.path, props: component.props.length }
+    size += JSON.stringify(entry).length + 1
+    if (size > maxChars) {
+      fact.isCut = true
+      break
+    }
+    fact.components.push(entry)
+  }
+  return fact
+}
