@@ -18,7 +18,7 @@ import type { BudgetKey, Op } from './team'
 const NAME = 'team-hub'
 const TAB = 'team'
 const PANE = 'team-hub'
-const TAB_ORDER = 220
+const TAB_ORDER = 221
 const VERSION = '1.0.0'
 const CHECK_MS = 60_000
 const GIT_TIMEOUT_MS = 5_000

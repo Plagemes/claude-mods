@@ -1,6 +1,6 @@
 {
   "name": "persona-switch",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "/persona switches Claude between reviewer, architect, teacher and other roles.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#persona-switch",

@@ -1,6 +1,6 @@
 {
   "name": "scope-lock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "/scope locks Claude to the files you name; edits outside the scope are blocked.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#scope-lock",

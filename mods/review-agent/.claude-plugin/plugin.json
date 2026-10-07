@@ -1,6 +1,6 @@
 {
   "name": "review-agent",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Adds a dedicated code-reviewer subagent and a /review command.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#review-agent",

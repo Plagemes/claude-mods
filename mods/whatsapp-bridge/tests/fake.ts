@@ -64,6 +64,8 @@ export type World = {
   gh: { exitCode: number; stdout: string }
   /** Host tools that exist (beyond sleep, git and gh): rsvg-convert, openssl. */
   bins: Set<string>
+  /** Runs just before a file write lands: another session writing at the same moment. */
+  beforeWrite?: (path: string) => void
 }
 
 /** Sends the bot made (send-text, reply, send-image, ...): chat and text. */
@@ -203,6 +205,7 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
     return { value: e.as === 'bytes' ? { base64: text } : text }
   })
   on('fs.write', ($, e) => {
+    seen.beforeWrite?.(e.path)
     seen.files.set(e.path, e.text)
     mtimes.set(e.path, seen.clock.now())
     return { value: undefined }

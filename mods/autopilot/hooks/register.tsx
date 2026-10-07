@@ -43,6 +43,8 @@ const PANE = 'autopilot'
 const PANE_TITLE = 'Autopilot'
 const TAB = 'autopilot'
 const TAB_ORDER = 40
+/** The only mods whose `channel.inbound` is trusted as the owner's words: any mod can publish `isOwner: true`, only a bridge has checked the sender. */
+const BRIDGES: ReadonlySet<string> = new Set(['whatsapp-bridge', 'telegram-bridge', 'slack-bridge', 'discord-bridge'])
 const VERSION = '1.0.0'
 const STORE_PREFIX = 'run:'
 const FILES_DIR = '.claude/claude-mods/autopilot'
@@ -508,7 +510,7 @@ async function pollHub($: EngineInterface, ctx: Ctx, run: AutopilotRun): Promise
       if ((await read($, runAtom))?.status === 'paused') await resumeRun($, ctx, '')
     }
     // Without control.* (an older hub, a mod that raises its own topic), the stop is inferred as before.
-    else if (event.topic === 'channel.inbound' && data.isOwner === true && typeof data.text === 'string') {
+    else if (event.topic === 'channel.inbound' && data.isOwner === true && BRIDGES.has(event.source) && typeof data.text === 'string') {
       const text = data.text
       if (REMOTE_STOP.test(text)) await stopRun($, ctx, `stopped from ${String(data.channel ?? 'a channel')}`)
       else if (REMOTE_PAUSE.test(text)) await pauseRun($, ctx, `paused from ${String(data.channel ?? 'a channel')}`)

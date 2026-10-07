@@ -1,6 +1,6 @@
 {
   "name": "speak-summary",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#speak-summary",

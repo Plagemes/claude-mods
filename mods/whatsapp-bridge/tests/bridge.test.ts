@@ -187,3 +187,31 @@ test('a leader that finds its lease taken (it was suspended past the takeover) s
   await seen.clock.advance(6_500)
   expect(polls()).toBe(before)
 })
+
+test('two leaders overlapping in a takeover deliver to this session at the same moment: one file each, both messages handled, a message both delivered handled once', async ($, on) => {
+  const seen = world(on, { files: noConfirm() })
+  await lead($, seen)
+  const row = arrive(seen, { chatId: GROUP, author: OWNER_CHAT, body: 'add a changelog entry' })
+  const other = `${DIR}/inbox/sess-a/sess-b.jsonl`
+  const line = (key: string, text: string, seq: number) => JSON.stringify({ seq, key, at: seen.clock.now(), kind: 'owner', chatId: GROUP, messageId: `m-${seq}`, author: OWNER_CHAT, text })
+  // The other leader writes its own file while this one is delivering the same row (and one of its own).
+  seen.beforeWrite = path => {
+    if (path === `${DIR}/inbox/sess-a/sess-a.jsonl` && !seen.files.has(other)) {
+      seen.files.set(other, `${line(`row:${row.id}`, 'add a changelog entry', 1)}\n${line('row:row-09999', 'and update the docs', 2)}\n`)
+    }
+  }
+  await pass(seen, 12_000)
+  expect(seen.submitted.map(one => one.text)).toEqual(['add a changelog entry', 'and update the docs'])
+  expect(seen.files.get(other)).toContain('and update the docs')
+  expect(JSON.parse(seen.files.get(`${DIR}/inbox/sess-a.done.json`) ?? '{}').from).toMatchObject({ 'sess-a': 1, 'sess-b': 2 })
+})
+
+test('a session that lost the lease does not clear the new leader\'s lease when it ends', async ($, on) => {
+  const seen = world(on, { files: noConfirm() })
+  on('session.end', (_$, e) => ({ sessionId: (e as { sessionId?: string }).sessionId ?? 'sess-a' }) as never)
+  await lead($, seen)
+  const theirs = JSON.stringify({ sessionId: 'sess-b', heartbeatAt: seen.clock.now(), since: seen.clock.now() })
+  seen.files.set(`${DIR}/lease.json`, theirs)
+  await $.session.end({ reason: 'exit' } as never)
+  expect(seen.files.get(`${DIR}/lease.json`)).toBe(theirs)
+})

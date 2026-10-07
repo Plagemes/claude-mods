@@ -1,6 +1,6 @@
 {
   "name": "webhook-notify",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Posts to Slack, Discord, Teams or ntfy when a long task finishes.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#webhook-notify",

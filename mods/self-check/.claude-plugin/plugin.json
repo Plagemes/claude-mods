@@ -1,6 +1,6 @@
 {
   "name": "self-check",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "At the end of each editing turn, has the model double-check it actually did what you asked.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#self-check",

@@ -20,7 +20,7 @@ Claude Code ships its own `/goal` command (a stop condition for Claude), so this
   - **Done** (`d`) marks it reached, with a 🎉 toast.
   - **Edit** (`e`) puts `/daily-goal <goal>` in the prompt box to change it.
   - **Hide** (`h`) hides the band for this session.
-- **The evening question,** from 18:00 (configurable) or in the first session after it: `🎯 Did you reach today's goal?`
+- **The evening question,** from 18:00 (configurable) or in the first session after it, for a goal set before that hour (one set later is asked about the next day): `🎯 Did you reach today's goal?`
   - **Yes, done** marks it reached.
   - **Not yet** keeps it open; the next day asks again.
   - **Later** hides the band for this session.
@@ -31,7 +31,7 @@ Claude Code ships its own `/goal` command (a stop condition for Claude), so this
 ## Configuration
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `askAfterHour` | number | `18` | From this hour (local time, 0–24) the band asks whether you reached today's goal. |
+| `askAfterHour` | number | `18` | From this hour (local time, 0–24) the band asks whether you reached today's goal. A goal set after that hour is not asked about the same day (the next day's first session asks). |
 | `tellClaude` | boolean | `true` | Add today's open goal to the system prompt, so Claude keeps it in mind. |
 
 ## How it works

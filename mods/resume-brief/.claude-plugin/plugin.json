@@ -1,6 +1,6 @@
 {
   "name": "resume-brief",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Shows what you were working on last time when a new session starts.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#resume-brief",

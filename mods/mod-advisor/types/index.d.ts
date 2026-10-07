@@ -90,6 +90,7 @@ declare module 'claude-code' {
       dismissed: string[]
       quiet: boolean
       pane: AdvisorPane
+      autoShown: boolean
     }
   }
 }

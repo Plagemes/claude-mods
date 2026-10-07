@@ -1,6 +1,6 @@
 {
   "name": "component-catalog",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "/components lists your existing UI components so Claude reuses them instead of creating duplicates.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#component-catalog",

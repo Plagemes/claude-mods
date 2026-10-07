@@ -17,7 +17,7 @@ export const hub: Plugin = {
       statuses: [] as string[],
       published: [] as { topic: string; data: unknown }[],
       notices: [] as Record<string, unknown>[],
-      tabs: [] as { id: string; title: string }[],
+      tabs: [] as { id: string; title: string; order?: number }[],
       tab: 'home',
       hellos: [] as string[],
       controls: [] as Record<string, unknown>[],
@@ -64,7 +64,7 @@ export const hub: Plugin = {
     })
     on('mods.registerTab', (_$, e) => {
       if (state.isDown) return down
-      state.tabs.push({ id: e.id, title: e.title })
+      state.tabs.push({ id: e.id, title: e.title, order: e.order })
       return { value: { tabs: [] } }
     })
     on('mods.showTab', (_$, e) => {
@@ -122,7 +122,7 @@ export type HubSnapshot = {
   statuses: string[]
   published: { topic: string; data: Record<string, unknown> }[]
   notices: { level: string; title: string; body?: string; audience?: string; kind?: string }[]
-  tabs: { id: string; title: string }[]
+  tabs: { id: string; title: string; order?: number }[]
   tab: string
   hellos: string[]
   controls: { action?: string; scope?: string; reason: string; by?: string }[]

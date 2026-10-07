@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DIR, GROUP, OWNER_CHAT, arrive, configured, lead, pass, react, sends, world } from './fake'
+import { DIR, ME, GROUP, OWNER_CHAT, arrive, configured, lead, pass, react, sends, world } from './fake'
 
 const MEMBER = '447700900123@c.us'
 const noConfirm = () => configured({ [`${DIR}/prefs.json`]: JSON.stringify({ presence: 'away', interaction: 'on', events: { confirmPrompts: false } }) })
@@ -51,7 +51,7 @@ test('member questions are rate limited per member', async ($, on) => {
   for (let i = 1; i <= 7; i += 1) arrive(seen, { chatId: GROUP, author: MEMBER, body: `? question number ${i}` })
   await pass(seen, 20_000)
   expect(seen.forks).toHaveLength(5)
-  expect(seen.files.get(`${DIR}/members.jsonl`)).toContain('"outcome":"limited"')
+  expect(seen.files.get(`${DIR}/members/${ME}.jsonl`)).toContain('"outcome":"limited"')
 })
 
 test('a member’s bug report becomes a draft; only the owner’s 👍 files the issue', async ($, on) => {

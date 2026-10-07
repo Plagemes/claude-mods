@@ -78,6 +78,11 @@ function world(on: On) {
     files.set(e.path, e.text)
     return { value: undefined }
   })
+  on('fs.list', ($, e) => {
+    const names = [...files.keys()].filter(path => path.startsWith(`${e.path}/`) && !path.slice(e.path.length + 1).includes('/'))
+    if (names.length === 0) return { deny: `ENOENT: ${e.path}` }
+    return { value: names.map(path => ({ name: path.slice(e.path.length + 1), kind: 'file' as const, size: 1, mtimeMs: 0, isLink: false })) }
+  })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 'sess-1234abcd' }))
   on('session.cwd', () => ({ value: '/work/shop' }))
@@ -213,6 +218,9 @@ test('the shared panel: Home on every surface, a mod draws its own tab and keeps
     expect(await ui.find({ type: 'Text', text: 'Channels' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'WhatsApp' })).toBeDefined()
     expect(await ui.find({ key: 'tab-router' })).toBeDefined()
+    // The tab buttons are plain with their digit, so the terminal draws `0: Home` and `1: Router`.
+    expect((await ui.find({ key: 'tab-home' }))?.props).toMatchObject({ plain: true, hotkey: '0', label: 'Home', variant: 'primary' })
+    expect((await ui.find({ key: 'tab-router' }))?.props).toMatchObject({ plain: true, hotkey: '1', label: 'Router', dimColor: true })
 
     await ui.press({ key: 'interaction' })
     expect(JSON.parse(w.files.get(PREFS_FILE) ?? '{}').interaction).toBe(surface === 'terminal' ? 'on' : 'off')
@@ -286,19 +294,22 @@ test('stop, pause, resume: control.* on the bus and in state, all sessions throu
   await start($)
   await w.clock.settle()
   const CONTROL_FILE = '/home/me/.claude/claude-mods/hub/control.json'
+  const OWN_CONTROL_FILE = '/home/me/.claude/claude-mods/hub/control/sess-1234abcd.json'
 
   const stopped = await mods($, 'stop', { scope: 'all', reason: 'STOP ALL from the phone', by: 'owner via whatsapp' })
   expect(stopped.value).toMatchObject({ action: 'stop', scope: 'all', by: 'owner via whatsapp', source: 'probe', session: 'sess-1234abcd' })
   expect((await mods($, 'latest', { topic: 'control.stop' })).value).toMatchObject({ source: 'probe', data: { scope: 'all', reason: 'STOP ALL from the phone' } })
-  expect(JSON.parse(w.files.get(CONTROL_FILE) ?? '{}').controls).toHaveLength(1)
+  // One writer per file: this session's controls go to its own file, never the shared one.
+  expect(JSON.parse(w.files.get(OWN_CONTROL_FILE) ?? '{}').controls).toHaveLength(1)
+  expect(w.files.has(CONTROL_FILE)).toBe(false)
   expect(String((await hub($, 'status')).text)).toContain('Automatic work: stopped by owner via whatsapp')
 
   expect((await mods($, 'publish', { topic: 'control.stop', data: { id: 'x', scope: 'all', reason: 'r', by: 'b', session: 's' } })).error).toContain('$.mods.stop')
   expect((await mods($, 'stop', { reason: '' })).error).toContain('needs a reason')
 
-  // Another session resumes everything: this one picks it up within 5 seconds.
+  // Another session resumes everything (from its own file): this one picks it up within 5 seconds.
   const other = { id: 'c-other-1', action: 'resume', scope: 'all', reason: 'back at it', by: 'you', session: 'sess-other', source: 'mods-hub', at: NOON + 1_000 }
-  w.files.set(CONTROL_FILE, JSON.stringify({ controls: [...JSON.parse(w.files.get(CONTROL_FILE) ?? '{}').controls, other] }))
+  w.files.set('/home/me/.claude/claude-mods/hub/control/sess-other.json', JSON.stringify({ controls: [other] }))
   await w.clock.advance(6_000)
   expect((await mods($, 'latest', { topic: 'control.resume' })).value).toMatchObject({ data: { id: 'c-other-1', session: 'sess-other' } })
   await w.clock.advance(6_000)
@@ -337,4 +348,29 @@ test('notifications: an identical one within 30 s is dropped, one with a differe
   expect(other.value.targets).toEqual(['toast'])
   expect(w.toasts.filter(text => text.startsWith('✗ probe: CI failed'))).toHaveLength(2)
   expect((await mods($, 'notify', { level: 'info', title: 'x', body: 42 })).error).toContain('body is text')
+})
+
+test('shared files, one writer each: two sessions beating at once both stay in sessions.json, an ended one is not written back, and a prefs change made elsewhere survives', { plugins: [probe] }, async ($, on) => {
+  const w = world(on)
+  const HUB = '/home/me/.claude/claude-mods/hub'
+  await start($)
+  await w.clock.settle()
+  // Another session beats from its own file; the shared view this session last read did not have it yet.
+  w.files.set(`${HUB}/sessions/sess-other.json`, JSON.stringify({ id: 'sess-other', project: 'api', cwd: '/work/api', startedAt: NOON, lastSeen: NOON, presence: 'here', turns: 2, usd: 0.1, events: [] }))
+  w.files.set(`${HUB}/sessions.json`, JSON.stringify({}))
+  await w.clock.advance(61_000)
+  const merged = JSON.parse(w.files.get(`${HUB}/sessions.json`) ?? '{}') as Record<string, unknown>
+  expect(Object.keys(merged).sort()).toEqual(['sess-1234abcd', 'sess-other'])
+  expect(JSON.parse(w.files.get(`${HUB}/sessions/sess-1234abcd.json`) ?? '{}')).toMatchObject({ id: 'sess-1234abcd', project: 'shop' })
+
+  // The other session ends: its own file says so, and this session's next beat does not bring it back.
+  w.files.set(`${HUB}/sessions/sess-other.json`, JSON.stringify({ id: 'sess-other', lastSeen: NOON + 60_000, ended: true }))
+  w.files.set(`${HUB}/sessions.json`, JSON.stringify({ 'sess-other': { id: 'sess-other', lastSeen: NOON + 60_000 }, 'sess-1234abcd': {} }))
+  await w.clock.advance(61_000)
+  expect(Object.keys(JSON.parse(w.files.get(`${HUB}/sessions.json`) ?? '{}'))).toEqual(['sess-1234abcd'])
+
+  // Another session turned Night off a moment ago (this one has not re-read the file yet); a route changed here keeps it.
+  w.files.set(PREFS_FILE, JSON.stringify({ ...JSON.parse(w.files.get(PREFS_FILE) ?? '{}'), isNightOn: false }))
+  await hub($, 'route warning always')
+  expect(JSON.parse(w.files.get(PREFS_FILE) ?? '{}')).toMatchObject({ isNightOn: false, routes: { warning: 'always' } })
 })

@@ -182,6 +182,8 @@ const commandsState = atom({ plugin: 'mod-advisor', key: 'commands' } as const, 
 const dismissedState = atom({ plugin: 'mod-advisor', key: 'dismissed' } as const, [])
 const quietState = atom({ plugin: 'mod-advisor', key: 'quiet' } as const, false)
 const paneState = atom({ plugin: 'mod-advisor', key: 'pane' } as const, { isOpen: false, isPlaced: false })
+/** Whether this session already opened the panel by itself: host state outlives a hot reload, so a reload does not steal the visible tab again. */
+const autoShownState = atom({ plugin: 'mod-advisor', key: 'autoShown' } as const, false)
 
 const emptyPending = (): Pending => ({ paths: new Set(), manifests: new Set(), installs: false, isFull: false })
 
@@ -899,7 +901,8 @@ async function openPane($: Dollar, rt: Runtime, isAsked: boolean): Promise<boole
 async function startSession($: Dollar, rt: Runtime): Promise<void> {
   rt.isQuiet = (await $.store.get(QUIET_KEY).catch(() => undefined)) === true
   await update($, quietState, () => rt.isQuiet)
-  if (rt.config.autoOpen && rt.isInteractive) {
+  if (rt.config.autoOpen && rt.isInteractive && !(await read($, autoShownState))) {
+    await update($, autoShownState, () => true)
     await openPane($, rt, false).catch(() => false)
   }
   const root = (await $.session.repo().catch(() => null))?.root ?? (await $.session.root())
@@ -1453,6 +1456,7 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
+    await update($, autoShownState, () => false)
     if (e.reason === 'clear') {
       rt.told.clear()
       rt.prompts = []

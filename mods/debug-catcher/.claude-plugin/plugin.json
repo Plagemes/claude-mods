@@ -1,6 +1,6 @@
 {
   "name": "debug-catcher",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Warns when console.log, print, debugger or dbg! statements are left in code.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#debug-catcher",

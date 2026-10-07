@@ -1,6 +1,6 @@
 {
   "name": "seed-guard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Blocks database seed, reset and drop commands unless DATABASE_URL points at your own machine.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#seed-guard",

@@ -1,6 +1,6 @@
 {
   "name": "no-any",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Flags new any types, @ts-ignore and eslint-disable comments as Claude writes them.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#no-any",

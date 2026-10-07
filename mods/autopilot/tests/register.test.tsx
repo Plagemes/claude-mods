@@ -334,6 +334,23 @@ test('with the hub and interaction off: never asks, parks questions, notifies an
   expect(seen.toasts).toContain('HUB publish task.finished')
 })
 
+test('with the hub: channel.inbound says "owner" only through a bridge; any other mod claiming isOwner is not trusted', { plugins: [hub] }, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await pilot($, 'add a database')
+  await pilot($, 'go')
+  await seen.clock.settle()
+  const inbound = (source: string, at: number) => ({ id: `i-${at}`, topic: 'channel.inbound', data: { channel: 'whatsapp', from: 'me', text: 'stop', isOwner: true }, source, at, session: 's', scope: 'session' })
+
+  seen.files.set('/hub/events.json', JSON.stringify([inbound('some-other-mod', NOON + 60_000)]))
+  await seen.clock.advance(65_000)
+  expect(await pilot($, 'status')).not.toContain('stopped from whatsapp')
+
+  seen.files.set('/hub/events.json', JSON.stringify([inbound('telegram-bridge', NOON + 130_000)]))
+  await seen.clock.advance(65_000)
+  expect(await pilot($, 'status')).toContain('Reason: stopped from whatsapp')
+})
+
 test('with the hub: control.pause, control.resume and control.stop ($.mods.stop, from any session) drive the run', { plugins: [hub] }, async ($, on) => {
   const seen = world(on)
   await start($)

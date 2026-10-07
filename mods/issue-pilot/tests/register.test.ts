@@ -208,6 +208,7 @@ test('with the hub: an Issues tab; autopilot reporting done prepares the PR but 
   await start($)
   expect(seenOff.hello).toContain('issue-pilot')
   expect(seenOff.tabs).toEqual(['issues'])
+  expect(seenOff.orders).toEqual([213]) // unique among the shared panel's tabs (error-feed 210, slack 211, discord 212, telegram 214)
   await issues($)
   expect(seenOff.shown).toEqual(['issues'])
   expect(w.opened).toEqual([])

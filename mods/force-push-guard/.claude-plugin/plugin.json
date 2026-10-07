@@ -1,6 +1,6 @@
 {
   "name": "force-push-guard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Forbids force-pushing to protected branches and suggests --force-with-lease.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#force-push-guard",

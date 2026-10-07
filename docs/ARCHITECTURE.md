@@ -81,8 +81,8 @@ A subscriber must return `next(e)` promptly and defer work (`$.clock.after(0, �
 | This session, survives hot reload | `$.state` `outbox` | pull channels' notices until their owner acknowledges them (100 per channel; lost when the session ends) |
 | All sessions, the hub | `~/.claude/claude-mods/hub/prefs.json` | the global mode and routing (`ModsPrefs`): changed in one session, picked up by the others within 30 s |
 | | `~/.claude/claude-mods/hub/activity.json` | the person's last activity, so a session idle in the background does not think the person is away while they type in another |
-| | `~/.claude/claude-mods/hub/control.json` | the last 20 stops, pauses and resumes raised with `scope: 'all'` (one hour); every session polls it every 5 s and raises each new one once |
-| | `~/.claude/claude-mods/hub/sessions.json` | one heartbeat per live session (project, presence, turns, cost, its last 20 `scope: 'global'` events); entries older than 10 min are dropped; a session removes itself at `session.end` |
+| | `~/.claude/claude-mods/hub/control/<session>.json` | the stops, pauses and resumes a session raised with `scope: 'all'` (the last 20, one hour), one file per raising session (one writer per file); every session polls the folder every 5 s and raises each new entry once. The older single `control.json` is still read |
+| | `~/.claude/claude-mods/hub/sessions/<id>.json` and `sessions.json` | each session writes only its own heartbeat file (project, presence, turns, cost, its last 20 `scope: 'global'` events; one writer per file, so two sessions beating at once never drop each other's line) and rebuilds `sessions.json`, the merged view that mission-control, resume-brief, handoff and standup read; entries older than 10 min are dropped; a session removes itself at `session.end` |
 | All sessions, a mod | `~/.claude/claude-mods/<mod>/…` (convention) or `$.store` | mod data other sessions (or mods) read: `smart-router/daily.json`, `whatsapp-bridge/sessions/` |
 
 When the hub is absent nothing above exists: soft mods use their own `$.state`/`$.store` exactly as today.
@@ -151,7 +151,7 @@ Above the hub, `next(e)` returns the hub's frame (tab strip) and the owner appen
 | **`notify(level)`** | anything that used to be a toast and might matter away from the terminal | ci-watch, long-run-alert, typecheck-gate, night-shift |
 | **Command output / guard text** | on-demand reports; refusals | bash-history, standup; every guard's deny |
 
-Tab order convention (`order`): 10 Advisor, 20 Router, 30 Mission Control, 40 Autopilot, 50 Workflows, 60 Brain, 70 Guardian, 80 Channels, 90 Cost, 95 Context, 100 Tests, then the rest at 200+ as built: 210 Errors (error-feed; issue-pilot and the telegram tab also use 210), 211–212 Slack/Discord, 220 Queue (task-queue; team-hub also uses 220), 240 Calendar, 250 Changes (one tab shared by diff-pane and files-touched), 260 Tasks, 270 Timeline, 280 Notes, 290 Stats, 300 Dev server. Hotkeys `0`–`9` follow the order and belong to the hub's tab strip: a tab body never binds a digit (use letters).
+Tab order convention (`order`): 10 Advisor, 20 Router, 30 Mission Control, 40 Autopilot, 50 Workflows, 60 Brain, 70 Guardian, 80 Channels, 90 Cost, 95 Context, 100 Tests, then the rest at 200+ as built, every order unique: 210 Errors (error-feed), 211 Slack, 212 Discord, 213 Issues (issue-pilot), 214 Telegram, 220 Queue (task-queue), 221 Team (team-hub), 240 Calendar, 250 Changes (one tab shared by diff-pane and files-touched), 260 Tasks, 270 Timeline, 280 Notes, 290 Stats, 300 Dev server. Hotkeys `0`–`9` follow the order and belong to the hub's tab strip (the tab buttons on the terminal show their digit, `1: Advisor`): a tab body never binds a digit (use letters).
 
 ## 8. Event catalog
 
@@ -555,13 +555,13 @@ All soft (they work without the hub) except the three push bridges, which depend
 | `workflow-studio` | task.queued, task.started, task.finished | agent.routed, agent.finished, control.* | reads fact `smart-router.policy` | **tab** Workflows | — |
 | `mission-control` (soft) | — | everything incl. sessions.json (all sessions), control.* | reads sessions.json, latest/*; works from its own session files without the hub | **tab** Mission Control (own pane without the hub) | prices |
 | `session-sync` (soft) | x.session-sync.synced | session.*, decision.recorded | reads/writes sessions.json neighbours; its own files without the hub | tab section in Mission Control | — |
-| `team-hub` | x.team-hub.drift | — | fact `team-hub.policy`; reads fact `guardian.policy` and the hub's routes (drift from the team's rules) | **tab** Team (order 220) | secrets |
-| `telegram-bridge` (bound) | channel.inbound, approval.answered | mods.deliver | — | channel `telegram` (push) | secrets |
+| `team-hub` | x.team-hub.drift | — | fact `team-hub.policy`; reads fact `guardian.policy` and the hub's routes (drift from the team's rules) | **tab** Team (order 221) | secrets |
+| `telegram-bridge` (bound) | channel.inbound, approval.answered | mods.deliver | — | channel `telegram` (push) + **tab** Telegram (order 214) | secrets |
 | `slack-bridge` (bound) | channel.inbound | mods.deliver (audience team) | — | channel `slack` (team, push) | secrets |
 | `discord-bridge` (bound) | channel.inbound | mods.deliver (audience team) | — | channel `discord` (team, push) | secrets |
 | `calendar-sync` | x.calendar-sync.busy | — | calls setMode/setPresence from meetings | **tab** Calendar | — |
 | `email-digest` | — | its `email` channel (`drain`); ci.result, deploy.finished, deploy.failed, pr.opened, decision.recorded, test.result, error.repeated, cost.update (`recent`) | — | channel `email` (pull, digest) | secrets |
-| `issue-pilot` | issue.drafted | ci.result, error.repeated, test.result | — | **tab** Issues | secrets |
+| `issue-pilot` | issue.drafted | ci.result, error.repeated, test.result | — | **tab** Issues (order 213) | secrets |
 
 ### Overlaps, and how they cooperate
 
@@ -597,9 +597,9 @@ Rationale: wave 1 gives the hub its first real publishers and consumers (cost, t
 
 ## 12. Open points
 
-- Cross-plugin pane drawing is verified in the engine's test kit (terminal and desktop), with the tab owner beneath the hub, and the hub was run live headlessly (`claude -p --plugin-dir mods/mods-hub "/hub status"`); a first interactive session with a tab owner installed should confirm the drawing order the convention relies on.
+- **Confirmed live:** cross-plugin pane drawing (a tab owner drawing its body inside the hub's `claude-mods` pane, with its own buttons) works in a real session: a tmux smoke test ran an interactive session with the hub and a tab owner installed, in both load orders (owner before the hub and after it), alongside the test-kit runs (terminal and desktop) and the headless run (`claude -p --plugin-dir mods/mods-hub "/hub status"`). The convention in section 7 relies on nothing about the order.
 - `mods.deliver` runs in the hub's background timer; a slow channel delays the next delivery, not the session. Channel mods should queue and answer at once.
-- A pull channel's notices live in its session's state: they survive a hot reload, not the end of the session. A channel that must not lose a notice across sessions keeps its own durable outbox after draining. The pull channels written before the cursor (whatsapp-bridge, email-digest, desktop-notify, webhook-notify) still drain without `after` (at-most-once); moving them to the cursor is a one-line change each.
-- `control.json` is read-modify-write like the other shared files: two sessions raising a STOP ALL in the same instant may keep only one of the two entries (both stop everything, so nothing is lost in effect).
+- A pull channel's notices live in its session's state: they survive a hot reload, not the end of the session. A channel that must not lose a notice across sessions keeps its own durable outbox after draining. **Resolved:** the four pull channels written before the cursor (whatsapp-bridge, email-digest, desktop-notify, webhook-notify) are now on the drain cursor (`drain({ channel, after })`, at-least-once, deduplicated by id); only a channel that calls `drain` without `after` is at-most-once.
+- **Resolved:** `control.json` was read-modify-write (two sessions raising a STOP ALL in the same instant could keep one entry); each session now writes its own `control/<session>.json` and the old file is still read. Likewise `sessions.json` is rebuilt from per-session files, the bridges keep one inbox file per writer, and the pull channels written before the cursor are on it (above).
 - Presence counts prompts and hub presses, not other mods' slash commands or buttons (the hub cannot see those cheaply).
 - Promote `x.*` topics used by two or more mods into the catalog at each hub release; bump the contract's version in `plugin.json` and re-run `sync-shared` so soft mods pick up the new types.

@@ -307,7 +307,7 @@ test('align: a row an organization has locked is not changed and the person is t
 test('hub: the Team tab, the drift event (once, and again only when it changes), the policy fact and one notice', { plugins: [hubStandIn()] }, async ($, on) => {
   const w = world(on)
   await start($, w)
-  expect(await callsOf($, 'registerTab', PLUGIN)).toEqual([{ id: 'team', title: 'Team', order: 220, command: 'team' }])
+  expect(await callsOf($, 'registerTab', PLUGIN)).toEqual([{ id: 'team', title: 'Team', order: 221, command: 'team' }])
   expect(await callsOf($, 'hello', PLUGIN)).toEqual([{ version: '1.0.0', publishes: ['x.team-hub.drift'], consumes: [] }])
   const published = await callsOf($, 'publish', PLUGIN)
   expect(published).toEqual([

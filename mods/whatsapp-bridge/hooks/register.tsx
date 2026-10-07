@@ -232,6 +232,8 @@ type Runtime = {
   liveStatus: { chatId: string; messageId: string; at: number } | undefined
   doneSeq: number
   doneIds: string[]
+  /** How far this session consumed each leader's inbox file (one writer per file). */
+  doneFrom: Record<string, number>
   isLeader: boolean
   leaseVerified: boolean
   leader: LeaderState | undefined
@@ -315,6 +317,7 @@ const newRuntime = (settings: Settings): Runtime => ({
   liveStatus: undefined,
   doneSeq: 0,
   doneIds: [],
+  doneFrom: {},
   isLeader: false,
   leaseVerified: false,
   leader: undefined,
@@ -375,9 +378,12 @@ const paths = {
   sessions: (rt: Runtime): string => `${rt.dir}/sessions`,
   session: (rt: Runtime, id: string): string => `${rt.dir}/sessions/${id}.json`,
   inbox: (rt: Runtime, id: string): string => `${rt.dir}/inbox/${id}.jsonl`,
+  inboxDir: (rt: Runtime, id: string): string => `${rt.dir}/inbox/${id}`,
+  inboxFrom: (rt: Runtime, id: string, writer: string): string => `${rt.dir}/inbox/${id}/${writer}.jsonl`,
   done: (rt: Runtime, id: string): string => `${rt.dir}/inbox/${id}.done.json`,
   log: (rt: Runtime, id: string): string => `${rt.dir}/log/${id}.jsonl`,
   members: (rt: Runtime): string => `${rt.dir}/members.jsonl`,
+  memberLogs: (rt: Runtime): string => `${rt.dir}/members`,
   scratch: (rt: Runtime): string => `${rt.dir}/tmp`,
   media: (rt: Runtime): string => `${rt.root}/.claude/whatsapp/inbox`,
   queue: (rt: Runtime): string => `${rt.root}/.claude/whatsapp/queue.md`,
@@ -627,7 +633,9 @@ async function loadShared($: EngineInterface, rt: Runtime): Promise<void> {
 }
 
 async function saveConfig($: EngineInterface, rt: Runtime, change: Partial<SharedConfig>): Promise<void> {
-  rt.config = { ...rt.config, ...change }
+  // From the file, not this session's copy: a key or owner another session saved meanwhile is kept.
+  const stored = await readJsonFile($, paths.config(rt))
+  rt.config = { ...(isRecord(stored) ? (stored as SharedConfig) : rt.config), ...change }
   await writeJsonFile($, paths.config(rt), rt.config)
   await loadShared($, rt)
 }
@@ -1119,15 +1127,39 @@ const memberName = (row: WaRow): string => {
   return phone !== '' ? `+${phone.slice(0, -4).replace(/\d/g, '•')}${phone.slice(-4)}` : 'a member'
 }
 
-/** Appends one entry to a session's inbox (written by the leader alone), trimming what it has consumed. */
+/** One inbox line and the leader that wrote it ('' for the older single inbox file). */
+type Posted = { writer: string; entry: InboxEntry }
+
+/**
+ * A session's inbox: one file per leader that delivered to it (`inbox/<id>/<leader>.jsonl`, one writer per file, so two
+ * leaders overlapping during a takeover never overwrite each other's lines), and the older single file.
+ */
+async function readInbox($: EngineInterface, rt: Runtime, sessionId: string): Promise<Posted[]> {
+  const lines = async (path: string): Promise<InboxEntry[]> => (await readLines($, path)).filter(isRecord) as unknown as InboxEntry[]
+  const posted: Posted[] = (await lines(paths.inbox(rt, sessionId))).map(entry => ({ writer: '', entry }))
+  for (const file of await $.fs.list(paths.inboxDir(rt, sessionId)).catch(() => [])) {
+    if (file.kind !== 'file' || !file.name.endsWith('.jsonl')) continue
+    const writer = file.name.slice(0, -'.jsonl'.length)
+    posted.push(...(await lines(paths.inboxFrom(rt, sessionId, writer))).map(entry => ({ writer, entry })))
+  }
+  return posted
+}
+
+/** How far a session consumed a leader's inbox file, from its done file (`from`; `seq` for the older single file). */
+const consumedOf = (done: unknown, writer: string): number => {
+  if (!isRecord(done)) return 0
+  const value = writer === '' ? done.seq : isRecord(done.from) ? done.from[writer] : undefined
+  return typeof value === 'number' ? value : 0
+}
+
+/** Appends one entry to a session's inbox, in this leader's own file, trimming what that session has consumed of it. */
 async function deliver($: EngineInterface, rt: Runtime, sessionId: string, entry: Omit<InboxEntry, 'seq'>): Promise<void> {
-  const done = await readJsonFile($, paths.done(rt, sessionId))
-  const doneSeq = isRecord(done) && typeof done.seq === 'number' ? done.seq : 0
-  const lines = (await readLines($, paths.inbox(rt, sessionId))).filter(isRecord) as unknown as InboxEntry[]
-  if (lines.some(line => line.key === entry.key)) return
-  const kept = lines.filter(line => line.seq > doneSeq)
-  const seq = Math.max(doneSeq, ...lines.map(line => line.seq)) + 1
-  await writeLines($, paths.inbox(rt, sessionId), [...kept, { ...entry, seq }])
+  const posted = await readInbox($, rt, sessionId)
+  if (posted.some(one => one.entry.key === entry.key)) return
+  const consumed = consumedOf(await readJsonFile($, paths.done(rt, sessionId)), rt.me)
+  const mine = posted.filter(one => one.writer === rt.me).map(one => one.entry)
+  const seq = Math.max(consumed, ...mine.map(line => line.seq)) + 1
+  await writeLines($, paths.inboxFrom(rt, sessionId, rt.me), [...mine.filter(line => line.seq > consumed), { ...entry, seq }])
   if (sessionId === rt.me) void consumeInbox($, rt)
 }
 
@@ -1304,13 +1336,16 @@ async function consumeInbox($: EngineInterface, rt: Runtime): Promise<void> {
   if (rt.isConsuming || rt.me === '' || rt.dir === '') return
   rt.isConsuming = true
   try {
-    const entries = ((await readLines($, paths.inbox(rt, rt.me))).filter(isRecord) as unknown as InboxEntry[]).sort((a, b) => a.seq - b.seq)
-    for (const entry of entries) {
-      if (entry.seq <= rt.doneSeq && rt.doneIds.includes(entry.key)) continue
-      if (rt.doneIds.includes(entry.key)) continue
-      rt.doneIds = [...rt.doneIds, entry.key].slice(-DONE_KEEP)
-      rt.doneSeq = Math.max(rt.doneSeq, entry.seq)
-      await writeJsonFile($, paths.done(rt, rt.me), { seq: rt.doneSeq, ids: rt.doneIds })
+    const posted = (await readInbox($, rt, rt.me)).sort((a, b) => a.entry.at - b.entry.at || a.entry.seq - b.entry.seq)
+    for (const { writer, entry } of posted) {
+      // Each leader's file is consumed in its own order; a line two leaders both delivered is handled once (by key).
+      const isSeen = rt.doneIds.includes(entry.key)
+      if (writer === '' ? isSeen : entry.seq <= (rt.doneFrom[writer] ?? 0)) continue
+      if (writer === '') rt.doneSeq = Math.max(rt.doneSeq, entry.seq)
+      else rt.doneFrom = { ...rt.doneFrom, [writer]: entry.seq }
+      if (!isSeen) rt.doneIds = [...rt.doneIds, entry.key].slice(-DONE_KEEP)
+      await writeJsonFile($, paths.done(rt, rt.me), { seq: rt.doneSeq, ids: rt.doneIds, from: rt.doneFrom })
+      if (isSeen) continue
       try {
         await handleEntry($, rt, entry)
       } catch (error) {
@@ -1649,9 +1684,20 @@ async function fileIssue($: EngineInterface, rt: Runtime, pending: Pending, entr
   await appendMemberLog($, rt, { at: await $.clock.now(), member: entry.author, question: title, answer: url, outcome: 'bug-filed' })
 }
 
+/** The member Q&A of every session: one log per writer, and the older shared file; oldest first. */
+async function readMemberLogs($: EngineInterface, rt: Runtime): Promise<Record<string, unknown>[]> {
+  const rows = (await readLines($, paths.members(rt))).filter(isRecord)
+  for (const file of await $.fs.list(paths.memberLogs(rt)).catch(() => [])) {
+    if (file.kind === 'file' && file.name.endsWith('.jsonl')) rows.push(...(await readLines($, `${paths.memberLogs(rt)}/${file.name}`)).filter(isRecord))
+  }
+  return rows.sort((a, b) => Number(a.at ?? 0) - Number(b.at ?? 0))
+}
+
 async function appendMemberLog($: EngineInterface, rt: Runtime, qa: WaMemberQa): Promise<void> {
-  const lines = (await readLines($, paths.members(rt))).slice(-99)
-  await writeLines($, paths.members(rt), [...lines, qa])
+  // One writer per file: the leader (limits) and every answering session append to their own log.
+  const path = `${paths.memberLogs(rt)}/${rt.me || 'unknown'}.jsonl`
+  const lines = (await readLines($, path)).slice(-99)
+  await writeLines($, path, [...lines, qa])
   await update($, membersAtom, list => [...list, qa].slice(-20))
 }
 
@@ -2109,7 +2155,8 @@ async function scanScreenshots($: EngineInterface, rt: Runtime): Promise<void> {
 /** The session-end summary: from the transcript, no model call (the end gives hooks ~1.5 s). */
 async function onSessionEnd($: EngineInterface, rt: Runtime): Promise<void> {
   rt.file.info.ended = true
-  if (rt.isLeader) await writeJsonFile($, paths.lease(rt), { sessionId: '', heartbeatAt: 0, since: 0 })
+  // Released only while it still names this session: a session that lost the lease must not clear the new leader's.
+  if (rt.isLeader && parseLease(await readJsonFile($, paths.lease(rt)))?.sessionId === rt.me) await writeJsonFile($, paths.lease(rt), { sessionId: '', heartbeatAt: 0, since: 0 })
   if (rt.turns > 0 && isConfigured(rt) && rt.prefs.events.sessionEnd) {
     const messages = await $.session.messages().catch(() => [])
     const list = Array.isArray(messages) ? messages : []
@@ -2283,6 +2330,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   if (isRecord(done)) {
     rt.doneSeq = typeof done.seq === 'number' ? done.seq : 0
     rt.doneIds = Array.isArray(done.ids) ? done.ids.map(String) : []
+    rt.doneFrom = isRecord(done.from) ? Object.fromEntries(Object.entries(done.from).filter((pair): pair is [string, number] => typeof pair[1] === 'number')) : {}
   }
   await saveSelf($, rt)
   rt.isStarted = true
@@ -2332,7 +2380,7 @@ async function refreshPane($: EngineInterface, rt: Runtime): Promise<void> {
   await update($, conversationAtom, () => logs.filter(entry => entry.dir === 'in' || entry.dir === 'out').slice(-30))
   const own = (await readLines($, paths.log(rt, rt.me))).filter(isRecord).slice(-40) as unknown as WaLogEntry[]
   await update($, auditAtom, () => own)
-  const members = (await readLines($, paths.members(rt))).filter(isRecord) as unknown as WaMemberQa[]
+  const members = (await readMemberLogs($, rt)) as unknown as WaMemberQa[]
   await update($, membersAtom, () => members.slice(-20))
   await update($, privacyAtom, privacy => ({ ...privacy, allowlist: allowlist(rt) }))
   await refreshGroupCard($, rt, '')

@@ -246,38 +246,68 @@ async function loadShared($: EngineInterface, rt: Runtime): Promise<void> {
 
 /** Changes the prefs every session shares, then recomputes the mode. */
 async function changePrefs($: EngineInterface, rt: Runtime, change: (prefs: ModsPrefs) => ModsPrefs): Promise<ModsMode> {
-  const next = sanitizePrefs(change(await read($, prefsAtom)))
+  // From the file, not this session's copy (up to 30 s old): what another session changed meanwhile is kept.
+  const onDisk = rt.dir === '' ? undefined : await readJsonFile($, `${rt.dir}/prefs.json`)
+  const next = sanitizePrefs(change(onDisk === undefined ? await read($, prefsAtom) : sanitizePrefs(onDisk)))
   await update($, prefsAtom, () => next)
   if (rt.dir !== '') await writeJsonFile($, `${rt.dir}/prefs.json`, next)
   return refreshMode($, rt, 'manual')
 }
 
-/** This session's line in sessions.json: what mission-control and session-sync read. */
+/**
+ * This session's heartbeat. Each session writes only its own `sessions/<id>.json` (one writer per file: two sessions
+ * beating at once can no longer drop each other's line, and an ended session cannot be written back by another), then
+ * rebuilds `sessions.json`, the merged view mission-control, resume-brief, handoff and standup read, from those files.
+ */
 async function heartbeat($: EngineInterface, rt: Runtime, isEnding = false): Promise<void> {
   if (rt.dir === '' || rt.sessionId === '') return
   const now = await $.clock.now()
   rt.lastHeartbeatAt = now
-  const path = `${rt.dir}/sessions.json`
-  const raw = ((await readJsonFile($, path)) ?? {}) as Record<string, { lastSeen?: number }>
+  const mode = await read($, modeAtom)
+  const own = {
+    id: rt.sessionId,
+    project: rt.project,
+    cwd: rt.cwd,
+    startedAt: rt.startedAt,
+    lastSeen: now,
+    presence: mode.presence,
+    turns: rt.turns,
+    usd: Math.round(rt.sessionUsd * 10_000) / 10_000,
+    events: rt.globalFeed,
+    ...(isEnding ? { ended: true } : {}),
+  }
+  await writeJsonFile($, `${rt.dir}/sessions/${fileId(rt.sessionId)}.json`, own)
+  const sessions = await mergedSessions($, rt, now)
+  if (isEnding) delete sessions[rt.sessionId]
+  else sessions[rt.sessionId] = { ...own }
+  await writeJsonFile($, `${rt.dir}/sessions.json`, sessions)
+}
+
+/** A session id as a file name. */
+const fileId = (id: string): string => id.replace(/[^A-Za-z0-9_-]/g, '_')
+
+/**
+ * The live sessions from their own files (fresh and not ended), plus the lines of sessions.json that no file speaks for
+ * (a session still on an older hub, which writes only there).
+ */
+async function mergedSessions($: EngineInterface, rt: Runtime, now: number): Promise<Record<string, unknown>> {
   const sessions: Record<string, unknown> = {}
-  for (const [id, entry] of Object.entries(raw)) {
-    if (typeof entry?.lastSeen === 'number' && now - entry.lastSeen < SESSION_STALE_MS && id !== rt.sessionId) sessions[id] = entry
+  const spoken = new Set<string>()
+  const entries = await $.fs.list(`${rt.dir}/sessions`).catch(() => [])
+  for (const entry of entries) {
+    if (entry.kind !== 'file' || !entry.name.endsWith('.json') || (entry.mtimeMs > 0 && now - entry.mtimeMs >= SESSION_STALE_MS)) continue
+    const one = (await readJsonFile($, `${rt.dir}/sessions/${entry.name}`)) as { id?: unknown; lastSeen?: unknown; ended?: unknown } | undefined
+    if (typeof one?.id !== 'string' || typeof one.lastSeen !== 'number') continue
+    spoken.add(one.id)
+    if (one.ended === true || now - one.lastSeen >= SESSION_STALE_MS) continue
+    const { ended: _ended, ...line } = one
+    sessions[one.id] = line
   }
-  if (!isEnding) {
-    const mode = await read($, modeAtom)
-    sessions[rt.sessionId] = {
-      id: rt.sessionId,
-      project: rt.project,
-      cwd: rt.cwd,
-      startedAt: rt.startedAt,
-      lastSeen: now,
-      presence: mode.presence,
-      turns: rt.turns,
-      usd: Math.round(rt.sessionUsd * 10_000) / 10_000,
-      events: rt.globalFeed,
-    }
+  const legacy = ((await readJsonFile($, `${rt.dir}/sessions.json`)) ?? {}) as Record<string, { lastSeen?: unknown } | null>
+  for (const [id, entry] of Object.entries(legacy)) {
+    if (!spoken.has(id) && id !== rt.sessionId && typeof entry?.lastSeen === 'number' && now - entry.lastSeen < SESSION_STALE_MS) sessions[id] = entry
   }
-  await writeJsonFile($, path, sessions)
+  return sessions
 }
 
 // ── Presence and the mode ───────────────────────────────────────────────────────────────────────────
@@ -519,10 +549,24 @@ const problemWithStop = (input: ModsStopInput): string | undefined => {
   return undefined
 }
 
-/** control.json: the last stops, pauses and resumes raised for all sessions (one hour, twenty at most). */
-async function readControls($: EngineInterface, rt: Runtime): Promise<ModsControl[]> {
-  const raw = (await readJsonFile($, `${rt.dir}/control.json`)) as { controls?: unknown } | undefined
+/** One control file's list: `{ controls: [...] }`. */
+async function readControlFile($: EngineInterface, path: string): Promise<ModsControl[]> {
+  const raw = (await readJsonFile($, path)) as { controls?: unknown } | undefined
   return Array.isArray(raw?.controls) ? raw.controls.filter(isControl) : []
+}
+
+/**
+ * The stops, pauses and resumes raised for all sessions in the last hour: each session writes only its own
+ * `control/<id>.json` (one writer per file, so two STOP ALLs raised at once both survive), and an older hub's shared
+ * control.json is still read.
+ */
+async function readControls($: EngineInterface, rt: Runtime, now: number): Promise<ModsControl[]> {
+  const controls = await readControlFile($, `${rt.dir}/control.json`)
+  for (const entry of await $.fs.list(`${rt.dir}/control`).catch(() => [])) {
+    if (entry.kind !== 'file' || !entry.name.endsWith('.json') || (entry.mtimeMs > 0 && now - entry.mtimeMs >= CONTROL_MAX_AGE_MS)) continue
+    controls.push(...(await readControlFile($, `${rt.dir}/control/${entry.name}`)))
+  }
+  return controls
 }
 
 /** A control takes effect here: the `control` state, and `control.<action>` on the bus with the asking mod as source. */
@@ -554,8 +598,9 @@ async function raiseControl($: EngineInterface, rt: Runtime, input: ModsStopInpu
   }
   await applyControl($, rt, control)
   if (control.scope === 'all' && rt.dir !== '') {
-    const kept = (await readControls($, rt)).filter(one => now - one.at < CONTROL_MAX_AGE_MS && one.id !== control.id)
-    await writeJsonFile($, `${rt.dir}/control.json`, { controls: [...kept, control].slice(-CONTROL_KEEP) })
+    const path = `${rt.dir}/control/${fileId(rt.sessionId || 'hub')}.json`
+    const kept = (await readControlFile($, path)).filter(one => now - one.at < CONTROL_MAX_AGE_MS && one.id !== control.id)
+    await writeJsonFile($, path, { controls: [...kept, control].slice(-CONTROL_KEEP) })
   }
   return control
 }
@@ -564,7 +609,7 @@ async function raiseControl($: EngineInterface, rt: Runtime, input: ModsStopInpu
 async function pollControls($: EngineInterface, rt: Runtime): Promise<void> {
   if (rt.dir === '') return
   if (rt.controlFloor === 0) rt.controlFloor = await $.clock.now()
-  const fresh = (await readControls($, rt))
+  const fresh = (await readControls($, rt, await $.clock.now()))
     .filter(one => one.scope === 'all' && one.session !== rt.sessionId && one.at >= rt.controlFloor && !rt.controlSeen.has(one.id))
     .sort((a, b) => a.at - b.at)
   for (const control of fresh) await applyControl($, rt, control)
@@ -813,9 +858,9 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>, next: (e: Re
   const current = tabs.find(tab => tab.id === active)
   const strip = (
     <Box key="tabs" flexDirection="row" flexWrap="wrap" columnGap={1}>
-      <Button key="tab-home" hotkey="0" variant={current === undefined ? 'primary' : 'secondary'} label="Home" onPress={() => update($, tabAtom, () => HOME)} />
+      <Button key="tab-home" plain hotkey="0" dimColor={current !== undefined} variant={current === undefined ? 'primary' : 'secondary'} label="Home" onPress={() => update($, tabAtom, () => HOME)} />
       {tabs.slice(0, 9).map((tab, index) => (
-        <Button key={`tab-${tab.id}`} hotkey={String(index + 1)} variant={tab.id === current?.id ? 'primary' : 'secondary'} label={tab.title} onPress={() => update($, tabAtom, () => tab.id)} />
+        <Button key={`tab-${tab.id}`} plain hotkey={String(index + 1)} dimColor={tab.id !== current?.id} variant={tab.id === current?.id ? 'primary' : 'secondary'} label={tab.title} onPress={() => update($, tabAtom, () => tab.id)} />
       ))}
     </Box>
   )

@@ -131,7 +131,7 @@ function linear(request: Request): { status: number; text: string } {
 
 /** Registers every engine answer the plugin needs; call before the first `$` call. */
 export function world(on: On, setup: Setup = {}): World {
-  const w: World = { runs: [], stdin: new Map(), http: [], prompts: [], toasts: [], statuses: [], opened: [], store: new Map(), clock: mock.clock(on, { now: NOW }), hub: { published: [], notices: [], tabs: [], hello: [], shown: [] } }
+  const w: World = { runs: [], stdin: new Map(), http: [], prompts: [], toasts: [], statuses: [], opened: [], store: new Map(), clock: mock.clock(on, { now: NOW }), hub: { published: [], notices: [], tabs: [], orders: [], hello: [], shown: [] } }
   const files: Record<string, string> = { [`${ROOT}/package.json`]: '{"scripts":{"test":"jest"}}', ...setup.files }
   mock.env(on, { HOME: '/home/me' })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
@@ -213,7 +213,7 @@ export const callsOf = (w: World, ...prefix: string[]): string[][] => w.runs.fil
 // A test plugin's register runs in its own environment: it may use nothing from this file. What the hub stand-in
 // sees reaches the test as `$.ui.log` lines starting `hub ` (World.hub).
 
-export type HubSeen = { published: ModsEvent[]; notices: { level: string; title: string; body?: string; url?: string }[]; tabs: string[]; hello: string[]; shown: string[] }
+export type HubSeen = { published: ModsEvent[]; notices: { level: string; title: string; body?: string; url?: string }[]; tabs: string[]; orders: number[]; hello: string[]; shown: string[] }
 
 /** A minimal mods-hub: provides `$.mods`, records publishes as `latest`, keeps the shown tab. */
 export const hubStub: Plugin = {
@@ -260,6 +260,7 @@ export const hubStub: Plugin = {
     })
     on('mods.registerTab', ($, e) => {
       $.ui.log(`hub tabs ${JSON.stringify(e.id)}`, { to: 'debug' })
+      $.ui.log(`hub orders ${JSON.stringify(e.order ?? null)}`, { to: 'debug' })
       return { value: { tabs: [] } }
     })
     on('mods.showTab', async ($, e) => {

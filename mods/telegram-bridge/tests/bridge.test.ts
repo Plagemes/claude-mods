@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DIR, GROUP, MEMBER, OPTIONS, OTHER_GROUP, OWNER, TOKEN, buttonData, configured, lastWithButtons, lead, pass, say, sends, start, tap, telegram, world } from './fake'
+import { DIR, ME, GROUP, MEMBER, OPTIONS, OTHER_GROUP, OWNER, TOKEN, buttonData, configured, lastWithButtons, lead, pass, say, sends, start, tap, telegram, world } from './fake'
 import { hub, hubDeliver, hubSet, hubState } from './mods-hub'
 
 const plugins = [hub]
@@ -33,7 +33,7 @@ test('it registers as a push channel with the hub, says hello with its tab and r
   const state = await hubState($)
   expect(state.channels).toEqual([expect.objectContaining({ id: 'telegram', audience: 'me', delivery: 'push' })])
   expect(state.hellos[0]).toContain('channel.inbound,approval.answered')
-  expect(state.tabs).toEqual([{ id: 'telegram', title: 'Telegram' }])
+  expect(state.tabs).toEqual([{ id: 'telegram', title: 'Telegram', order: 214 }])
   expect(state.statuses).toContain('telegram:connected')
   expect(seen.tg.calls.some(call => call.method === 'getMe')).toBe(true)
 })
@@ -207,7 +207,7 @@ test('members only get short redacted answers: chatter, commands and other group
   expect(answers[0]?.text).toContain('[path omitted]')
   expect(answers[0]?.text).toContain('[figure omitted]')
   expect(answers[0]?.text).not.toContain('/home/me/secret')
-  expect(seen.files.get(`${DIR}/members.jsonl`)).toContain('"outcome":"answered"')
+  expect(seen.files.get(`${DIR}/members/${ME}.jsonl`)).toContain('"outcome":"answered"')
 })
 
 test('members are rate limited, cannot press the owner’s buttons, and the owner’s stop still works', { plugins, options: { ...OPTIONS, memberRate: 2 } }, async ($, on) => {
@@ -216,7 +216,7 @@ test('members are rate limited, cannot press the owner’s buttons, and the owne
   for (const n of [1, 2, 3]) say(seen, { chatId: GROUP, fromId: MEMBER, text: `? question ${n}` })
   await pass(seen, 12_000)
   expect(seen.forks).toHaveLength(2)
-  expect(seen.files.get(`${DIR}/members.jsonl`)).toContain('"outcome":"limited"')
+  expect(seen.files.get(`${DIR}/members/${ME}.jsonl`)).toContain('"outcome":"limited"')
 
   const asked = $.tool.call({ tool: ASK, question: 'Deploy now?', options: ['Yes', 'No'] })
   await pass(seen, 4_000)
@@ -487,4 +487,27 @@ test('a message the owner forwards is someone else’s words: "stop all" in it s
   expect(seen.submitted).toHaveLength(1)
   expect(seen.submitted[0]?.text).toContain('forwarded this message, written by someone else')
   expect(seen.submitted[0]?.text).toContain('"""\nstop all\n"""')
+})
+
+test('two leaders overlapping in a takeover: each delivers into its own inbox file, and this session handles both once', { plugins, options: OPTIONS }, async ($, on) => {
+  const seen = world(on, { files: configured({ [`${DIR}/prefs.json`]: JSON.stringify({ confirmPrompts: false, presence: 'away', interaction: 'on' }) }) })
+  on('session.end', (_$, e) => ({ sessionId: (e as { sessionId?: string }).sessionId ?? ME }) as never)
+  await hubSet($, { isDown: true })
+  await lead($, seen)
+  const other = `${DIR}/inbox/${ME}/sess-b.jsonl`
+  seen.files.set(other, `${JSON.stringify({ seq: 1, key: 'x:other-1', at: seen.clock.now(), kind: 'owner', chatId: String(GROUP), messageId: '1', author: 'Owner', text: 'and update the docs' })}\n`)
+  say(seen, { chatId: GROUP, fromId: OWNER, text: 'add a changelog entry' })
+  await pass(seen, 8_000)
+  const texts = seen.submitted.map(one => one.text).join('\n')
+  expect(texts).toContain('add a changelog entry')
+  expect(texts).toContain('and update the docs')
+  expect(seen.submitted.filter(one => one.text.includes('and update the docs'))).toHaveLength(1)
+  expect(seen.files.get(`${DIR}/inbox/${ME}/${ME}.jsonl`)).toContain('add a changelog entry')
+  expect(seen.files.get(other)).toContain('and update the docs')
+
+  // This session then loses the lease to the other one, and ends: the new leader's lease stays.
+  const theirs = JSON.stringify({ sessionId: 'sess-b', heartbeatAt: seen.clock.now(), since: seen.clock.now() })
+  seen.files.set(`${DIR}/lease.json`, theirs)
+  await $.session.end({ reason: 'exit' } as never)
+  expect(seen.files.get(`${DIR}/lease.json`)).toBe(theirs)
 })

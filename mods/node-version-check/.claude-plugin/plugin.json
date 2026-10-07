@@ -1,6 +1,6 @@
 {
   "name": "node-version-check",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Warns when your Node version doesn't match .nvmrc, .node-version or package.json engines.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#node-version-check",

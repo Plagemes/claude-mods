@@ -577,6 +577,23 @@ test('with mods-hub: the Advisor is the first tab of the shared panel, opened at
   expect(hub.shown).toEqual(['advisor', 'advisor'])
 })
 
+test('with mods-hub: a hot reload does not steal the visible tab again; the tab opens by itself once per session', async ($, on) => {
+  const w = world(on)
+  const hub = fakeHub(on, {}, w.clock)
+  await start($)
+  await w.clock.settle()
+  expect(hub.shown).toEqual(['advisor'])
+  // A hot reload runs session.start again in the same session: the person may be on another tab by now.
+  await start($)
+  await w.clock.settle()
+  expect(hub.shown).toEqual(['advisor'])
+  // A new session (the old one ended) opens it again.
+  await $.session.end({ reason: 'clear', sessionId: 's', resume: { id: 's' } })
+  await start($)
+  await w.clock.settle()
+  expect(hub.shown).toEqual(['advisor', 'advisor'])
+})
+
 test('with mods-hub: failing tests on the bus bring the test mods, published as mod.recommended and told through the hub', async ($, on) => {
   const w = world(on)
   const hub = fakeHub(on, {}, w.clock)

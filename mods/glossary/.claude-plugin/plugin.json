@@ -1,6 +1,6 @@
 {
   "name": "glossary",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Teaches Claude your project's vocabulary and injects definitions when you use the terms.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#glossary",

@@ -1,6 +1,6 @@
 {
   "name": "loop-breaker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Stops Claude when it repeats the same failing command three times and suggests a different approach.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#loop-breaker",

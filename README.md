@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="#catalog"><img alt="201 mods" src="https://img.shields.io/badge/mods-201-ee8a4f?style=flat-square&labelColor=1e1c19"></a>
+  <a href="#catalog"><img alt="219 mods" src="https://img.shields.io/badge/mods-219-ee8a4f?style=flat-square&labelColor=1e1c19"></a>
   <a href="#whats-new-in-v2"><img alt="Version 2.0.0" src="https://img.shields.io/badge/version-v2.0.0-eee7db?style=flat-square&labelColor=1e1c19"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-eee7db?style=flat-square&labelColor=1e1c19"></a>
   <a href="#quick-start"><img alt="Claude Code 2.1.292 or later" src="https://img.shields.io/badge/Claude%20Code-2.1.292%2B-ee8a4f?style=flat-square&labelColor=1e1c19"></a>
@@ -35,7 +35,24 @@
 
 ## What's new in v2
 
-**v2.0.0 adds a second shelf to the rack: 100 new mods in 10 new categories.** They cover your stack, your database and your cloud, and they let you scope, queue and supervise Claude itself. The store and the two install commands stay the same, and every v1 mod keeps its name and install command. Browse them with `/mods`, or turn on the **New** filter in the [web store](https://plagemes.github.io/claude-mods/#new).
+**v2.0.0 turns the collection into a platform: 118 new mods (219 in all, in 21 categories) and a shared core that lets them work together.** The store and the two install commands stay the same, and every v1 mod keeps its name and install command. Browse the new ones with `/mods`, or turn on the **New** filter in the [web store](https://plagemes.github.io/claude-mods/#new).
+
+**The platform.** Every mod still works alone; install [mods-hub](mods/mods-hub) and they start to cooperate (165 mods are wired to it).
+
+| Piece | What it does |
+| --- | --- |
+| [**mods-hub**](mods/mods-hub) | The shared core: one **event bus** (typed `test.result`, `ci.result`, `cost.update`, ...), one **side panel with tabs** (`0`-`9` switch them), one **notification router** that knows if you are here, away, Silent or in your Night hours, and a **STOP** that halts every automatic mod in every session. |
+| [**mod-advisor**](mods/mod-advisor) | Recommends the mods that fit your project and what you are asking, and installs them in one click. |
+| [**smart-router**](mods/smart-router) | Sends each subagent to the right model for the task, runs independent work in parallel. |
+| [**project-brain**](mods/project-brain) | A project memory that learns which decisions, conventions and fixes matter and recalls them. |
+| [**autopilot**](mods/autopilot) | Give it a goal and success criteria; it plans, delegates, verifies and retries until they pass or it needs you. |
+| [**mission-control**](mods/mission-control) | One dashboard for every Claude session on your machine, with pause and priorities. |
+| [**guardian**](mods/guardian) | One security policy (permissive, standard, strict) for every guard mod, and a project safety score. |
+| [**whatsapp-bridge**](mods/whatsapp-bridge), [**telegram-bridge**](mods/telegram-bridge), [**slack-bridge**](mods/slack-bridge), [**discord-bridge**](mods/discord-bridge) | Progress, questions and approvals on your phone or team channel, and remote control (including STOP) back. Only the owner's messages through a bridge are trusted. |
+
+The rest of the platform wave: [context-optimizer](mods/context-optimizer), [workflow-studio](mods/workflow-studio), [session-sync](mods/session-sync), [issue-pilot](mods/issue-pilot), [team-hub](mods/team-hub), [calendar-sync](mods/calendar-sync) and [email-digest](mods/email-digest). How the pieces fit: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/MOD_CONTRACT.md](docs/MOD_CONTRACT.md).
+
+**The second shelf.** 100 mods in 10 new categories cover your stack, your database and your cloud, and let you scope, queue and supervise Claude itself.
 
 | New category | What it covers | Try first |
 | --- | --- | --- |
@@ -156,23 +173,25 @@ Search, filter by category, then install, update or uninstall from a pane inside
 <!-- CATALOG:START -->
 
 ### Core
-<sub>The mod store and essentials. &middot; 1 mod</sub>
+<sub>The mod store and essentials. &middot; 3 mods</sub>
 
 <details open>
-<summary>Show the 1 mod</summary>
+<summary>Show the 3 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
 | --- | --- | --- |
 | [**mod-store**](mods/mod-store) | An in-terminal app store: browse, search, install and update every Claude Mod from GitHub. | `/mods` |
+| [**mods-hub**](mods/mods-hub) | The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels. | `/hub` |
+| [**mod-advisor**](mods/mod-advisor) | Recommends the right mods for your project and for what you're asking, with the commands to type, and installs them in one click. | `/mods-advisor` |
 
 </details>
 
 ### Security & Guardrails
-<sub>Stop dangerous actions before they happen. &middot; 10 mods</sub>
+<sub>Stop dangerous actions before they happen. &middot; 11 mods</sub>
 
 <details>
-<summary>Show the 10 mods</summary>
+<summary>Show the 11 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -187,6 +206,7 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**curl-pipe-guard**](mods/curl-pipe-guard) | Blocks piping downloaded scripts straight into a shell. | — |
 | [**dependency-sentinel**](mods/dependency-sentinel) | Flags typosquatted or brand-new packages before npm, pip or cargo installs them. | — |
 | [**lockfile-guard**](mods/lockfile-guard) | Prevents hand-editing lockfiles; they must change through the package manager. | — |
+| [**guardian**](mods/guardian) | One security policy for every guard mod — permissive, standard or strict — plus a project safety score. | `/guardian` |
 
 </details>
 
@@ -213,10 +233,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Cost, Tokens & Context
-<sub>Know what every turn costs and keep context lean. &middot; 10 mods</sub>
+<sub>Know what every turn costs and keep context lean. &middot; 11 mods</sub>
 
 <details>
-<summary>Show the 10 mods</summary>
+<summary>Show the 11 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -231,14 +251,15 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**daily-spend**](mods/daily-spend) | Tracks spend per day and week across sessions with a /spend report. | `/spend` |
 | [**model-advisor**](mods/model-advisor) | Suggests a cheaper model when your prompt is simple, and a stronger one when it is hard. | `/model-advisor` |
 | [**compact-coach**](mods/compact-coach) | Suggests /compact at natural breakpoints, before the context gets tight. | — |
+| [**context-optimizer**](mods/context-optimizer) | Keeps the context lean automatically: trims noise, picks the right moment to compact and shows the tokens it saved. | `/ctx` |
 
 </details>
 
 ### Productivity
-<sub>Shortcuts, panes and timers for a faster flow. &middot; 10 mods</sub>
+<sub>Shortcuts, panes and timers for a faster flow. &middot; 11 mods</sub>
 
 <details>
-<summary>Show the 10 mods</summary>
+<summary>Show the 11 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -253,6 +274,7 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**prompt-history**](mods/prompt-history) | /history searches every prompt you have sent across sessions and reuses one. | `/history` |
 | [**quick-commands**](mods/quick-commands) | Short aliases like /t, /l and /b that run your test, lint and build commands. | `/t` `/l` `/b` `/tc` |
 | [**idle-nudge**](mods/idle-nudge) | Reminds you about uncommitted changes after a stretch of inactivity. | — |
+| [**calendar-sync**](mods/calendar-sync) | Reads your calendar (private iCal link) so notifications and questions respect meetings and time off, and suggests slots for long jobs. | `/calendar` |
 
 </details>
 
@@ -279,10 +301,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Panes & Dashboards
-<sub>See what Claude is doing, live. &middot; 10 mods</sub>
+<sub>See what Claude is doing, live. &middot; 11 mods</sub>
 
 <details>
-<summary>Show the 10 mods</summary>
+<summary>Show the 11 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -297,6 +319,7 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**web-trail**](mods/web-trail) | /sources lists every page Claude fetched or searched this session. | `/sources` |
 | [**permission-log**](mods/permission-log) | Keeps a log of every tool call that was denied, and why. | `/denied` |
 | [**token-sparkline**](mods/token-sparkline) | A sparkline of tokens per turn right above the prompt. | `/sparkline` |
+| [**mission-control**](mods/mission-control) | One dashboard for every Claude session on your machine: what each is doing, cost, blockers, with pause and priorities. | `/mission` |
 
 </details>
 
@@ -323,10 +346,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Notifications & Audio
-<sub>Know when it is done, wherever you are. &middot; 10 mods</sub>
+<sub>Know when it is done, wherever you are. &middot; 14 mods</sub>
 
 <details>
-<summary>Show the 10 mods</summary>
+<summary>Show the 14 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -341,14 +364,18 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**ci-watch**](mods/ci-watch) | /ci-watch follows your GitHub Actions run and tells you the moment it passes or fails. | `/ci-watch` |
 | [**break-reminder**](mods/break-reminder) | Reminds you to stand up and stretch every 50 minutes of active work. | — |
 | [**celebrate**](mods/celebrate) | Celebrates when failing tests go green again. | — |
+| [**whatsapp-bridge**](mods/whatsapp-bridge) | Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number. | `/wa` |
+| [**telegram-bridge**](mods/telegram-bridge) | Progress, questions and remote control over a Telegram bot, through the mods-hub channel system. | `/telegram` |
+| [**slack-bridge**](mods/slack-bridge) | Posts progress and reports to Slack and takes questions and commands from a channel, through the mods-hub channel system. | `/slack` |
+| [**discord-bridge**](mods/discord-bridge) | Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system. | `/discord` |
 
 </details>
 
 ### Memory & Knowledge
-<sub>Remember decisions, notes and context across sessions. &middot; 10 mods</sub>
+<sub>Remember decisions, notes and context across sessions. &middot; 11 mods</sub>
 
 <details>
-<summary>Show the 10 mods</summary>
+<summary>Show the 11 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -363,14 +390,15 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**snippet-vault**](mods/snippet-vault) | Save and reuse code snippets across projects with /save-snippet and /snippet. | `/save-snippet` `/snippet` `/snippets` `/delete-snippet` |
 | [**link-vault**](mods/link-vault) | Collects every URL from the conversation into one list. | `/links` `/links-copy` |
 | [**recall**](mods/recall) | Gives Claude a recall tool to search your saved notes, decisions and journal. | `/remember` `/recall` |
+| [**project-brain**](mods/project-brain) | A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network. | `/brain` |
 
 </details>
 
 ### Team & Docs
-<sub>Changelogs, standups, reviews and handoffs. &middot; 10 mods</sub>
+<sub>Changelogs, standups, reviews and handoffs. &middot; 13 mods</sub>
 
 <details>
-<summary>Show the 10 mods</summary>
+<summary>Show the 13 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -385,6 +413,9 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**i18n-guard**](mods/i18n-guard) | Flags hard-coded user-facing strings in UI components. | — |
 | [**migration-guard**](mods/migration-guard) | Prevents editing database migrations that already exist; write a new one instead. | — |
 | [**codeowners-hint**](mods/codeowners-hint) | Shows who owns a file (from CODEOWNERS) as Claude edits it. | `/owners` |
+| [**team-hub**](mods/team-hub) | A shared panel of team conventions, recommended mods, budgets and rules, synced through the repo. | `/team` |
+| [**email-digest**](mods/email-digest) | Daily or weekly email summaries in plain language for clients and managers who don't live in chat. | `/digest` |
+| [**issue-pilot**](mods/issue-pilot) | Picks up a GitHub, Jira or Linear issue, sizes it with smart-router, works it in a dedicated session and opens the PR. | `/issues` |
 
 </details>
 
@@ -499,10 +530,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Agents & Orchestration
-<sub>Scope, queue and supervise Claude's work. &middot; 10 mods &middot; new in v2.0.0</sub>
+<sub>Scope, queue and supervise Claude's work. &middot; 14 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 10 mods</summary>
+<summary>Show the 14 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -517,6 +548,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**self-check**](mods/self-check) | At the end of each editing turn, has the model double-check it actually did what you asked. | — |
 | [**edit-limit**](mods/edit-limit) | Asks for confirmation when a single turn tries to modify more than N files. | `/edit-limit` |
 | [**agent-presets**](mods/agent-presets) | Ready-made subagents for focused jobs: debugger, test writer, doc writer and migrator. | `/presets` |
+| [**smart-router**](mods/smart-router) | Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one. | `/route` `/router` |
+| [**autopilot**](mods/autopilot) | Give it a goal and success criteria; it plans, delegates, verifies and retries until the criteria pass or it needs you. | `/autopilot` |
+| [**workflow-studio**](mods/workflow-studio) | Build, save and share reusable workflows — release, dependency update, security audit — and run them with one command. | `/recipe` |
+| [**session-sync**](mods/session-sync) | Coordinates sessions working on the same repo: file leases against conflicts, overlap warnings and hand-offs. | `/sync` `/handoff-to` |
 
 </details>
 

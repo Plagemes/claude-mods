@@ -125,9 +125,13 @@ test('tellClaude off keeps the goal out of the system prompt', { options: { tell
 })
 
 test('in the evening the band asks; "Not yet" waits for tomorrow, which asks about yesterday', async ($, on) => {
-  const w = world(on, { now: MORNING + 9 * HOUR })
+  const w = world(on)
   await goal($, 'Ship the login fix')
   const band = await mount($)
+  expect(await band.find({ key: 'question' })).toBeUndefined()
+  await w.clock.set(MORNING + 9 * HOUR)
+  await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 't0', reason: 'answer' })
+  await w.clock.advance(0)
   expect((await band.find({ key: 'question' }))?.text).toContain("🎯 Did you reach today's goal? “Ship the login fix”")
   await band.press({ key: 'not-yet' })
   expect(await band.find({ key: 'question' })).toBeUndefined()
@@ -157,6 +161,18 @@ test('a new session after 18:00 asks right away; Yes counts it reached', async (
   expect(await band.find({ key: 'question' })).toBeUndefined()
 })
 
+test('a goal set in the evening is not asked about the moment it is set', async ($, on) => {
+  const w = world(on, { now: MORNING + 9 * HOUR })
+  await goal($, 'Evening goal')
+  const band = await mount($)
+  expect(await band.find({ key: 'goal' })).toBeDefined()
+  expect(await band.find({ key: 'question' })).toBeUndefined()
+  await w.clock.advance(HOUR)
+  await goal($)
+  expect(await band.find({ key: 'question' })).toBeUndefined()
+  await band.unmount()
+})
+
 test('Edit puts the goal back in the prompt box; Hide hides the band until /daily-goal', async ($, on) => {
   const w = world(on)
   await goal($, 'Ship the login fix')
@@ -184,8 +200,11 @@ test('the engine band is not drawn under a Box with a size prop while the goal s
 })
 
 test('the engine band is not drawn under a Box with a size prop while the evening question shows', async ($, on) => {
-  world(on, { now: MORNING + 9 * HOUR })
+  const w = world(on)
   await goal($, 'Ship the login fix')
+  await w.clock.set(MORNING + 9 * HOUR)
+  await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 't0', reason: 'answer' })
+  await w.clock.advance(0)
   for (const surface of SURFACES) {
     const band = await mount($, surface)
     expect(await band.find({ key: 'question' })).toBeDefined()
