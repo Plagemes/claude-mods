@@ -1,5 +1,5 @@
 # daily-goal
-> /goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.
+> /daily-goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.
 
 **Category:** Mod Ecosystem · **Version:** 1.0.0
 

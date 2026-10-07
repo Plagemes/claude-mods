@@ -73,7 +73,7 @@
       "id": "stacks",
       "title": "Languages & Frameworks",
       "tagline": "Guardrails that know your stack.",
-      "count": 7
+      "count": 10
     },
     {
       "id": "devops",
@@ -85,25 +85,25 @@
       "id": "data",
       "title": "Databases & Data",
       "tagline": "Safer queries, schemas and test data.",
-      "count": 9
+      "count": 10
     },
     {
       "id": "frontend",
       "title": "Frontend & Accessibility",
       "tagline": "Pixels, bundles and a11y, checked as you go.",
-      "count": 7
+      "count": 10
     },
     {
       "id": "api",
       "title": "APIs & Network",
       "tagline": "Talk to the web on your terms.",
-      "count": 4
+      "count": 10
     },
     {
       "id": "agents",
       "title": "Agents & Orchestration",
       "tagline": "Scope, queue and supervise Claude's work.",
-      "count": 7
+      "count": 10
     },
     {
       "id": "learning",
@@ -115,19 +115,19 @@
       "id": "compliance",
       "title": "Privacy & Compliance",
       "tagline": "Licenses, personal data and audit trails.",
-      "count": 5
+      "count": 10
     },
     {
       "id": "performance",
       "title": "Performance & Reliability",
       "tagline": "Fast, stable and regression-free.",
-      "count": 6
+      "count": 10
     },
     {
       "id": "ecosystem",
       "title": "Mod Ecosystem",
       "tagline": "Make, manage and personalise your mods.",
-      "count": 6
+      "count": 10
     }
   ],
   "mods": [
@@ -855,7 +855,9 @@
         "tests",
         "watch"
       ],
-      "commands": [],
+      "commands": [
+        "/tests-last"
+      ],
       "since": "1.0.0"
     },
     {
@@ -870,7 +872,9 @@
         "typescript",
         "typecheck"
       ],
-      "commands": [],
+      "commands": [
+        "/typecheck"
+      ],
       "since": "1.0.0"
     },
     {
@@ -964,7 +968,9 @@
         "tdd",
         "guard"
       ],
-      "commands": [],
+      "commands": [
+        "/tdd"
+      ],
       "since": "1.0.0"
     },
     {
@@ -979,7 +985,9 @@
         "pane",
         "tools"
       ],
-      "commands": [],
+      "commands": [
+        "/timeline"
+      ],
       "since": "1.0.0"
     },
     {
@@ -994,7 +1002,9 @@
         "pane",
         "files"
       ],
-      "commands": [],
+      "commands": [
+        "/files"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1026,7 +1036,9 @@
         "subagents",
         "pane"
       ],
-      "commands": [],
+      "commands": [
+        "/agents-live"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1041,7 +1053,9 @@
         "errors",
         "pane"
       ],
-      "commands": [],
+      "commands": [
+        "/errors"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1056,7 +1070,9 @@
         "heatmap",
         "statistics"
       ],
-      "commands": [],
+      "commands": [
+        "/heatmap"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1122,7 +1138,9 @@
         "tokens",
         "sparkline"
       ],
-      "commands": [],
+      "commands": [
+        "/sparkline"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1137,7 +1155,9 @@
         "style-guide",
         "system-prompt"
       ],
-      "commands": [],
+      "commands": [
+        "/style"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1184,7 +1204,9 @@
         "rewrite",
         "pane"
       ],
-      "commands": [],
+      "commands": [
+        "/enhance"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1229,7 +1251,10 @@
         "persona",
         "system-prompt"
       ],
-      "commands": [],
+      "commands": [
+        "/persona",
+        "/personas"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1263,7 +1288,9 @@
         "conventions",
         "frameworks"
       ],
-      "commands": [],
+      "commands": [
+        "/stack"
+      ],
       "since": "1.0.0"
     },
     {
@@ -1839,6 +1866,21 @@
       "since": "2.0.0"
     },
     {
+      "name": "django-migrate-watch",
+      "category": "stacks",
+      "tier": "complex",
+      "description": "After Django model changes, checks for missing migrations and offers to create them.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "django",
+        "migrations"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
       "name": "go-mod-tidy",
       "category": "stacks",
       "tier": "simple",
@@ -1869,6 +1911,21 @@
       "since": "2.0.0"
     },
     {
+      "name": "schema-sync",
+      "category": "stacks",
+      "tier": "complex",
+      "description": "After Prisma or Drizzle schema edits, regenerates the client and warns when a migration is missing.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "prisma",
+        "drizzle"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
       "name": "env-example-sync",
       "category": "stacks",
       "tier": "simple",
@@ -1881,6 +1938,23 @@
         "dotenv"
       ],
       "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "monorepo-scope",
+      "category": "stacks",
+      "tier": "complex",
+      "description": "Detects which monorepo package you're in and scopes test, lint and build commands to it.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "stacks",
+        "monorepo",
+        "workspaces"
+      ],
+      "commands": [
+        "/scope-pkg"
+      ],
       "since": "2.0.0"
     },
     {
@@ -2194,6 +2268,23 @@
       "since": "2.0.0"
     },
     {
+      "name": "fixture-factory",
+      "category": "data",
+      "tier": "complex",
+      "description": "/fixtures generates realistic test data that matches your schema or types.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "data",
+        "testing",
+        "fixtures"
+      ],
+      "commands": [
+        "/fixtures"
+      ],
+      "since": "2.0.0"
+    },
+    {
       "name": "a11y-guard",
       "category": "frontend",
       "tier": "simple",
@@ -2207,6 +2298,23 @@
         "guard"
       ],
       "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "screenshot-check",
+      "category": "frontend",
+      "tier": "complex",
+      "description": "After UI edits, takes a Playwright screenshot of the page and shows it to Claude.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "playwright",
+        "screenshot"
+      ],
+      "commands": [
+        "/screenshot"
+      ],
       "since": "2.0.0"
     },
     {
@@ -2242,6 +2350,23 @@
       "since": "2.0.0"
     },
     {
+      "name": "lighthouse-run",
+      "category": "frontend",
+      "tier": "complex",
+      "description": "/lighthouse runs Lighthouse on a URL and shows performance, a11y, SEO and best-practice scores in a pane.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "performance",
+        "lighthouse"
+      ],
+      "commands": [
+        "/lighthouse"
+      ],
+      "since": "2.0.0"
+    },
+    {
       "name": "heavy-asset-warn",
       "category": "frontend",
       "tier": "simple",
@@ -2269,6 +2394,21 @@
         "storybook",
         "components",
         "reminder"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "contrast-checker",
+      "category": "frontend",
+      "tier": "complex",
+      "description": "Checks that the colors Claude changes in CSS meet WCAG AA contrast.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "frontend",
+        "accessibility",
+        "css"
       ],
       "commands": [],
       "since": "2.0.0"
@@ -2342,6 +2482,42 @@
       "since": "2.0.0"
     },
     {
+      "name": "url-allowlist",
+      "category": "api",
+      "tier": "simple",
+      "description": "Restricts WebFetch to the domains you allow.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "network",
+        "allowlist",
+        "guard"
+      ],
+      "commands": [
+        "/allow-host"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "offline-mode",
+      "category": "api",
+      "tier": "simple",
+      "description": "/offline blocks every network call — fetches, curl, installs, git push — until you turn it back on.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "network",
+        "offline",
+        "guard"
+      ],
+      "commands": [
+        "/offline"
+      ],
+      "since": "2.0.0"
+    },
+    {
       "name": "mock-server",
       "category": "api",
       "tier": "complex",
@@ -2360,6 +2536,76 @@
       "since": "2.0.0"
     },
     {
+      "name": "rate-limit-guard",
+      "category": "api",
+      "tier": "simple",
+      "description": "Stops Claude from hammering external APIs with curl loops.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "rate-limit",
+        "curl",
+        "guard"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "jwt-decode",
+      "category": "api",
+      "tier": "simple",
+      "description": "/jwt decodes a JSON Web Token locally — header, claims, expiry — without sending it anywhere.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "jwt",
+        "security",
+        "decode"
+      ],
+      "commands": [
+        "/jwt"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "status-check",
+      "category": "api",
+      "tier": "simple",
+      "description": "/service-status checks whether GitHub, npm, PyPI or the Anthropic API are having an outage before you blame your code.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "status",
+        "outage",
+        "network"
+      ],
+      "commands": [
+        "/service-status"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "graphql-context",
+      "category": "api",
+      "tier": "complex",
+      "description": "Gives Claude a compact summary of your GraphQL schema when you work on queries and resolvers.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "api",
+        "graphql",
+        "schema",
+        "context"
+      ],
+      "commands": [
+        "/gql-schema"
+      ],
+      "since": "2.0.0"
+    },
+    {
       "name": "curl-to-code",
       "category": "api",
       "tier": "simple",
@@ -2373,6 +2619,60 @@
       ],
       "commands": [
         "/curl2code"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "scope-lock",
+      "category": "agents",
+      "tier": "complex",
+      "description": "/scope locks Claude to the files you name; edits outside the scope are blocked.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "scope",
+        "guard",
+        "glob"
+      ],
+      "commands": [
+        "/scope"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "second-opinion",
+      "category": "agents",
+      "tier": "complex",
+      "description": "/second-opinion has a different model critique Claude's last answer or plan.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "review",
+        "models",
+        "critique"
+      ],
+      "commands": [
+        "/second-opinion"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "parallel-explore",
+      "category": "agents",
+      "tier": "complex",
+      "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "agents",
+        "subagents",
+        "explore",
+        "parallel"
+      ],
+      "commands": [
+        "/explore"
       ],
       "since": "2.0.0"
     },
@@ -2603,7 +2903,9 @@
         "history",
         "rationale"
       ],
-      "commands": [],
+      "commands": [
+        "/why"
+      ],
       "since": "2.0.0"
     },
     {
@@ -2668,6 +2970,83 @@
         "compliance",
         "license",
         "dependencies"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "pii-in-logs",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Flags log statements that print emails, passwords, tokens or other personal data.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "privacy",
+        "logging"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "data-map",
+      "category": "compliance",
+      "tier": "complex",
+      "description": "/data-map lists where your code collects, stores and sends personal data — a head start for GDPR.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "gdpr",
+        "privacy"
+      ],
+      "commands": [
+        "/data-map"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "tracker-guard",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Blocks adding analytics and tracking SDKs that haven't been approved.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "privacy",
+        "analytics"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "no-upload",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Blocks commands that upload files to external services like pastebins and file-sharing sites.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "privacy",
+        "exfiltration"
+      ],
+      "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "crypto-guard",
+      "category": "compliance",
+      "tier": "simple",
+      "description": "Flags weak cryptography: MD5 or SHA1 for passwords, Math.random for tokens, ECB mode, hard-coded IVs.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "compliance",
+        "security",
+        "cryptography"
       ],
       "commands": [],
       "since": "2.0.0"
@@ -2739,6 +3118,23 @@
       "since": "2.0.0"
     },
     {
+      "name": "benchmark-compare",
+      "category": "performance",
+      "tier": "complex",
+      "description": "/bench runs your benchmarks before and after a change and compares the numbers.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "benchmarks",
+        "regressions"
+      ],
+      "commands": [
+        "/bench"
+      ],
+      "since": "2.0.0"
+    },
+    {
       "name": "slow-test-flag",
       "category": "performance",
       "tier": "simple",
@@ -2756,6 +3152,23 @@
       "since": "2.0.0"
     },
     {
+      "name": "flaky-detector",
+      "category": "performance",
+      "tier": "complex",
+      "description": "Detects tests that pass and fail at random and keeps a list of the suspects.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "tests",
+        "flaky"
+      ],
+      "commands": [
+        "/flaky"
+      ],
+      "since": "2.0.0"
+    },
+    {
       "name": "leak-hint",
       "category": "performance",
       "tier": "simple",
@@ -2768,6 +3181,40 @@
         "react"
       ],
       "commands": [],
+      "since": "2.0.0"
+    },
+    {
+      "name": "outdated-deps",
+      "category": "performance",
+      "tier": "complex",
+      "description": "/outdated shows stale dependencies and how risky each upgrade is.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "dependencies",
+        "upgrades"
+      ],
+      "commands": [
+        "/outdated"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "profile-run",
+      "category": "performance",
+      "tier": "complex",
+      "description": "/profile runs a command under a profiler and shows the hottest functions.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "performance",
+        "profiling",
+        "cpu"
+      ],
+      "commands": [
+        "/profile"
+      ],
       "since": "2.0.0"
     },
     {
@@ -2932,6 +3379,74 @@
       ],
       "commands": [
         "/achievements"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "streaks",
+      "category": "ecosystem",
+      "tier": "simple",
+      "description": "Shows your consecutive days of coding with Claude in the status line.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "streak",
+        "habit"
+      ],
+      "commands": [
+        "/streak"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "soundpack",
+      "category": "ecosystem",
+      "tier": "simple",
+      "description": "Sound packs for Claude Code events: minimal, retro or nature.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "sound",
+        "audio"
+      ],
+      "commands": [
+        "/soundpack"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "daily-goal",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "/daily-goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "focus",
+        "band"
+      ],
+      "commands": [
+        "/daily-goal"
+      ],
+      "since": "2.0.0"
+    },
+    {
+      "name": "session-replay",
+      "category": "ecosystem",
+      "tier": "complex",
+      "description": "/replay steps through the session — prompts, tool calls, edits — in a pane, like a video timeline.",
+      "version": "1.0.0",
+      "keywords": [
+        "claude-mods",
+        "ecosystem",
+        "timeline",
+        "pane"
+      ],
+      "commands": [
+        "/replay"
       ],
       "since": "2.0.0"
     }

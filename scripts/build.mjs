@@ -40,8 +40,10 @@ function commandsOf(name) {
     const path = join(ROOT, 'mods', name, file)
     if (!existsSync(path)) continue
     const source = readFileSync(path, 'utf8')
-    const registered = source.matchAll(/command\.register\(\s*\{\s*name:\s*['"`]([a-z0-9][a-z0-9:-]*)['"`]/g)
-    return [...new Set([...registered].map(m => `/${m[1]}`))]
+    const constants = new Map([...source.matchAll(/const\s+([A-Z_]+)\s*=\s*['"`]([a-z0-9][a-z0-9:-]*)['"`]/g)].map(m => [m[1], m[2]]))
+    const registered = [...source.matchAll(/command\.register\(\s*\{\s*name:\s*(?:['"`]([a-z0-9][a-z0-9:-]*)['"`]|([A-Z_]+)\b)/g)]
+    const names = registered.map(m => m[1] ?? constants.get(m[2])).filter(Boolean)
+    return [...new Set(names.map(name => `/${name}`))]
   }
   return []
 }

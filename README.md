@@ -262,14 +262,14 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | --- | --- | --- |
 | [**auto-format**](mods/auto-format) | Formats every file Claude edits with the right formatter for its language. | — |
 | [**lint-on-save**](mods/lint-on-save) | Runs the linter on each edited file and hands the errors straight back to Claude. | — |
-| [**test-watch**](mods/test-watch) | Runs the tests related to what changed and shows pass/fail in the status line. | — |
-| [**typecheck-gate**](mods/typecheck-gate) | Type-checks the project at the end of every editing turn so errors never slip by. | — |
+| [**test-watch**](mods/test-watch) | Runs the tests related to what changed and shows pass/fail in the status line. | `/tests-last` |
+| [**typecheck-gate**](mods/typecheck-gate) | Type-checks the project at the end of every editing turn so errors never slip by. | `/typecheck` |
 | [**no-skip-tests**](mods/no-skip-tests) | Blocks Claude from silencing tests with .skip, .only, xit or skip markers. | — |
 | [**todo-tracker**](mods/todo-tracker) | Notices every TODO, FIXME and HACK Claude adds and lists them at turn end. | `/todos-added` |
 | [**debug-catcher**](mods/debug-catcher) | Warns when console.log, print, debugger or dbg! statements are left in code. | — |
 | [**no-any**](mods/no-any) | Flags new any types, @ts-ignore and eslint-disable comments as Claude writes them. | — |
 | [**file-size-watch**](mods/file-size-watch) | Warns when an edited file grows past a size that hurts readability. | — |
-| [**test-first**](mods/test-first) | A TDD mode: no production code changes until a test has been written or changed. | — |
+| [**test-first**](mods/test-first) | A TDD mode: no production code changes until a test has been written or changed. | `/tdd` |
 
 </details>
 
@@ -282,16 +282,16 @@ Search, filter by category, then install, update or uninstall from a pane inside
 
 | Mod | What it does | Commands |
 | --- | --- | --- |
-| [**tool-timeline**](mods/tool-timeline) | A timeline pane of every tool call with duration, status and input summary. | — |
-| [**files-touched**](mods/files-touched) | A pane of every file read, edited or created in the session, with counts. | — |
+| [**tool-timeline**](mods/tool-timeline) | A timeline pane of every tool call with duration, status and input summary. | `/timeline` |
+| [**files-touched**](mods/files-touched) | A pane of every file read, edited or created in the session, with counts. | `/files` |
 | [**session-stats**](mods/session-stats) | /session-stats shows a dashboard of turns, tools, tokens, cost, duration and files. | `/session-stats` |
-| [**subagent-monitor**](mods/subagent-monitor) | Watch running subagents live: type, status, duration and last activity. | — |
-| [**error-feed**](mods/error-feed) | Collects every failed command and tool error in one pane. | — |
-| [**activity-heatmap**](mods/activity-heatmap) | A heat map of when you use Claude Code, by hour and weekday. | — |
+| [**subagent-monitor**](mods/subagent-monitor) | Watch running subagents live: type, status, duration and last activity. | `/agents-live` |
+| [**error-feed**](mods/error-feed) | Collects every failed command and tool error in one pane. | `/errors` |
+| [**activity-heatmap**](mods/activity-heatmap) | A heat map of when you use Claude Code, by hour and weekday. | `/heatmap` |
 | [**bash-history**](mods/bash-history) | /bash-history lists recent shell commands Claude ran, with exit status and duration. | `/bash-history` |
 | [**web-trail**](mods/web-trail) | /sources lists every page Claude fetched or searched this session. | `/sources` |
 | [**permission-log**](mods/permission-log) | Keeps a log of every tool call that was denied, and why. | `/denied` |
-| [**token-sparkline**](mods/token-sparkline) | A sparkline of tokens per turn right above the prompt. | — |
+| [**token-sparkline**](mods/token-sparkline) | A sparkline of tokens per turn right above the prompt. | `/sparkline` |
 
 </details>
 
@@ -304,15 +304,15 @@ Search, filter by category, then install, update or uninstall from a pane inside
 
 | Mod | What it does | Commands |
 | --- | --- | --- |
-| [**house-style**](mods/house-style) | Injects your team's style guide (STYLE.md) into the system prompt automatically. | — |
+| [**house-style**](mods/house-style) | Injects your team's style guide (STYLE.md) into the system prompt automatically. | `/style` |
 | [**language-lock**](mods/language-lock) | Makes Claude always answer in your language while keeping code in English. | — |
 | [**concise-mode**](mods/concise-mode) | /concise toggles short, to-the-point answers. | `/concise` |
-| [**prompt-enhancer**](mods/prompt-enhancer) | /enhance rewrites your draft prompt into a precise, well-scoped request. | — |
+| [**prompt-enhancer**](mods/prompt-enhancer) | /enhance rewrites your draft prompt into a precise, well-scoped request. | `/enhance` |
 | [**ticket-linker**](mods/ticket-linker) | Turns ticket references like ABC-123 or #42 into links and context for Claude. | — |
 | [**date-context**](mods/date-context) | Gives Claude the current date, time zone, branch and OS on every prompt. | — |
-| [**persona-switch**](mods/persona-switch) | /persona switches Claude between reviewer, architect, teacher and other roles. | — |
+| [**persona-switch**](mods/persona-switch) | /persona switches Claude between reviewer, architect, teacher and other roles. | `/persona` `/personas` |
 | [**explain-level**](mods/explain-level) | /eli5, /normal and /expert set how deep Claude's explanations go. | `/eli5` `/normal` `/expert` |
-| [**stack-detector**](mods/stack-detector) | Detects your stack and gives Claude the right conventions for it. | — |
+| [**stack-detector**](mods/stack-detector) | Detects your stack and gives Claude the right conventions for it. | `/stack` |
 | [**prompt-lint**](mods/prompt-lint) | Gently flags vague prompts like 'fix it' and suggests what to add. | — |
 
 </details>
@@ -384,10 +384,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Languages & Frameworks
-<sub>Guardrails that know your stack. &middot; 7 mods &middot; new in v2.0.0</sub>
+<sub>Guardrails that know your stack. &middot; 10 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 7 mods</summary>
+<summary>Show the 10 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -396,9 +396,12 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**next-guard**](mods/next-guard) | Flags missing or needless "use client" and server-only imports leaking into client components in Next.js. | — |
 | [**venv-guard**](mods/venv-guard) | Blocks pip install outside an active virtualenv so system Python stays clean. | — |
 | [**node-version-check**](mods/node-version-check) | Warns when your Node version doesn't match .nvmrc, .node-version or package.json engines. | — |
+| [**django-migrate-watch**](mods/django-migrate-watch) | After Django model changes, checks for missing migrations and offers to create them. | — |
 | [**go-mod-tidy**](mods/go-mod-tidy) | Runs go mod tidy when Claude changes Go imports, so go.mod and go.sum stay in sync. | — |
 | [**strict-types**](mods/strict-types) | Adds declare(strict_types=1) to new PHP files and from __future__ import annotations to new Python files. | — |
+| [**schema-sync**](mods/schema-sync) | After Prisma or Drizzle schema edits, regenerates the client and warns when a migration is missing. | — |
 | [**env-example-sync**](mods/env-example-sync) | Keeps .env.example in sync with the environment variables your code actually reads. | — |
+| [**monorepo-scope**](mods/monorepo-scope) | Detects which monorepo package you're in and scopes test, lint and build commands to it. | `/scope-pkg` |
 
 </details>
 
@@ -425,10 +428,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Databases & Data
-<sub>Safer queries, schemas and test data. &middot; 9 mods &middot; new in v2.0.0</sub>
+<sub>Safer queries, schemas and test data. &middot; 10 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 9 mods</summary>
+<summary>Show the 10 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -442,53 +445,66 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**query-result-cap**](mods/query-result-cap) | Adds a LIMIT to ad-hoc SELECTs Claude runs in psql, mysql or sqlite so results don't flood the context. | — |
 | [**backup-before-migrate**](mods/backup-before-migrate) | Dumps your local database before every migration so a bad one is one command away from undo. | `/db-backups` `/db-restore` |
 | [**csv-peek**](mods/csv-peek) | /peek shows a CSV or JSONL file's columns, sample rows and inferred types without reading the whole file. | `/peek` |
+| [**fixture-factory**](mods/fixture-factory) | /fixtures generates realistic test data that matches your schema or types. | `/fixtures` |
 
 </details>
 
 ### Frontend & Accessibility
-<sub>Pixels, bundles and a11y, checked as you go. &middot; 7 mods &middot; new in v2.0.0</sub>
+<sub>Pixels, bundles and a11y, checked as you go. &middot; 10 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 7 mods</summary>
+<summary>Show the 10 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
 | --- | --- | --- |
 | [**a11y-guard**](mods/a11y-guard) | Flags accessibility misses as Claude writes UI: images without alt, unlabeled buttons, clickable divs. | — |
+| [**screenshot-check**](mods/screenshot-check) | After UI edits, takes a Playwright screenshot of the page and shows it to Claude. | `/screenshot` |
 | [**bundle-size-watch**](mods/bundle-size-watch) | Compares bundle size after each build and warns when it grows. | — |
 | [**css-token-guard**](mods/css-token-guard) | Flags hard-coded hex colors and pixel values where your design tokens should be used. | — |
+| [**lighthouse-run**](mods/lighthouse-run) | /lighthouse runs Lighthouse on a URL and shows performance, a11y, SEO and best-practice scores in a pane. | `/lighthouse` |
 | [**heavy-asset-warn**](mods/heavy-asset-warn) | Warns when large images, videos or fonts are added to the project. | — |
 | [**storybook-nudge**](mods/storybook-nudge) | Reminds you to add a story when Claude creates a new component without one. | — |
+| [**contrast-checker**](mods/contrast-checker) | Checks that the colors Claude changes in CSS meet WCAG AA contrast. | — |
 | [**dark-mode-check**](mods/dark-mode-check) | Flags colors added without a dark-mode variant in projects that support a dark theme. | — |
 | [**component-catalog**](mods/component-catalog) | /components lists your existing UI components so Claude reuses them instead of creating duplicates. | `/components` |
 
 </details>
 
 ### APIs & Network
-<sub>Talk to the web on your terms. &middot; 4 mods &middot; new in v2.0.0</sub>
+<sub>Talk to the web on your terms. &middot; 10 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 4 mods</summary>
+<summary>Show the 10 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
 | --- | --- | --- |
 | [**http-client**](mods/http-client) | /http sends a request and shows the formatted response in a pane, like a tiny Postman in your terminal. | `/http` |
 | [**openapi-sync**](mods/openapi-sync) | Warns when your API routes change but openapi.yaml doesn't. | — |
+| [**url-allowlist**](mods/url-allowlist) | Restricts WebFetch to the domains you allow. | `/allow-host` |
+| [**offline-mode**](mods/offline-mode) | /offline blocks every network call — fetches, curl, installs, git push — until you turn it back on. | `/offline` |
 | [**mock-server**](mods/mock-server) | /mock starts a fake API server from your OpenAPI spec so you can build the frontend before the backend. | `/mock` |
+| [**rate-limit-guard**](mods/rate-limit-guard) | Stops Claude from hammering external APIs with curl loops. | — |
+| [**jwt-decode**](mods/jwt-decode) | /jwt decodes a JSON Web Token locally — header, claims, expiry — without sending it anywhere. | `/jwt` |
+| [**status-check**](mods/status-check) | /service-status checks whether GitHub, npm, PyPI or the Anthropic API are having an outage before you blame your code. | `/service-status` |
+| [**graphql-context**](mods/graphql-context) | Gives Claude a compact summary of your GraphQL schema when you work on queries and resolvers. | `/gql-schema` |
 | [**curl-to-code**](mods/curl-to-code) | /curl2code turns a curl command into fetch, axios, Python requests or Go code. | `/curl2code` |
 
 </details>
 
 ### Agents & Orchestration
-<sub>Scope, queue and supervise Claude's work. &middot; 7 mods &middot; new in v2.0.0</sub>
+<sub>Scope, queue and supervise Claude's work. &middot; 10 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 7 mods</summary>
+<summary>Show the 10 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
 | --- | --- | --- |
+| [**scope-lock**](mods/scope-lock) | /scope locks Claude to the files you name; edits outside the scope are blocked. | `/scope` |
+| [**second-opinion**](mods/second-opinion) | /second-opinion has a different model critique Claude's last answer or plan. | `/second-opinion` |
+| [**parallel-explore**](mods/parallel-explore) | /explore sends three subagents to investigate different parts of the codebase and merges their findings. | `/explore` |
 | [**subagent-cap**](mods/subagent-cap) | Caps how many subagents can run at the same time. | — |
 | [**task-queue**](mods/task-queue) | /queue lines up prompts that run one after another whenever Claude is free. | `/queue` |
 | [**night-shift**](mods/night-shift) | Runs your queued tasks at a scheduled time, like overnight, and leaves you a report. | `/night-shift` |
@@ -514,7 +530,7 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**onboarding-tour**](mods/onboarding-tour) | /tour walks a newcomer through the repository step by step. | `/tour` |
 | [**command-coach**](mods/command-coach) | Suggests Claude Code commands and mods that fit the way you work. | `/coach` |
 | [**shortcut-tips**](mods/shortcut-tips) | One tip a day about Claude Code shortcuts and features you might not know. | `/tip` |
-| [**why-log**](mods/why-log) | Records why each file was changed; /why shows the reasoning behind any file's edits. | — |
+| [**why-log**](mods/why-log) | Records why each file was changed; /why shows the reasoning behind any file's edits. | `/why` |
 | [**cheatsheet**](mods/cheatsheet) | /cheat shows a quick reference for git, docker, regex, tmux and more, offline. | `/cheat` |
 | [**pair-mode**](mods/pair-mode) | Claude proposes, you type: edits become diffs you apply yourself, for deliberate practice. | `/pair` |
 | [**skill-tracker**](mods/skill-tracker) | Tracks which languages and tools you've worked with each week. | `/my-skills` |
@@ -522,15 +538,20 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Privacy & Compliance
-<sub>Licenses, personal data and audit trails. &middot; 5 mods &middot; new in v2.0.0</sub>
+<sub>Licenses, personal data and audit trails. &middot; 10 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 5 mods</summary>
+<summary>Show the 10 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
 | --- | --- | --- |
 | [**license-checker**](mods/license-checker) | Warns when a dependency with a copyleft license (GPL, AGPL) lands in a permissively licensed project. | — |
+| [**pii-in-logs**](mods/pii-in-logs) | Flags log statements that print emails, passwords, tokens or other personal data. | — |
+| [**data-map**](mods/data-map) | /data-map lists where your code collects, stores and sends personal data — a head start for GDPR. | `/data-map` |
+| [**tracker-guard**](mods/tracker-guard) | Blocks adding analytics and tracking SDKs that haven't been approved. | — |
+| [**no-upload**](mods/no-upload) | Blocks commands that upload files to external services like pastebins and file-sharing sites. | — |
+| [**crypto-guard**](mods/crypto-guard) | Flags weak cryptography: MD5 or SHA1 for passwords, Math.random for tokens, ECB mode, hard-coded IVs. | — |
 | [**sbom**](mods/sbom) | /sbom generates a software bill of materials with every dependency and its license. | `/sbom` |
 | [**audit-trail**](mods/audit-trail) | Writes every action Claude takes to an append-only JSONL audit log. | `/audit` |
 | [**vuln-scan**](mods/vuln-scan) | After installs, runs npm audit or pip-audit and shows any vulnerabilities in a pane. | `/vulns` |
@@ -539,16 +560,20 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Performance & Reliability
-<sub>Fast, stable and regression-free. &middot; 6 mods &middot; new in v2.0.0</sub>
+<sub>Fast, stable and regression-free. &middot; 10 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 6 mods</summary>
+<summary>Show the 10 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
 | --- | --- | --- |
+| [**benchmark-compare**](mods/benchmark-compare) | /bench runs your benchmarks before and after a change and compares the numbers. | `/bench` |
 | [**slow-test-flag**](mods/slow-test-flag) | Points out your slowest tests after each test run. | `/slow-tests` |
+| [**flaky-detector**](mods/flaky-detector) | Detects tests that pass and fail at random and keeps a list of the suspects. | `/flaky` |
 | [**leak-hint**](mods/leak-hint) | Flags event listeners, intervals and subscriptions created without cleanup. | — |
+| [**outdated-deps**](mods/outdated-deps) | /outdated shows stale dependencies and how risky each upgrade is. | `/outdated` |
+| [**profile-run**](mods/profile-run) | /profile runs a command under a profiler and shows the hottest functions. | `/profile` |
 | [**net-retry**](mods/net-retry) | Automatically retries commands that failed because of a temporary network error. | — |
 | [**disk-guard**](mods/disk-guard) | Warns when the disk is nearly full before builds, installs and docker pulls. | — |
 | [**regression-guard**](mods/regression-guard) | Remembers which tests passed at the start of the session and warns if any of them now fail. | `/baseline` |
@@ -557,10 +582,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 </details>
 
 ### Mod Ecosystem
-<sub>Make, manage and personalise your mods. &middot; 6 mods &middot; new in v2.0.0</sub>
+<sub>Make, manage and personalise your mods. &middot; 10 mods &middot; new in v2.0.0</sub>
 
 <details>
-<summary>Show the 6 mods</summary>
+<summary>Show the 10 mods</summary>
 <br>
 
 | Mod | What it does | Commands |
@@ -571,6 +596,10 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**settings-sync**](mods/settings-sync) | Exports and imports your mods' configuration so you can move it between machines. | `/mods-export` `/mods-import` |
 | [**quiet-mode**](mods/quiet-mode) | /quiet silences toasts and sounds from every mod while you focus. | `/quiet` |
 | [**achievements**](mods/achievements) | Unlock achievements as you work: first commit, 100 green test runs, a week-long streak and more. | `/achievements` |
+| [**streaks**](mods/streaks) | Shows your consecutive days of coding with Claude in the status line. | `/streak` |
+| [**soundpack**](mods/soundpack) | Sound packs for Claude Code events: minimal, retro or nature. | `/soundpack` |
+| [**daily-goal**](mods/daily-goal) | /daily-goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there. | `/daily-goal` |
+| [**session-replay**](mods/session-replay) | /replay steps through the session — prompts, tool calls, edits — in a pane, like a video timeline. | `/replay` |
 
 </details>
 
