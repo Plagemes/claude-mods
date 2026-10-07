@@ -1,0 +1,43 @@
+{
+  "name": "screenshot-check",
+  "version": "1.0.0",
+  "description": "After UI edits, takes a Playwright screenshot of the page and shows it to Claude.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#screenshot-check",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "frontend", "playwright", "screenshot"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "auto": {
+      "type": "boolean",
+      "title": "Capture after UI edits",
+      "description": "Take screenshots by itself a few seconds after Claude edits components, pages or styles, while a dev server runs.",
+      "default": false
+    },
+    "delaySeconds": {
+      "type": "number",
+      "title": "Delay after edits (seconds)",
+      "description": "How long the edits must settle before an automatic capture.",
+      "default": 5
+    },
+    "baseUrl": {
+      "type": "string",
+      "title": "Base URL",
+      "description": "The app's URL, e.g. http://localhost:3000. Empty: the running dev server is found on its usual port.",
+      "default": ""
+    },
+    "fullPage": {
+      "type": "boolean",
+      "title": "Full page",
+      "description": "Capture the whole scrollable page instead of the first screen.",
+      "default": false
+    },
+    "keep": {
+      "type": "number",
+      "title": "Captures kept",
+      "description": "How many captures to keep in .claude/screenshots; older ones are deleted.",
+      "default": 10
+    }
+  }
+}

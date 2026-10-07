@@ -1,0 +1,36 @@
+{
+  "name": "backup-before-migrate",
+  "version": "1.0.0",
+  "description": "Dumps your local database before every migration so a bad one is one command away from undo.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#backup-before-migrate",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "data", "database", "backup"],
+  "userConfig": {
+    "keep": {
+      "type": "number",
+      "title": "Backups kept",
+      "description": "How many backups to keep in .claude/db-backups; older ones are deleted.",
+      "default": 10
+    },
+    "compress": {
+      "type": "boolean",
+      "title": "Compress PostgreSQL dumps",
+      "description": "Gzip pg_dump output (.sql.gz). MySQL dumps are plain .sql and SQLite backups a copy of the file either way.",
+      "default": true
+    },
+    "requireBackup": {
+      "type": "boolean",
+      "title": "Require a backup",
+      "description": "Block a migration whenever no backup could be taken (remote or unknown database, missing dump tool). SKIP_DB_BACKUP=1 is then ignored.",
+      "default": false
+    },
+    "extraPattern": {
+      "type": "string",
+      "title": "Extra migration pattern",
+      "description": "A regex for more migration commands to back up before (for example: make migrate|./bin/migrate). Empty: only the built-in list.",
+      "default": ""
+    }
+  }
+}
