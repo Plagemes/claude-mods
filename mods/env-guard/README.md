@@ -15,7 +15,8 @@ an `.npmrc` that holds an auth token (an `.npmrc` that only references `${NPM_TO
 
 ## Install
 ```
-/plugin install env-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install env-guard@claude-mods
 ```
 
 ## Usage

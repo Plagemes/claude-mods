@@ -8,7 +8,8 @@ Starts a timer whenever Claude runs a Bash command. If the command is still goin
 
 ## Install
 ```
-/plugin install long-run-alert --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install long-run-alert@claude-mods
 ```
 
 ## Usage

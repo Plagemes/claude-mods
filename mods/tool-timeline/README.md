@@ -8,7 +8,8 @@ tool-timeline records every tool call of the session: when it started, how long 
 
 ## Install
 ```
-/plugin install tool-timeline --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install tool-timeline@claude-mods
 ```
 
 ## Usage

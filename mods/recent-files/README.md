@@ -8,7 +8,8 @@ Keeps a running list of every file Claude has read, edited or written in the ses
 
 ## Install
 ```
-/plugin install recent-files --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install recent-files@claude-mods
 ```
 
 ## Usage

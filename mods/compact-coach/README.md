@@ -8,7 +8,8 @@ Compacting in the middle of a task throws away detail you still need; compacting
 
 ## Install
 ```
-/plugin install compact-coach --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install compact-coach@claude-mods
 ```
 
 ## Usage

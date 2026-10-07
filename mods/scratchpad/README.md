@@ -8,7 +8,8 @@ Keeps a list of notes for each project (by its root folder), across sessions. `/
 
 ## Install
 ```
-/plugin install scratchpad --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install scratchpad@claude-mods
 ```
 
 ## Usage

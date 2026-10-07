@@ -8,7 +8,8 @@ Select text in the transcript with the mouse (an error message, a paragraph of C
 
 ## Install
 ```
-/plugin install quote-selection --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install quote-selection@claude-mods
 ```
 
 ## Usage

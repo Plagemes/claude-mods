@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install handoff --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install handoff@claude-mods
 ```
 
 ## Usage

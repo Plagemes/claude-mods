@@ -8,7 +8,8 @@ A personal snippet library inside Claude Code. `/save-snippet <name>` saves the 
 
 ## Install
 ```
-/plugin install snippet-vault --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install snippet-vault@claude-mods
 ```
 
 ## Usage

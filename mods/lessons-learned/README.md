@@ -8,7 +8,8 @@ It notices fix cycles: a test, build, lint or type-check command fails, Claude e
 
 ## Install
 ```
-/plugin install lessons-learned --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install lessons-learned@claude-mods
 ```
 
 ## Usage

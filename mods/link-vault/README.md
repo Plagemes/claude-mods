@@ -8,7 +8,8 @@ Long sessions scatter links through prompts and answers. `/links` gathers every 
 
 ## Install
 ```
-/plugin install link-vault --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install link-vault@claude-mods
 ```
 
 ## Usage

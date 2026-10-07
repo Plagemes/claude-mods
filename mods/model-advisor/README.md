@@ -8,7 +8,8 @@ Rates every prompt you send as light, standard or heavy from its words and lengt
 
 ## Install
 ```
-/plugin install model-advisor --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install model-advisor@claude-mods
 ```
 
 ## Usage

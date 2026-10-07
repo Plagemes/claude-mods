@@ -8,7 +8,8 @@ Three commands set the depth of Claude's explanations for the session. `/eli5` a
 
 ## Install
 ```
-/plugin install explain-level --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install explain-level@claude-mods
 ```
 
 ## Usage

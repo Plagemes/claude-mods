@@ -115,8 +115,8 @@
           </div>
           <div class="cmd cmd--hero">
             <span class="cmd__prompt" aria-hidden="true">&gt;</span>
-            <code class="cmd__text">/plugin install mod-store --marketplace plagemes/claude-mods</code>
-            <button class="cmd__copy" type="button" data-copy="/plugin install mod-store --marketplace plagemes/claude-mods" aria-label="Copy the mod store install command">
+            <code class="cmd__text">/plugin marketplace add plagemes/claude-mods</code>
+            <button class="cmd__copy" type="button" data-copy="/plugin marketplace add plagemes/claude-mods" aria-label="Copy the command that adds the marketplace">
               <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
               <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
             </button>
@@ -151,7 +151,7 @@
           <div><dt>Mods</dt><dd data-count>101</dd></div>
           <div><dt>Categories</dt><dd data-cat-count>11</dd></div>
           <div><dt>Config to start</dt><dd>0</dd></div>
-          <div><dt>Commands to install</dt><dd>2</dd></div>
+          <div><dt>Commands to install</dt><dd>3</dd></div>
         </dl>
       </div>
     </section>
@@ -161,18 +161,18 @@
       <div class="wrap install__grid">
         <div class="install__copy">
           <p class="kicker reveal">Install</p>
-          <h2 class="display h2 reveal" id="install-title">Two commands. <em>That&rsquo;s</em> the setup.</h2>
+          <h2 class="display h2 reveal" id="install-title">Three commands. <em>That&rsquo;s</em> the setup.</h2>
           <p class="sub reveal">Install the store once, then add, update and remove every other mod from inside Claude Code.</p>
 
           <ol class="steps">
             <li class="step reveal">
               <span class="step__num" aria-hidden="true">01</span>
               <div class="step__body">
-                <h3 class="step__title">Install the mod store</h3>
+                <h3 class="step__title">Add the marketplace</h3>
                 <div class="cmd">
                   <span class="cmd__prompt" aria-hidden="true">&gt;</span>
-                  <code class="cmd__text">/plugin install mod-store --marketplace plagemes/claude-mods</code>
-                  <button class="cmd__copy" type="button" data-copy="/plugin install mod-store --marketplace plagemes/claude-mods" aria-label="Copy step 1 command">
+                  <code class="cmd__text">/plugin marketplace add plagemes/claude-mods</code>
+                  <button class="cmd__copy" type="button" data-copy="/plugin marketplace add plagemes/claude-mods" aria-label="Copy step 1 command">
                     <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
                     <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
                   </button>
@@ -182,11 +182,26 @@
             <li class="step reveal">
               <span class="step__num" aria-hidden="true">02</span>
               <div class="step__body">
+                <h3 class="step__title">Install the mod store</h3>
+                <div class="cmd">
+                  <span class="cmd__prompt" aria-hidden="true">&gt;</span>
+                  <code class="cmd__text">/plugin install mod-store@claude-mods</code>
+                  <button class="cmd__copy" type="button" data-copy="/plugin install mod-store@claude-mods" aria-label="Copy step 2 command">
+                    <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
+                    <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
+                  </button>
+                </div>
+                <p class="step__note">Then run <code>/reload-plugins</code> to load it.</p>
+              </div>
+            </li>
+            <li class="step reveal">
+              <span class="step__num" aria-hidden="true">03</span>
+              <div class="step__body">
                 <h3 class="step__title">Open it</h3>
                 <div class="cmd">
                   <span class="cmd__prompt" aria-hidden="true">&gt;</span>
                   <code class="cmd__text">/mods</code>
-                  <button class="cmd__copy" type="button" data-copy="/mods" aria-label="Copy step 2 command">
+                  <button class="cmd__copy" type="button" data-copy="/mods" aria-label="Copy step 3 command">
                     <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
                     <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
                   </button>
@@ -200,8 +215,8 @@
             <h3 class="single__title">Just want one mod?</h3>
             <div class="cmd">
               <span class="cmd__prompt" aria-hidden="true">&gt;</span>
-              <code class="cmd__text">/plugin install <span class="cmd__slot" data-single-slot>&lt;mod&gt;</span> --marketplace plagemes/claude-mods</code>
-              <button class="cmd__copy" type="button" data-copy="/plugin install <mod> --marketplace plagemes/claude-mods" data-single-copy aria-label="Copy the single mod install command">
+              <code class="cmd__text">/plugin install <span class="cmd__slot" data-single-slot>&lt;mod&gt;</span>@claude-mods</code>
+              <button class="cmd__copy" type="button" data-copy="/plugin install <mod>@claude-mods" data-single-copy aria-label="Copy the single mod install command">
                 <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
                 <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
               </button>
@@ -507,8 +522,8 @@
         <p class="sub reveal">One install, <span data-count>101</span> mods, zero lock-in. Every mod is a folder of plain TypeScript you can read in a minute.</p>
         <div class="cmd cmd--hero outro__cmd reveal">
           <span class="cmd__prompt" aria-hidden="true">&gt;</span>
-          <code class="cmd__text">/plugin install mod-store --marketplace plagemes/claude-mods</code>
-          <button class="cmd__copy" type="button" data-copy="/plugin install mod-store --marketplace plagemes/claude-mods" aria-label="Copy the mod store install command">
+          <code class="cmd__text">/plugin marketplace add plagemes/claude-mods</code>
+          <button class="cmd__copy" type="button" data-copy="/plugin marketplace add plagemes/claude-mods" aria-label="Copy the command that adds the marketplace">
             <svg class="icon icon--copy" aria-hidden="true"><use href="#i-copy"/></svg>
             <svg class="icon icon--check" aria-hidden="true"><use href="#i-check"/></svg>
           </button>

@@ -8,7 +8,8 @@ Every tool call that comes back as an error (a Bash command exiting non-zero, an
 
 ## Install
 ```
-/plugin install error-feed --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install error-feed@claude-mods
 ```
 
 ## Usage

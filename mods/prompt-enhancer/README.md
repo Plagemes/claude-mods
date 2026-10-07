@@ -8,7 +8,8 @@ Type a rough idea after `/enhance` and a model rewrites it into a clear request 
 
 ## Install
 ```
-/plugin install prompt-enhancer --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install prompt-enhancer@claude-mods
 ```
 
 ## Usage

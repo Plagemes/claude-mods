@@ -8,7 +8,8 @@ Before Claude edits or writes a file, codeowners-hint looks the file up in your 
 
 ## Install
 ```
-/plugin install codeowners-hint --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install codeowners-hint@claude-mods
 ```
 
 ## Usage

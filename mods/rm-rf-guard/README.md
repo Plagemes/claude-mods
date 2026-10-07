@@ -12,7 +12,8 @@ Everyday cleanups (`rm -rf node_modules`, `rm -rf /tmp/x`, `git clean -n`) pass 
 
 ## Install
 ```
-/plugin install rm-rf-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install rm-rf-guard@claude-mods
 ```
 
 ## Usage

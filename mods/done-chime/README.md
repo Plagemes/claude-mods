@@ -8,7 +8,8 @@ When Claude finishes a turn that took longer than 20 seconds (configurable), a s
 
 ## Install
 ```
-/plugin install done-chime --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install done-chime@claude-mods
 ```
 
 ## Usage

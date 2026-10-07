@@ -8,7 +8,8 @@ When you leave a session, it appends an entry to `.claude/journal/YYYY-MM-DD.md`
 
 ## Install
 ```
-/plugin install session-journal --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install session-journal@claude-mods
 ```
 
 ## Usage

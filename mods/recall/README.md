@@ -8,7 +8,8 @@ Registers a `search` tool (listed to Claude as `mcp__recall__search`) that searc
 
 ## Install
 ```
-/plugin install recall --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install recall@claude-mods
 ```
 
 ## Usage

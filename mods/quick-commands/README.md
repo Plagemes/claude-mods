@@ -8,7 +8,8 @@ Four short commands that send Claude straight to work with your project's own to
 
 ## Install
 ```
-/plugin install quick-commands --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install quick-commands@claude-mods
 ```
 
 ## Usage

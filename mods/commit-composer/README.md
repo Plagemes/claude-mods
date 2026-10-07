@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install commit-composer --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install commit-composer@claude-mods
 ```
 
 ## Usage

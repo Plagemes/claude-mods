@@ -11,7 +11,8 @@ It works at two levels: the commit text Claude is asked to write is extended wit
 
 ## Install
 ```
-/plugin install co-author-stamp --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install co-author-stamp@claude-mods
 ```
 
 ## Usage

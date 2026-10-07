@@ -12,7 +12,8 @@ saved to a file pass untouched.
 
 ## Install
 ```
-/plugin install curl-pipe-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install curl-pipe-guard@claude-mods
 ```
 
 ## Usage

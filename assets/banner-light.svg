@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-labelledby="t d">
   <title id="t">Claude Mods</title>
-  <desc id="d">101 mods for Claude Code: guardrails, live panes, status lines, slash commands and sounds. Install the store with /plugin install mod-store --marketplace plagemes/claude-mods.</desc>
+  <desc id="d">101 mods for Claude Code: guardrails, live panes, status lines, slash commands and sounds. Install the store with /plugin marketplace add plagemes/claude-mods, then /plugin install mod-store@claude-mods.</desc>
   <defs>
     <radialGradient id="glow" cx="78%" cy="45%" r="55%">
       <stop offset="0" stop-color="#e07434" stop-opacity="0.16"/>

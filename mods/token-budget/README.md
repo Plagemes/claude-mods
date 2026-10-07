@@ -8,7 +8,8 @@ Adds up what every turn of the session costs, from the real token usage the engi
 
 ## Install
 ```
-/plugin install token-budget --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install token-budget@claude-mods
 ```
 
 ## Usage

@@ -8,7 +8,8 @@ Attaches one tiny line to each prompt you send, which only Claude reads: the loc
 
 ## Install
 ```
-/plugin install date-context --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install date-context@claude-mods
 ```
 
 ## Usage

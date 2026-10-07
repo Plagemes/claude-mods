@@ -11,7 +11,8 @@ the tool call and tells Claude which pattern hit and on which line, with the sec
 
 ## Install
 ```
-/plugin install secret-shield --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install secret-shield@claude-mods
 ```
 
 ## Usage

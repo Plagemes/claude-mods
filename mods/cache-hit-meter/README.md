@@ -8,7 +8,8 @@ After every turn it works out which share of the input tokens was served from th
 
 ## Install
 ```
-/plugin install cache-hit-meter --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install cache-hit-meter@claude-mods
 ```
 
 ## Usage

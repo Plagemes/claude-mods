@@ -8,7 +8,8 @@
 
 ## Install
 ```
-/plugin install pr-describer --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install pr-describer@claude-mods
 ```
 
 ## Usage

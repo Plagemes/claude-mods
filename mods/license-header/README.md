@@ -8,7 +8,8 @@ When Claude creates a new source file with the Write tool, license-header puts y
 
 ## Install
 ```
-/plugin install license-header --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install license-header@claude-mods
 ```
 
 ## Usage

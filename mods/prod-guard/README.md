@@ -12,7 +12,8 @@ namespace (or at the current context when it is production), `DROP`/`TRUNCATE` a
 
 ## Install
 ```
-/plugin install prod-guard --marketplace plagemes/claude-mods
+/plugin marketplace add plagemes/claude-mods
+/plugin install prod-guard@claude-mods
 ```
 
 ## Usage
