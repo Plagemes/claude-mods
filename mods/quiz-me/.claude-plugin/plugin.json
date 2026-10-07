@@ -1,0 +1,25 @@
+{
+  "name": "quiz-me",
+  "version": "1.0.0",
+  "description": "/quiz asks you questions about the code Claude just wrote, to check you really understand it.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#quiz-me",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "learning", "quiz", "understanding"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "questions": {
+      "type": "number",
+      "title": "Questions per quiz",
+      "description": "How many questions /quiz asks when you do not say (1-10).",
+      "default": 5
+    },
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "The model that writes the questions: an alias such as sonnet, haiku or opus, or a full model id.",
+      "default": "sonnet"
+    }
+  }
+}

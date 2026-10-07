@@ -1,0 +1,31 @@
+{
+  "name": "night-shift",
+  "version": "1.0.0",
+  "description": "Runs your queued tasks at a scheduled time, like overnight, and leaves you a report.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#night-shift",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "agents", "scheduler", "automation"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "allowDirty": {
+      "type": "boolean",
+      "title": "Allow uncommitted changes",
+      "description": "Start even when the git working tree has uncommitted changes (or the project is not a git repository). Off keeps the night's work cleanly reviewable with git diff.",
+      "default": false
+    },
+    "maxTasks": {
+      "type": "number",
+      "title": "Tasks per night",
+      "description": "The most tasks one shift runs (1-50); the rest stay queued for the next one.",
+      "default": 10
+    },
+    "taskMinutes": {
+      "type": "number",
+      "title": "Minutes per task",
+      "description": "A task still running after this long is stopped and the shift moves on (5-240).",
+      "default": 45
+    }
+  }
+}
