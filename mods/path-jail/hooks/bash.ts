@@ -382,3 +382,11 @@ const substitutionBodies = (word: string): string[] => {
   }
   return bodies
 }
+
+/**
+ * A Git Bash / MSYS / Cygwin drive path (`/c/Users`, `/cygdrive/c/Users`) as
+ * Windows spells it (`C:\Users`). Only for a jail on Windows paths: there,
+ * `/c/...` names drive C, not a folder `c` at the root of the current drive.
+ */
+export const fromGitBash = (path: string): string =>
+  path.replace(/^\/(?:cygdrive\/)?([A-Za-z])(?:\/|$)/, (_match, drive: string) => `${drive.toUpperCase()}:\\`)

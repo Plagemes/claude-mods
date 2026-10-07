@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { writeTargets } from '../hooks/bash'
+import { fromGitBash, writeTargets } from '../hooks/bash'
 
 type Entry = { kind: 'dir' | 'file'; link?: string }
 
@@ -162,6 +162,15 @@ test('plan mode and auto memory can write Claude Code\'s own plan and memory fil
   } finally {
     delete FILES['/home/me/.claude']
   }
+})
+
+test('Git Bash drive paths read as Windows paths', () => {
+  expect(fromGitBash('/c/Users/me/.claude/x')).toBe('C:\\Users/me/.claude/x')
+  expect(fromGitBash('/d')).toBe('D:\\')
+  expect(fromGitBash('/cygdrive/c/tmp/a')).toBe('C:\\tmp/a')
+  expect(fromGitBash('/tmp/a')).toBe('/tmp/a')
+  expect(fromGitBash('/code/app')).toBe('/code/app')
+  expect(fromGitBash('src/c/a')).toBe('src/c/a')
 })
 
 test('the Bash reader sees through bash -lc and wrapper options', () => {
