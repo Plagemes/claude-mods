@@ -1,0 +1,139 @@
+{
+  "name": "smart-router",
+  "version": "1.0.0",
+  "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#smart-router",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "agents",
+    "routing",
+    "subagents",
+    "cost"
+  ],
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "Routing mode",
+      "description": "auto: set each subagent's model by difficulty; suggest: only log what it would set; off: do nothing.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "suggest",
+        "off"
+      ]
+    },
+    "profile": {
+      "type": "string",
+      "title": "Profile",
+      "description": "Saver, Balanced (these settings as they are), Fast or Max quality: presets for the tier models, opus quota, parallelism, budget bias and audit rate. The pane's chips switch it per session.",
+      "default": "balanced",
+      "options": [
+        "saver",
+        "balanced",
+        "fast",
+        "max"
+      ]
+    },
+    "lightModel": {
+      "type": "string",
+      "title": "Light model",
+      "description": "Model for light work (search, read, summarise, mechanical edits): an alias, a full id, or inherit (the main model).",
+      "default": "haiku"
+    },
+    "standardModel": {
+      "type": "string",
+      "title": "Standard model",
+      "description": "Model for standard work (features with a clear spec, tests, bugs with a repro, module refactors).",
+      "default": "sonnet"
+    },
+    "deepModel": {
+      "type": "string",
+      "title": "Deep model",
+      "description": "Model for deep work (architecture, security, concurrency and performance root causes, cross-cutting or production changes).",
+      "default": "opus"
+    },
+    "override": {
+      "type": "string",
+      "title": "Replace chosen models",
+      "description": "never: keep a model the caller set, and custom agents' own models; always: route every subagent by difficulty.",
+      "default": "never",
+      "options": [
+        "never",
+        "always"
+      ]
+    },
+    "protectDeep": {
+      "type": "boolean",
+      "title": "Protect deep work",
+      "description": "Never run deep work on a model weaker than the main one.",
+      "default": true
+    },
+    "budgetBias": {
+      "type": "number",
+      "title": "Budget bias (USD)",
+      "description": "Past this session spend, borderline tasks go one tier down. 0 turns it off.",
+      "default": 5
+    },
+    "opusShare": {
+      "type": "number",
+      "title": "Opus quota (%)",
+      "description": "Soft cap on the share of this project's subagent tokens that run on opus-class models: past it, borderline deep work goes to the standard model. 0 turns it off.",
+      "default": 0
+    },
+    "auditRate": {
+      "type": "number",
+      "title": "Quality checks (%)",
+      "description": "Share of finished light and standard agents that changed files for which the pane offers a quick review one tier up. 0 turns it off.",
+      "default": 10
+    },
+    "useEffort": {
+      "type": "boolean",
+      "title": "Effort lever",
+      "description": "Run deep but well-scoped tasks (a race, a leak or a slow path in a few files) on the standard model at effort high instead of the deep model. Off: effort is never set.",
+      "default": false
+    },
+    "useModel": {
+      "type": "boolean",
+      "title": "Ask a small model for borderline tasks",
+      "description": "When the local rules are unsure, ask the light model (5 tokens, 4 s timeout, cached).",
+      "default": false
+    },
+    "maxParallel": {
+      "type": "number",
+      "title": "Max parallel agents",
+      "description": "Most subagents in one parallel batch (1-8).",
+      "default": 5
+    },
+    "workflowThreshold": {
+      "type": "number",
+      "title": "Workflow threshold",
+      "description": "Subtasks from which /route offers Run as workflow (a multi-stage pipeline or more than 10 agents also qualify).",
+      "default": 6
+    },
+    "prices": {
+      "type": "string",
+      "title": "Price overrides (JSON)",
+      "description": "Optional: {\"<model id part>\": {\"input\": 3, \"output\": 15}} in USD per million tokens, ahead of the built-in table.",
+      "default": ""
+    },
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open the pane at start",
+      "description": "Open the Router pane when a session starts (docked only on wide terminals).",
+      "default": false
+    },
+    "writeFiles": {
+      "type": "boolean",
+      "title": "Write summary files",
+      "description": "Keep ~/.claude/claude-mods/smart-router/daily.json and stats.json up to date for other mods.",
+      "default": true
+    }
+  },
+  "types": "./types/index.d.ts"
+}
