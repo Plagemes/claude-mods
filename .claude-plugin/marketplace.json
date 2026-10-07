@@ -140,7 +140,7 @@
       "name": "path-jail",
       "source": "./mods/path-jail",
       "description": "Allows writes only inside the project root, resolving symlinks and .. tricks.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"

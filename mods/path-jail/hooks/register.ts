@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { writeTargets } from './bash'
+import { fromGitBash, writeTargets } from './bash'
 
 type Target = { path: string; via: string; cdChain: readonly string[] }
 type Jail = { roots: string[]; sep: string; cwd: string; home: string | undefined; tmp: string | undefined }
@@ -70,7 +70,8 @@ const expand = (path: string, jail: Jail, cwd: string): string | undefined => {
     .replace(/\$\{?HOME\}?(?![\w])/g, () => jail.home ?? '$HOME')
     .replace(/\$\{?PWD\}?(?![\w])/g, cwd)
     .replace(/\$\{?TMPDIR\}?(?![\w])/g, () => jail.tmp ?? '$TMPDIR')
-  return /[$`]|^~/.test(result) ? undefined : result
+  if (/[$`]|^~/.test(result)) return undefined
+  return jail.sep === '\\' ? fromGitBash(result) : result
 }
 
 /** A glob is checked by the folder it expands in; `..` after a glob cannot be followed. */
