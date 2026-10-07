@@ -1,0 +1,15 @@
+{
+  "name": "team-hub",
+  "version": "1.0.0",
+  "description": "A shared panel of team conventions, recommended mods, budgets and rules, synced through the repo.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#team-hub",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "team", "conventions", "onboarding", "policy"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "injectConventions": { "type": "boolean", "title": "Add the conventions to the system prompt", "description": "Claude follows the team's conventions from .claude/team.json (a short, stable section, capped at 1,500 characters).", "default": true },
+    "notifyDrift": { "type": "boolean", "title": "Tell me when my settings differ", "description": "One notice per session when your budget, notification or guard settings are weaker than the team's, or recommended mods are missing.", "default": true }
+  }
+}
