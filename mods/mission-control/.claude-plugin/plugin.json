@@ -1,0 +1,16 @@
+{
+  "name": "mission-control",
+  "version": "1.0.0",
+  "description": "One dashboard for every Claude session on your machine: what each is doing, cost, blockers, with pause and priorities.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#mission-control",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "observability", "sessions", "dashboard"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "alertMinutes": { "type": "number", "title": "Alert after (minutes)", "description": "Minutes a session may wait on a permission prompt or a question before you are alerted (through mods-hub when installed).", "default": 3 },
+    "shareSession": { "type": "boolean", "title": "Show this session", "description": "Write this session's heartbeat so every cockpit lists it, and accept Pause / Stop / Note / Priority from them.", "default": true },
+    "statusLine": { "type": "boolean", "title": "Status line", "description": "Show when this session is paused, or when other sessions wait for you.", "default": true }
+  }
+}

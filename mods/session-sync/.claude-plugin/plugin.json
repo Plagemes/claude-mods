@@ -1,0 +1,17 @@
+{
+  "name": "session-sync",
+  "version": "1.0.0",
+  "description": "Coordinates sessions working on the same repo: file leases against conflicts, overlap warnings and hand-offs.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#session-sync",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "agents", "sessions", "conflicts"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "leaseMinutes": { "type": "number", "title": "Lease length (minutes)", "description": "How long a file stays reserved for the session that edited it after that session's last activity.", "default": 10 },
+    "leases": { "type": "boolean", "title": "File leases", "description": "Refuse an edit to a file another live session on the same repo is editing (the person can override with SYNC-OK).", "default": true },
+    "warnings": { "type": "boolean", "title": "Overlap warnings", "description": "Warn when another session changes files in the same folder, or works on the same branch with uncommitted changes.", "default": true },
+    "statusLine": { "type": "boolean", "title": "Status line", "description": "Show how many other sessions work on this repo.", "default": true }
+  }
+}
