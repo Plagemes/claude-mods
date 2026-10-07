@@ -1,0 +1,61 @@
+{
+  "name": "project-brain",
+  "version": "1.0.0",
+  "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#project-brain",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "memory", "knowledge-graph", "recall", "learning"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "inject": {
+      "type": "boolean",
+      "title": "Recall into prompts",
+      "description": "Add the memories that matter for each prompt as context Claude reads (once per conversation each).",
+      "default": true
+    },
+    "tokenBudget": {
+      "type": "number",
+      "title": "Context budget (tokens)",
+      "description": "The most a recalled-memories note may add to a prompt, in tokens (about 4 characters each).",
+      "default": 600
+    },
+    "useModel": {
+      "type": "boolean",
+      "title": "Learn with a small model",
+      "description": "In the background, ask a small model to pull decisions, conventions and lessons out of finished turns and to summarise clusters while idle.",
+      "default": true
+    },
+    "model": {
+      "type": "string",
+      "title": "Model for learning",
+      "description": "The model alias or id used for background extraction and summaries.",
+      "default": "haiku"
+    },
+    "modelCallsPerHour": {
+      "type": "number",
+      "title": "Model calls per hour",
+      "description": "Rate limit for the background model calls (0 turns them off).",
+      "default": 6
+    },
+    "halfLifeDays": {
+      "type": "number",
+      "title": "Forgetting half-life (days)",
+      "description": "An association not used for this many days loses half its strength.",
+      "default": 14
+    },
+    "maxNodes": {
+      "type": "number",
+      "title": "Memory size cap",
+      "description": "The most memories (nodes) kept per project, up to 6000; the weakest are pruned during consolidation. Links are capped at ten times this.",
+      "default": 4000
+    },
+    "idleMinutes": {
+      "type": "number",
+      "title": "Sleep after (minutes idle)",
+      "description": "Minutes without a prompt before the brain consolidates (merges duplicates, prunes, summarises).",
+      "default": 10
+    }
+  }
+}
