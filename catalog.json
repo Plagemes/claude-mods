@@ -4996,6 +4996,28 @@
         ],
         "always": true
       }
+    },
+    {
+      "name": "whatsapp-bridge",
+      "category": "notifications",
+      "tier": "complex",
+      "since": "2.0.0",
+      "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
+      "spec": "See orchestrator prompt.",
+      "signals": {
+        "intents": [
+          "whatsapp",
+          "notify me",
+          "avvisami",
+          "phone",
+          "telefono",
+          "remote control",
+          "update me",
+          "aggiornami",
+          "away from desk",
+          "report on whatsapp"
+        ]
+      }
     }
   ]
 }

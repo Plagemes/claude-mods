@@ -1,0 +1,166 @@
+{
+  "name": "whatsapp-bridge",
+  "version": "1.0.0",
+  "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#whatsapp-bridge",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "notifications", "whatsapp", "remote-control", "openwa"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "ownerNumbers": {
+      "type": "string",
+      "title": "Owner number(s)",
+      "description": "Your own WhatsApp number(s) with country code, comma-separated. Only these can command Claude, approve or answer. Also settable with /wa owner.",
+      "default": ""
+    },
+    "apiKey": {
+      "type": "string",
+      "title": "OpenWA API key",
+      "description": "A SCOPED operator key (never the admin key). Optional here: /wa setup and the panel can store it, or export OPENWA_API_KEY.",
+      "sensitive": true,
+      "default": ""
+    },
+    "baseUrl": {
+      "type": "string",
+      "title": "OpenWA API URL",
+      "description": "Where your local OpenWA answers.",
+      "default": "http://127.0.0.1:2785/api"
+    },
+    "allowedChats": {
+      "type": "string",
+      "title": "Extra allowed chats",
+      "description": "More chat ids the mod may use (e.g. 1203…@g.us), comma-separated. Your direct chat and linked project groups are always allowed; every other chat is ignored.",
+      "default": ""
+    },
+    "autoCreateGroup": {
+      "type": "boolean",
+      "title": "Create a group per project",
+      "description": "Create \"Claude · <project>\" with only you in it on the first update (needs OpenWA's Baileys engine; otherwise link one with /wa link-project).",
+      "default": true
+    },
+    "notifyMode": {
+      "type": "string",
+      "title": "When to notify",
+      "description": "away: only when you are away (no typing for the away minutes, or /wa away); always; off.",
+      "options": ["away", "always", "off"],
+      "default": "away"
+    },
+    "awayMinutes": {
+      "type": "number",
+      "title": "Away after (minutes)",
+      "description": "Minutes without typing after which you count as away.",
+      "default": 10
+    },
+    "quietHours": {
+      "type": "string",
+      "title": "Quiet hours",
+      "description": "Hours when only critical messages go out, like 23-8 (empty: none).",
+      "default": "23-8"
+    },
+    "interactionOffHours": {
+      "type": "string",
+      "title": "Interaction off hours",
+      "description": "Hours when Claude may not ask you anything (questions are parked), like 23-8. Overridden by the panel's On / Silent / Night.",
+      "default": "23-8"
+    },
+    "digestMinutes": {
+      "type": "number",
+      "title": "Digest every (minutes)",
+      "description": "How often info updates are batched into one digest (30-60).",
+      "default": 45
+    },
+    "maxPerHour": {
+      "type": "number",
+      "title": "Messages per hour",
+      "description": "Cap on messages sent in an hour across all sessions; past it, updates wait for the digest.",
+      "default": 20
+    },
+    "pin": {
+      "type": "string",
+      "title": "PIN for risky phone commands",
+      "description": "When set, STOP ALL and /slash commands from the phone must include it.",
+      "sensitive": true,
+      "default": ""
+    },
+    "remoteApprovals": {
+      "type": "boolean",
+      "title": "Approve permissions from the phone",
+      "description": "While you are away and interaction is on, a permission prompt can be answered with 👍 / ❌ on WhatsApp.",
+      "default": true
+    },
+    "longTurnMinutes": {
+      "type": "number",
+      "title": "Long turn (minutes)",
+      "description": "Report a turn that finished after at least this long.",
+      "default": 5
+    },
+    "budgetSteps": {
+      "type": "string",
+      "title": "Budget alerts (USD)",
+      "description": "Session cost thresholds that send an alert, comma-separated.",
+      "default": "5,10,25"
+    },
+    "briefingTime": {
+      "type": "string",
+      "title": "Morning briefing",
+      "description": "Time of the morning briefing (HH:MM, empty: off).",
+      "default": "08:30"
+    },
+    "eveningTime": {
+      "type": "string",
+      "title": "Evening digest",
+      "description": "Time of the evening digest (HH:MM, empty: off).",
+      "default": "19:00"
+    },
+    "memberTrigger": {
+      "type": "string",
+      "title": "Member trigger words",
+      "description": "Group members' messages starting with one of these (comma-separated) are questions for Claude; mentions and replies to the bot count too.",
+      "default": "?,claude"
+    },
+    "memberRate": {
+      "type": "number",
+      "title": "Member questions per 10 minutes",
+      "description": "Per member.",
+      "default": 5
+    },
+    "memberDailyCap": {
+      "type": "number",
+      "title": "Member questions per day",
+      "description": "For all members together.",
+      "default": 40
+    },
+    "shareCodeWithMembers": {
+      "type": "boolean",
+      "title": "Share code with members",
+      "description": "Let answers to group members include short code snippets.",
+      "default": false
+    },
+    "ownerOnlyAlertsInGroup": {
+      "type": "boolean",
+      "title": "Owner alerts in the group",
+      "description": "Send cost, budget and approval alerts to the project group instead of your direct chat.",
+      "default": false
+    },
+    "maxMessageChars": {
+      "type": "number",
+      "title": "Message length cap",
+      "description": "Longest text sent, in characters.",
+      "default": 1500
+    },
+    "maxFileMb": {
+      "type": "number",
+      "title": "File size cap (MB)",
+      "description": "Largest file send_file or a preview may send.",
+      "default": 5
+    },
+    "pollSeconds": {
+      "type": "number",
+      "title": "Poll every (seconds)",
+      "description": "How often the polling session reads new messages while you are away (slower otherwise).",
+      "default": 6
+    }
+  }
+}
