@@ -7,6 +7,7 @@ const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 12, 0, 0)
 const RAW = 'https://raw.githubusercontent.com/plagemes/claude-mods/main/'
 const BIN = '/opt/claude-code/bin/claude'
+const APPDATA = 'C:\\Users\\me\\AppData\\Roaming'
 
 const MARKETPLACE = {
   name: 'claude-mods',
@@ -50,13 +51,24 @@ type WorldOptions = {
   isPlaced?: boolean
   copies?: boolean
   listFails?: boolean
+  /** The desktop app: no CLAUDE_CODE_EXECPATH, its folders by path, and the engine version. */
+  desktop?: { folders: Record<string, { name: string; kind: 'file' | 'dir' }[]>; version: string; bin: string }
 }
 
 /** Stands for everything beneath the plugin: GitHub, the claude CLI, the surface. */
 function world(on: On, options: WorldOptions = {}) {
   const clock = mock.clock(on, { now: NOW })
   mock.store(on, options.store ?? {})
-  mock.env(on, { CLAUDE_CODE_EXECPATH: BIN })
+  const bin = options.desktop?.bin ?? BIN
+  mock.env(on, options.desktop === undefined ? { CLAUDE_CODE_EXECPATH: BIN } : { APPDATA })
+  if (options.desktop !== undefined) {
+    const { folders, version } = options.desktop
+    on('session.version', () => ({ value: { version } }))
+    on('fs.list', ($, e) => {
+      const entries = folders[e.path ?? '']
+      return entries === undefined ? { deny: `ENOENT: ${e.path}` } : { value: entries.map(entry => ({ ...entry, size: 0, mtimeMs: 0 })) }
+    })
+  }
   const net = { isOnline: options.isOnline ?? true }
   const installed = new Map(Object.entries(options.installed ?? {}))
   const marketplaces = [...(options.marketplaces ?? ['claude-mods'])]
@@ -101,8 +113,8 @@ function world(on: On, options: WorldOptions = {}) {
     }
   })
   on('process.run', ($, e) => {
-    const [bin = '', ...args] = e.argv
-    expect(bin).toBe(BIN)
+    const [bin0 = '', ...args] = e.argv
+    expect(bin0).toBe(bin)
     calls.push(args.join(' '))
     const [, verb, target = ''] = args
     const name = target.split('@')[0] ?? ''
@@ -486,4 +498,25 @@ test('when the installed mods cannot be read, the store says so instead of count
   expect(await ui.find({ type: 'Text', text: 'install status unknown' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /▲ Install status unavailable/ }))?.props).toMatchObject({ wrap: 'wrap' })
   expect(await ui.find({ type: 'Text', text: /0 installed/ })).toBeUndefined()
+})
+
+test('in the desktop app, where claude is not on PATH, the store runs the claude.exe the app installed', async ($, on) => {
+  const root = `${APPDATA}\\Claude\\claude-code`
+  const w = world(on, {
+    installed: OUTDATED,
+    desktop: {
+      version: '2.1.286',
+      bin: `${root}\\2.1.286\\635c\\claude.exe`,
+      folders: {
+        [root]: [{ name: '2.1.284', kind: 'dir' }, { name: '2.1.286', kind: 'dir' }],
+        [`${root}\\2.1.284`]: [{ name: 'aaaa', kind: 'dir' }],
+        [`${root}\\2.1.284\\aaaa`]: [{ name: 'claude.exe', kind: 'file' }],
+        [`${root}\\2.1.286`]: [{ name: '635c', kind: 'dir' }],
+        [`${root}\\2.1.286\\635c`]: [{ name: 'claude.exe', kind: 'file' }],
+      },
+    },
+  })
+  const report = await mods($, 'refresh')
+  expect(report.text).toBe('◆ 6 mods in 4 categories, 2 installed, 1 update available.')
+  expect(w.calls).toContain('plugin list --json')
 })

@@ -20,6 +20,7 @@ import {
   buildCatalog,
   CATALOG_PATH,
   categoryOf,
+  compareVersions,
   countsOf,
   DEFAULT_BRANCH,
   DEFAULT_MARKETPLACE,
@@ -47,7 +48,18 @@ import {
   updatesOf,
 } from './catalog'
 import type { CatalogMeta, ModStatus, Row, Source } from './catalog'
-import { argv, claudeBinary, parseInstalled, parseMarketplaceNames, parseOutcome } from './cli'
+import {
+  argv,
+  CLAUDE,
+  claudeBinary,
+  desktopRoots,
+  isClaudeFile,
+  joinPath,
+  parseInstalled,
+  parseMarketplaceNames,
+  parseOutcome,
+  versionOrder,
+} from './cli'
 
 type Dollar = EngineInterface
 type Action = 'install' | 'update' | 'uninstall'
@@ -218,6 +230,39 @@ async function syncCatalog($: Dollar, config: Config, isForced: boolean): Promis
 
 // ── Installed mods: the `claude plugin` CLI ──────────────────────────────────
 
+/** The `claude` the desktop app installed, this engine's version first; undefined when there is none. */
+async function desktopBinary($: Dollar): Promise<string | undefined> {
+  const [appData, home, engine] = await Promise.all([
+    $.env.get('APPDATA').catch(() => undefined),
+    $.env.get('HOME').catch(() => undefined),
+    $.session.version().then(info => info.version, () => ''),
+  ])
+  for (const root of desktopRoots(appData, home)) {
+    const versions = (await $.fs.list(root).catch(() => [])).filter(entry => entry.kind === 'dir')
+    for (const version of versionOrder(versions.map(entry => entry.name), engine, compareVersions)) {
+      const folder = joinPath(root, version)
+      const entries = await $.fs.list(folder).catch(() => [])
+      const direct = entries.find(entry => entry.kind === 'file' && isClaudeFile(entry.name))
+      if (direct !== undefined) {
+        return joinPath(folder, direct.name)
+      }
+      for (const build of entries.filter(entry => entry.kind === 'dir')) {
+        const files = await $.fs.list(joinPath(folder, build.name)).catch(() => [])
+        const file = files.find(entry => entry.kind === 'file' && isClaudeFile(entry.name))
+        if (file !== undefined) {
+          return joinPath(folder, build.name, file.name)
+        }
+      }
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * The `claude` executable: the one CLAUDE_CODE_EXECPATH names (a terminal
+ * session), else the desktop app's own, else `claude` from PATH.
+ */
 async function claudeBin($: Dollar): Promise<string> {
   if (binary === undefined) {
     let execPath: string | undefined
@@ -226,7 +271,8 @@ async function claudeBin($: Dollar): Promise<string> {
     } catch {
       execPath = undefined
     }
-    binary = claudeBinary(execPath)
+    const fromEnv = claudeBinary(execPath)
+    binary = fromEnv !== CLAUDE ? fromEnv : (await desktopBinary($)) ?? CLAUDE
   }
 
   return binary
