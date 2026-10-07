@@ -248,8 +248,55 @@ test('with mods-hub: the channel shows error once the webhook refuses a post, on
   await start($)
   hub.outbox.push(notice({ title: 'one' }), notice({ id: 'n2', title: 'two' }))
   await clock.advance(5_000)
+  // The refused notice stays first in line: the one behind it waits for it.
+  expect(seen.posts).toHaveLength(1)
+  await clock.advance(5_000)
   expect(seen.posts).toHaveLength(2)
+  expect(JSON.parse(seen.posts[1]!.body).text).toBe(JSON.parse(seen.posts[0]!.body).text)
   expect(hub.statuses).toEqual([{ id: 'webhook', status: 'error', detail: 'slack webhook answered HTTP 404 no_such_hook' }])
+})
+
+test('with mods-hub: a notice whose post failed is posted again on the next collection, once, and the channel recovers', { options: { webhookUrl: SLACK } }, async ($, on) => {
+  const clock = mock.clock(on)
+  const posts: string[] = []
+  let isDown = true
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('http.fetch', ($, e) => {
+    if (isDown) return { deny: `connect ECONNREFUSED while posting to ${e.url}` }
+    posts.push(String(JSON.parse(e.init?.body ?? '{}').text))
+    return { value: { status: 200, ok: true, headers: {}, text: 'ok' } }
+  })
+  const hub = fakeHub(on)
+
+  await start($)
+  hub.outbox.push(notice({ title: 'Deploy failed' }), notice({ id: 'n2', level: 'success', title: 'All green' }))
+  await clock.advance(5_000)
+  expect(posts).toEqual([])
+  expect(hub.outbox.map(one => one.id)).toEqual(['n1', 'n2'])
+  // The webhook URL is a credential: an error that echoes it shows [webhook] instead.
+  expect(hub.statuses.at(-1)?.status).toBe('error')
+  expect(hub.statuses.at(-1)?.detail).not.toContain('hooks.slack.com/services')
+  expect(hub.statuses.at(-1)?.detail).not.toContain('XXXX')
+  expect(hub.statuses.at(-1)?.detail).toContain('[webhook]')
+
+  isDown = false
+  await clock.advance(5_000)
+  expect(posts).toEqual(['*❌ Deploy failed*', '*✅ All green*'])
+  expect(hub.statuses.at(-1)).toEqual({ id: 'webhook', status: 'connected' })
+  await clock.advance(5_000)
+  expect(hub.drains.at(-1)).toEqual({ channel: 'webhook', after: 'n2' })
+  expect(posts).toHaveLength(2)
+})
+
+test('/notify-test never prints the webhook URL an error carries', { options: { webhookUrl: SLACK } }, async ($, on) => {
+  on('session.repo', () => ({ value: null }))
+  on('session.root', () => ({ value: '/home/me/shop' }))
+  on('http.fetch', ($, e) => ({ deny: `getaddrinfo ENOTFOUND for ${e.url}` }))
+
+  const result = await $.command.run(NOTIFY_TEST)
+  expect(result.text).toContain('📭 webhook-notify: slack webhook failed')
+  expect(result.text).not.toContain('/services/T000/B000/XXXX')
 })
 
 test('without mods-hub: session start registers the command only, and no timer collects anything', { options: { webhookUrl: SLACK } }, async ($, on) => {

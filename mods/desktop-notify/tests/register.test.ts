@@ -189,3 +189,59 @@ test('without mods-hub: session start does nothing and there is no timer', async
 
   expect(runs).toHaveLength(0)
 })
+
+test('with mods-hub: a notice the notifier fails on stays queued and is shown on a later collection, once', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, {})
+  on('session.cwd', () => ({ value: '/home/me/shop' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const shown: string[] = []
+  let isBroken = true
+  on('process.run', (_$, e) => {
+    const ok = { value: { exitCode: 0, stdout: e.argv[0] === 'uname' ? 'Linux\n' : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    if (e.argv[0] === 'uname') return ok
+    if (isBroken) return { value: { exitCode: 1, stdout: '', stderr: 'no notification daemon', isStdoutTruncated: false, isStderrTruncated: false } }
+    shown.push(String(e.argv.at(-1)))
+    return ok
+  })
+  const hub = fakeHub(on)
+
+  await start($)
+  hub.outbox.push(notice({ title: 'Deploy failed' }), notice({ id: 'n2', title: 'Budget at 80%' }))
+  await clock.advance(5_000)
+  expect(shown).toEqual([])
+  expect(hub.drains.at(-1)).toEqual({ channel: 'desktop', after: null })
+  expect(hub.outbox.map(one => one.id)).toEqual(['n1', 'n2'])
+  expect(hub.statuses.at(-1)).toMatchObject({ id: 'desktop', status: 'error' })
+
+  isBroken = false
+  await clock.advance(5_000)
+  expect(shown).toEqual(['Deploy failed', 'Budget at 80%'])
+  expect(hub.statuses.at(-1)).toMatchObject({ id: 'desktop', status: 'connected' })
+  await clock.advance(5_000)
+  expect(hub.drains.at(-1)).toEqual({ channel: 'desktop', after: 'n2' })
+  expect(shown).toHaveLength(2)
+})
+
+test('with mods-hub: a notice the notifier keeps refusing is given up after five tries, so the next one is not held back', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, {})
+  on('session.cwd', () => ({ value: '/home/me/shop' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  const shown: string[] = []
+  on('process.run', (_$, e) => {
+    const done = (exitCode: number, stdout = '') => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+    if (e.argv[0] === 'uname') return done(0, 'Linux\n')
+    if (String(e.argv.at(-1)).startsWith('poison')) return done(1)
+    shown.push(String(e.argv.at(-1)))
+    return done(0)
+  })
+  const hub = fakeHub(on)
+
+  await start($)
+  hub.outbox.push(notice({ title: 'poison' }), notice({ id: 'n2', title: 'after it' }))
+  for (let tick = 0; tick < 4; tick += 1) await clock.advance(5_000)
+  expect(shown).toEqual([])
+  await clock.advance(5_000)
+  expect(shown).toEqual(['after it'])
+})

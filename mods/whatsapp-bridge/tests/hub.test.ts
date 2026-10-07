@@ -46,6 +46,32 @@ test('with mods-hub: another mod\'s notification routed to WhatsApp is drained a
   expect(sent?.chatId).toBe(GROUP)
   expect(sent?.text).toContain('❌ *ci-watch*: ❌ CI failed on main: test (failure)')
   expect(sent?.text).toContain('https://github.com/acme/shop/actions/runs/8')
+  // The next drain acknowledges it (a cursor: at least once), and it is not sent again.
+  await pass(seen, 4_000)
+  expect(hub.outbox).toEqual([])
+  expect(sends(seen).filter(one => one.text.includes('CI failed on main'))).toHaveLength(1)
+})
+
+test('with mods-hub: a hub notice whose WhatsApp send failed stays queued and goes out on a later drain, once', async ($, on) => {
+  const seen = world(on, { files: noConfirm() })
+  const hub = fakeHub(on, {}, seen.clock)
+  await lead($, seen)
+  seen.wa.failSends = 2
+  hub.outbox.push(
+    { id: 'n1', level: 'error', title: 'Deploy failed', source: 'deploy-checklist', at: seen.clock.now(), targets: ['whatsapp'], held: false },
+    { id: 'n2', level: 'warning', title: 'Budget at 80%', source: 'token-budget', at: seen.clock.now(), targets: ['whatsapp'], held: false },
+  )
+  /** What reached WhatsApp: the rows OpenWA stored for the bot's sends that it took. */
+  const delivered = () => seen.wa.rows.filter(row => row.direction === 'outgoing').map(row => row.body)
+  await pass(seen, 3_000, 1_000)
+  expect(seen.wa.failSends).toBe(1)
+  expect(delivered().filter(text => text.includes('Deploy failed'))).toHaveLength(0)
+  expect(hub.outbox.map(one => one.id)).toEqual(['n1', 'n2'])
+  await pass(seen, 12_000, 1_000)
+  const texts = delivered()
+  expect(texts.filter(text => text.includes('Deploy failed'))).toHaveLength(1)
+  expect(texts.filter(text => text.includes('Budget at 80%'))).toHaveLength(1)
+  expect(texts.findIndex(text => text.includes('Deploy failed'))).toBeLessThan(texts.findIndex(text => text.includes('Budget at 80%')))
   expect(hub.outbox).toEqual([])
 })
 
@@ -127,4 +153,17 @@ test('with mods-hub: STOP from the phone raises control.stop for this session, S
   arrive(seen, { chatId: OWNER_CHAT, author: OWNER_CHAT, body: 'STOP ALL' })
   await pass(seen, 12_000)
   expect(hub.controls.find(control => control.scope === 'all')).toMatchObject({ action: 'stop', reason: 'STOP ALL from WhatsApp' })
+})
+
+test('with mods-hub: the PIN of a phone slash command never reaches the log or the bus', { options: { pin: '4321' } }, async ($, on) => {
+  const seen = world(on, { files: noConfirm() })
+  const hub = fakeHub(on, { presence: 'away' }, seen.clock)
+  await lead($, seen)
+  arrive(seen, { chatId: GROUP, author: OWNER_CHAT, body: '/compact 4321' })
+  await pass(seen, 12_000)
+  expect(hub.published).toContainEqual({ topic: 'channel.inbound', data: { channel: 'whatsapp', from: 'owner', text: '/compact', isOwner: true } })
+  expect(JSON.stringify(hub.published)).not.toContain('4321')
+  const logs = [...seen.files.entries()].filter(([path]) => path.startsWith(`${DIR}/log/`)).map(([, text]) => text)
+  expect(logs.join('\n')).toContain('/compact')
+  expect(logs.join('\n')).not.toContain('4321')
 })

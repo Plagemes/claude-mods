@@ -125,7 +125,8 @@ test('a mod publishes on the bus: subscribers see it, the hub stamps and keeps i
   await w.clock.settle()
 
   const ok = await mods($, 'publish', { topic: 'test.result', data: { runner: 'jest', outcome: 'passed', passed: 4, failed: 0 } })
-  expect(ok.value.id).toMatch(/^sess-123-\d+$/)
+  // session, load (a hot reload restarts the sequence, never the ids), sequence
+  expect(ok.value.id).toMatch(/^sess-123-[a-z0-9]{1,4}-\d+$/)
   expect(w.toasts).toContain('probe saw test.result')
 
   const recent = await mods($, 'recent', { topic: 'test.result' })
@@ -309,4 +310,31 @@ test('stop, pause, resume: control.* on the bus and in state, all sessions throu
   await ui.press({ key: 'resume' })
   expect((await mods($, 'latest', { topic: 'control.resume' })).value.data.session).toBe('sess-1234abcd')
   await ui.unmount()
+})
+
+test('/hub away, then /hub status and /hub test: looking does not end the away you just set to try the routing', { plugins: [probe] }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await mods($, 'registerChannel', { id: 'phone', title: 'WhatsApp', audience: 'me', delivery: 'push', status: 'connected' })
+  await hub($, 'away')
+  expect(String((await hub($, 'status')).text)).toContain('Mode: away')
+  expect(String((await hub($, 'test error')).text)).toContain('Routed to toast, phone')
+  await w.clock.settle()
+  expect(w.toasts).toContain('phone got: Test notification | Sent with /hub test')
+  // A change made from the terminal is the person at the keyboard: away ends.
+  await hub($, 'interaction on')
+  expect((await mods($, 'mode')).value.presence).toBe('here')
+})
+
+test('notifications: an identical one within 30 s is dropped, one with a different body is not; a body must be text', { plugins: [probe] }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  const first = await mods($, 'notify', { level: 'error', title: 'CI failed', body: 'acme/shop' })
+  const again = await mods($, 'notify', { level: 'error', title: 'CI failed', body: 'acme/shop' })
+  const other = await mods($, 'notify', { level: 'error', title: 'CI failed', body: 'acme/api' })
+  expect(first.value.targets).toEqual(['toast'])
+  expect(again.value).toMatchObject({ targets: [], reason: 'a repeat of the last 30 seconds' })
+  expect(other.value.targets).toEqual(['toast'])
+  expect(w.toasts.filter(text => text.startsWith('✗ probe: CI failed'))).toHaveLength(2)
+  expect((await mods($, 'notify', { level: 'info', title: 'x', body: 42 })).error).toContain('body is text')
 })

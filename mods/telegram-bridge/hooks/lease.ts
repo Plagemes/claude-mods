@@ -13,6 +13,10 @@ export const leaseAction = (lease: Lease | null, me: string, now: number): 'rene
   return lease.sessionId === me ? 'renew' : 'follow'
 }
 
+/** Whether another session holds the lease now: a leader whose beat was late (a suspended process) must not poll on. */
+export const isLeaseTaken = (lease: Lease | null, me: string, now: number): boolean =>
+  lease !== null && lease.sessionId !== me && now - lease.heartbeatAt <= LEASE_STALE_MS
+
 export const parseLease = (value: unknown): Lease | null => {
   if (typeof value !== 'object' || value === null) return null
   const lease = value as Partial<Lease>

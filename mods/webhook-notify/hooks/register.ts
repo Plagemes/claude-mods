@@ -14,6 +14,10 @@ const CHANNEL_ID = 'webhook'
 /** How often the notices mods-hub queued for the `webhook` channel are collected. */
 const DRAIN_MS = 5_000
 const NOTICE_BODY_CHARS = 1_000
+/** A notice the webhook refused this many collections in a row is given up, so it cannot hold back the ones behind it. */
+const MAX_TRIES = 5
+/** Ids of posted notices remembered for deduplication. */
+const POSTED_KEEP = 200
 const LEVEL_GLYPHS = { info: 'ℹ️', success: '✅', warning: '⚠️', error: '❌', critical: '🚨' } as const
 const LEVEL_COLORS = { info: 0x36c5f0, success: 0x2eb67d, warning: 0xecb22e, error: 0xe01e5a, critical: 0xe01e5a } as const
 const LEVEL_NTFY_TAGS = { info: 'information_source', success: 'white_check_mark', warning: 'warning', error: 'x', critical: 'rotating_light' } as const
@@ -33,8 +37,12 @@ type Report = {
 type Delivery = { url: string; headers: Record<string, string>; body: string }
 /** A notification mods-hub queued for this channel. */
 type Notice = Awaited<ReturnType<EngineInterface['mods']['drain']>>[number]
-/** The timer that collects the hub's notices, the last notice posted, and whether the last delivery to the webhook failed. */
-type Courier = { timer?: { cancel: () => void }; cursor: string | null; isFailing: boolean }
+/**
+ * The hub's notices on their way to the webhook: the collecting timer, the last notice handled (the next drain
+ * acknowledges up to it), the ids already posted (a notice comes back until acknowledged), whether a collection is
+ * running, how often the oldest waiting notice failed, and whether the last delivery to the webhook failed.
+ */
+type Courier = { timer?: { cancel: () => void }; cursor: string | null; posted: string[]; isBusy: boolean; failures: number; isFailing: boolean }
 
 function readSettings(options: PluginOptions): Settings {
   const url = typeof options.webhookUrl === 'string' ? options.webhookUrl.trim() : ''
@@ -222,15 +230,26 @@ async function projectOf($: EngineInterface): Promise<Pick<Report, 'project' | '
   }
 }
 
+/**
+ * A webhook URL is a credential (Slack and Discord put the token in its path): an error text that echoes it, or its
+ * root (ntfy), shows `[webhook]` instead. Applied to every line shown in a toast, the hub's channel list or /notify-test.
+ */
+function hideUrl(text: string, url: string): string {
+  const secrets = [url, ...(URL.canParse(url) ? [new URL(url).pathname] : [])].filter(secret => secret.length > 1)
+  return secrets.reduce((out, secret) => out.split(secret).join('[webhook]'), text)
+}
+
 /** Posts what `build` makes; resolves a one-line outcome for the person. */
 async function post($: EngineInterface, kind: Kind, build: () => Delivery): Promise<{ ok: boolean; line: string }> {
+  let url = ''
   try {
     const delivery = build()
+    url = delivery.url
     const response = await $.http.fetch(delivery.url, { method: 'POST', headers: delivery.headers, body: delivery.body })
     const detail = response.ok ? `${response.status} OK` : `HTTP ${response.status} ${response.text.slice(0, 120).trim()}`.trim()
-    return { ok: response.ok, line: `${kind} webhook answered ${detail}` }
+    return { ok: response.ok, line: hideUrl(`${kind} webhook answered ${detail}`, url) }
   } catch (error) {
-    return { ok: false, line: `${kind} webhook failed: ${error instanceof Error ? error.message : String(error)}` }
+    return { ok: false, line: hideUrl(`${kind} webhook failed: ${error instanceof Error ? error.message : String(error)}`, url) }
   }
 }
 
@@ -260,19 +279,33 @@ async function notifyTurn($: EngineInterface, settings: Settings, courier: Couri
 }
 
 /**
- * Posts what mods-hub queued for the webhook channel (a pull channel: the hub never calls this mod). The cursor
- * acknowledges the notices already posted, so one the process died on comes back instead of being lost.
+ * Posts what mods-hub queued for the webhook channel (a pull channel: the hub never calls this mod), at least once:
+ * the cursor acknowledges only notices the webhook took (or gave up after MAX_TRIES refusals), so a notice whose post
+ * failed, or that the process died on, comes back on the next collection; ids already posted are skipped. One
+ * collection at a time.
  */
 async function drain($: EngineInterface, settings: Settings, courier: Courier): Promise<void> {
+  if (courier.isBusy) return
+  courier.isBusy = true
   try {
     const kind = detectKind(settings.url, settings.kind)
     for (const notice of await $.mods.drain({ channel: CHANNEL_ID, after: courier.cursor })) {
-      const sent = await post($, kind, () => buildNoticeDelivery(settings.url, kind, notice))
+      if (!courier.posted.includes(notice.id)) {
+        const sent = await post($, kind, () => buildNoticeDelivery(settings.url, kind, notice))
+        await reportStatus($, courier, !sent.ok, sent.line)
+        if (!sent.ok) {
+          courier.failures += 1
+          if (courier.failures < MAX_TRIES) return
+        }
+        courier.posted = [...courier.posted, notice.id].slice(-POSTED_KEEP)
+      }
+      courier.failures = 0
       courier.cursor = notice.id
-      await reportStatus($, courier, !sent.ok, sent.line)
     }
   } catch {
     // The hub went away: the next tick finds out again.
+  } finally {
+    courier.isBusy = false
   }
 }
 
@@ -332,7 +365,7 @@ async function sendTest($: EngineInterface, settings: Settings): Promise<string>
 
 export const register: Register = (on, options) => {
   const settings = readSettings(options)
-  const courier: Courier = { cursor: null, isFailing: false }
+  const courier: Courier = { cursor: null, posted: [], isBusy: false, failures: 0, isFailing: false }
   let tools: Record<string, number> = {}
 
   on('session.start', async ($, e, next) => {

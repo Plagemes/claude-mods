@@ -30,6 +30,8 @@ export type Inbound = {
   /** The message this one replies to, and whether that was the bot. */
   replyToId?: string
   isReplyToBot: boolean
+  /** Forwarded from someone else: its words are another person's, never the sender's own command. */
+  isForwarded?: boolean
   /** A button press: its id (to acknowledge) and data. */
   callbackId?: string
   data?: string
@@ -92,6 +94,7 @@ export const parseUpdates = (result: unknown, botId: string): ParsedUpdates => {
       messageId: str(message.message_id),
       text: str(message.text) || str(message.caption),
       ...(replied !== undefined ? { replyToId: str(replied.message_id) } : {}),
+      ...(message.forward_origin !== undefined || message.forward_date !== undefined || message.forward_from !== undefined ? { isForwarded: true } : {}),
       isReplyToBot: replied !== undefined && isRecord(replied.from) && botId !== '' && str(replied.from.id) === botId,
     })
   }

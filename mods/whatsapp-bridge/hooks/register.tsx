@@ -17,7 +17,7 @@ import type {
 import type { ModsEvent, ModsNotice } from '../types/mods-hub'
 import { MAX_OPTIONS, matchAnswer, optionsFor, pendingFor, questionText } from './answers'
 import type { Answer, Pending } from './answers'
-import { HELP_TEXT, parseCommand, reactionMeaning } from './commands'
+import { HELP_TEXT, parseCommand, reactionMeaning, takePin } from './commands'
 import type { PhoneCommand } from './commands'
 import {
   PUSH_COMMAND,
@@ -54,7 +54,7 @@ import {
   phaseOf,
 } from './openwa'
 import type { Request, WaRow } from './openwa'
-import { LEASE_RENEW_MS, MAX_PAGES, PAGE_LIMIT, backoff, leaseAction, parseLease, pollInterval, remember, walkPage } from './poller'
+import { LEASE_RENEW_MS, MAX_PAGES, PAGE_LIMIT, backoff, isLeaseTaken, leaseAction, parseLease, pollInterval, remember, walkPage } from './poller'
 import type { Cursor, Lease } from './poller'
 import { crossed, crossedBudgets, dayKey, decide, isAway } from './policy'
 import { clean, oneLine } from './privacy'
@@ -96,6 +96,8 @@ const SESSION_FILE_FRESH_MS = 2 * 24 * 60 * 60_000
 const STATS_DAYS_MS = 8 * 24 * 60 * 60_000
 const LOG_KEEP = 200
 const SENT_KEEP = 300
+/** A hub notice whose send failed this many drains in a row is given up. */
+const HUB_MAX_TRIES = 5
 const DONE_KEEP = 400
 const ALERT_TTL_MS = 2 * 60 * 60_000
 const CONFIRM_TTL_MS = 30 * 60_000
@@ -254,6 +256,12 @@ type Runtime = {
   hubSeenAt: number
   /** The link phase last reported to the hub's channel list ('' before the channel is registered). */
   channelPhase: string
+  /** The hub's notices for this channel: the last one handled (the next drain acknowledges up to it), the ids handed
+   * to `emit` (a notice comes back until acknowledged), whether a drain runs, how often the oldest one failed. */
+  hubCursor: string | null
+  hubHandled: string[]
+  isDraining: boolean
+  hubFailures: number
 }
 
 type HubMode = NonNullable<Awaited<ReturnType<typeof hubMode>>>
@@ -328,6 +336,10 @@ const newRuntime = (settings: Settings): Runtime => ({
   hub: undefined,
   hubSeenAt: 0,
   channelPhase: '',
+  hubCursor: null,
+  hubHandled: [],
+  isDraining: false,
+  hubFailures: 0,
 })
 
 function emptyFile(): SessionFile {
@@ -792,7 +804,7 @@ async function lastActivity($: EngineInterface, rt: Runtime): Promise<{ lastActi
  * The one door for automatic updates and Claude's notify: the event's toggle, then the priority, away,
  * quiet hours, pause and the hourly cap decide whether it goes now, waits for the digest, or is dropped.
  */
-async function emit($: EngineInterface, rt: Runtime, notice: Notice): Promise<{ action: 'send' | 'digest' | 'drop'; reason: string; messageId: string }> {
+async function emit($: EngineInterface, rt: Runtime, notice: Notice): Promise<{ action: 'send' | 'digest' | 'drop'; reason: string; messageId: string; isFailed?: boolean }> {
   if (!isConfigured(rt)) return { action: 'drop', reason: 'WhatsApp is not set up (/wa setup)', messageId: '' }
   if (notice.event !== undefined && !rt.prefs.events[notice.event]) return { action: 'drop', reason: `${EVENT_LABELS[notice.event]} is switched off`, messageId: '' }
   await refreshHub($, rt)
@@ -816,7 +828,7 @@ async function emit($: EngineInterface, rt: Runtime, notice: Notice): Promise<{ 
   if (delivery.action === 'drop') return { ...delivery, messageId: '' }
   const chatId = await alertChat($, rt, notice.isOwnerOnly === true)
   const messageId = await waSendText($, rt, { chatId, text: notice.text, kind: notice.kind ?? notice.event ?? 'notify', ...(notice.quotedId !== undefined ? { quotedId: notice.quotedId } : {}) })
-  return messageId === '' ? { action: 'drop', reason: 'the send failed (see /wa log)', messageId } : { ...delivery, messageId }
+  return messageId === '' ? { action: 'drop', reason: 'the send failed (see /wa log)', messageId, isFailed: true } : { ...delivery, messageId }
 }
 
 async function toDigest($: EngineInterface, rt: Runtime, text: string): Promise<void> {
@@ -900,6 +912,8 @@ function schedulePoll($: EngineInterface, rt: Runtime, ms: number): void {
 async function pollRound($: EngineInterface, rt: Runtime): Promise<void> {
   if (!rt.isLeader || !rt.leaseVerified) return
   const now = await $.clock.now()
+  // A beat that came late (a suspended process) may find the lease taken: the new leader polls, never both.
+  if (isLeaseTaken(parseLease(await readJsonFile($, paths.lease(rt))), rt.me, now)) return stepDown($, rt)
   let busy = false
   if (now >= rt.backoffUntil) {
     const files = await readSessionFiles($, rt, SESSION_FILE_FRESH_MS)
@@ -1310,8 +1324,10 @@ async function consumeInbox($: EngineInterface, rt: Runtime): Promise<void> {
 
 async function handleEntry($: EngineInterface, rt: Runtime, entry: InboxEntry): Promise<void> {
   const who = entry.kind === 'member' || entry.kind === 'bug' ? 'member' : 'owner'
-  await appendLog($, rt, { dir: 'in', chatId: entry.chatId, kind: entry.kind, text: entry.emoji ?? entry.text, messageId: entry.messageId, who })
-  await publishInbound($, rt, entry, who)
+  // The PIN that unlocks "/compact 1234" is a secret: never in the log, the panel or the hub's bus.
+  const shown = who === 'owner' ? takePin(entry.text, rt.settings.pin).text : entry.text
+  await appendLog($, rt, { dir: 'in', chatId: entry.chatId, kind: entry.kind, text: entry.emoji ?? shown, messageId: entry.messageId, who })
+  await publishInbound($, rt, { ...entry, text: shown }, who)
   switch (entry.kind) {
     case 'reaction':
       return handleReaction($, rt, entry)
@@ -2182,12 +2198,30 @@ async function syncChannel($: EngineInterface, rt: Runtime): Promise<void> {
 const hubNoticeText = (notice: ModsNotice): string =>
   [`${HUB_GLYPH[notice.level] ?? '•'} *${notice.source}*: ${notice.title}`, notice.body ?? '', notice.url ?? ''].filter(line => line !== '').join('\n')
 
-/** The hub's notifications waiting for this channel: each goes out by its level (the hub judged presence and night). */
+/**
+ * The hub's notifications waiting for this channel: each goes out by its level (the hub judged presence and night).
+ * At least once: the cursor acknowledges only notices sent, held for the digest or dropped on purpose (paused, off),
+ * so one whose send failed (OpenWA down) or that a crash interrupted comes back on the next drain; ids already handled
+ * are skipped. After HUB_MAX_TRIES failed sends a notice is given up, so it cannot hold back the ones behind it.
+ */
 async function drainHub($: EngineInterface, rt: Runtime): Promise<void> {
-  if (rt.hub === undefined || !isConfigured(rt)) return
-  const notices = await $.mods.drain({ channel: CHANNEL })
-  for (const notice of notices) {
-    await emit($, rt, { text: hubNoticeText(notice), priority: HUB_PRIORITY[notice.level] ?? 'normal', kind: 'hub', isRouted: true })
+  if (rt.hub === undefined || !isConfigured(rt) || rt.isDraining) return
+  rt.isDraining = true
+  try {
+    for (const notice of await $.mods.drain({ channel: CHANNEL, after: rt.hubCursor })) {
+      if (!rt.hubHandled.includes(notice.id)) {
+        const outcome = await emit($, rt, { text: hubNoticeText(notice), priority: HUB_PRIORITY[notice.level] ?? 'normal', kind: 'hub', isRouted: true })
+        if (outcome.isFailed === true) {
+          rt.hubFailures += 1
+          if (rt.hubFailures < HUB_MAX_TRIES) return
+        }
+        rt.hubHandled = [...rt.hubHandled, notice.id].slice(-SENT_KEEP)
+      }
+      rt.hubFailures = 0
+      rt.hubCursor = notice.id
+    }
+  } finally {
+    rt.isDraining = false
   }
 }
 

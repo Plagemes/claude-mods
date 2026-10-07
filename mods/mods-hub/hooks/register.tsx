@@ -30,6 +30,7 @@ import {
   DEFAULT_PREFS,
   GLYPH,
   HUB_USAGE,
+  type HubCommand,
   INTERACTIONS,
   LEVELS,
   ROUTES,
@@ -229,10 +230,14 @@ async function writeJsonFile($: EngineInterface, path: string, value: unknown): 
   }
 }
 
-/** Reads prefs.json (another session may have changed it) and the shared last activity. */
+/**
+ * Reads prefs.json (another session may have changed it) and the shared last activity. A missing or unreadable file
+ * changes nothing: a home where the write failed must not undo, 30 s later, what the person just set.
+ */
 async function loadShared($: EngineInterface, rt: Runtime): Promise<void> {
   if (rt.dir === '') return
-  const prefs = sanitizePrefs(await readJsonFile($, `${rt.dir}/prefs.json`))
+  const raw = await readJsonFile($, `${rt.dir}/prefs.json`)
+  const prefs = raw === undefined ? await read($, prefsAtom) : sanitizePrefs(raw)
   const current = await read($, prefsAtom)
   if (JSON.stringify(current) !== JSON.stringify(prefs)) await update($, prefsAtom, () => prefs)
   const activity = (await readJsonFile($, `${rt.dir}/activity.json`)) as { at?: unknown } | undefined
@@ -351,7 +356,8 @@ async function publishSelf($: EngineInterface, rt: Runtime, input: ModsPublishIn
 async function record($: EngineInterface, rt: Runtime, input: ModsPublishInput, source: string): Promise<ModsEvent> {
   rt.seq += 1
   const event: ModsEvent = {
-    id: `${rt.sessionId.slice(0, 8) || 'hub'}-${rt.seq}`,
+    // The load tag keeps ids unique across a hot reload: the feed survives it in state, the sequence does not.
+    id: `${idTag(rt)}-${rt.seq}`,
     topic: input.topic,
     data: asJson(input.data),
     source,
@@ -379,6 +385,7 @@ async function recentEvents($: EngineInterface, input: { topic?: string; prefix?
 const problemWithNotice = (input: ModsNotifyInput): string | undefined => {
   if (!LEVELS.includes(input.level)) return `level must be one of ${LEVELS.join(', ')}`
   if (typeof input.title !== 'string' || input.title.trim() === '') return 'a notification needs a title'
+  if (input.body !== undefined && typeof input.body !== 'string') return 'a notification body is text'
   return undefined
 }
 
@@ -389,7 +396,8 @@ async function addToInbox($: EngineInterface, notice: ModsNotice): Promise<void>
 /** Routes one notification: toast, channels (in the background), or held for the digest. */
 async function dispatch($: EngineInterface, rt: Runtime, input: ModsNotifyInput, source: string): Promise<ModsNotifyResult> {
   const now = await $.clock.now()
-  const key = `${source}|${input.level}|${input.title}`
+  // Identical means the same text too: two different "CI failed" bodies (two repos) are two notifications.
+  const key = `${source}|${input.level}|${input.title}|${input.body ?? ''}`
   const seen = rt.recentNotices.get(key)
   for (const [old, at] of rt.recentNotices) if (now - at > DEDUPE_MS) rt.recentNotices.delete(old)
   rt.seq += 1
@@ -629,9 +637,12 @@ async function openPanel($: EngineInterface, tab: string): Promise<boolean> {
   return opened.isPlaced
 }
 
+/** `/hub` words that only look (status, a test, a tab): they must not end the "away" the person just set to try them. */
+const LOOKING: ReadonlySet<HubCommand['kind']> = new Set(['open', 'status', 'tab', 'test', 'error'])
+
 async function runHub($: EngineInterface, rt: Runtime, args: string): Promise<string> {
-  await noteActivity($, rt)
   const command = parseHubArgs(args)
+  if (!LOOKING.has(command.kind)) await noteActivity($, rt)
   const now = await $.clock.now()
   switch (command.kind) {
     case 'open':
@@ -1103,7 +1114,7 @@ export const register: Register = (on, options) => {
     const now = await $.clock.now()
     rt.seq += 1
     await addToInbox($, {
-      id: `t-${rt.seq}`,
+      id: `t-${idTag(rt)}-${rt.seq}`,
       level: 'info',
       title: oneLine(e.text, 200),
       source: origin.plugin,

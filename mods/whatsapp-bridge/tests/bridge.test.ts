@@ -174,3 +174,16 @@ test('the owner’s direct chat keeps global commands; a project with a group is
   expect(replies[1]).toContain('steered from its group "Claude · shop"')
   expect(seen.submitted).toEqual([])
 })
+
+test('a leader that finds its lease taken (it was suspended past the takeover) stops polling before its next beat', async ($, on) => {
+  const seen = world(on, { files: noConfirm() })
+  await lead($, seen)
+  const polls = () => seen.wa.calls.filter(call => call.path.includes('/messages?')).length
+  await seen.clock.advance(1_000)
+  expect(polls()).toBeGreaterThan(0)
+  // Another session took the lease while this one was stopped; this one's poll timer fires before its heartbeat.
+  seen.files.set(`${DIR}/lease.json`, JSON.stringify({ sessionId: 'sess-b', heartbeatAt: seen.clock.now(), since: seen.clock.now() }))
+  const before = polls()
+  await seen.clock.advance(6_500)
+  expect(polls()).toBe(before)
+})

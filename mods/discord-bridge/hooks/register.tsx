@@ -9,7 +9,7 @@ import type { Answer, Pending } from './answers'
 import { helpText, parseCommand } from './commands'
 import type { PhoneCommand } from './commands'
 import { composeSection, noticeText, sessionsText, statusText, tagOf } from './format'
-import { LEASE_RENEW_MS, backoff, leaseAction, parseLease, pollInterval, remember } from './lease'
+import { LEASE_RENEW_MS, backoff, isLeaseTaken, leaseAction, parseLease, pollInterval, remember } from './lease'
 import type { Lease } from './lease'
 import { emptyBook, memberPrompt, memberTrigger, takeQuota } from './members'
 import type { RateBook } from './members'
@@ -565,6 +565,8 @@ function schedulePoll($: EngineInterface, rt: Runtime, ms: number): void {
 async function pollRound($: EngineInterface, rt: Runtime, epoch: number): Promise<void> {
   if (rt.epoch !== epoch || !rt.isLeader || !rt.leaseVerified) return
   const now = await $.clock.now()
+  // A beat that came late (a suspended process) may find the lease taken: the new leader polls, never both.
+  if (isLeaseTaken(parseLease(await readJsonFile($, paths.lease(rt))), rt.me, now)) return stepDown($, rt)
   let isBusy = false
   if (now >= rt.backoffUntil) isBusy = await pollChannel($, rt, epoch)
   if (rt.epoch !== epoch) return

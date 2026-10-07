@@ -69,7 +69,8 @@ export const parseMessages = (body: unknown, botUserId: string): { messages: Inb
     if (out.newest === '' || newerId(raw.id, out.newest)) out.newest = raw.id
     const author = isRecord(raw.author) ? raw.author : {}
     const userId = str(author.id)
-    if (userId === '' || userId === botUserId || author.bot === true) continue
+    // A webhook's post names any author it likes: never a person (a webhook can wear the owner's name, not their id).
+    if (userId === '' || userId === botUserId || author.bot === true || raw.webhook_id !== undefined) continue
     if (raw.type !== 0 && raw.type !== 19) continue
     const hasContent = str(raw.content) !== '' || (Array.isArray(raw.attachments) && raw.attachments.length > 0) || (Array.isArray(raw.embeds) && raw.embeds.length > 0) || (Array.isArray(raw.sticker_items) && raw.sticker_items.length > 0)
     if (!hasContent) out.empty += 1

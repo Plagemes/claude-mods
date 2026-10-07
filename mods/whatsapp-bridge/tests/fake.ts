@@ -43,6 +43,8 @@ export type FakeWa = {
   groups: { id: string; name: string; participants: string[] }[]
   calls: { method: string; path: string; body: Record<string, unknown> }[]
   next: number
+  /** The next this many sends fail with a 500 (the engine restarting). */
+  failSends: number
 }
 
 export type World = {
@@ -145,6 +147,10 @@ function openwa(seen: World, method: string, url: string, body: Record<string, u
   }
   const send = /^\/sessions\/[^/]+\/messages\/(send-text|reply|send-image|send-document)$/.exec(route)
   if (send !== null) {
+    if (wa.failSends > 0) {
+      wa.failSends -= 1
+      return json(500, { message: 'engine restarting' })
+    }
     const chatId = String(body.chatId ?? '')
     const row = arrive(seen, { chatId, body: String(body.text ?? body.caption ?? ''), direction: 'outgoing', from: wa.phone })
     row.waMessageId = `true_${chatId}_OUT${wa.next}`
@@ -176,7 +182,7 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
   const seen: World = {
     clock: mock.clock(on, { now: options.now ?? new Date(2026, 9, 7, 12, 0, 0).getTime() }),
     files: new Map(Object.entries(options.files ?? {})),
-    wa: { status: options.status ?? 'ready', phone: BOT, role: 'operator', canCreateGroups: options.canCreateGroups ?? true, rows: [], groups: [], calls: [], next: 0 },
+    wa: { status: options.status ?? 'ready', phone: BOT, role: 'operator', canCreateGroups: options.canCreateGroups ?? true, rows: [], groups: [], calls: [], next: 0, failSends: 0 },
     submitted: [],
     prompts: [],
     toasts: [],

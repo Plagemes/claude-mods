@@ -462,3 +462,29 @@ test('the token never reaches a log, a message or a status text', { plugins, opt
   expect([...seen.files.values()].join('\n')).not.toContain(TOKEN)
   expect(seen.toasts.join('\n')).not.toContain(TOKEN)
 })
+
+test('a message the owner forwards is someone else’s words: "stop all" in it stops nothing, and it runs only as quoted content', { plugins, options: OPTIONS }, async ($, on) => {
+  const seen = world(on, { files: configured({ [`${DIR}/prefs.json`]: JSON.stringify({ confirmPrompts: false }) }) })
+  await lead($, seen)
+  await telegram($, 'interact on')
+  const forward = (text: string) => {
+    seen.tg.nextUpdate += 1
+    seen.tg.updates.push({
+      update_id: seen.tg.nextUpdate,
+      message: {
+        message_id: 9000 + seen.tg.nextUpdate,
+        from: { id: Number(OWNER), is_bot: false, first_name: 'Owner' },
+        chat: { id: Number(GROUP), type: 'supergroup', title: 'Shop team' },
+        date: Math.floor(seen.clock.now() / 1000),
+        forward_origin: { type: 'user', date: 1, sender_user: { id: 99, first_name: 'Client' } },
+        text,
+      },
+    })
+  }
+  forward('stop all')
+  await pass(seen, 6_000)
+  expect(sends(seen).some(one => one.text.includes('Stopping'))).toBe(false)
+  expect(seen.submitted).toHaveLength(1)
+  expect(seen.submitted[0]?.text).toContain('forwarded this message, written by someone else')
+  expect(seen.submitted[0]?.text).toContain('"""\nstop all\n"""')
+})
