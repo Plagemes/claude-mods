@@ -1,0 +1,120 @@
+{
+  "name": "telegram-bridge",
+  "version": "1.0.0",
+  "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#telegram-bridge",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "notifications", "telegram", "remote-control"],
+  "dependencies": ["mods-hub"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "botToken": {
+      "type": "string",
+      "title": "Bot token",
+      "description": "The token @BotFather gave your bot (a secret). Optional here: export TELEGRAM_BOT_TOKEN instead.",
+      "sensitive": true,
+      "default": ""
+    },
+    "ownerId": {
+      "type": "string",
+      "title": "Owner user id",
+      "description": "Your numeric Telegram user id: the only one that can command Claude, answer or approve. /telegram setup finds it for you, /telegram owner <id> saves it.",
+      "default": ""
+    },
+    "allowedChats": {
+      "type": "string",
+      "title": "Extra allowed chats",
+      "description": "More group chat ids the bot may use (like -1001234567890), comma-separated. Groups linked with /telegram link-project are always allowed; every other chat is ignored unread.",
+      "default": ""
+    },
+    "notifyMode": {
+      "type": "string",
+      "title": "When to notify (without a hub)",
+      "description": "Only used while mods-hub does not answer. away: only when you are away; always; off.",
+      "options": ["away", "always", "off"],
+      "default": "away"
+    },
+    "interaction": {
+      "type": "string",
+      "title": "Interaction (without a hub)",
+      "description": "Only used while mods-hub does not answer: may Claude ask you things. auto = only while you are away.",
+      "options": ["auto", "on", "off"],
+      "default": "auto"
+    },
+    "awayMinutes": {
+      "type": "number",
+      "title": "Away after (minutes, without a hub)",
+      "description": "Only used without the hub: minutes without typing after which you count as away.",
+      "default": 10
+    },
+    "quietHours": {
+      "type": "string",
+      "title": "Quiet hours (without a hub)",
+      "description": "Only used without the hub: hours when only critical messages go out and nothing is asked, like 23-8 (empty: none).",
+      "default": "23-8"
+    },
+    "pin": {
+      "type": "string",
+      "title": "PIN",
+      "description": "A PIN that \"stop all\" from the phone needs (a secret; empty: none).",
+      "sensitive": true,
+      "default": ""
+    },
+    "confirmPrompts": {
+      "type": "boolean",
+      "title": "Confirm prompts from the phone",
+      "description": "Ask \"Run this?\" with Run / Cancel buttons before a prompt from Telegram starts a turn (only when Interaction allows questions).",
+      "default": true
+    },
+    "remoteApprovals": {
+      "type": "boolean",
+      "title": "Answer permission prompts from the phone",
+      "description": "While you are away and Interaction allows it, permission prompts come with Allow / Deny buttons.",
+      "default": true
+    },
+    "memberTrigger": {
+      "type": "string",
+      "title": "Member trigger words",
+      "description": "Group members' messages starting with one of these (comma-separated) are questions for Claude; mentions and replies to the bot count too.",
+      "default": "?,claude"
+    },
+    "memberRate": {
+      "type": "number",
+      "title": "Member questions per 10 minutes",
+      "description": "Per member.",
+      "default": 5
+    },
+    "memberDailyCap": {
+      "type": "number",
+      "title": "Member questions per day",
+      "description": "For all members together.",
+      "default": 40
+    },
+    "shareCodeWithMembers": {
+      "type": "boolean",
+      "title": "Share code with members",
+      "description": "Let answers to group members include short code snippets.",
+      "default": false
+    },
+    "maxMessageChars": {
+      "type": "number",
+      "title": "Message length cap",
+      "description": "Longest text sent, in characters (Telegram allows 4096).",
+      "default": 3000
+    },
+    "maxFileMb": {
+      "type": "number",
+      "title": "File size cap (MB)",
+      "description": "Largest file send_file may send (Telegram bots: 50).",
+      "default": 10
+    },
+    "pollSeconds": {
+      "type": "number",
+      "title": "Long-poll seconds",
+      "description": "How long one getUpdates call waits for news (0: short polls every few seconds).",
+      "default": 10
+    }
+  }
+}
