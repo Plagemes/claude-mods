@@ -1,0 +1,14 @@
+{
+  "name": "error-buzz",
+  "version": "1.0.0",
+  "description": "A short buzz when a command or test run fails.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#error-buzz",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "notifications", "sound", "tests"],
+  "userConfig": {
+    "cooldownSeconds": { "type": "number", "title": "Cooldown (seconds)", "description": "Minimum time between two buzzes.", "default": 10 },
+    "onlyTests": { "type": "boolean", "title": "Test runs only", "description": "Buzz only when a test-runner command fails, not for every failing command.", "default": false }
+  }
+}

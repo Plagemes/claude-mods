@@ -1,0 +1,14 @@
+{
+  "name": "break-reminder",
+  "version": "1.0.0",
+  "description": "Reminds you to stand up and stretch every 50 minutes of active work.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#break-reminder",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "notifications", "wellbeing", "timer"],
+  "userConfig": {
+    "minutes": { "type": "number", "title": "Reminder interval (minutes)", "description": "Minutes of active work between two reminders.", "default": 50 },
+    "idleMinutes": { "type": "number", "title": "Idle after (minutes)", "description": "How long after your last prompt you still count as working.", "default": 5 }
+  }
+}

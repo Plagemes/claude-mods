@@ -1,0 +1,14 @@
+{
+  "name": "migration-guard",
+  "version": "1.0.0",
+  "description": "Prevents editing database migrations that already exist; write a new one instead.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#migration-guard",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "team", "database", "migrations", "guardrail"],
+  "userConfig": {
+    "directories": { "type": "string", "title": "Migration directories", "description": "Comma-separated directory names (or paths) that hold migrations, matched anywhere in a file's path.", "default": "migrations,db/migrate,prisma/migrations,alembic/versions,supabase/migrations" },
+    "allowUncommitted": { "type": "boolean", "title": "Allow uncommitted migrations", "description": "Also allow editing migrations that existed before the session but are not tracked in git yet. Tracked ones stay protected.", "default": false }
+  }
+}
