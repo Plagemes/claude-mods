@@ -17,8 +17,8 @@ const MODEL_TABLE = [
 
 type World = { runs: (readonly string[])[]; prompts: { model: string; prompt: string }[]; writes: Map<string, string>; toasts: string[]; copies: string[]; clock: ReturnType<typeof mock.clock> }
 
-const world = (on: On, options: { isGit?: boolean; modelAnswers?: boolean; grepOutput?: string } = {}): World => {
-  const { isGit = true, modelAnswers = true, grepOutput = SHOP_GIT_GREP } = options
+const world = (on: On, options: { isGit?: boolean; modelAnswers?: boolean; modelRefuses?: boolean; grepOutput?: string } = {}): World => {
+  const { isGit = true, modelAnswers = true, modelRefuses = false, grepOutput = SHOP_GIT_GREP } = options
   const state: World = { runs: [], prompts: [], writes: new Map(), toasts: [], copies: [], clock: mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') }) }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/home/dev/shop-app' }))
@@ -31,6 +31,7 @@ const world = (on: On, options: { isGit?: boolean; modelAnswers?: boolean; grepO
   })
   on('model.complete', ($, e) => {
     state.prompts.push({ model: e.model, prompt: e.prompt })
+    if (modelRefuses) return { deny: `unknown model ${e.model}` }
     const usage = { input_tokens: 4000, output_tokens: 300, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
     return modelAnswers
       ? { value: { isAnswered: true as const, text: `Here is the map.\n\n${MODEL_TABLE}`, usage } }
@@ -118,4 +119,14 @@ test('a project without personal-data fields says so without asking the model', 
     expect(await ui.find({ type: 'Text', text: /No personal-data fields found/ })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('a model call that is refused outright still ends in the table from the scan', { options: { model: 'no-such-model' } }, async ($, on) => {
+  const state = world(on, { modelRefuses: true })
+  await dataMap($)
+  await state.clock.advance(0)
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ key: 'header' }))?.text).toContain('The model did not answer')
+  expect((await ui.find({ key: 'table' }))?.text).toContain('| email address |')
+  await ui.unmount()
 })

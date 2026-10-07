@@ -172,3 +172,43 @@ test('isForeign compares holders by the words that name them, and licenses by fa
   expect(isForeign(notice('GNU General Public License as published by the Free Software Foundation'), project)).toBe(true)
   expect(isForeign(notice('Licensed under the Business Source License'), project)).toBe(true)
 })
+
+test('an MPL LICENSE is read as MPL, not as the GPL family it lists as secondary licenses', () => {
+  const mpl = [
+    'Mozilla Public License Version 2.0',
+    '==================================',
+    '1.12. "Secondary License"',
+    '    means either the GNU General Public License, Version 2.0, the GNU',
+    '    Lesser General Public License, Version 2.1, the GNU Affero General',
+    '    Public License, Version 3.0, or any later versions of those licenses.',
+  ].join('\n')
+  const project = mergeProject([parseLicenseText(mpl)], [])
+
+  expect([...project.families]).toEqual(['MPL'])
+  expect(isForeign(noticesIn({ added: '// SPDX-License-Identifier: MPL-2.0', before: '' })[0]!, project)).toBe(false)
+  expect(parseLicenseText('GNU LESSER GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007').families).toEqual(new Set(['LGPL']))
+})
+
+test('a footer the app shows is not a pasted header', async ($, on) => {
+  const { toasts } = world(on, { '/repo/package.json': JSON.stringify({ name: 'my-site', private: true }) })
+
+  const footer = await $.tool.call({
+    tool: 'Write',
+    file_path: '/repo/src/Footer.tsx',
+    content: [
+      'export const Footer = () => (',
+      '  <footer>',
+      '    <p>© 2024 Acme Inc. All rights reserved.</p>',
+      '    <p>© {year} Acme</p>',
+      '  </footer>',
+      ')',
+      "const copyright = `Copyright © ${new Date().getFullYear()} Acme, Inc.`",
+      'const label = "© 2024 Acme"',
+    ].join('\n'),
+  })
+  const header = await $.tool.call({ tool: 'Write', file_path: '/repo/src/vendor.js', content: FACEBOOK_HEADER })
+
+  expect(footer.context).toBeUndefined()
+  expect(header.context?.[0]).toContain('Copyright (c) 2015-present, Facebook, Inc.')
+  expect(toasts).toHaveLength(1)
+})

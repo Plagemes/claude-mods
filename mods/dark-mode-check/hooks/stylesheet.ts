@@ -1,4 +1,5 @@
 import { lightnessOf, parseColor } from './color'
+import { lineFinder } from './tailwind'
 import type { Finding } from './tailwind'
 
 export type Decl = { prop: string; value: string; line: number }
@@ -52,7 +53,7 @@ const endOfBlock = (text: string, open: number): number => {
 export const parseRules = (source: string): Rule[] => {
   const text = withoutComments(source)
   const rules: Rule[] = []
-  const lineAt = (offset: number): number => text.slice(0, offset).split('\n').length
+  const lineAt = lineFinder(text)
 
   const parseBlock = (from: number, to: number, parent: string | undefined, isDark: boolean, isLight: boolean): void => {
     const decls: Decl[] = []

@@ -32,6 +32,6 @@ env-guard: Read of /repo/.env (an environment file) is blocked. Ask the user for
 | `allowed` | string | empty | Comma-separated globs that are never blocked, e.g. `.env.test,fixtures/*.pem`. |
 
 ## How it works
-- Two `tool.call` guards: one for the file tools (it also resolves the real path, so a symlink named `notes.txt` that points at `.env` is caught), one for `Bash` (a small shell lexer finds the file arguments of reader/copy/edit commands and redirections).
+- Two `tool.call` guards: one for the file tools (it also resolves the real path, so a symlink named `notes.txt` that points at `.env` is caught), one for `Bash` (a small shell lexer finds the file arguments of reader/copy/edit commands and redirections, also inside the script handed to `bash -c "…"` or `eval`).
 - Both fail closed: if the check itself throws, the call is denied.
 - Limits: a deny-list, so it is best effort. A script that opens a secret (`python -c "open('.env')"`), a glob that expands to one (`cat .e*`) or a `Grep` with no `path` that happens to walk into one is not seen.

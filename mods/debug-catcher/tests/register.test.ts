@@ -97,3 +97,19 @@ test('compares a Write against the file it replaces and clears the status once c
   })
   expect(statuses.at(-1)).toBeUndefined()
 })
+
+test('printing in a command-line program is its output, not debug code; breakpoints still count', async ($, on) => {
+  engine(on, {
+    '/repo/tool/report.py': 'import sys\n\ndef main():\n    pass\n\nif __name__ == "__main__":\n    main()\n',
+    '/repo/cmd/serve/main.go': 'package main\n\nfunc main() {\n}\n',
+  })
+  const flagged = async (file_path: string, new_string: string) =>
+    (await $.tool.call({ tool: 'Edit', file_path, old_string: 'pass', new_string })).context !== undefined
+
+  expect(await flagged('/repo/tool/report.py', 'print(f"{len(rows)} rows")')).toBe(false)
+  expect(await flagged('/repo/tool/report.py', 'breakpoint()')).toBe(true)
+  expect(await flagged('/repo/cmd/serve/main.go', 'fmt.Println("listening on", addr)')).toBe(false)
+  const cli = await $.tool.call({ tool: 'Write', file_path: '/repo/src/cli.js', content: '#!/usr/bin/env node\nconsole.log("done")\n' })
+  expect(cli.context).toBeUndefined()
+  expect(await flagged('/repo/src/lib/util.py', 'print(value)')).toBe(true)
+})

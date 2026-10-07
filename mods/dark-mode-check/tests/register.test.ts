@@ -163,3 +163,16 @@ test('selectors and colors are normalised', () => {
   expect(parseColor('WHITE')).toEqual([255, 255, 255])
   expect(parseColor('hsl(0 0% 100%)')).toEqual([255, 255, 255])
 })
+
+test('a class map before the markup is read too, and a big style sheet is analysed in time', () => {
+  const source = "const styles = { card: 'bg-white text-gray-900' }\nexport const Card = () => <div className=\"p-4\" />\n"
+  expect(texts(source)).toEqual(['bg-white, text-gray-900'])
+  expect(findClassFindings(source)[0]?.line).toBe(1)
+
+  const css = Array.from({ length: 8000 }, (_, i) => `.c${i} {\n  color: #333;\n  background: #fff;\n}\n`).join('')
+  const started = performance.now()
+  const findings = findStyleFindings(css)
+  expect(findings).toHaveLength(16000)
+  expect(findings.at(-1)?.line).toBe(8000 * 4 - 1)
+  expect(performance.now() - started).toBeLessThan(2000)
+})

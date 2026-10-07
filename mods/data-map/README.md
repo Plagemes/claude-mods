@@ -34,6 +34,6 @@
 | `output` | `docs/data-map.md` | Where **Save** writes, relative to the project root. |
 
 ## How it works
-- One `git grep -n -I -i -E` over tracked files (plain `grep -r` outside git), skipping tests, fixtures, docs, Markdown, lockfiles and built or vendored code; each line is then classified by exact patterns in a pure module (at most 40 lines per signal; logging only counts when the line names a data item).
+- One `git grep -n -I -i -E` over tracked files (plain `grep -r` outside git), skipping tests, fixtures, docs, Markdown, lockfiles, `.env` and key files, and built or vendored code; each line is then classified by exact patterns in a pure module (at most 40 lines per signal; logging only counts when the line names a data item). Hard-coded secret values (`password: '…'`) are masked in the evidence.
 - The grouped evidence goes to `$.model.complete` with instructions to cite only what it was given; if the model does not answer, a table is built from the scan alone (items, the stores and third parties found in the same files, a default legal-basis hint) and marked as such.
 - Limits: keyword matching finds names, not data flows, so expect false positives and misses (a field called `contact` is not seen); the legal basis is a hint, not legal advice; the scan and its evidence are sent to the model.

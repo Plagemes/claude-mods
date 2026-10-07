@@ -14,7 +14,7 @@ After Claude edits or writes a source file, debug-catcher looks at the lines tha
 ## Usage
 Nothing to run. When an edit adds a debug statement Claude sees a note such as `debug-catcher: this edit added 1 debug statement to src/app.ts: console.log("x")`, and the status line shows `⚠ 1 debug statement to remove`. The count drops when a later edit removes the line. To keep a statement on purpose, put `debug-catcher: ignore` on its line.
 
-Tests, specs, `scripts/`, `fixtures/`, `examples/`, `bin/`, `*.config.*` files, comments and non-source files are never flagged.
+Tests, specs, `scripts/`, `fixtures/`, `examples/`, `bin/`, `*.config.*` files, comments and non-source files are never flagged. In a command-line program (a shebang, Python's `if __name__ == "__main__"`, `__main__.py`, Go's `package main`, Java's `main()`) printing is the program's output, so only `debugger`, `breakpoint()`, `dbg!` and the like are flagged there.
 
 ## Configuration
 No configuration needed.

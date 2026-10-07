@@ -37,6 +37,14 @@ const RISKY = [
   'sudo docker system prune -a',
   'cd infra && docker compose down -v && docker compose up -d',
   'docker --context remote volume prune',
+  // Regressions: wrappers with options, xargs, timeout, and a shell handed the command as a string.
+  'sudo -E docker volume prune -f',
+  'sudo -u root docker compose down -v',
+  'docker volume ls -q | xargs -r docker volume rm',
+  'timeout 60 docker volume prune -f',
+  'nice -n 10 docker system prune --volumes',
+  'bash -c "docker compose down -v"',
+  "sh -c 'docker volume prune -f'",
 ]
 
 const SAFE = [
@@ -61,6 +69,8 @@ const SAFE = [
   'echo "docker compose down -v"',
   'git commit -m "docker volume prune notes"',
   'ls -la',
+  'bash -c "docker compose ps"',
+  'timeout 30 docker compose up -d',
 ]
 
 test('denies commands that can delete volumes or every unused image, and says what would be lost', async ($, on) => {

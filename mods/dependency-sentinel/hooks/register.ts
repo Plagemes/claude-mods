@@ -18,6 +18,9 @@ const PLUGIN = 'dependency-sentinel'
 const OVERRIDE = /\bDEPS-OK\b/
 const DAY_MS = 86_400_000
 const CACHE_TTL_MS = DAY_MS
+/** A package this old with this many releases is a project in its own right, not a squat: `ms` is not a typo of `ws`. */
+const ESTABLISHED_DAYS = 365
+const ESTABLISHED_VERSIONS = 5
 const APPROVED_KEY = 'approved'
 const MAX_APPROVED = 500
 const USER_AGENT = 'dependency-sentinel (https://github.com/plagemes/claude-mods)'
@@ -134,17 +137,24 @@ const inspect = async ($: EngineInterface, request: PackageRequest, limits: Limi
     findings.push({ name: request.name, ecosystem: request.ecosystem, reason })
   }
   const near = nearestPopular(request.ecosystem, request.name)
-  if (near !== undefined) add(`looks like a typo of "${near.name}" (${near.distance} edit${near.distance === 1 ? '' : 's'} away)`)
-  if (POPULAR[request.ecosystem].has(request.name) || !limits.checkRegistry) return findings
+  const typo = near === undefined ? undefined : `looks like a typo of "${near.name}" (${near.distance} edit${near.distance === 1 ? '' : 's'} away)`
+  if (POPULAR[request.ecosystem].has(request.name) || !limits.checkRegistry) {
+    if (typo !== undefined) add(typo)
+    return findings
+  }
 
   const lookup = await lookUp($, request, limits, now)
   const registry = REGISTRY_LABEL[request.ecosystem]
   if (lookup.kind === 'unknown') {
+    if (typo !== undefined) add(typo)
     $.ui.toast(`${PLUGIN}: could not check ${request.name} on ${registry} (${lookup.why}); allowed`)
   } else if (lookup.kind === 'missing') {
+    if (typo !== undefined) add(typo)
     add(`does not exist on ${registry}: a mistyped or hallucinated name, or a squat waiting to happen`)
   } else {
     const ageDays = lookup.createdAt === undefined ? undefined : Math.floor((now - lookup.createdAt) / DAY_MS)
+    const isEstablished = ageDays !== undefined && ageDays >= ESTABLISHED_DAYS && lookup.versions >= ESTABLISHED_VERSIONS
+    if (typo !== undefined && !isEstablished) add(typo)
     if (ageDays !== undefined && ageDays < limits.minAgeDays) add(`was first published ${ageDays === 0 ? 'today' : `${ageDays} day${ageDays === 1 ? '' : 's'} ago`}`)
     if (lookup.versions < limits.minVersions) {
       add(lookup.versions === 0 ? 'has no tagged releases' : `has only ${lookup.versions} release${lookup.versions === 1 ? '' : 's'}`)

@@ -103,11 +103,17 @@ const formAppends = (parts: readonly FormPart[], blobOf: (part: FormPart) => str
 const blobOf = (part: FormPart): string =>
   `new Blob([await readFile(${quote(part.value)})]${part.type === undefined ? '' : `, { type: ${quote(part.type)} }`})`
 
+/** Methods fetch refuses to send a body with: `new Request()` throws a TypeError. */
+const BODILESS_IN_FETCH = new Set(['GET', 'HEAD'])
+
 const emitFetch = (request: CurlRequest): Emitted => {
-  const { body } = request
-  const json = jsonBody(request)
+  const notes: string[] = []
+  // curl -X GET -d '...' (Elasticsearch style) sends a body; fetch would throw, so the body is left out and said so.
+  const body = request.body !== undefined && BODILESS_IN_FETCH.has(request.method) ? undefined : request.body
+  if (body !== request.body) notes.push(`fetch cannot send a body with ${request.method}, so it was left out: use POST if the server accepts it, or axios`)
+  const json = body === undefined ? undefined : jsonBody(request)
   const lines: string[] = []
-  if (hasFile(request)) lines.push("import { readFile } from 'node:fs/promises';", '')
+  if (body !== undefined && hasFile(request)) lines.push("import { readFile } from 'node:fs/promises';", '')
   if (request.isInsecure) {
     lines.push('// curl -k: fetch cannot skip TLS verification per request; for local testing run Node with NODE_TLS_REJECT_UNAUTHORIZED=0.', '')
   }
@@ -130,7 +136,7 @@ const emitFetch = (request: CurlRequest): Emitted => {
   if (options.length === 0) lines.push(`const response = await fetch(${quote(request.url)});`)
   else lines.push(`const response = await fetch(${quote(request.url)}, {`, ...indented(options, '  '), '});')
   lines.push('', 'console.log(response.status, await response.text());')
-  return { code: lines.join('\n'), notes: [] }
+  return { code: lines.join('\n'), notes }
 }
 
 const emitAxios = (request: CurlRequest): Emitted => {

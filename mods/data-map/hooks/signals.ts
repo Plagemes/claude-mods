@@ -118,10 +118,17 @@ export const EXCLUDED_PATHS = [
   '*.lock', 'package-lock.json', 'pnpm-lock.yaml', 'go.sum', '*.min.js', '*.map', '*.svg', '*.snap', '*.md',
   '**/test/**', '**/tests/**', '**/__tests__/**', '**/spec/**', '*.test.*', '*.spec.*', '*_test.*', '**/fixtures/**',
   '**/node_modules/**', '**/vendor/**', '**/dist/**', '**/build/**', '**/coverage/**', 'docs/**', '.claude/**',
+  // Secrets live here: their lines would end up in the prompt and in the saved document.
+  '.env', '.env.*', '*.pem', '*.key',
 ]
 
 const MAX_LINE = 180
 const MAX_PER_SIGNAL = 40
+/** `password: "hunter2"`, `STRIPE_SECRET_KEY = 'sk_live_…'`: a hard-coded secret's value is kept out of the evidence. */
+const SECRET_VALUE = /((?:secret|token|passw(?:or)?d|pwd|api_?key|private_?key|access_?key)\w*["'`]?\s*(?:=>|[:=])\s*)(["'`])[^"'`]{4,}\2/gi
+
+/** A line as evidence: hard-coded secret values masked. */
+export const redactSecrets = (text: string): string => text.replace(SECRET_VALUE, (_, head: string, quote: string) => `${head}${quote}…${quote}`)
 
 /** `git grep` arguments that find candidate lines for every signal, case-insensitively, in tracked text files. */
 export const gitGrepArgs = (): string[] => [
@@ -134,7 +141,7 @@ export const gitGrepArgs = (): string[] => [
 export const grepArgs = (): string[] => [
   'grep', '-r', '-n', '-I', '-i', '-E',
   ...['node_modules', 'vendor', 'dist', 'build', 'coverage', 'docs', 'test', 'tests', '__tests__', 'fixtures', '.git', '.claude', '.venv'].map(dir => `--exclude-dir=${dir}`),
-  ...['*.lock', 'package-lock.json', 'pnpm-lock.yaml', '*.min.js', '*.map', '*.md', '*.test.*', '*.spec.*'].map(glob => `--exclude=${glob}`),
+  ...['*.lock', 'package-lock.json', 'pnpm-lock.yaml', '*.min.js', '*.map', '*.md', '*.test.*', '*.spec.*', '.env', '.env.*', '*.pem', '*.key'].map(glob => `--exclude=${glob}`),
   ...SIGNALS.flatMap(signal => ['-e', signal.grep]),
   '.',
 ]
@@ -147,7 +154,8 @@ export const classifyGrepOutput = (output: string): Hit[] => {
     const match = /^(?:\.\/)?(.+?):(\d+):(.*)$/.exec(raw)
     if (match === null) continue
     const [, file = '', line = '0', content = ''] = match
-    const text = content.trim().length > MAX_LINE ? `${content.trim().slice(0, MAX_LINE - 1)}…` : content.trim()
+    const shown = redactSecrets(content.trim())
+    const text = shown.length > MAX_LINE ? `${shown.slice(0, MAX_LINE - 1)}…` : shown
     const items = DATA_ITEMS.filter(signal => signal.match.test(content))
     for (const signal of SIGNALS) {
       if (!signal.match.test(content)) continue

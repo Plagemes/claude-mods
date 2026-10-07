@@ -67,3 +67,17 @@ test('without the model, a table from the scan: stores and third parties seen in
   expect(document).toContain('organised without the model')
   expect(document).toContain('- `src/routes/signup.js:12` logs: `logger.info(\'new signup ${email} from ${req.ip}\')`')
 })
+
+test('env files and key files are not scanned, and hard-coded secret values are masked in the evidence', () => {
+  expect(gitGrepArgs()).toContain(':(exclude,glob)**/.env')
+  expect(gitGrepArgs()).toContain(':(exclude,glob)**/.env.*')
+  const hits = classifyGrepOutput(
+    [
+      "src/config.js:3:  password: 'hunter2-prod',",
+      "src/pay.js:1:const STRIPE_SECRET_KEY = 'sk_live_51Habc'",
+      'src/routes/signup.js:4:  const password = req.body.password',
+    ].join('\n'),
+  )
+  expect(hits.map(hit => hit.text)).toEqual(["password: '…',", "const STRIPE_SECRET_KEY = '…'", 'const password = req.body.password'])
+  expect(documentOf('shop', '2026-10-07', '| a |', hits, false)).not.toContain('hunter2')
+})

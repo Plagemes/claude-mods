@@ -38,7 +38,7 @@ const endOfBrackets = (text: string, start: number): number => {
   return -1
 }
 
-type Group = { start: number; text: string }
+type Group = { start: number; end: number; text: string }
 
 /** The class lists in a source: attribute values and class-helper calls (all their strings together), then any other string. */
 const classGroups = (text: string): Group[] => {
@@ -55,17 +55,36 @@ const classGroups = (text: string): Group[] => {
       first === '"' || first === "'" ? text.indexOf(first, start + 1) + 1 :
       -1
     if (end <= 0) continue
-    groups.push({ start, text: text.slice(isCall ? start - 1 : start, end) })
+    groups.push({ start, end, text: text.slice(isCall ? start - 1 : start, end) })
     covered = end
   }
+  // The class lists are in source order and do not overlap: one pass tells the strings inside them from the others.
+  const lists = [...groups]
+  let list = 0
   for (const match of text.matchAll(STRING_LITERAL)) {
     const index = match.index ?? 0
-    if (index >= covered && !groups.some(group => index >= group.start && index < group.start + group.text.length)) groups.push({ start: index, text: match[0].slice(1, -1) })
+    while (list < lists.length && (lists[list]?.end ?? 0) <= index) list += 1
+    const current = lists[list]
+    if (current === undefined || index < current.start) groups.push({ start: index, end: index + match[0].length, text: match[0].slice(1, -1) })
   }
   return groups
 }
 
-const lineAt = (text: string, offset: number): number => text.slice(0, offset).split('\n').length
+/** The 1-based line of an offset, by a binary search over the line starts (a big file has thousands of lookups). */
+export const lineFinder = (text: string): ((offset: number) => number) => {
+  const starts = [0]
+  for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', index + 1)) starts.push(index + 1)
+  return offset => {
+    let low = 0
+    let high = starts.length - 1
+    while (low < high) {
+      const middle = (low + high + 1) >> 1
+      if ((starts[middle] ?? 0) <= offset) low = middle
+      else high = middle - 1
+    }
+    return low + 1
+  }
+}
 
 /** A Tailwind utility with the parts that matter: its variants (hover, dark, ...), property family and color. */
 type Utility = { variants: string[]; family: string; prefix: string; color: string; shade: string }
@@ -109,6 +128,7 @@ const hasDarkCounterpart = (tokens: readonly string[], item: Utility): boolean =
 /** Light-assuming Tailwind colors in class lists that have no `dark:` counterpart in the same list. */
 export const findClassFindings = (text: string): Finding[] => {
   const findings: Finding[] = []
+  const lineAt = lineFinder(text)
   for (const group of classGroups(text)) {
     const tokens = [...group.text.matchAll(TOKEN)].map(match => match[0])
     const flagged = new Map<string, Utility>()
@@ -119,7 +139,7 @@ export const findClassFindings = (text: string): Finding[] => {
     const names = [...flagged.keys()]
     if (names.length === 0) continue
     findings.push({
-      line: lineAt(text, group.start + Math.max(0, group.text.indexOf(names[0] ?? ''))),
+      line: lineAt(group.start + Math.max(0, group.text.indexOf(names[0] ?? ''))),
       text: names.join(', '),
       advice: [...flagged.values()].map(darkCounterpart).join(' '),
       count: names.length,

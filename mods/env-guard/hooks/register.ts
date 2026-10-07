@@ -12,9 +12,12 @@ const FILE_COMMANDS = new Set([
   'cat', 'tac', 'nl', 'rev', 'less', 'more', 'head', 'tail', 'bat', 'batcat', 'grep', 'egrep', 'fgrep',
   'rg', 'ag', 'ack', 'awk', 'gawk', 'sed', 'cut', 'sort', 'uniq', 'tr', 'od', 'xxd', 'hexdump', 'strings',
   'base64', 'diff', 'cmp', 'comm', 'paste', 'join', 'cp', 'mv', 'rm', 'ln', 'tee', 'scp', 'rsync',
-  'curl', 'wget', 'nc', 'ncat', 'vi', 'vim', 'nvim', 'nano', 'emacs', 'code', 'open',
+  'curl', 'wget', 'nc', 'ncat', 'vi', 'vim', 'nvim', 'nano', 'emacs', 'code', 'open', 'dd', 'jq', 'yq',
 ])
 const GIT_READERS = new Set(['show', 'cat-file', 'blame', 'grep'])
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'ash', 'fish'])
+/** How deep `bash -c "…"` strings are opened up. */
+const MAX_NESTING = 3
 
 type Verdict = { path: string; reason: string }
 
@@ -59,6 +62,37 @@ async function judge($: EngineInterface, rules: Rules, path: string, newText = '
   return undefined
 }
 
+/** The command strings a command hands to a shell: `bash -c "…"` (also after `sudo` or `docker exec`) and `eval "…"`. */
+function nestedScripts(words: readonly string[]): string[] {
+  const scripts: string[] = []
+  words.forEach((word, index) => {
+    if (!SHELLS.has(baseName(word))) return
+    const flag = words.findIndex((arg, at) => at > index && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(arg))
+    const script = flag === -1 ? undefined : words[flag + 1]
+    if (script !== undefined) scripts.push(script)
+  })
+  if (words[0] === 'eval') scripts.push(words.slice(1).join(' '))
+  return scripts
+}
+
+/** The first protected file a shell line reads or writes, looking inside the scripts it hands to `bash -c` too. */
+async function bashVerdict($: EngineInterface, rules: Rules, command: string, depth = 0): Promise<Verdict | undefined> {
+  for (const { words, redirects } of parseShell(command)) {
+    const names = words.map(baseName)
+    const touchesFiles = names.some(name => FILE_COMMANDS.has(name)) || (names.includes('git') && names.some(name => GIT_READERS.has(name)))
+    const paths = [...redirects, ...(touchesFiles ? words : [])].flatMap(candidates)
+    for (const path of paths) {
+      const verdict = await judge($, rules, path)
+      if (verdict) return verdict
+    }
+    for (const script of depth < MAX_NESTING ? nestedScripts(words) : []) {
+      const verdict = await bashVerdict($, rules, script, depth + 1)
+      if (verdict) return verdict
+    }
+  }
+  return undefined
+}
+
 function refusal(what: string, { path, reason }: Verdict): string {
   return `env-guard: ${what} ${path} (${reason}) is blocked. Ask the user for the value you need, or work from .env.example.`
 }
@@ -85,15 +119,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => (next.called ? next(e) : { deny: 'env-guard: its check failed, so the call was blocked.' }))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    for (const { words, redirects } of parseShell(e.command)) {
-      const names = words.map(baseName)
-      const touchesFiles = names.some(name => FILE_COMMANDS.has(name)) || (names.includes('git') && names.some(name => GIT_READERS.has(name)))
-      const paths = [...redirects, ...(touchesFiles ? words : [])].flatMap(candidates)
-      for (const path of paths) {
-        const verdict = await judge($, rules, path)
-        if (verdict) return { deny: refusal('this command touches', verdict) }
-      }
-    }
-    return next(e)
+    const verdict = await bashVerdict($, rules, e.command)
+    return verdict ? { deny: refusal('this command touches', verdict) } : next(e)
   }).catch(($, e, next) => (next.called ? next(e) : { deny: 'env-guard: its check failed, so the command was blocked.' }))
 }

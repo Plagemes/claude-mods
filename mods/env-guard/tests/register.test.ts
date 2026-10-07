@@ -48,11 +48,17 @@ test('blocks Bash commands that read or write protected files, not harmless ones
     'git show HEAD:.env',
     'cat .env*',
     'tar c . && cat "$HOME/.aws/credentials"',
+    // Regressions: a shell handed the command as a string, and dd.
+    'bash -c "cat .env"',
+    "sh -c 'grep KEY .env.local'",
+    'sudo bash -lc "cat ~/.ssh/id_rsa"',
+    'eval "cat .env"',
+    'dd if=.env',
   ]
   for (const command of blocked) {
     expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('env-guard')
   }
-  const allowed = ['ls -la', 'cat README.md', 'cat .env.example', 'echo ".env is ignored" > notes.txt', 'npm test && git status', 'cat ~/.ssh/id_rsa.pub']
+  const allowed = ['ls -la', 'cat README.md', 'cat .env.example', 'echo ".env is ignored" > notes.txt', 'npm test && git status', 'cat ~/.ssh/id_rsa.pub', 'bash -c "npm run build"', 'jq .scripts package.json']
   for (const command of allowed) {
     expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
   }

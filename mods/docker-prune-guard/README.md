@@ -27,6 +27,6 @@ To allow it, put `PRUNE-OK` in your next message. It applies to that message onl
 No configuration needed.
 
 ## How it works
-- A `tool.call` guard on `Bash` splits the command line like a shell (quotes respected, so `echo "docker volume prune"` is ignored), reads the engine, subcommand and flags (`-af` counts as `-a -f`), and matches them against the delete rules. A `prompt.submit` hook remembers the latest message that came from the person.
+- A `tool.call` guard on `Bash` splits the command line like a shell (quotes respected, so `echo "docker volume prune"` is ignored, while the script of `bash -c "…"` is read too), looks past wrappers such as `sudo -u root`, `xargs -r`, `timeout 60` and `env`, reads the engine, subcommand and flags (`-af` counts as `-a -f`), and matches them against the delete rules. A `prompt.submit` hook remembers the latest message that came from the person.
 - It fails closed: if the check itself throws, a command that mentions docker or podman together with prune, volume, down or rm is refused.
 - Limits: it reads text only, so a script or `make` target that runs these commands is not seen, and it does not list the volumes that exist.

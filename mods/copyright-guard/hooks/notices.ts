@@ -55,8 +55,18 @@ const GENERIC_WORDS = new Set([
 /** Paths whose job is to carry notices of other people: license files, vendored and third-party code. */
 const NOTICE_HOMES = /(?:^|[\\/])(?:LICEN[CS]E[^\\/]*|COPYING[^\\/]*|NOTICE[^\\/]*|UNLICENSE|AUTHORS|[^\\/]*\.license)$|(?:^|[\\/])(?:node_modules|vendor|vendors|third[_-]?party|licenses|\.git)[\\/]/i
 
-/** The license family a name or text points to (`Apache License, Version 2.0` is `Apache`), if it points to one. */
-export const familyOf = (text: string): string | undefined => LICENSE_FAMILIES.find(([, pattern]) => pattern.test(text))?.[0]
+/**
+ * The license family a name or text points to (`Apache License, Version 2.0` is `Apache`), if it points to one.
+ * The family named first wins: the MPL text lists the GPL family as "Secondary Licenses" after its own title.
+ */
+export const familyOf = (text: string): string | undefined => {
+  let first: { family: string; index: number } | undefined
+  for (const [family, pattern] of LICENSE_FAMILIES) {
+    const index = text.search(pattern)
+    if (index !== -1 && (first === undefined || index < first.index)) first = { family, index }
+  }
+  return first?.family
+}
 
 /** The families an SPDX expression names (`MIT OR Apache-2.0`); a part this file cannot place is left out. */
 const familiesOfExpression = (expression: string): string[] =>
@@ -84,16 +94,22 @@ export const holderOf = (line: string): string | undefined => {
   return holder === '' ? undefined : holder
 }
 
+/**
+ * A copyright line that is part of what the app shows (`<p>© 2024 Acme</p>`, `© {year} Acme`, a `'© Acme'` string,
+ * a docs site's `copyright: \`Copyright © ${year}\``): the site owner's footer, not a header pasted with code.
+ */
+const UI_TEXT = /<\/?[A-Za-z][\w.:-]*(?:\s|\/?>)|\{[^}]*\}|\$\{|["'`]\s*(?:©|\(c\)|copyright\b)/i
+
 const noticeOf = (line: string): Notice | undefined => {
   const text = line.trim().length > MAX_NOTICE_LENGTH ? `${line.trim().slice(0, MAX_NOTICE_LENGTH - 1)}…` : line.trim()
   const spdx = SPDX.exec(line)
   if (spdx !== null) return { text, kind: 'license', families: familiesOfExpression(spdx[1] ?? '') }
-  if (COPYRIGHT.test(line)) return { text, kind: 'copyright', holder: holderOf(line), families: [] }
+  if (COPYRIGHT.test(line)) return UI_TEXT.test(line) ? undefined : { text, kind: 'copyright', holder: holderOf(line), families: [] }
   if (LICENSED_UNDER.test(line) || GNU_GPL.test(line)) {
     const family = familyOf(line)
     return { text, kind: 'license', families: family === undefined ? [] : [family] }
   }
-  if (ALL_RIGHTS_RESERVED.test(line)) return { text, kind: 'reserved', families: [] }
+  if (ALL_RIGHTS_RESERVED.test(line)) return UI_TEXT.test(line) ? undefined : { text, kind: 'reserved', families: [] }
   return undefined
 }
 

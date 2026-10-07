@@ -281,4 +281,11 @@ describe('literals', () => {
     expect(code).toContain(`data='{"id": 12345678901234567890}',`)
     expect(code).toContain("'Content-Type': 'application/json',")
   })
+
+  test('fetch leaves out a body it cannot send with GET, and says so (curl -X GET -d, Elasticsearch style)', () => {
+    const emitted = emit(parse(`curl -X GET localhost:9200/_search -H 'Content-Type: application/json' -d '{"query":{"match_all":{}}}'`), 'fetch')
+    expect(emitted.code).not.toContain('body:')
+    expect(emitted.notes.join('\n')).toContain('fetch cannot send a body with GET')
+    expect(emit(parse(`curl -X GET localhost:9200/_search -d '{"a":1}'`), 'python').code).toContain('data=')
+  })
 })

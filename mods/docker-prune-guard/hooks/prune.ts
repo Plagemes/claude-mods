@@ -11,7 +11,26 @@ export type Risk = {
 
 const ENGINES = new Set(['docker', 'podman'])
 const COMPOSE_BINARIES = new Set(['docker-compose', 'podman-compose'])
-const WRAPPERS = new Set(['sudo', 'time', 'nohup', 'command', 'exec', 'env'])
+/** Commands that run the command after them, with their options that take the next word as a value. */
+const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
+  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-r', '-t', '-U', '-T', '--user', '--group', '--host', '--prompt', '--chdir']),
+  doas: new Set(['-u', '-C']),
+  env: new Set(['-u', '--unset', '-C', '--chdir']),
+  nice: new Set(['-n', '--adjustment']),
+  ionice: new Set(['-c', '-n', '-p']),
+  timeout: new Set(['-s', '--signal', '-k', '--kill-after']),
+  xargs: new Set(['-I', '-n', '-P', '-d', '-L', '-s', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file', '--max-lines']),
+  stdbuf: new Set(['-i', '-o', '-e']),
+  time: new Set(['-f', '-o']),
+  nohup: new Set(),
+  command: new Set(),
+  exec: new Set(['-a']),
+}
+/** Wrappers whose first operand is their own (`timeout 60 docker ...`), not the command's. */
+const OWN_OPERAND = new Set(['timeout'])
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'ash'])
+/** How deep `bash -c "…"` strings are opened up. */
+const MAX_NESTING = 3
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 /** Options of the engine and of `compose` (before the subcommand) that take the next word as their value. */
 const GLOBAL_VALUE_FLAGS = new Set([
@@ -24,11 +43,36 @@ const MAX_COMMAND_LENGTH = 80
 type Flag = { name: string; /** How many positional words came before it. */ at: number }
 type Parsed = { positional: string[]; flags: Flag[] }
 
-/** Words of one command with leading `NAME=value` words and wrappers (`sudo`, `env`) removed. */
+/** Words of one command with leading `NAME=value` words and wrappers (`sudo -u root`, `xargs -r`, `timeout 60`) removed. */
 function withoutPrefix(all: readonly string[]): string[] {
   let index = 0
-  while (index < all.length && (ASSIGNMENT.test(all[index] as string) || WRAPPERS.has(baseName(all[index] as string)))) index += 1
+  while (index < all.length) {
+    const word = all[index] as string
+    if (ASSIGNMENT.test(word)) {
+      index += 1
+      continue
+    }
+    const name = baseName(word)
+    const valued = WRAPPERS[name]
+    if (valued === undefined) break
+    index += 1
+    while (index < all.length && (all[index] as string).startsWith('-')) index += valued.has(all[index] as string) ? 2 : 1
+    if (OWN_OPERAND.has(name)) index += 1
+  }
   return all.slice(index)
+}
+
+/** The command strings a command hands to a shell: `bash -c "…"`, also after `sudo` or `docker exec`; and `eval "…"`. */
+function nestedScripts(words: readonly string[]): string[] {
+  const scripts: string[] = []
+  words.forEach((word, index) => {
+    if (!SHELLS.has(baseName(word))) return
+    const flag = words.findIndex((arg, at) => at > index && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(arg))
+    const script = flag === -1 ? undefined : words[flag + 1]
+    if (script !== undefined) scripts.push(script)
+  })
+  if (words[0] === 'eval') scripts.push(words.slice(1).join(' '))
+  return scripts
 }
 
 /** Positional words and flags of an engine command line; `-af` counts as `-a` and `-f`. */
@@ -109,8 +153,10 @@ function risksOf({ positional, flags }: Parsed, command: string): Risk[] {
 }
 
 /** Commands of the line that can delete volumes (or all unused images); reads text, runs nothing. */
-export function findRisks(line: string): Risk[] {
+export function findRisks(line: string, depth = 0): Risk[] {
   return parseShell(line).flatMap(segment => {
+    const nested = depth < MAX_NESTING ? nestedScripts(withoutPrefix(segment.words)).flatMap(script => findRisks(script, depth + 1)) : []
+    if (nested.length > 0) return nested
     const words = withoutPrefix(segment.words)
     const binary = baseName(words[0] ?? '')
     const isComposeBinary = COMPOSE_BINARIES.has(binary)

@@ -10,6 +10,7 @@ const PANE = 'dev-server'
 const PANE_TITLE = 'Dev server'
 const MAX_LINES = 500
 const MAX_LINE_CHARS = 2_000
+const MAX_PARTIAL_CHARS = 64_000
 /** How much text the pane draws, newest lines first, well inside a tree's 100,000 characters. */
 const DRAWN_CHARS = 60_000
 const FLUSH_MS = 200
@@ -179,7 +180,8 @@ async function pump($: EngineInterface, host: Host, child: Child): Promise<void>
         break
       }
       const { lines, partial } = splitLines(child.partial[step.value.stream], step.value.text)
-      child.partial[step.value.stream] = partial
+      // A progress line redrawn with \r and never ended would grow without bound: only its latest text is shown.
+      child.partial[step.value.stream] = partial.length > MAX_PARTIAL_CHARS ? partial.slice(-MAX_LINE_CHARS) : partial
       for (const text of lines) push(child, text, step.value.stream)
       scheduleFlush($, host, child)
     }

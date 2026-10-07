@@ -54,7 +54,7 @@ async function search($: EngineInterface, root: string, name: string): Promise<H
 }
 
 /** Where fixtures go: the configured folder, else the first fixtures folder the project has, else `fixtures/`. */
-async function outputDir($: EngineInterface, root: string, settings: Settings): Promise<string> {
+async function fixtureFolder($: EngineInterface, root: string, settings: Settings): Promise<string> {
   if (settings.outputDir !== '') return settings.outputDir
   for (const dir of FIXTURE_DIRS) {
     if (await $.fs.exists(`${root}/${dir}`).catch(() => false)) return dir
@@ -120,8 +120,8 @@ async function start($: EngineInterface, args: string, settings: Settings): Prom
   const definition = extractBlock(lines, best.line - 1, best.kind)
   const related = relatedBlocks(lines, relatedNames(definition, wanted.name), best.kind, best.line - 1)
   const source = `${best.path}:${best.line}`
-  const target = `${await outputDir($, root, settings)}/${fileNameFor(wanted.name)}`
-  const next: Draft = {
+  const target = `${await fixtureFolder($, root, settings)}/${fileNameFor(wanted.name)}`
+  const fresh: Draft = {
     phase: 'generating',
     name: wanted.name,
     count: wanted.count,
@@ -139,18 +139,18 @@ async function start($: EngineInterface, args: string, settings: Settings): Prom
     savedTo: null,
     isReplacing: false,
   }
-  await update($, draft, () => next)
+  await update($, draft, () => fresh)
   await $.ui.open({ id: PANE, title: 'Fixtures' })
-  $.clock.after(0, () => void generate($, settings, next).catch(error => fail($, next, String(error))))
+  $.clock.after(0, () => void generate($, settings, fresh).catch(error => fail($, fresh, String(error))))
   return `Generating ${wanted.count} ${wanted.name} records from ${source} with ${settings.model}…`
 }
 
 async function regenerate($: EngineInterface, settings: Settings): Promise<void> {
   const current = await read($, draft)
   if (current === null || current.phase === 'generating') return
-  const next: Draft = { ...current, phase: 'generating', json: '', preview: '', recordCount: 0, warning: null, error: null, savedTo: null, isReplacing: false }
-  await update($, draft, () => next)
-  await generate($, settings, next).catch(error => fail($, next, String(error)))
+  const fresh: Draft = { ...current, phase: 'generating', json: '', preview: '', recordCount: 0, warning: null, error: null, savedTo: null, isReplacing: false }
+  await update($, draft, () => fresh)
+  await generate($, settings, fresh).catch(error => fail($, fresh, String(error)))
 }
 
 /** Writes the records; a file already there is replaced only on a second press. */

@@ -40,14 +40,17 @@ async function search($: EngineInterface, root: string, isGit: boolean): Promise
 }
 
 async function organise($: EngineInterface, settings: Settings, project: string, hits: readonly Hit[]): Promise<{ markdown: string; isFallback: boolean }> {
-  const reply = await $.model.complete({
-    model: settings.model,
-    system: SYSTEM_PROMPT,
-    prompt: buildPrompt(project, evidenceOf(hits)),
-    maxTokens: MAX_TOKENS,
-    timeoutMs: MODEL_TIMEOUT_MS,
-  })
-  const table = reply.isAnswered ? extractTable(reply.text) : undefined
+  // A call refused outright (an unknown model, another plugin's budget guard) falls back like one left unanswered.
+  const reply = await $.model
+    .complete({
+      model: settings.model,
+      system: SYSTEM_PROMPT,
+      prompt: buildPrompt(project, evidenceOf(hits)),
+      maxTokens: MAX_TOKENS,
+      timeoutMs: MODEL_TIMEOUT_MS,
+    })
+    .catch(() => undefined)
+  const table = reply?.isAnswered === true ? extractTable(reply.text) : undefined
   return table === undefined ? { markdown: fallbackTable(hits), isFallback: true } : { markdown: table, isFallback: false }
 }
 

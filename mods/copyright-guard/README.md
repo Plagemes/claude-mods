@@ -21,7 +21,7 @@ If this text was copied from another project, check that its license lets you us
 If you wrote the notice yourself, remove it or make it match the project's.
 ```
 
-The project's own holder and license never trigger it, nor do lines that were already in the file, or files that exist to carry notices (`LICENSE`, `COPYING`, `NOTICE`, `node_modules/`, `vendor/`, `third_party/`).
+The project's own holder and license never trigger it, nor do lines that were already in the file, or files that exist to carry notices (`LICENSE`, `COPYING`, `NOTICE`, `node_modules/`, `vendor/`, `third_party/`). A copyright line the app itself shows (`<p>© 2024 Acme</p>`, `© {year} Acme`, a `'© Acme'` string) is a footer, not a pasted header, and is left alone.
 
 ## Configuration
 | Key | Type | Default | Description |

@@ -9,6 +9,11 @@ const COMMAND_TIMEOUT_MS = 5000
 const MAX_TITLE_LENGTH = 60
 const MAX_BODY_LENGTH = 200
 const APP_NAME = 'Claude Code'
+/**
+ * Windows shows a desktop app's toast only for an AppUserModelID registered by a Start menu shortcut:
+ * an arbitrary one ('Claude Code') is accepted and then silently dropped. Windows PowerShell's own always exists.
+ */
+const WINDOWS_APP_ID = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe'
 
 // AppleScript reads title and message as arguments, so nothing is ever spliced into the script text.
 const MACOS_SCRIPT = [
@@ -23,7 +28,7 @@ const WINDOWS_SCRIPT = [
   "$text = $xml.GetElementsByTagName('text')",
   '$text.Item(0).AppendChild($xml.CreateTextNode($env:CLAUDE_NOTIFY_TITLE)) | Out-Null',
   '$text.Item(1).AppendChild($xml.CreateTextNode($env:CLAUDE_NOTIFY_BODY)) | Out-Null',
-  `[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('${APP_NAME}').Show([Windows.UI.Notifications.ToastNotification]::new($xml))`,
+  `[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('${WINDOWS_APP_ID}').Show([Windows.UI.Notifications.ToastNotification]::new($xml))`,
 ].join('; ')
 
 const clip = (text: string, max: number): string => {

@@ -4,7 +4,7 @@
 **Category:** Security & Guardrails · **Version:** 1.0.0
 
 ## What it does
-Before a Bash install runs, every package it names is checked twice: offline against ~340 popular packages for one- or two-letter typos (`lodahs`, `expresss`, `reqeusts`), and online against its registry for names that do not exist (a hallucinated dependency is an open invitation to squatters), were first published under 30 days ago, or have a single release. A suspicious install is held back with the reasons, and goes through once you reply with **DEPS-OK**.
+Before a Bash install runs, every package it names is checked twice: offline against ~340 popular packages for one- or two-letter typos (`lodahs`, `expresss`, `reqeusts`), and online against its registry for names that do not exist (a hallucinated dependency is an open invitation to squatters), were first published under 30 days ago, or have a single release. A name close to a popular one is not held back when the registry shows it is established in its own right (a year old with five or more releases, like `ms` or `vuex`). A suspicious install is held back with the reasons, and goes through once you reply with **DEPS-OK**.
 
 ## Install
 ```
@@ -23,7 +23,7 @@ Check the names. If they are intended, ask the user to reply with DEPS-OK, then 
 
 Put `DEPS-OK` anywhere in your next prompt to allow the installs of that turn; packages installed that way are remembered and not flagged again.
 
-Covered: `npm install|i|add`, `npm exec`, `npx`, `pnpm add|install|dlx`, `yarn add|global add|dlx`, `bun add|install`, `bunx`, `pip install`, `python -m pip install`, `pipx install`, `uv add`, `uv pip install`, `poetry add`, `cargo add|install`, `go get|install`. Paths, URLs, git sources, `-r requirements.txt` and tarballs are skipped.
+Covered (leading options like `pnpm --filter web add` and `yarn workspace web add` included): `npm install|i|add`, `npm exec`, `npx`, `pnpm add|install|dlx`, `yarn add|global add|dlx`, `bun add|install`, `bunx`, `pip install`, `python -m pip install`, `pipx install`, `uv add`, `uv pip install`, `poetry add`, `cargo add|install`, `go get|install`. Paths, URLs, git sources, `-r requirements.txt` and tarballs are skipped.
 
 ## Configuration
 | Key | Type | Default | Description |

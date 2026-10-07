@@ -1,9 +1,10 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-type Rule = { label: string; pattern: RegExp }
+/** `isOutput`: the language's way to print, which is a program's real output in a command-line entry point. */
+type Rule = { label: string; pattern: RegExp; isOutput?: boolean }
 
 const JAVASCRIPT: Rule[] = [
-  { label: 'console.log', pattern: /\bconsole\.(log|debug|trace|dir|table)\s*\(/ },
+  { label: 'console.log', pattern: /\bconsole\.(log|debug|trace|dir|table)\s*\(/, isOutput: true },
   { label: 'debugger', pattern: /^\s*debugger\s*;?\s*(\/\/.*)?$/ },
 ]
 
@@ -19,7 +20,7 @@ const RULES_BY_EXTENSION: Record<string, Rule[]> = {
   vue: JAVASCRIPT,
   svelte: JAVASCRIPT,
   py: [
-    { label: 'print()', pattern: /^\s*print\s*\(/ },
+    { label: 'print()', pattern: /^\s*print\s*\(/, isOutput: true },
     { label: 'breakpoint', pattern: /\b(breakpoint\(\)|i?pdb\.set_trace\(\))/ },
   ],
   rb: [
@@ -28,9 +29,16 @@ const RULES_BY_EXTENSION: Record<string, Rule[]> = {
   ],
   php: [{ label: 'var_dump', pattern: /(^|[^\w>:$.])(var_dump|print_r|dd|dump)\s*\(/ }],
   rs: [{ label: 'dbg!', pattern: /\bdbg!\s*[([{]/ }],
-  go: [{ label: 'fmt.Println', pattern: /\bfmt\.Println\s*\(/ }],
-  java: [{ label: 'System.out', pattern: /\bSystem\.(out|err)\.print(ln)?\s*\(|\.printStackTrace\s*\(/ }],
+  go: [{ label: 'fmt.Println', pattern: /\bfmt\.Println\s*\(/, isOutput: true }],
+  java: [
+    { label: 'System.out', pattern: /\bSystem\.(out|err)\.print(ln)?\s*\(/, isOutput: true },
+    { label: 'printStackTrace', pattern: /\.printStackTrace\s*\(/ },
+  ],
 }
+
+/** A command-line program, whose printing is its output: a shebang, Python's __main__ guard, Go's package main, Java's main(). */
+const PROGRAM = /^#!|\bif\s+__name__\s*==\s*['"]__main__['"]|^package\s+main\b|\bstatic\s+void\s+main\s*\(/m
+const PROGRAM_FILE = /(^|[\\/])(__main__|manage)\.py$/
 
 const NOT_SOURCE =
   /(^|\/)(tests?|__tests__|specs?|scripts?|fixtures?|examples?|e2e|bin)\/|\.(test|spec|stories)\.[^/]+$|(^|\/)(conftest|test_[^/]*)\.py$|_test\.(go|py)$|\.config\.[^/]+$/
@@ -105,8 +113,13 @@ export const register: Register = on => {
       before = e._host === undefined ? await readLocal($, e.file_path) : ''
     }
 
-    const added = debugLines(newLines(before, after), rules)
-    const removed = debugLines(newLines(after, before), rules)
+    // In a program's entry point print() and console.log are the output: only debugger-style rules apply there.
+    const usesOutput = rules.some(rule => rule.isOutput === true)
+    const fileText = usesOutput ? (e.tool === 'Write' ? after : `${e._host === undefined ? await readLocal($, e.file_path) : ''}\n${after}`) : ''
+    const isProgram = usesOutput && (PROGRAM_FILE.test(e.file_path) || PROGRAM.test(fileText))
+    const checked = isProgram ? rules.filter(rule => rule.isOutput !== true) : rules
+    const added = debugLines(newLines(before, after), checked)
+    const removed = debugLines(newLines(after, before), checked)
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError) return ran
 

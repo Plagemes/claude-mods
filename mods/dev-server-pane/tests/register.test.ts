@@ -223,6 +223,21 @@ test('tells the model once that a server runs, and keeps only the last 500 lines
   await dev($, 'stop')
 })
 
+test('a progress line that is redrawn and never ended does not grow without bound', SERVER_TEST, async ($, on) => {
+  const w = world(on, NODE_APP)
+  await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  await dev($)
+  for (let i = 0; i < 60; i += 1) w.server.write(Array.from({ length: 100 }, (_, j) => `\rbuilding ${i * 100 + j}%`).join(''))
+  await w.clock.advance(200)
+
+  const ui = await mountPane($, 'desktop')
+  const texts = (await ui.findAll({ type: 'Text' })).map(text => text.text)
+  expect(texts).toContain('building 5999%')
+  expect(texts.every(text => text.length <= 2_001)).toBe(true)
+  await ui.unmount()
+  await dev($, 'stop')
+})
+
 test('detects Django with its virtualenv, and says when nothing is found', SERVER_TEST, async ($, on) => {
   const w = world(on, { '/app/manage.py': '', '/app/.venv/bin/python': '' })
   await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
