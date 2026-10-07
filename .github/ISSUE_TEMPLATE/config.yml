@@ -3,3 +3,9 @@ contact_links:
   - name: Visit the Showcase
     url: https://plagemes.github.io/claude-mods/
     about: Explore all available mods and see examples
+  - name: Ask a question or share an idea
+    url: https://github.com/Plagemes/claude-mods/discussions
+    about: Questions, ideas and show-and-tell go to Discussions
+  - name: Report a security vulnerability
+    url: https://github.com/Plagemes/claude-mods/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue
