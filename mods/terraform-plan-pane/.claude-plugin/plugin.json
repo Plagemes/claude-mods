@@ -1,0 +1,11 @@
+{
+  "name": "terraform-plan-pane",
+  "version": "1.0.0",
+  "description": "Shows terraform plan as a clear pane of resources to create, change and destroy.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#terraform-plan-pane",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "devops", "terraform", "opentofu"],
+  "types": "./types/index.d.ts"
+}

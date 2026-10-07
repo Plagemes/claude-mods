@@ -1,0 +1,25 @@
+{
+  "name": "django-migrate-watch",
+  "version": "1.0.0",
+  "description": "After Django model changes, checks for missing migrations and offers to create them.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#django-migrate-watch",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "stacks", "django", "migrations"],
+  "userConfig": {
+    "debounceSeconds": {
+      "type": "number",
+      "title": "Debounce (seconds)",
+      "description": "How long model edits must settle before the migration check runs.",
+      "default": 3
+    },
+    "timeoutSeconds": {
+      "type": "number",
+      "title": "Check timeout (seconds)",
+      "description": "How long `manage.py makemigrations --check --dry-run` may take.",
+      "default": 60
+    }
+  },
+  "types": "./types/index.d.ts"
+}

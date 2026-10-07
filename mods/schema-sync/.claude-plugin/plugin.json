@@ -1,0 +1,25 @@
+{
+  "name": "schema-sync",
+  "version": "1.0.0",
+  "description": "After Prisma or Drizzle schema edits, regenerates the client and warns when a migration is missing.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#schema-sync",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "stacks", "prisma", "drizzle"],
+  "userConfig": {
+    "generate": {
+      "type": "boolean",
+      "title": "Regenerate the Prisma client",
+      "description": "Run `prisma generate` after each Prisma schema edit.",
+      "default": true
+    },
+    "debounceSeconds": {
+      "type": "number",
+      "title": "Debounce (seconds)",
+      "description": "How long schema edits must settle before generating and checking.",
+      "default": 2
+    }
+  },
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "dev-server-pane",
+  "version": "1.0.0",
+  "description": "Starts your dev server in the background and shows its errors in a live pane.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#dev-server-pane",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "devops", "dev-server", "pane"],
+  "userConfig": {
+    "command": {
+      "type": "string",
+      "title": "Dev command",
+      "description": "The command /dev runs, e.g. `pnpm dev --port 4000`. Empty: detected from package.json, manage.py, Rails, Phoenix or Laravel.",
+      "default": ""
+    }
+  },
+  "types": "./types/index.d.ts"
+}
