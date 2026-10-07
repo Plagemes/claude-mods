@@ -9,6 +9,7 @@ const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 12, 0, 0)
 const RAW = 'https://raw.githubusercontent.com/plagemes/claude-mods/main/'
 const BIN = '/opt/claude-code/bin/claude'
+const HOME = '/Users/me'
 
 const MARKETPLACE = {
   name: 'claude-mods',
@@ -51,13 +52,25 @@ type WorldOptions = {
   store?: Record<string, unknown>
   isPlaced?: boolean
   copies?: boolean
+  listFails?: boolean
+  /** The desktop app: no CLAUDE_CODE_EXECPATH, its environment, its folders by path, and the engine version. */
+  desktop?: { env: Record<string, string>; folders: Record<string, { name: string; kind: 'file' | 'dir' }[]>; version: string; bin: string }
 }
 
 /** Stands for everything beneath the plugin: GitHub, the claude CLI, the surface. */
 function world(on: On, options: WorldOptions = {}) {
   const clock = mock.clock(on, { now: NOW })
   mock.store(on, options.store ?? {})
-  mock.env(on, { CLAUDE_CODE_EXECPATH: BIN })
+  const bin = options.desktop?.bin ?? BIN
+  mock.env(on, options.desktop === undefined ? { CLAUDE_CODE_EXECPATH: BIN } : options.desktop.env)
+  if (options.desktop !== undefined) {
+    const { folders, version } = options.desktop
+    on('session.version', () => ({ value: { version } }))
+    on('fs.list', ($, e) => {
+      const entries = folders[e.path ?? '']
+      return entries === undefined ? { deny: `ENOENT: ${e.path}` } : { value: entries.map(entry => ({ ...entry, size: 0, mtimeMs: 0, isLink: false })) }
+    })
+  }
   const net = { isOnline: options.isOnline ?? true }
   const installed = new Map(Object.entries(options.installed ?? {}))
   const marketplaces = [...(options.marketplaces ?? ['claude-mods'])]
@@ -102,12 +115,15 @@ function world(on: On, options: WorldOptions = {}) {
     }
   })
   on('process.run', ($, e) => {
-    const [bin = '', ...args] = e.argv
-    expect(bin).toBe(BIN)
+    const [bin0 = '', ...args] = e.argv
+    expect(bin0).toBe(bin)
     calls.push(args.join(' '))
     const [, verb, target = ''] = args
     const name = target.split('@')[0] ?? ''
     if (args.join(' ') === 'plugin list --json') {
+      if (options.listFails === true) {
+        return { deny: 'spawn claude ENOENT' }
+      }
       return result(json([...installed].map(([id, one]) => ({ id: `${id}@claude-mods`, ...one }))))
     }
     if (args.join(' ') === 'plugin marketplace list --json') {
@@ -505,4 +521,41 @@ test('without mods-hub installing works exactly as before', async ($, on) => {
   const w = world(on, { marketplaces: [] })
   expect((await mods($, 'install cost-meter')).text).toBe('✓ Installed cost-meter 1.1.0. Run /reload-plugins to activate it.')
   expect(w.installed.has('cost-meter')).toBe(true)
+})
+
+test('when the installed mods cannot be read, the store says so instead of counting zero', async ($, on) => {
+  const w = world(on, { listFails: true })
+  const report = await mods($, 'refresh')
+  expect(report.text).toBe('◆ 6 mods in 4 categories, install status unavailable (spawn claude ENOENT).')
+  const updated = await mods($, 'update-all')
+  expect(updated.text).toBe('✗ Could not read the installed mods: spawn claude ENOENT')
+  expect(w.calls.some(call => call.startsWith('plugin update'))).toBe(false)
+  const ui = await $.ui.mount({ ...pane(), surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'install status unknown' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /▲ Install status unavailable/ }))?.props).toMatchObject({ wrap: 'wrap' })
+  expect(await ui.find({ type: 'Text', text: /0 installed/ })).toBeUndefined()
+})
+
+test('in the desktop app, where claude is not on PATH, the store runs the claude the app installed', async ($, on) => {
+  // The macOS layout: its absolute paths read the same on every host the tests run on. The Windows layout
+  // (%APPDATA%\Claude\claude-code\<version>\<build>\claude.exe) is covered by the path helpers in catalog.test.ts.
+  const root = `${HOME}/Library/Application Support/Claude/claude-code`
+  const w = world(on, {
+    installed: OUTDATED,
+    desktop: {
+      env: { HOME },
+      version: '2.1.286',
+      bin: `${root}/2.1.286/635c/claude`,
+      folders: {
+        [root]: [{ name: '2.1.284', kind: 'dir' }, { name: '2.1.286', kind: 'dir' }],
+        [`${root}/2.1.284`]: [{ name: 'aaaa', kind: 'dir' }],
+        [`${root}/2.1.284/aaaa`]: [{ name: 'claude', kind: 'file' }],
+        [`${root}/2.1.286`]: [{ name: '635c', kind: 'dir' }],
+        [`${root}/2.1.286/635c`]: [{ name: 'claude', kind: 'file' }],
+      },
+    },
+  })
+  const report = await mods($, 'refresh')
+  expect(report.text).toBe('◆ 6 mods in 4 categories, 2 installed, 1 update available.')
+  expect(w.calls).toContain('plugin list --json')
 })

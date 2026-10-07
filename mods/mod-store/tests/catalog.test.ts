@@ -23,7 +23,7 @@ import {
   trimReadme,
   updatesOf,
 } from '../hooks/catalog'
-import { argv, claudeBinary, parseInstalled, parseMarketplaceNames, parseOutcome } from '../hooks/cli'
+import { argv, claudeBinary, desktopRoots, isClaudeFile, joinPath, parseInstalled, parseMarketplaceNames, parseOutcome, versionOrder } from '../hooks/cli'
 import type { StoreInstalled } from '../types'
 
 const SOURCE = { repository: 'plagemes/claude-mods', branch: 'main' }
@@ -256,6 +256,21 @@ describe('claude plugin CLI', () => {
     expect(claudeBinary('C:\\Program Files\\Claude\\claude.exe')).toBe('C:\\Program Files\\Claude\\claude.exe')
     expect(claudeBinary('/usr/bin/node')).toBe('claude')
     expect(claudeBinary(undefined)).toBe('claude')
+  })
+
+  test('looks for the desktop app’s claude under %APPDATA% on Windows and Application Support on macOS', () => {
+    expect(desktopRoots('C:\\Users\\me\\AppData\\Roaming', undefined)).toEqual(['C:\\Users\\me\\AppData\\Roaming\\Claude\\claude-code'])
+    expect(desktopRoots(undefined, '/Users/me')).toEqual(['/Users/me/Library/Application Support/Claude/claude-code'])
+    expect(desktopRoots('', '')).toEqual([])
+    expect(joinPath('C:\\Users\\me\\AppData\\Roaming\\Claude\\claude-code', '2.1.286', '635c', 'claude.exe'))
+      .toBe('C:\\Users\\me\\AppData\\Roaming\\Claude\\claude-code\\2.1.286\\635c\\claude.exe')
+    expect(joinPath('/Users/me/Library/Application Support/Claude/claude-code', '2.1.286', 'claude'))
+      .toBe('/Users/me/Library/Application Support/Claude/claude-code/2.1.286/claude')
+    expect(isClaudeFile('claude.exe')).toBe(true)
+    expect(isClaudeFile('Claude')).toBe(true)
+    expect(isClaudeFile('claude-helper.exe')).toBe(false)
+    expect(versionOrder(['2.1.284', '2.1.290', '2.1.286'], '2.1.286', compareVersions)).toEqual(['2.1.286', '2.1.290', '2.1.284'])
+    expect(versionOrder(['2.1.284', '2.1.290'], '2.1.286', compareVersions)).toEqual(['2.1.290', '2.1.284'])
   })
 
   test('reads --json outcomes, failures and plain-text errors', () => {

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { writeTargets } from './bash'
+import { fromGitBash, writeTargets } from './bash'
 import { redactSummary } from './shared/secrets'
 
 /** `isLiteral`: a tool's own path field (Edit, Write): no shell reads it, so `$` and backticks are plain characters. */
@@ -69,12 +69,14 @@ const expand = (path: string, jail: Jail, cwd: string, isLiteral = false): strin
     result = jail.home + result.slice(1)
   }
   // `app/routes/$slug.tsx` (Remix, TanStack Router) written with Edit/Write is a real file name, not an expansion.
-  if (isLiteral) return result
-  result = result
-    .replace(/\$\{?HOME\}?(?![\w])/g, () => jail.home ?? '$HOME')
-    .replace(/\$\{?PWD\}?(?![\w])/g, cwd)
-    .replace(/\$\{?TMPDIR\}?(?![\w])/g, () => jail.tmp ?? '$TMPDIR')
-  return /[$`]|^~/.test(result) ? undefined : result
+  if (!isLiteral) {
+    result = result
+      .replace(/\$\{?HOME\}?(?![\w])/g, () => jail.home ?? '$HOME')
+      .replace(/\$\{?PWD\}?(?![\w])/g, cwd)
+      .replace(/\$\{?TMPDIR\}?(?![\w])/g, () => jail.tmp ?? '$TMPDIR')
+    if (/[$`]|^~/.test(result)) return undefined
+  }
+  return jail.sep === '\\' ? fromGitBash(result) : result
 }
 
 /** A glob is checked by the folder it expands in; `..` after a glob cannot be followed. */
