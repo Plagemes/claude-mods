@@ -1,0 +1,34 @@
+{
+  "name": "context-gauge",
+  "version": "1.0.0",
+  "description": "A slim band above the prompt showing how full the context window is.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#context-gauge",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "cost",
+    "band",
+    "context",
+    "status"
+  ],
+  "userConfig": {
+    "warnAt": {
+      "type": "number",
+      "title": "Yellow from (%)",
+      "description": "Context percentage at which the bar turns yellow.",
+      "default": 60
+    },
+    "alertAt": {
+      "type": "number",
+      "title": "Red and /compact hint from (%)",
+      "description": "Context percentage above which the bar turns red and suggests /compact.",
+      "default": 75
+    }
+  },
+  "types": "./types/index.d.ts"
+}

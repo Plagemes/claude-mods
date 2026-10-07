@@ -1,0 +1,27 @@
+{
+  "name": "idle-nudge",
+  "version": "1.0.0",
+  "description": "Reminds you about uncommitted changes after a stretch of inactivity.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#idle-nudge",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "productivity",
+    "git",
+    "reminder",
+    "toast"
+  ],
+  "userConfig": {
+    "idleMinutes": {
+      "type": "number",
+      "title": "Idle minutes",
+      "description": "Minutes without a prompt before you are reminded about uncommitted changes.",
+      "default": 20
+    }
+  }
+}

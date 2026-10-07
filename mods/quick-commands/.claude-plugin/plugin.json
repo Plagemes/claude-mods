@@ -1,0 +1,45 @@
+{
+  "name": "quick-commands",
+  "version": "1.0.0",
+  "description": "Short aliases like /t, /l and /b that run your test, lint and build commands.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#quick-commands",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "productivity",
+    "shortcuts",
+    "test",
+    "lint"
+  ],
+  "userConfig": {
+    "testCommand": {
+      "type": "string",
+      "title": "Test command",
+      "description": "Command /t runs. Leave empty to detect it (package.json, Makefile, Cargo.toml, pyproject.toml, go.mod).",
+      "default": ""
+    },
+    "lintCommand": {
+      "type": "string",
+      "title": "Lint command",
+      "description": "Command /l runs. Leave empty to detect it.",
+      "default": ""
+    },
+    "buildCommand": {
+      "type": "string",
+      "title": "Build command",
+      "description": "Command /b runs. Leave empty to detect it.",
+      "default": ""
+    },
+    "typecheckCommand": {
+      "type": "string",
+      "title": "Typecheck command",
+      "description": "Command /tc runs. Leave empty to detect it.",
+      "default": ""
+    }
+  }
+}

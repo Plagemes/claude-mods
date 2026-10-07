@@ -1,0 +1,34 @@
+{
+  "name": "cache-hit-meter",
+  "version": "1.0.0",
+  "description": "Shows what share of input tokens came from the prompt cache.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#cache-hit-meter",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "cost",
+    "cache",
+    "tokens",
+    "status"
+  ],
+  "userConfig": {
+    "warnBelow": {
+      "type": "number",
+      "title": "Warn below (%)",
+      "description": "Toast once when the session's cache share is under this percentage.",
+      "default": 30
+    },
+    "afterTurns": {
+      "type": "number",
+      "title": "Warn after (turns)",
+      "description": "Number of turns the session must have before the low-cache toast can fire.",
+      "default": 5
+    }
+  },
+  "types": "./types/index.d.ts"
+}

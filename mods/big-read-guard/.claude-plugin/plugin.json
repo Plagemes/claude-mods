@@ -1,0 +1,27 @@
+{
+  "name": "big-read-guard",
+  "version": "1.0.0",
+  "description": "Stops full reads of huge files and nudges toward offset/limit or grep.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#big-read-guard",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "cost",
+    "guard",
+    "read",
+    "tokens"
+  ],
+  "userConfig": {
+    "maxKb": {
+      "type": "number",
+      "title": "Largest full read (KB)",
+      "description": "Files bigger than this must be read with offset/limit or searched with Grep.",
+      "default": 256
+    }
+  }
+}

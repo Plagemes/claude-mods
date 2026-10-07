@@ -1,0 +1,34 @@
+{
+  "name": "compact-coach",
+  "version": "1.0.0",
+  "description": "Suggests /compact at natural breakpoints, before the context gets tight.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#compact-coach",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "cost",
+    "context",
+    "compact",
+    "toast"
+  ],
+  "userConfig": {
+    "minPercent": {
+      "type": "number",
+      "title": "Suggest from context fill (%)",
+      "description": "Only suggest /compact when the context window is at least this full.",
+      "default": 60
+    },
+    "cooldownTurns": {
+      "type": "number",
+      "title": "Turns between suggestions",
+      "description": "Do not suggest again until this many turns have passed.",
+      "default": 10
+    }
+  },
+  "types": "./types/index.d.ts"
+}

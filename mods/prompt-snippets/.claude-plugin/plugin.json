@@ -1,0 +1,27 @@
+{
+  "name": "prompt-snippets",
+  "version": "1.0.0",
+  "description": "Type :review:, :tests: or your own shortcodes and they expand into full prompts.",
+  "author": {
+    "name": "Plagemes",
+    "url": "https://github.com/plagemes"
+  },
+  "homepage": "https://plagemes.github.io/claude-mods/#prompt-snippets",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-mods",
+    "productivity",
+    "snippets",
+    "shortcodes",
+    "prompt"
+  ],
+  "userConfig": {
+    "snippets": {
+      "type": "string",
+      "title": "Your snippets (JSON)",
+      "description": "A JSON object of shortcode to prompt, e.g. {\"ship\": \"Run the tests, then commit with a clear message.\"}. Snippets added with /snippet-add override these.",
+      "default": "{}"
+    }
+  }
+}
