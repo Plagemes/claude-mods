@@ -182,7 +182,7 @@ export const register: Register = on => {
 
       if (added.length > 0) {
         $.ui.toast(
-          `todo-tracker: ${added.length} marker${added.length === 1 ? '' : 's'} added this turn (${summary(added)}). /todos-added lists them`,
+          `${added.length} marker${added.length === 1 ? '' : 's'} added this turn (${summary(added)}). /todos-added lists them`,
         )
       }
     }

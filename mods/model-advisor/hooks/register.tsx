@@ -81,7 +81,7 @@ async function advise($: EngineInterface, text: string, settings: Settings): Pro
   await update($, lastSuggested, before => ({ ...before, [model]: count }))
   await update($, hint, () => shown)
 
-  if (isFresh && settings.display !== 'band') $.ui.toast(`${NAME}: ${headline(shown)}`)
+  if (isFresh && settings.display !== 'band') $.ui.toast(headline(shown))
 }
 
 /** `advise`, its failure logged rather than thrown: a suggestion is never worth an error. */
@@ -96,7 +96,7 @@ async function adviseQuietly($: EngineInterface, text: string, settings: Setting
 /** Puts `/model <alias>` in the prompt box for the person to send, and clears the hint. */
 async function typeSwitch($: EngineInterface, model: string): Promise<void> {
   const filled = await $.prompt.fill({ text: `/model ${model}` })
-  if (!filled.isFilled) $.ui.toast(`${NAME}: type /model ${model} to switch`)
+  if (!filled.isFilled) $.ui.toast(`Type /model ${model} to switch`)
   await update($, hint, () => null)
 }
 
@@ -128,7 +128,7 @@ export const register: Register = (on, options: PluginOptions) => {
     await update($, isMuted, () => willMute)
     if (willMute) await update($, hint, () => null)
 
-    return { text: willMute ? `${NAME}: suggestions off for this session.` : `${NAME}: suggestions on.` }
+    return { text: willMute ? 'Suggestions off for this session.' : 'Suggestions on.' }
   })
 
   on('prompt.submit', async ($, e, next) => {

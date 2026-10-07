@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 
 type Rule = { label: string; marker: RegExp; files: RegExp }
 
@@ -34,7 +34,9 @@ const TEST_FILE_NAMES: readonly RegExp[] = [
 /** Rust keeps its tests inside the source files, so every .rs file is checked. */
 const ALWAYS_CHECKED = /\.rs$/
 
-const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
+const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
+/** Words the person typed (or sent from a phone or the SDK, or a plugin sent as theirs); never a notification or a peer. */
+const isPerson = (origin: PromptOrigin): boolean => PERSON_ORIGINS.has(origin.kind) || (origin.kind === 'plugin' && origin.asUser === true)
 const DEFAULT_ALLOW_WORD = 'SKIP-OK'
 
 /** Windows paths are matched with forward slashes, so `tests\\` folders count too. */
@@ -102,8 +104,11 @@ export const register: Register = (on, options) => {
   let isAllowed = false
 
   on('prompt.submit', (_$, e, next) => {
-    if (PERSON_ORIGINS.has(e.origin.kind)) {
+    if (isPerson(e.origin)) {
       isAllowed = allowWord !== '' && e.text.includes(allowWord)
+    } else if (e.turnId === undefined) {
+      // A turn nobody typed (a notification, a schedule, a peer) starts without the approval of an earlier prompt.
+      isAllowed = false
     }
 
     return next(e)

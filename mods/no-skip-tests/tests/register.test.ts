@@ -113,3 +113,15 @@ test('Windows paths with backslashes are recognised as test files', async ($, on
   const result = await edit($, 'C:\\repo\\tests\\test_api.py', 'def test_a():', '@pytest.mark.skip\ndef test_a():')
   expect(result.deny).toContain('@pytest.mark.skip')
 })
+
+test('regression: SKIP-OK does not carry into a turn the person did not start', async ($, on) => {
+  answerEngine(on)
+  const skip = () => edit($, '/p/a.test.ts', "it('x')", "it.skip('x')")
+  await $.prompt.submit({ text: 'please skip the flaky test, SKIP-OK', wait: false, origin: { kind: 'composer' } })
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await skip()).deny).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect((await skip()).deny).toContain('SKIP-OK')
+})

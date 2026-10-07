@@ -97,7 +97,7 @@ test('with useModel the classifier model decides after the prompt entered, and i
   await clock.advance(1)
   expect(engine.asked[0]?.model).toBe('haiku')
   expect(engine.asked[0]?.system).toContain('light, standard or heavy')
-  expect(engine.toasts).toEqual(['model-advisor: Hard task (rated heavy by haiku): /model opus is stronger'])
+  expect(engine.toasts).toEqual(['Hard task (rated heavy by haiku): /model opus is stronger'])
 
   engine.classifierReply = 'no idea'
   await $.prompt.submit(typed('fix the typo in the README'))
@@ -133,7 +133,7 @@ test('Type /model fills the prompt, the same hint then rests a few prompts, Mute
     origin: { kind: 'composer' },
     presentation: { isFullscreen: false, columns: 80 },
   })
-  expect(run.text).toBe('model-advisor: suggestions on.')
+  expect(run.text).toBe('Suggestions on.')
   await $.prompt.submit(typed('reformat this file'))
   expect(await ui.find({ type: 'Button', key: 'use' })).toBeDefined()
   await ui.unmount()

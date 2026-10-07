@@ -22,7 +22,7 @@ When a turn of Claude's edited TypeScript or Python files, typecheck-gate runs y
 
 ## Usage
 - Status line: `⧗ typecheck: running tsc…`, then `✓ types: clean (tsc)` or `✗ types: 4 type errors (tsc)`.
-- Toast: `typecheck-gate: 4 type errors (tsc)`. In autofix mode it reads `… asking Claude to fix them (round 1 of 3)`.
+- Toast: `4 type errors (tsc)`. In autofix mode it reads `… asking Claude to fix them (round 1 of 3)`.
 - `/typecheck` checks every TS and Python file edited this session right away, or the working directory's `tsconfig.json` project if none were edited. It prints the errors in the transcript, where Claude reads them too.
 
 ## Configuration

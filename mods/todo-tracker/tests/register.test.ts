@@ -59,7 +59,7 @@ test('toasts the count at turn end and /todos-added lists file:line items for an
   )
 
   expect(world.toasts).toEqual([
-    'todo-tracker: 2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them',
+    '2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them',
   ])
   expect((await todos($)).split('\n')).toEqual([
     'Markers added in the latest turn that added any (2):',
@@ -80,7 +80,7 @@ test('a Write counts only the markers the old file did not have', async ($, on) 
   )
 
   expect(world.toasts).toEqual([
-    'todo-tracker: 2 markers added this turn (1 HACK, 1 XXX). /todos-added lists them',
+    '2 markers added this turn (1 HACK, 1 XXX). /todos-added lists them',
   ])
   expect((await todos($)).split('\n').slice(1)).toEqual(['  lib.py:3  # HACK: new', '  lib.py:4  # XXX also new'])
 })

@@ -29,16 +29,16 @@ export const register: Register = on => {
     const current = await read($, status)
     if (arg === 'on') {
       await update($, status, () => ({ ...OFF, isOn: true }))
-      return { text: 'test-first: TDD mode on. Production code stays locked each turn until a test is written.', context: [MODEL_BRIEFING] }
+      return { text: 'TDD mode on. Production code stays locked each turn until a test is written.', context: [MODEL_BRIEFING] }
     }
     if (arg === 'off') {
       await update($, status, () => OFF)
-      return { text: 'test-first: TDD mode off.', context: ['TDD mode is off: production code may be edited freely again.'] }
+      return { text: 'TDD mode off.', context: ['TDD mode is off: production code may be edited freely again.'] }
     }
     return {
       text: current.isOn
-        ? `test-first: TDD mode is on, phase ${current.phase}. Use /tdd off to stop.`
-        : 'test-first: TDD mode is off. Use /tdd on to start.',
+        ? `TDD mode is on, phase ${current.phase}. Use /tdd off to stop.`
+        : 'TDD mode is off. Use /tdd on to start.',
     }
   })
 
@@ -102,22 +102,27 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const isUnlocked = current.hasTestThisTurn || current.lastRun?.isPassed === false
     const isNarrow = e.props.bodyColumns < NARROW_COLUMNS
+    // Other plugins' bands draw beneath this one rather than being replaced by it.
+    const below = await next(e)
     return (
-      <Box flexDirection="row" gap={1} alignItems="center">
-        <Text bold>TDD</Text>
-        {PHASES.map((phase, index) => (
-          <Text
-            bold={phase === current.phase}
-            dimColor={phase !== current.phase}
-            color={phase === current.phase ? PHASE_COLORS[phase] : undefined}
-          >
-            {phase === current.phase ? '●' : '○'} {phase}
-            {index < PHASES.length - 1 ? ' →' : ''}
-          </Text>
-        ))}
-        <Text color={isUnlocked ? 'success' : 'warning'}>{isUnlocked ? '· code open' : '· code locked'}</Text>
-        {!isNarrow && <Text dimColor>· {hintFor(current)}</Text>}
-        <Button key="off" label="TDD off" plain dimColor onPress={() => void update($, status, () => OFF)} />
+      <Box flexDirection="column">
+        <Box key="tdd" flexDirection="row" gap={1} alignItems="center">
+          <Text bold>TDD</Text>
+          {PHASES.map((phase, index) => (
+            <Text
+              bold={phase === current.phase}
+              dimColor={phase !== current.phase}
+              color={phase === current.phase ? PHASE_COLORS[phase] : undefined}
+            >
+              {phase === current.phase ? '●' : '○'} {phase}
+              {index < PHASES.length - 1 ? ' →' : ''}
+            </Text>
+          ))}
+          <Text color={isUnlocked ? 'success' : 'warning'}>{isUnlocked ? '· code open' : '· code locked'}</Text>
+          {!isNarrow && <Text dimColor>· {hintFor(current)}</Text>}
+          <Button key="off" label="TDD off" plain dimColor onPress={() => void update($, status, () => OFF)} />
+        </Box>
+        {below}
       </Box>
     )
   })

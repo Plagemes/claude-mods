@@ -86,7 +86,7 @@ test('type-checks after an editing turn and hands the errors to Claude with the 
     { argv: ['/repo/node_modules/.bin/tsc', '--noEmit', '--pretty', 'false', '-p', '/repo/tsconfig.json'], cwd: '/repo' },
   ])
   expect(statuses).toEqual(['⧗ typecheck: running tsc…', '✗ types: 2 type errors (tsc)'])
-  expect(toasts).toEqual(['typecheck-gate: 2 type errors (tsc)'])
+  expect(toasts).toEqual(['2 type errors (tsc)'])
   expect(notes).toEqual([
     [
       'typecheck-gate: tsc reports 2 type errors after your last turn. Fix them before moving on, unless the user says otherwise:',
@@ -129,7 +129,7 @@ test('autofix asks Claude to fix the errors, at most maxAutofixRounds times in a
 
   expect(prompts).toHaveLength(2)
   expect(prompts[0]).toStartWith('typecheck-gate: tsc reports 2 type errors after your last turn. Fix them, then type-check again to confirm:')
-  expect(toasts.at(-1)).toBe('typecheck-gate: 2 type errors still stand after 2 fix rounds; over to you')
+  expect(toasts.at(-1)).toBe('2 type errors still stand after 2 fix rounds; over to you')
 
   await $.prompt.submit(NEXT_PROMPT)
   expect(notes).toHaveLength(1)
@@ -137,7 +137,7 @@ test('autofix asks Claude to fix the errors, at most maxAutofixRounds times in a
   await $.turn.complete(TURN_END)
   await clock.settle()
   expect(prompts.filter(text => text.startsWith('typecheck-gate'))).toHaveLength(3)
-  expect(toasts.at(-1)).toBe('typecheck-gate: 2 type errors, asking Claude to fix them (round 1 of 2)')
+  expect(toasts.at(-1)).toBe('2 type errors, asking Claude to fix them (round 1 of 2)')
 })
 
 test('/typecheck runs the configured Python checker on the files edited so far', async ($, on) => {
@@ -154,7 +154,7 @@ test('/typecheck runs the configured Python checker on the files edited so far',
     { argv: ['mypy', '--no-error-summary', '--no-color-output', '--show-column-numbers', '/repo/py/app.py'], cwd: '/repo/py' },
   ])
   expect(shown.text).toBe(
-    'typecheck-gate: mypy reports 1 type error:\n  py/app.py:4:12  return-value  Incompatible return value type (got "str", expected "int")',
+    'mypy reports 1 type error:\n  py/app.py:4:12  return-value  Incompatible return value type (got "str", expected "int")',
   )
 })
 

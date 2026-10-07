@@ -111,6 +111,8 @@ export const register: Register = (on, options) => {
       await update($, pendingAtom, () => [])
       await $.prompt.submit({ text: updatePrompt(pending), asUser: true })
     }
+    // Other plugins' bands draw beneath this one rather than being replaced by it.
+    const below = await next(e)
 
     return (
       <Box flexDirection="column">
@@ -126,6 +128,7 @@ export const register: Register = (on, options) => {
           <Button key="update" label="Ask Claude to update docs" hotkey="u" variant="primary" onPress={() => void askClaude()} />
           <Button key="dismiss" label="Dismiss" hotkey="d" role="dismiss" onPress={() => void update($, pendingAtom, () => [])} />
         </Box>
+        {below}
       </Box>
     )
   })

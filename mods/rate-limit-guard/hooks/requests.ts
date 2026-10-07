@@ -1,6 +1,26 @@
 const FETCH_PROGRAMS = new Set(['curl', 'wget', 'http', 'https', 'httpie', 'xh', 'xhs'])
-const WRAPPERS = new Set(['sudo', 'env', 'time', 'nohup', 'nice', 'exec', 'timeout', 'stdbuf', 'xargs', 'do', 'then', 'else'])
-const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-n', '-I', '-L', '-P'])
+/** Commands that run the command after their own options, and those options that take a value. */
+const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
+  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-r', '-t', '--user', '--group', '--host', '--prompt', '--chdir']),
+  doas: new Set(['-u', '-C']),
+  env: new Set(['-u', '--unset', '-C', '--chdir']),
+  time: new Set(['-f', '--format', '-o', '--output']),
+  nohup: new Set(),
+  nice: new Set(['-n', '--adjustment']),
+  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata']),
+  exec: new Set(['-a']),
+  command: new Set(),
+  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+  stdbuf: new Set(['-i', '-o', '-e']),
+  xargs: new Set(['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file']),
+  do: new Set(),
+  then: new Set(),
+  else: new Set(),
+}
+const SHELL = /^(?:ba|z|da|k)?sh$/
+/** `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`. */
+const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+const MAX_NESTING = 3
 const URL_WITH_SCHEME = /^([a-z][a-z0-9+.-]*):\/\/([^/?#\\]*)/i
 const BARE_HOST = /^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#]|$)/i
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
@@ -65,11 +85,12 @@ const programOf = (words: readonly string[]): { name: string; args: string[] } |
   let index = 0
   while (index < words.length) {
     const word = words[index] ?? ''
+    const wrapper = basename(word)
+    const valued = Object.hasOwn(WRAPPERS, wrapper) ? WRAPPERS[wrapper] : undefined
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) index += 1
-    else if (WRAPPERS.has(basename(word))) {
-      const wrapper = basename(word)
+    else if (valued !== undefined) {
       index += 1
-      while (words[index]?.startsWith('-') === true) index += WRAPPER_OPTIONS_WITH_VALUE.has(words[index] ?? '') && wrapper === 'sudo' ? 2 : 1
+      while (words[index]?.startsWith('-') === true) index += valued.has(words[index] ?? '') ? 2 : 1
       if (wrapper === 'timeout') index += 1
     } else break
   }
@@ -111,10 +132,18 @@ const targetsOf = (name: string, args: readonly string[]): string[] => {
 }
 
 /** The external hosts a command sends curl, wget or httpie requests to, once per mention. */
-export const externalHosts = (command: string): string[] =>
+export const externalHosts = (command: string, depth = 0): string[] =>
   simpleCommands(command).flatMap(words => {
     const program = programOf(words)
-    if (program === undefined || !FETCH_PROGRAMS.has(program.name)) return []
+    if (program === undefined) return []
+    if (!FETCH_PROGRAMS.has(program.name)) {
+      // `bash -lc "curl …"` and `eval "curl …"` run their text as a command line of its own.
+      if (depth >= MAX_NESTING) return []
+      if (program.name === 'eval') return externalHosts(program.args.join(' '), depth + 1)
+      const flag = SHELL.test(program.name) ? program.args.findIndex(arg => SHELL_COMMAND_FLAG.test(arg)) : -1
+      const script = flag === -1 ? undefined : program.args[flag + 1]
+      return script === undefined ? [] : externalHosts(script, depth + 1)
+    }
     return targetsOf(program.name, program.args).flatMap(url => {
       const host = hostOf(url)
       return host === undefined || isLocalHost(host) ? [] : [host]
@@ -128,7 +157,7 @@ export type LoopUse = { iterations: number | undefined }
  * in the command slows them down. Undefined for a polite loop (one that sleeps or waits) or none.
  */
 export const loopOfFetches = (command: string): LoopUse | undefined => {
-  const text = /\b(?:ba|z)?sh\s+-c\b|\beval\b/.test(command) ? command : command.replace(/"[^"]*"|'[^']*'/g, '""')
+  const text = /\b(?:ba|z|da|k)?sh\s+(?:-[a-zA-Z]+\s+)*-[a-zA-Z]*c[a-zA-Z]*\b|\beval\b/.test(command) ? command : command.replace(/"[^"]*"|'[^']*'/g, '""')
   const start = LOOP_START.exec(text)
   const fetches = /\b(?:curl|wget|http|https|httpie|xh)\b/
   if (start !== null) {

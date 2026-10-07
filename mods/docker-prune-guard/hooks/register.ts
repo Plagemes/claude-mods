@@ -18,6 +18,8 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     const previous = latestPrompt
     if (isFromPerson(e.origin)) latestPrompt = e.text
+    // A turn nobody typed (a notification, a schedule, a peer) starts without the approval of an earlier prompt.
+    else if (e.turnId === undefined) latestPrompt = ''
     const result = await next(e)
     if (result.drop !== undefined) latestPrompt = previous
     return result

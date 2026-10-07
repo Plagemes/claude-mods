@@ -79,7 +79,7 @@ test('after a fail, edit, pass cycle it offers the lesson and saves it under Les
   const band = await $.ui.mount({ plugin: 'lessons-learned', surface: 'terminal', component: 'AbovePrompt', props: BAND })
   await band.press({ key: 'save' })
   expect(seen.files.get(CLAUDE_MD)).toBe(`# Shop\n\n## Lessons learned\n\n- Use pnpm, not npm.\n- ${LESSON}\n\n## Style\n\nTabs.\n`)
-  expect(seen.toasts).toEqual(['📘 lessons-learned: saved to CLAUDE.md'])
+  expect(seen.toasts).toEqual(['📘 Saved to CLAUDE.md'])
   expect(await band.find({ key: 'save' })).toBeUndefined()
 })
 
@@ -136,4 +136,16 @@ test('the lesson band keeps the bands beneath it on screen', async ($, on) => {
     expect(await band.find({ type: 'Text', text: 'engine band' })).toBeDefined()
     await band.unmount()
   }
+})
+
+test('regression: a failing command that only names a check does not start a fix cycle', async ($, on) => {
+  const seen = world(on, LESSON)
+  for (const named of ['cat jest.config.js', 'npm i -D vitest', 'git commit -m "fix eslint"']) {
+    await fixCycle($, seen, named, 'npx jest')
+  }
+  expect(seen.asked).toEqual([])
+
+  await fixCycle($, seen, 'cd web && npx jest cart', 'cd web && npx jest')
+  expect(seen.asked).toHaveLength(1)
+  expect(seen.asked[0]).toContain('Failed command: cd web && npx jest cart')
 })

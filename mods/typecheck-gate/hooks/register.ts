@@ -87,16 +87,16 @@ export const register: Register = (on, options) => {
       jobs = await tscJobs($, await scanProject($, join(root, TSCONFIG)), root)
     }
     if (jobs.length === 0) {
-      return { text: 'typecheck-gate: nothing to check (no tsconfig.json, and no pyright or mypy config for the files edited so far).' }
+      return { text: 'Nothing to check (no tsconfig.json, and no pyright or mypy config for the files edited so far).' }
     }
 
     const results = await runJobs($, jobs, settings)
     const findings = findingsOf(results)
     showVerdict($, results)
-    if (findings.length === 0) return { text: `typecheck-gate: ✓ no type errors (${checkersOf(results)}).` }
+    if (findings.length === 0) return { text: `✓ No type errors (${checkersOf(results)}).` }
     return {
       text: [
-        `typecheck-gate: ${checkersOf(results)} reports ${countOf(findings)}:`,
+        `${checkersOf(results)} reports ${countOf(findings)}:`,
         ...listFindings(findings, MAX_LISTED, file => relativeTo(root, file)),
       ].join('\n'),
     }
@@ -128,17 +128,17 @@ const gate = async ($: EngineInterface, files: readonly string[], settings: Sett
 
     if (settings.mode === 'autofix' && autofixRounds < settings.maxRounds) {
       autofixRounds += 1
-      $.ui.toast(`typecheck-gate: ${countOf(findings)}, asking Claude to fix them (round ${autofixRounds} of ${settings.maxRounds})`)
+      $.ui.toast(`${countOf(findings)}, asking Claude to fix them (round ${autofixRounds} of ${settings.maxRounds})`)
       await $.prompt
         .submit({ text: `typecheck-gate: ${what}. Fix them, then type-check again to confirm:\n${list}` })
-        .catch(() => $.ui.toast('typecheck-gate: could not ask Claude to fix the type errors'))
+        .catch(() => $.ui.toast('Could not ask Claude to fix the type errors'))
       return
     }
 
     $.ui.toast(
       settings.mode === 'autofix'
-        ? `typecheck-gate: ${countOf(findings)} still stand after ${settings.maxRounds} fix rounds; over to you`
-        : `typecheck-gate: ${countOf(findings)} (${checkersOf(results)})`,
+        ? `${countOf(findings)} still stand after ${settings.maxRounds} fix rounds; over to you`
+        : `${countOf(findings)} (${checkersOf(results)})`,
     )
     pendingNote = `typecheck-gate: ${what}. Fix them before moving on, unless the user says otherwise:\n${list}`
   } catch {

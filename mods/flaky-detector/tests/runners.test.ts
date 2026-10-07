@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { applyRun, emptyHistory, suspectsOf } from '../hooks/history'
-import { isTestCommand, normalizeCommand, parseRun } from '../hooks/runners'
+import { isTestCommand, normalizeCommand, parseRun, runnerOfCommand } from '../hooks/runners'
 import type { RunReport } from '../hooks/runners'
 import { CARGO_FAIL, GO_FAIL, GO_VERBOSE, JEST_FAIL, JEST_VERBOSE, PYTEST_FAIL, PYTEST_VERBOSE, RSPEC_FAIL, VITEST_FAIL, VITEST_VERBOSE } from './fixtures'
 
@@ -121,4 +121,19 @@ test('a first failure on code a recent run passed is a flip; a run of other file
   const next = applyRun(history, { report: other, command: 'npx vitest run src/clock.test.js', fingerprint: 'tree:a', at: 2 })
   expect(next.newlyFlaky).toEqual([])
   expect(next.history.records['src/math.test.js > top level fails']?.outcomes).toHaveLength(1)
+})
+
+test('regression: a command that only names a runner is not a test run', () => {
+  for (const command of ['cat jest.config.js', 'npm i -D vitest', 'git commit -m "add jest"', 'tail -50 pytest-output.log', 'grep -rn rspec Gemfile', 'pip install pytest']) {
+    expect(isTestCommand(command)).toBe(false)
+    expect(runnerOfCommand(command)).toBeUndefined()
+  }
+  expect(runnerOfCommand('cd web && npx vitest run')).toBe('vitest')
+  expect(runnerOfCommand('python -m pytest -q')).toBe('pytest')
+  expect(runnerOfCommand('bundle exec rspec spec/a_spec.rb')).toBe('rspec')
+  expect(runnerOfCommand('./node_modules/.bin/jest --ci')).toBe('jest')
+  expect(runnerOfCommand('go test ./...')).toBe('go')
+  expect(runnerOfCommand('cargo nextest run')).toBe('cargo')
+  expect(isTestCommand('yarn test:e2e')).toBe(true)
+  expect(isTestCommand('make test')).toBe(true)
 })

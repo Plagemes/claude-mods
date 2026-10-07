@@ -141,3 +141,13 @@ test('a project in a folder named app (a Docker WORKDIR /app) is still found', a
   project(on, { '/app/package.json': NEXT_PACKAGE, '/app/app/page.tsx': COUNTER })
   expect((await $.tool.call({ tool: 'Write', file_path: '/app/app/page.tsx', content: COUNTER })).context?.[0]).toContain('useState')
 })
+
+test('regression: a 300 KB client file of imports is checked in well under a second', () => {
+  let source = "'use client'\n"
+  for (let i = 0; source.length < 300_000; i += 1) source += `import { thing${i} } from './lib/module-${i}'\n`
+  source += "import fs from 'fs'\n"
+  const started = performance.now()
+  const findings = checkComponent(source, '/app/page.tsx', { hintUnneeded: false })
+  expect(performance.now() - started).toBeLessThan(500)
+  expect(findings.find(finding => finding.kind === 'server-import')?.line).toBe(source.split('\n').length - 1)
+})

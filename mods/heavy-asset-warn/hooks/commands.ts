@@ -165,13 +165,55 @@ const downloads = (program: string, words: readonly string[], cwd: string, addit
   if (program === 'wget') additions.folders.push(outputDir)
 }
 
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+const PREFIXES = new Set(['command', 'builtin', 'exec', 'nohup'])
+/** Commands that run the command after their own options, and those options that take a value. */
+const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
+  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-r', '-t', '-T', '-U', '--user', '--group', '--host', '--prompt', '--chdir']),
+  doas: new Set(['-u', '-C']),
+  env: new Set(['-u', '--unset', '-C', '--chdir']),
+  nice: new Set(['-n', '--adjustment']),
+  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata']),
+  stdbuf: new Set(['-i', '-o', '-e']),
+  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+  time: new Set(['-f', '--format', '-o', '--output']),
+}
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+/** `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`. */
+const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+const MAX_NESTING = 3
+
+/** The words of the command a simple command runs, past assignments and wrappers: `sudo -u web timeout 60 cp a b` is `cp a b`. */
+const unwrap = (words: readonly string[]): string[] => {
+  let start = 0
+  for (;;) {
+    while (start < words.length && (ASSIGNMENT.test(words[start] ?? '') || PREFIXES.has(words[start] ?? ''))) start += 1
+    const wrapper = basename(words[start] ?? '')
+    const valued = WRAPPERS[wrapper]
+    if (valued === undefined) return words.slice(start)
+    start += 1
+    while (start < words.length && (words[start] ?? '').startsWith('-')) start += valued.has(words[start] ?? '') ? 2 : 1
+    if (wrapper === 'timeout') start += 1
+  }
+}
+
 /** What the command adds to the disk, as far as its words say; `cd` earlier in the line moves where relative paths point. */
-export const additionsOf = (command: string, startDirectory: string): Additions => {
+export const additionsOf = (command: string, startDirectory: string, depth = 0): Additions => {
   const additions: Additions = { files: [], folders: [], isGitAdd: false }
   let cwd = startDirectory
-  for (const { words, redirects } of simpleCommands(command)) {
+  for (const simple of simpleCommands(command)) {
+    const { redirects } = simple
+    const words = unwrap(simple.words)
     const program = basename(words[0] ?? '')
-    if (program === 'cd' && words[1] !== undefined && !isUnknown(words[1])) cwd = absolute(words[1], cwd)
+    const flag = SHELLS.has(program) ? words.findIndex(word => SHELL_COMMAND_FLAG.test(word)) : -1
+    const script = program === 'eval' ? words.slice(1).join(' ') : flag > 0 ? words[flag + 1] : undefined
+    if (script !== undefined && depth < MAX_NESTING) {
+      // `bash -c "cp big.mp4 public/"`, `sh -lc '…'`, `eval '…'`: the script's own commands add the files.
+      const inner = additionsOf(script, cwd, depth + 1)
+      additions.files.push(...inner.files)
+      additions.folders.push(...inner.folders)
+      additions.isGitAdd ||= inner.isGitAdd
+    } else if (program === 'cd' && words[1] !== undefined && !isUnknown(words[1])) cwd = absolute(words[1], cwd)
     else if (program === 'cp' || program === 'mv' || program === 'install') moves(program, words, cwd, additions)
     else if (program === 'curl' || program === 'wget') downloads(program, words, cwd, additions)
     else if (program === 'git' && gitSubcommand(words) === 'add') additions.isGitAdd = true

@@ -253,3 +253,17 @@ test('treats a file ESLint ignores as not linted, and checks it itself', async (
   expect(ran.context?.[0]?.startsWith('react-doctor found React issues in src/Profile.tsx:')).toBe(true)
   expect(ran.context?.[0]).toContain('useEffect in Profile is missing dependencies: userId, onLoad')
 })
+
+test('regression: a 300 KB file of components is analysed in well under a second', () => {
+  const unit = (i: number) =>
+    `function Row${i}({ rows, id }) {\n  const [count, setCount] = useState(0)\n  useEffect(() => { load(id) }, [])\n  return <ul>{rows.map(row => <li>{row.label}</li>)}</ul>\n}\n`
+  let source = ''
+  for (let i = 0; source.length < 300_000; i += 1) source += unit(i)
+  const started = performance.now()
+  const issues = analyze(source)
+  const ranged = analyze(source, { from: 100, to: 200 })
+  expect(performance.now() - started).toBeLessThan(500)
+  expect(issues.length).toBeGreaterThan(1000)
+  expect(issues.at(-1)?.line).toBeGreaterThan(source.split('\n').length - 10)
+  expect(ranged.every(issue => issue.line >= 96 && issue.line <= 205)).toBe(true)
+})

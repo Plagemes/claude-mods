@@ -24,7 +24,24 @@ const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g
 const HEREDOC = /<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1/
 const SEPARATORS = /\|\||&&|[;|&\n()`]|\$\(/
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const WRAPPERS = new Set(['sudo', 'command', 'exec', 'nohup', 'time', 'env', 'nice', 'xargs', 'doas'])
+/** Commands that run the command after their own options, and those options that take a value. */
+const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
+  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-r', '-t', '--user', '--group', '--host', '--prompt', '--chdir']),
+  doas: new Set(['-u', '-C']),
+  command: new Set(),
+  exec: new Set(['-a']),
+  nohup: new Set(),
+  time: new Set(['-f', '--format', '-o', '--output']),
+  env: new Set(['-u', '--unset', '-C', '--chdir']),
+  nice: new Set(['-n', '--adjustment']),
+  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata']),
+  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+  stdbuf: new Set(['-i', '-o', '-e']),
+  xargs: new Set(['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file']),
+}
+/** The quoted script of `bash -lc '…'`, `sh -c "…"` or `eval '…'`, which a shell runs as commands of their own. */
+const NESTED_SCRIPT = /\b(?:(?:ba|z|da|k)?sh(?:\s+-[a-zA-Z]+)*?\s+-[a-zA-Z]*c[a-zA-Z]*|eval)\s+(?:'([^']*)'|"((?:[^"\\]|\\.)*)")/g
+const MAX_NESTING = 3
 const SAFE_TARGET = /^(?:\/dev\/(?:null|stdout|stderr|tty)|&\d|&-)$/
 const REDIRECTION = /(?:^|[^<>&\d])\d?>>?\|?(?!&)\s*([^\s;&|<>()]+)/g
 const BOTH_REDIRECTION = /&>>?\s*([^\s;&|<>()]+)/g
@@ -58,12 +75,16 @@ const simpleCommands = (bare: string): string[][] =>
     .split(SEPARATORS)
     .map(part => part.trim().split(/\s+/).filter(word => word !== ''))
     .map(words => {
+      // `sudo -u web rm x`, `timeout 60 sed -i …`, `nice -n 5 mv …`: the wrapper, its options and their values go.
       let start = 0
-      while (start < words.length) {
-        const word = words[start] as string
-        if (ASSIGNMENT.test(word) || WRAPPERS.has(word) || (start > 0 && word.startsWith('-') && WRAPPERS.has(words[start - 1] ?? ''))) {
-          start += 1
-        } else break
+      for (;;) {
+        while (start < words.length && ASSIGNMENT.test(words[start] as string)) start += 1
+        const wrapper = words[start] ?? ''
+        const valued = Object.hasOwn(WRAPPERS, wrapper) ? WRAPPERS[wrapper] : undefined
+        if (valued === undefined) break
+        start += 1
+        while (start < words.length && (words[start] as string).startsWith('-')) start += valued.has(words[start] as string) ? 2 : 1
+        if (wrapper === 'timeout') start += 1
       }
       return words.slice(start)
     })
@@ -127,8 +148,15 @@ const writerOf = (words: readonly string[]): string | undefined => {
  * undefined when it does not. Best effort: quoted text and here-document
  * bodies are not read as commands, and redirections to /dev/null are fine.
  */
-export const writesFiles = (command: string): string | undefined => {
+export const writesFiles = (command: string, depth = 0): string | undefined => {
   if (INLINE_SCRIPT.test(command) && SCRIPTED_WRITE.test(command)) return 'a script that writes files'
+  if (depth < MAX_NESTING) {
+    for (const match of command.matchAll(NESTED_SCRIPT)) {
+      const script = match[1] ?? (match[2] ?? '').replace(/\\(["\\$`])/g, '$1')
+      const writer = writesFiles(script, depth + 1)
+      if (writer !== undefined) return writer
+    }
+  }
   const bare = withoutHeredocs(command).replace(QUOTED, '""')
   for (const pattern of [REDIRECTION, BOTH_REDIRECTION]) {
     for (const match of bare.matchAll(pattern)) {

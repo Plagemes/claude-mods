@@ -83,3 +83,18 @@ test('onlyTests ignores failing commands that are not test runs', { options: { o
   await $.tool.call({ tool: 'Bash', command: 'pytest -x' })
   expect(clips).toHaveLength(1)
 })
+
+test('regression: onlyTests does not count a command that merely names a runner', { options: { onlyTests: true, cooldownSeconds: 0 } }, async ($, on) => {
+  mock.clock(on)
+  const clips = engine(on, { isError: true })
+
+  for (const command of ['cat jest.config.js', 'npm i -D vitest', 'git commit -m "add jest"', 'grep -r pytest .']) {
+    await $.tool.call({ tool: 'Bash', command })
+  }
+  expect(clips).toHaveLength(0)
+
+  for (const command of ['cd web && npx vitest run', 'python -m pytest -q', 'npm run test:unit', 'bundle exec rspec', 'go test ./...']) {
+    await $.tool.call({ tool: 'Bash', command })
+  }
+  expect(clips).toHaveLength(5)
+})

@@ -195,3 +195,9 @@ test('regression: a DATABASE_URL the command sets for itself is the database bac
   expect(skipped.context?.[0]).toContain('no backup was taken before this migration (the command sets DATABASE_URL from a shell variable')
   expect(state.runs.filter(run => run.argv[0] === 'pg_dump')).toHaveLength(1)
 })
+
+test('regression: a migration inside bash -lc or sh -ec is recognised', () => {
+  expect(migrationKind(`bash -lc "npx prisma migrate deploy"`, undefined)).toBe('prisma migrate')
+  expect(migrationKind(`docker compose exec web sh -ec 'python manage.py migrate'`, undefined)).toBe('django migrate')
+  expect(migrationKind(`git commit -m "run prisma migrate deploy"`, undefined)).toBeUndefined()
+})

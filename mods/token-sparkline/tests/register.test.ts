@@ -89,7 +89,7 @@ test('Hide removes the band and remembers it; /sparkline brings it back', async 
       origin: { kind: 'composer' },
       presentation: { isFullscreen: false, columns: 100 },
     })
-    expect(shown.text).toContain('shown')
+    expect(shown.text).toBe('Shown.')
     expect(await ui.find({ key: 'spark' })).toBeDefined()
     expect(saved.get('isHidden')).toBe(false)
     await ui.unmount()

@@ -131,3 +131,16 @@ test('regression: a command handed to bash -c, sh -lc or eval is checked too', (
   expect(findExpensive('eval aws ec2 run-instances --instance-type p4d.24xlarge', 32)).toHaveLength(1)
   expect(findExpensive('bash -c "echo aws ec2 run-instances --instance-type p3.2xlarge"', 32)).toHaveLength(0)
 })
+
+test('regression: COST-OK does not carry into a turn the person did not start', async ($, on) => {
+  engine(on)
+  const command = 'eksctl create cluster --name demo'
+  await $.prompt.submit({ ...PERSON, text: 'spin up a cluster, COST-OK' })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('cloud-cost-warn')
+})

@@ -197,3 +197,12 @@ test('transientError names the temporary network errors of the usual tools and i
 test('backoffMs doubles the wait each time', () => {
   expect([1, 2, 3, 4].map(retry => backoffMs(retry, 1500))).toEqual([1500, 3000, 6000, 12000])
 })
+
+test('regression: a fetch behind bash -lc / sh -ec or timeout with options is read', () => {
+  for (const command of ['bash -lc "npm ci"', "sh -ec 'cd web && pip install -r requirements.txt'", 'timeout -s KILL 120 git fetch origin', 'sudo -u ci env -u PROXY npm install']) {
+    expect(isRetryable(command)).toBe(true)
+  }
+  for (const command of ['bash -lc "npm publish"', "sh -c 'curl -X POST https://api/x'", 'bash deploy.sh', 'bash -c']) {
+    expect(isRetryable(command)).toBe(false)
+  }
+})

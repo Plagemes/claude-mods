@@ -13,6 +13,10 @@ const EXEC_WRAPPERS: Readonly<Record<string, readonly string[]>> = {
   bundle: ['exec'], poetry: ['run'], uv: ['run'], pipenv: ['run'], pdm: ['run'], rye: ['run'], pnpm: ['exec', 'dlx'], yarn: ['exec', 'dlx'], npm: ['exec'], bun: ['x'],
 }
 const WRAPPER_FLAGS_WITH_VALUE = new Set(['-n', '-u', '-g', '-C'])
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+/** `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`. */
+const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+const MAX_NESTING = 3
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun'])
 
@@ -313,11 +317,20 @@ const verdictFor = (invocation: Invocation, isCi: boolean): string | undefined =
  * The first command in `command` that would keep running in the foreground, with what to run instead.
  * Commands sent to the background with `&`, or bounded by `timeout`, stop on their own or never hold the turn.
  */
-export const findNeverEnding = (command: string, isCi: boolean): Verdict | undefined => {
+export const findNeverEnding = (command: string, isCi: boolean, depth = 0): Verdict | undefined => {
   for (const segment of segmentsOf(command)) {
     if (segment.isBackground) continue
     const invocation = invocationOf(segment.words)
-    const instead = invocation.isBounded ? undefined : verdictFor(invocation, isCi)
+    if (invocation.isBounded) continue
+    // `bash -lc "npm run dev"`, `sh -c '…'`: the script runs in the foreground of this command.
+    const flag = SHELLS.has(invocation.program) ? invocation.args.findIndex(arg => SHELL_COMMAND_FLAG.test(arg)) : -1
+    const script = flag === -1 ? undefined : invocation.args[flag + 1]
+    if (script !== undefined) {
+      const inner = depth < MAX_NESTING ? findNeverEnding(script, isCi, depth + 1) : undefined
+      if (inner !== undefined) return inner
+      continue
+    }
+    const instead = verdictFor(invocation, isCi)
     if (instead !== undefined) return { command: segment.words.join(' '), instead }
   }
   return undefined

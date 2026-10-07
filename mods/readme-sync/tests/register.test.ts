@@ -37,7 +37,7 @@ const TURN = { answer: 'done', durationMs: 1200, isAborted: false, turnId: 't1',
 type Project = { files: Map<string, string>; prompts: { text: string; asUser?: true }[] }
 
 /** A project on a virtual disk; the bottom `tool.call` applies Edit and Write to it as the tools would. */
-const project = (on: On, files: Record<string, string>): Project => {
+const project = (on: On, files: Record<string, string>, below = 'nothing beneath'): Project => {
   const state: Project = { files: new Map(Object.entries(files).map(([path, text]) => [`${ROOT}/${path}`, text])), prompts: [] }
   on('session.root', () => ({ value: ROOT }))
   on('fs.exists', ($, e) => ({ value: state.files.has(e.path) }))
@@ -57,7 +57,7 @@ const project = (on: On, files: Record<string, string>): Project => {
   })
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
-  on('ui.render', () => ({ type: 'Box', children: [] }))
+  on('ui.render', () => ({ type: 'Box', props: { key: 'below' }, children: [{ type: 'Text', props: {}, children: [below] }] }))
   on('prompt.submit', ($, e) => {
     state.prompts.push({ text: e.text, ...(e.origin.kind === 'plugin' && e.origin.asUser === true ? { asUser: true as const } : {}) })
     return { text: e.text }
@@ -142,4 +142,17 @@ test('only exports under the API paths count; tests and other files are ignored'
   expect(await ui.find({ type: 'Text', text: 'docs untouched after 1 env var changed' })).toBeDefined()
   await ui.press({ key: 'dismiss' })
   expect(await ui.find({ key: 'dismiss' })).toBeUndefined()
+})
+
+test('regression: the band keeps the bands beneath it on screen', async ($, on) => {
+  project(on, { 'README.md': '# cli\n', 'src/config.ts': CONFIG_BEFORE }, 'engine band')
+  await $.turn.start({ text: 'add strict mode', turnId: 't1' })
+  await $.tool.call({ tool: 'Write', file_path: `${ROOT}/src/config.ts`, content: CONFIG_AFTER })
+  await $.turn.complete(TURN)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'readme-sync', surface, component: 'AbovePrompt', props: BAND_PROPS })
+    expect(await ui.find({ key: 'update' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    await ui.unmount()
+  }
 })

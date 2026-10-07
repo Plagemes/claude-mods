@@ -15,6 +15,8 @@ export type Profile = { functions: ProfileFunction[]; coveredMs: number }
 const IGNORED_NODES = new Set(['(root)', '(idle)'])
 const JS_TOOLS = /^(?:npm|npx|pnpm|pnpx|yarn|tsx|ts-node|vitest|jest|mocha|ava|next|vite|webpack|esbuild|eslint|tsc|nodemon)$/
 const PYTHON = /^python(?:\d(?:\.\d+)?)?(?:\.exe)?$/
+/** Python options that take the next word as their value. */
+const PYTHON_VALUED = new Set(['-W', '-X', '--check-hash-based-pycs'])
 /** go test flags that take the next argument as their value. */
 const GO_VALUED = new Set([
   '-run', '-bench', '-benchtime', '-count', '-cpu', '-parallel', '-timeout', '-tags', '-skip', '-coverprofile', '-covermode',
@@ -84,9 +86,16 @@ export const planProfile = (command: string, dir: string, stamp: string, python:
     return { profiler: 'node', argv: words, env: { NODE_OPTIONS: [nodeOptions, ...nodeCpuProf].filter(part => part !== '').join(' ') } }
   }
   if (PYTHON.test(program)) {
-    if (rest[0] === '-c') return { profiler: 'none', message: 'cProfile cannot profile python -c; put the code in a file or a module.' }
+    // Python's own options (`-u`, `-X dev`) stay before cProfile; `-c` alone or grouped (`-Bc`, `-uc`) is inline code.
+    const options: string[] = []
+    while (options.length < rest.length && (rest[options.length] ?? '').startsWith('-') && rest[options.length] !== '-m') {
+      const option = rest[options.length] ?? ''
+      if (/^-[a-zA-Z]*c$/.test(option)) return { profiler: 'none', message: 'cProfile cannot profile python -c; put the code in a file or a module.' }
+      options.push(option)
+      if (PYTHON_VALUED.has(option) && options.length < rest.length) options.push(rest[options.length] ?? '')
+    }
     const statsFile = `${dir}/${stamp}.pstats`
-    return { profiler: 'python', argv: [first, '-m', 'cProfile', '-o', statsFile, ...rest], statsFile }
+    return { profiler: 'python', argv: [first, ...options, '-m', 'cProfile', '-o', statsFile, ...rest.slice(options.length)], statsFile }
   }
   if (program === 'pytest' || program === 'py.test') {
     const statsFile = `${dir}/${stamp}.pstats`

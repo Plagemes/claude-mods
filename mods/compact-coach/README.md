@@ -13,7 +13,7 @@ Compacting in the middle of a task throws away detail you still need; compacting
 ```
 
 ## Usage
-You will see a toast like `compact-coach: good moment to /compact (context 72%, after a commit)`. Run `/compact` if you agree; the mod never compacts for you.
+You will see a toast like `Good moment to /compact (context 72%, after a commit)`. Run `/compact` if you agree; the mod never compacts for you.
 
 ## Configuration
 | Key | Default | Meaning |

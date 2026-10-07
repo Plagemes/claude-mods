@@ -39,7 +39,7 @@ test('suggests /compact after a commit once the context is over 60%', async ($, 
 
   await turn($, bash($, 'git add -A && git commit -m "feat: add thing"'))
 
-  expect(world.toasts).toEqual(['compact-coach: good moment to /compact (context 70%, after a commit)'])
+  expect(world.toasts).toEqual(['Good moment to /compact (context 70%, after a commit)'])
 })
 
 test('suggests it after a passing test run, but not after a failing one', async ($, on) => {

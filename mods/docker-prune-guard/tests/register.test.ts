@@ -128,3 +128,16 @@ test('PRUNE-OK from a notification or another plugin is not an approval', async 
   await $.prompt.submit({ text: 'PRUNE-OK', wait: false, origin: { kind: 'plugin', name: 'other' } })
   expect((await $.tool.call({ tool: 'Bash', command: 'docker volume prune -f' })).deny).toContain('docker-prune-guard')
 })
+
+test('regression: PRUNE-OK does not carry into a turn the person did not start', async ($, on) => {
+  engine(on)
+  const command = 'docker compose down -v'
+  await $.prompt.submit({ ...PERSON, text: 'reset my local db, PRUNE-OK' })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('docker-prune-guard')
+})

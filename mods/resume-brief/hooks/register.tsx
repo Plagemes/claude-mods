@@ -3,7 +3,6 @@ import type { EngineInterface, Register, SessionMessage } from 'claude-code'
 
 import type { Brief } from '../types'
 
-const MOD = 'resume-brief'
 const DEFAULT_MAX_AGE_DAYS = 14
 const DAY_MS = 86_400_000
 const PROMPTS_KEPT = 3
@@ -150,8 +149,8 @@ async function hide($: EngineInterface): Promise<void> {
 
 async function briefCommand($: EngineInterface, maxAgeMs: number): Promise<string> {
   const brief = await showBrief($, maxAgeMs)
-  if (brief === undefined) return `${MOD}: no earlier session to resume in this project.`
-  return `↩ ${MOD}: shown above the prompt. Press Continue to pick up “${brief.prompts.at(-1) ?? ''}”.`
+  if (brief === undefined) return 'No earlier session to resume in this project.'
+  return `↩ Shown above the prompt. Press Continue to pick up “${brief.prompts.at(-1) ?? ''}”.`
 }
 
 export const register: Register = (on, options) => {
@@ -197,6 +196,8 @@ export const register: Register = (on, options) => {
     if (e.props.hasSurvey || brief === null || (await read($, isHiddenAtom))) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
+    // Other plugins' bands draw beneath this one rather than being replaced by it.
+    const below = await next(e)
     const when = ago((await $.clock.now()) - brief.savedAt)
     const facts = [
       brief.files.length > 0 ? `Edited ${filesLine(brief.files)}` : '',
@@ -225,6 +226,7 @@ export const register: Register = (on, options) => {
           <Button key="continue" label="Continue" hotkey="c" variant="primary" onPress={() => continueWork($)} />
           <Button key="dismiss" label="Dismiss" hotkey="x" role="dismiss" onPress={() => hide($)} />
         </Box>
+        {below}
       </Box>
     )
   })

@@ -16,14 +16,14 @@ const BAND = {
 } as const
 
 /** The engine beneath the plugin: tool calls that reach it are counted, Bash fails while `bash.fails`. */
-const engine = (on: On) => {
+const engine = (on: On, below = 'nothing beneath') => {
   const reached: string[] = []
   const bash = { fails: false }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/repo' }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
-  on('ui.render', () => ({ type: 'Box' }))
+  on('ui.render', () => ({ type: 'Box', props: { key: 'below' }, children: [{ type: 'Text', props: {}, children: [below] }] }))
   on('tool.call', ($, e) => {
     reached.push(e.tool === 'Bash' ? e.command : 'file_path' in e ? String(e.file_path) : e.tool)
     if (e.tool === 'Bash' && bash.fails) return { isError: true, result: 'Exit code 1', text: 'Exit code 1\nTests  1 failed (1)' }
@@ -44,7 +44,7 @@ test('locks production code each turn until a test file has been edited', async 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
 
   const on_ = await tdd($, 'on')
-  expect(on_.text).toBe('test-first: TDD mode on. Production code stays locked each turn until a test is written.')
+  expect(on_.text).toBe('TDD mode on. Production code stays locked each turn until a test is written.')
   expect(on_.context?.[0]).toContain('red → green → refactor')
 
   const locked = await edit($, '/repo/src/app.ts')
@@ -134,4 +134,15 @@ test('regression: a command that only names a runner does not count as a test ru
   await $.tool.call({ tool: 'Bash', command: 'CI=1 npm run test:unit 2>&1 | tail -5' })
   await newTurn($, 'turn-3')
   expect((await edit($, '/repo/src/app.ts')).deny).toBeDefined()
+})
+
+test('regression: the TDD band keeps the bands beneath it on screen', async ($, on) => {
+  engine(on, 'engine band')
+  await tdd($, 'on')
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ type: 'Text', text: 'TDD' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    await ui.unmount()
+  }
 })

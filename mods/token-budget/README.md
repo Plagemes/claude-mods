@@ -13,7 +13,7 @@ Adds up what every turn of the session costs, from the real token usage the engi
 ```
 
 ## Usage
-- `/budget` shows the spend so far, e.g. `token-budget: 42% used · $4.21 of $10.00 · 610k tokens · 12 turns`.
+- `/budget` shows the spend so far, e.g. `42% used · $4.21 of $10.00 · 610k tokens · 12 turns`.
 - `/budget set 5` (or `$5`) sets a dollar budget for this session; `/budget set 2M tokens` (or `500k`) sets a token budget. Both can be active; the first one reached counts.
 - `/budget off` drops the limits for the rest of the session; `/budget reset` zeroes the counter.
 - Band at 80%: `▲ budget 84% ████████████░░░░ $1.60 left of $10.00` with **Raise 50%** and **Hide** buttons (ctrl+x tab focuses the band, then `r` / `h`).

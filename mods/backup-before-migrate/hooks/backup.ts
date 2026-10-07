@@ -41,10 +41,10 @@ export const SKIP_MARK = /(?:^|[\s;&|])SKIP_DB_BACKUP=(?:1|true|yes)\b/
 
 /**
  * The text a command matcher reads: quoted text blanked, so `git commit -m "fly deploy"` runs
- * nothing, except where a shell runs the quoted text (`bash -c "…"`, `eval`, `ssh host "…"`).
+ * nothing, except where a shell runs the quoted text (`bash -c "…"`, `sh -lc '…'`, `eval`, `ssh host "…"`).
  */
 const matchText = (command: string): string =>
-  /(?:^|\s)(?:-c|eval|ssh)\s/.test(command) ? command : command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, quoted => `"${' '.repeat(quoted.length - 2)}"`)
+  /(?:^|\s)(?:-c|eval|ssh)\s|\b(?:ba|z|da|k)?sh\s+(?:-[a-zA-Z]+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s/.test(command) ? command.replace(/["']/g, ' ') : command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, quoted => `"${' '.repeat(quoted.length - 2)}"`)
 
 export const migrationKind = (command: string, extra: RegExp | undefined): string | undefined => {
   const code = matchText(command)

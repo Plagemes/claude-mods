@@ -4,7 +4,23 @@ export type Ecosystem = 'npm' | 'pypi'
 export type InstallRequest = { ecosystem: Ecosystem; name: string; version?: string; isDev: boolean }
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const PREFIXES = new Set(['sudo', 'command', 'exec', 'time', 'nohup'])
+/** Commands that run the command after their own options, and those options that take a value. */
+const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
+  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-r', '-t', '--user', '--group', '--host', '--prompt', '--chdir']),
+  doas: new Set(['-u', '-C']),
+  command: new Set(),
+  exec: new Set(['-a']),
+  time: new Set(['-f', '--format', '-o', '--output']),
+  nohup: new Set(),
+  env: new Set(['-u', '--unset', '-C', '--chdir']),
+  nice: new Set(['-n', '--adjustment']),
+  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+  stdbuf: new Set(['-i', '-o', '-e']),
+}
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+/** `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`. */
+const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+const MAX_NESTING = 3
 /** A cheap test before parsing: does the command mention an installer at all? */
 const INSTALLER_HINT = /\b(?:npm|pnpm|yarn|bun|pip3?|python3?|uv|poetry)\b/
 
@@ -110,17 +126,28 @@ const pypiRequest = (spec: string, isDev: boolean): InstallRequest | undefined =
   return { ecosystem: 'pypi', name: name.toLowerCase().replace(/[-_.]+/g, '-'), version: exact, isDev }
 }
 
-const installsOf = (argv: readonly string[]): InstallRequest[] => {
+const installsOf = (argv: readonly string[], depth: number): InstallRequest[] => {
   let start = 0
-  while (start < argv.length && (PREFIXES.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) {
-    const isSudo = argv[start] === 'sudo'
+  for (;;) {
+    while (start < argv.length && ASSIGNMENT.test(argv[start] as string)) start += 1
+    const wrapper = argv[start] ?? ''
+    const valued = Object.hasOwn(WRAPPERS, wrapper) ? WRAPPERS[wrapper] : undefined
+    if (valued === undefined) break
     start += 1
-    // `sudo -H pip install ...`: sudo's own options (and the value of -u / -g) are not the command.
-    while (isSudo && (argv[start] ?? '').startsWith('-')) start += /^-[ug]$/.test(argv[start] as string) ? 2 : 1
+    // `sudo -H -u me pip install ...`, `timeout 120 npm i x`: the wrapper's options (and their values) are not the command.
+    while ((argv[start] ?? '').startsWith('-')) start += valued.has(argv[start] as string) ? 2 : 1
+    if (wrapper === 'timeout') start += 1
   }
   const [tool = '', sub = '', third = '', ...rest] = argv.slice(start)
   const name = tool.replace(/^.*\//, '')
   const afterSub = argv.slice(start + 2)
+
+  if (SHELLS.has(name) || name === 'eval') {
+    // `bash -lc "npm i left-pad"`, `eval "pip install x"`: the script's own installs.
+    const flag = argv.findIndex((word, index) => index > start && SHELL_COMMAND_FLAG.test(word))
+    const script = name === 'eval' ? argv.slice(start + 1).join(' ') : flag === -1 ? undefined : argv[flag + 1]
+    return script === undefined || depth >= MAX_NESTING ? [] : requestsIn(script, depth + 1)
+  }
 
   if (name === 'npm' || name === 'pnpm' || name === 'yarn' || name === 'bun') {
     const isAdd = name === 'yarn' ? sub === 'add' : NPM_INSTALL.has(sub) || (name === 'bun' && sub === 'a')
@@ -144,12 +171,13 @@ const installsOf = (argv: readonly string[]): InstallRequest[] => {
   return []
 }
 
+const requestsIn = (command: string, depth: number): InstallRequest[] => simpleCommands(command).flatMap(argv => installsOf(argv, depth))
+
 /** Every registry package `command` installs into a project (not globally), each once. */
 export const installsIn = (command: string): InstallRequest[] => {
   if (!INSTALLER_HINT.test(command)) return []
   const seen = new Set<string>()
-  return simpleCommands(command)
-    .flatMap(installsOf)
+  return requestsIn(command, 0)
     .filter(request => {
       const key = `${request.ecosystem}:${request.name}`
       if (seen.has(key)) return false

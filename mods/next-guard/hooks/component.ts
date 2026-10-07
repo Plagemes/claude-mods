@@ -46,7 +46,21 @@ const withoutComments = (source: string): string => source.replace(TOKENS, token
 const codeOnly = (source: string): string =>
   source.replace(TOKENS, token => (token.startsWith('//') || token.startsWith('/*') ? blank(token) : `${token[0]}${blank(token.slice(1, -1))}${token.slice(-1)}`))
 
-const lineOf = (text: string, index: number): number => text.slice(0, index).split('\n').length
+/** A finder of 1-based line numbers in `text`: the newline offsets are found once, then each lookup is a binary search. */
+const lineFinder = (text: string): ((index: number) => number) => {
+  const newlines: number[] = []
+  for (let at = text.indexOf('\n'); at >= 0; at = text.indexOf('\n', at + 1)) newlines.push(at)
+  return index => {
+    let low = 0
+    let high = newlines.length
+    while (low < high) {
+      const middle = (low + high) >> 1
+      if ((newlines[middle] ?? Infinity) < index) low = middle + 1
+      else high = middle
+    }
+    return low + 1
+  }
+}
 
 const hasDirective = (text: string, directive: string): boolean => new RegExp(`^\\s*(['"])${directive}\\1`).test(text)
 
@@ -76,7 +90,8 @@ export function checkComponent(source: string, path: string, options: { hintUnne
   const isClient = hasDirective(text, 'use client')
   const code = codeOnly(source)
   const features = clientFeatures(source)
-  const imports = [...text.matchAll(IMPORT)].map(match => ({ specifier: match[1] as string, line: lineOf(text, match.index ?? 0) }))
+  const lineOf = lineFinder(text)
+  const imports = [...text.matchAll(IMPORT)].map(match => ({ specifier: match[1] as string, line: lineOf(match.index ?? 0) }))
   const findings: Finding[] = []
 
   if (!isClient) {

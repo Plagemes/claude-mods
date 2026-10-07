@@ -97,6 +97,11 @@ const REDIRECT_TO_NEXT_WORD = /^(?:\d*>|&>)$/
 const REDIRECT = /^(?:\d*>|&>|<)/
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const WRAPPER_FLAGS_WITH_VALUE = new Set(['-n', '-u', '-g', '-C'])
+const TIMEOUT_FLAGS_WITH_VALUE = new Set(['-s', '-k', '--signal', '--kill-after'])
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+/** `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`. */
+const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+const MAX_NESTING = 3
 
 /** `words` without redirections (`> out.log`, `2>&1`, `&>/dev/null`) and without what runs before the program: variables, `sudo`, `time`, `timeout 60`. */
 const programWords = (words: Words): string[] => {
@@ -117,7 +122,7 @@ const programWords = (words: Words): string[] => {
       rest = after.slice(skipped)
     } else if (first === 'timeout') {
       let skipped = 0
-      while (after[skipped]?.startsWith('-') === true) skipped += 1
+      while (after[skipped]?.startsWith('-') === true) skipped += TIMEOUT_FLAGS_WITH_VALUE.has(after[skipped] ?? '') ? 2 : 1
       rest = after.slice(skipped + 1)
     } else {
       return rest
@@ -128,10 +133,17 @@ const programWords = (words: Words): string[] => {
 const baseName = (program: string): string => program.split('/').at(-1) ?? program
 
 /** Whether `words` is one fetch-type command a second run would redo without harm. */
-const isRepeatable = (words: Words): boolean => {
+const isRepeatable = (words: Words, depth: number): boolean => {
   const [rawProgram = '', ...args] = programWords(words)
   let program = baseName(rawProgram)
   let rest = args
+
+  if (SHELLS.has(program)) {
+    // `bash -lc "npm ci"`: the script decides, read like a command line of its own.
+    const flag = rest.findIndex(arg => SHELL_COMMAND_FLAG.test(arg))
+    const script = flag === -1 ? undefined : rest[flag + 1]
+    return script !== undefined && depth < MAX_NESTING && isRetryable(script, depth + 1)
+  }
 
   if (/^python[\d.]*$/.test(program) && rest[0] === '-m' && rest[1] === 'pip') {
     program = 'pip'
@@ -180,10 +192,10 @@ const isRepeatableDocker = (program: string, args: Words): boolean => {
  * (install, fetch, pull, clone, a GET) or something harmless beside one (`cd`, `rm -rf node_modules`, `tar`).
  * At least one part has to be a fetch, or there is nothing a network error could have broken.
  */
-export const isRetryable = (command: string): boolean => {
+export const isRetryable = (command: string, depth = 0): boolean => {
   const segments = segmentsOf(command)
   if (segments === undefined || segments.length === 0) return false
-  const kinds = segments.map(words => (isRepeatable(words) ? 'fetch' : HARMLESS.has(baseName(programWords(words)[0] ?? '')) ? 'harmless' : 'other'))
+  const kinds = segments.map(words => (isRepeatable(words, depth) ? 'fetch' : HARMLESS.has(baseName(programWords(words)[0] ?? '')) ? 'harmless' : 'other'))
   return kinds.includes('fetch') && !kinds.includes('other')
 }
 

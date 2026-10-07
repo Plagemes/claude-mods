@@ -157,3 +157,13 @@ test('limits and advice depend on the kind and format of the asset', () => {
   expect(adviceFor('a.otf', 'font')).toContain('WOFF2')
   expect(limitsFrom({ imageKb: -1, videoKb: 'x' }).image).toBe(300 * KB)
 })
+
+test('regression: commands behind sh -c, eval and wrappers with options are read too', () => {
+  expect(additionsOf('bash -lc "cp hero.mp4 public/"', '/app').files).toEqual(['/app/public', '/app/public/hero.mp4'])
+  expect(additionsOf("sh -ec 'cd web && wget -O logo.png https://x/y'", '/app').files).toEqual(['/app/web/logo.png'])
+  expect(additionsOf("eval 'curl -O https://x/a/b.png'", '/app').files).toEqual(['/app/b.png'])
+  expect(additionsOf('sudo -u www timeout 60 curl -o public/v.mp4 https://x/v', '/app').files).toEqual(['/app/public/v.mp4'])
+  expect(additionsOf('env -u PROXY LANG=C nice -n 5 cp a.png static/', '/app').files).toEqual(['/app/static', '/app/static/a.png'])
+  expect(additionsOf('bash -c "git add -A"', '/app').isGitAdd).toBe(true)
+  expect(additionsOf('bash script.sh', '/app')).toEqual({ files: [], folders: [], isGitAdd: false })
+})

@@ -144,7 +144,7 @@ test('stays hidden for a brief older than maxAgeDays', { options: { maxAgeDays: 
   await start($)
   const band = await $.ui.mount({ plugin: 'resume-brief', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   expect(await band.find({ key: 'continue' })).toBeUndefined()
-  expect((await $.command.run(typed)).text).toContain('no earlier session')
+  expect((await $.command.run(typed)).text).toContain('No earlier session')
 })
 
 test('does not show a brief of the session being resumed', async ($, on) => {
@@ -152,4 +152,15 @@ test('does not show a brief of the session being resumed', async ($, on) => {
   await start($)
   const band = await $.ui.mount({ plugin: 'resume-brief', surface: 'terminal', component: 'AbovePrompt', props: BAND })
   expect(await band.find({ key: 'continue' })).toBeUndefined()
+})
+
+test('regression: the brief band keeps the bands beneath it on screen', async ($, on) => {
+  world(on, { [KEY]: PREVIOUS })
+  await start($)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const band = await $.ui.mount({ plugin: 'resume-brief', surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'continue' })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    await band.unmount()
+  }
 })

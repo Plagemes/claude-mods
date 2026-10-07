@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { parseShell } from './shell'
+import { parseShell, withNestedScripts } from './shell'
 import { junkFor, matchesGlob, megabytes, parseGitAdd, parseStatus, type GitAdd, type StatusEntry } from './staging'
 
 const STATUS_TIMEOUT_MS = 15000
@@ -92,7 +92,7 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (!/\badd\b/.test(e.command)) return next(e)
-    const add = parseGitAdd(parseShell(e.command))
+    const add = parseGitAdd(withNestedScripts(parseShell(e.command)))
     if (add === undefined) return next(e)
 
     const findings = add.paths.flatMap(path => classify(path, false) ?? [])

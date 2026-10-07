@@ -21,7 +21,7 @@ Initialize the price cache before rendering a cart in tests; renderCart reads it
 [ Save to CLAUDE.md ]  [ Dismiss ]
 ```
 
-- **Save to CLAUDE.md** (`s`) appends `- <lesson>` at the end of the `## Lessons learned` section (created at the end of the file when missing, the file created when absent) and toasts `📘 lessons-learned: saved to CLAUDE.md`.
+- **Save to CLAUDE.md** (`s`) appends `- <lesson>` at the end of the `## Lessons learned` section (created at the end of the file when missing, the file created when absent) and toasts `📘 Saved to CLAUDE.md`.
 - **Dismiss** (`x`) drops it. Up to three lessons queue up (`· 1 of 2`).
 - Nothing appears for flaky reruns (no edits between fail and pass), commands that are not checks, or fixes the model judges one-off typos.
 

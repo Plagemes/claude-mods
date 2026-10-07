@@ -2,7 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { formatMs, parseTimings, runnerOf, slowest } from '../hooks/durations'
+import { formatMs, isTestCommand, parseTimings, runnerOf, slowest } from '../hooks/durations'
 
 const PYTEST_DURATIONS = `============================= test session starts ==============================
 collected 12 items
@@ -272,4 +272,15 @@ test('parseTimings skips very long lines instead of backtracking over them', () 
   const timings = parseTimings(`✓ a${' '.repeat(100_000)}x\n0.1s call x${' '.repeat(100_000)}y\n  ✓ renders (120 ms)`)
   expect(Date.now() - started).toBeLessThan(1_000)
   expect(timings.map(timing => timing.name)).toEqual(['renders'])
+})
+
+test('regression: a command that only names a runner is not a test run', () => {
+  for (const command of ['cat jest.config.js', 'npm i -D vitest', 'git commit -m "add jest"', 'tail -50 pytest.log', 'pip install pytest']) {
+    expect(isTestCommand(command)).toBe(false)
+  }
+  expect(runnerOf('cat jest.config.js', '')).toBeUndefined()
+  for (const command of ['cd web && npx vitest run', 'poetry run pytest --durations=10', 'yarn test:unit', 'cargo +nightly nextest run', 'tox -e py311']) {
+    expect(isTestCommand(command)).toBe(true)
+  }
+  expect(runnerOf('cd web && npx vitest run', '')).toBe('vitest')
 })

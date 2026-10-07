@@ -154,3 +154,18 @@ test('loops: counted rounds, polite loops and look-alikes', () => {
   expect(loopOfFetches('seq 1 9 | xargs -I{} curl https://a.com/{}')).toEqual({ iterations: undefined })
   expect(loopOfFetches('curl https://a.com/once')).toBeUndefined()
 })
+
+test('regression: requests behind bash -lc, eval and wrappers with options are counted', () => {
+  expect(externalHosts('bash -lc "curl https://api.example.com/a"')).toEqual(['api.example.com'])
+  expect(externalHosts("sh -ec 'cd /tmp && wget https://api.example.com/b'")).toEqual(['api.example.com'])
+  expect(externalHosts(`eval 'curl https://api.example.com/c'`)).toEqual(['api.example.com'])
+  expect(externalHosts('nice -n 5 curl https://api.example.com/d')).toEqual(['api.example.com'])
+  expect(externalHosts('timeout -s KILL 30 curl https://api.example.com/e')).toEqual(['api.example.com'])
+  expect(externalHosts('sudo -n curl https://api.example.com/f')).toEqual(['api.example.com'])
+  expect(externalHosts('bash ./fetch.sh https://api.example.com/g')).toEqual([])
+})
+
+test('regression: a fetch loop inside bash -lc is warned about', () => {
+  expect(loopOfFetches(`bash -lc 'for i in $(seq 1 50); do curl https://api.example.com/items/$i; done'`)).toEqual({ iterations: 50 })
+  expect(loopOfFetches(`git commit -m 'for each item do curl'`)).toBeUndefined()
+})

@@ -71,7 +71,7 @@ const parseAmount = (text: string): Command => {
   const value = Number(digits) * (multiplier?.toLowerCase() === 'm' ? 1_000_000 : multiplier ? 1_000 : 1)
 
   if (match === null || !(value > 0)) {
-    return { kind: 'invalid', text: `${NAME}: "${text.trim()}" is not an amount. Try /budget set 5 or /budget set 2M tokens.` }
+    return { kind: 'invalid', text: `"${text.trim()}" is not an amount. Try /budget set 5 or /budget set 2M tokens.` }
   }
 
   const isTokens = unit?.toLowerCase().startsWith('tok') ?? (multiplier !== undefined && dollarSign === undefined)
@@ -97,11 +97,11 @@ const levelOf = (share: number, warnShare: number): TokenBudgetLevel =>
 
 const statusText = (spent: TokenBudgetSpend, limits: TokenBudgetLimits): string => {
   if (!hasLimit(limits)) {
-    return `${NAME}: no budget this session (${describeSpend(spent, limits)} spent). Set one with /budget set 5 or /budget set 2M tokens.`
+    return `No budget this session (${describeSpend(spent, limits)} spent). Set one with /budget set 5 or /budget set 2M tokens.`
   }
 
   const share = shareUsed(spent, limits)
-  const lines = [`${NAME}: ${Math.round(share * 100)}% used · ${describeSpend(spent, limits)} · ${spent.turns} turns`]
+  const lines = [`${Math.round(share * 100)}% used · ${describeSpend(spent, limits)} · ${spent.turns} turns`]
   if (share >= 1) lines.push('New prompts are paused: prefix one with !override, or raise the budget with /budget set <amount>.')
 
   return lines.join('\n')
@@ -164,11 +164,11 @@ export const register: Register = (on, options: PluginOptions) => {
         return { text: statusText(await read($, spend), limits) }
       case 'off':
         await setLimits($, { usd: null, tokens: null }, settings)
-        return { text: `${NAME}: no budget for the rest of this session.` }
+        return { text: 'No budget for the rest of this session.' }
       case 'reset':
         await update($, spend, () => NOTHING_SPENT)
         await setLimits($, limits, settings)
-        return { text: `${NAME}: spending counter reset to zero.` }
+        return { text: 'Spending counter reset to zero.' }
       case 'set': {
         const changed = { ...limits, [command.unit]: command.amount }
         await setLimits($, changed, settings)
@@ -195,8 +195,8 @@ export const register: Register = (on, options: PluginOptions) => {
         await update($, isBandHidden, () => false)
         $.ui.toast(
           level === 'over'
-            ? `${NAME}: budget reached (${describeSpend(spent, limits)}). New prompts are paused; prefix one with !override to go on.`
-            : `${NAME}: ${Math.round(share * 100)}% of the budget used · ${describeLeft(spent, limits)}`,
+            ? `Budget reached (${describeSpend(spent, limits)}). New prompts are paused; prefix one with !override to go on.`
+            : `${Math.round(share * 100)}% of the budget used · ${describeLeft(spent, limits)}`,
           { timeoutMs: TOAST_MS },
         )
       }

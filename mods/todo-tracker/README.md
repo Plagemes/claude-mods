@@ -13,7 +13,7 @@ Claude sometimes leaves `// TODO` or `FIXME` comments behind instead of finishin
 ```
 
 ## Usage
-- At the end of a turn that added markers, a toast: `todo-tracker: 2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them`.
+- At the end of a turn that added markers, a toast: `2 markers added this turn (1 TODO, 1 FIXME). /todos-added lists them`.
 - `/todos-added` lists the markers of the latest turn that added any, as `src/a.ts:42  // TODO: handle errors`.
 - `/todos-added all` lists every marker added this session. `/clear` forgets them.
 

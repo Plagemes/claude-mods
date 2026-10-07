@@ -62,7 +62,7 @@ test('pauses prompts at 100% and lets an !override prompt through', { options: {
 
   await $.prompt.submit(typed('!override finish the refactor'))
   expect(engine.reached).toEqual(['first prompt', 'finish the refactor'])
-  expect(engine.toasts.join('\n')).toContain('budget reached')
+  expect(engine.toasts.join('\n')).toContain('Budget reached')
 })
 
 test('toasts once at 80% and draws a warning band on terminal and desktop', { options: { budgetUsd: 1 } }, async ($, on) => {
@@ -116,7 +116,7 @@ test('/budget shows the status and /budget set changes the limits', async ($, on
   expect((await run('set 40k')).text).toContain('125% used')
   expect((await $.prompt.submit(typed('blocked'))).drop).toContain('budget is spent')
 
-  expect((await run('off')).text).toContain('no budget')
+  expect((await run('off')).text).toContain('No budget')
   expect((await $.prompt.submit(typed('free again'))).drop).toBeUndefined()
 
   expect((await run('set lots')).text).toContain('is not an amount')

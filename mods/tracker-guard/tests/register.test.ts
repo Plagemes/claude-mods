@@ -194,3 +194,14 @@ test('regression: options before the subcommand and pnpm -w do not hide an insta
   for (const command of ['pnpm --filter web add react', 'pnpm -r build', 'yarn workspace web add zod']) expect((await bash($, command)).deny, command).toBeUndefined()
   expect(seen.reached).toBe(3)
 })
+
+test('regression: TRACKER-OK does not carry into a turn the person did not start', async ($, on) => {
+  engine(on)
+  await say($, 'add mixpanel please, TRACKER-OK')
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await bash($, 'npm install mixpanel-browser')).deny).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect((await bash($, 'npm install mixpanel-browser')).deny).toContain('tracker-guard')
+})

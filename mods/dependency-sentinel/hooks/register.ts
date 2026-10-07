@@ -1,4 +1,4 @@
-import type { EngineInterface, HttpResponse, Register } from 'claude-code'
+import type { EngineInterface, HttpResponse, PromptOrigin, Register } from 'claude-code'
 
 import { packageRequests } from './parse'
 import type { PackageRequest } from './parse'
@@ -25,7 +25,9 @@ const APPROVED_KEY = 'approved'
 const MAX_APPROVED = 500
 const USER_AGENT = 'dependency-sentinel (https://github.com/plagemes/claude-mods)'
 const TIMED_OUT = Symbol('timed out')
-const HUMAN_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
+const HUMAN_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
+/** Words the person typed (or sent from a phone or the SDK, or a plugin sent as theirs); never a notification or a peer. */
+const isPerson = (origin: PromptOrigin): boolean => HUMAN_ORIGINS.has(origin.kind) || (origin.kind === 'plugin' && origin.asUser === true)
 const REGISTRY_LABEL: Record<Ecosystem, string> = { npm: 'npm', pypi: 'PyPI', crates: 'crates.io', go: 'the Go module proxy' }
 
 const numberOption = (value: unknown, fallback: number): number =>
@@ -189,7 +191,9 @@ export const register: Register = (on, options) => {
   let isOverridden = false
 
   on('prompt.submit', ($, e, next) => {
-    if (HUMAN_ORIGINS.has(e.origin.kind)) isOverridden = OVERRIDE.test(e.text)
+    if (isPerson(e.origin)) isOverridden = OVERRIDE.test(e.text)
+    // A turn nobody typed (a notification, a schedule, a peer) starts without the approval of an earlier prompt.
+    else if (e.turnId === undefined) isOverridden = false
     return next(e)
   })
 

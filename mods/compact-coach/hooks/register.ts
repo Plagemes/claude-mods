@@ -112,7 +112,7 @@ export const register: Register = (on, options) => {
         if (percent !== undefined && percent >= minPercent) {
           await update($, coach, previous => ({ ...previous, lastCoachedTurn: previous.turns }))
           $.ui.toast(
-            `compact-coach: good moment to /compact (context ${Math.round(percent)}%, ${LABELS[state.milestone]})`,
+            `Good moment to /compact (context ${Math.round(percent)}%, ${LABELS[state.milestone]})`,
           )
         }
       }

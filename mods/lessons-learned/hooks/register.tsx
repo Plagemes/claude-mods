@@ -3,7 +3,6 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Lesson } from '../types'
 
-const MOD = 'lessons-learned'
 const SECTION = '## Lessons learned'
 const DEFAULT_MODEL = 'haiku'
 const DEFAULT_FILE = 'CLAUDE.md'
@@ -14,15 +13,23 @@ const MAX_QUEUED = 3
 const MODEL_TIMEOUT_MS = 20_000
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 
-/** Commands that check the code: a failure then a pass of the same one, with edits between, is a fix. */
+/** A shell segment's start, past env assignments and launchers (`npx`, `poetry run`, `bundle exec`...) and a path. */
+const LAUNCHED =
+  String.raw`^\s*(?:\w+=\S*\s+|(?:sudo|time|env|nice|command|npx|pnpx|bunx|yarn|pnpm|bun)\s+|timeout\s+\S+\s+|(?:poetry|uv|pipenv|pdm|hatch|rye)\s+run\s+|(?:bundle|pnpm|yarn|npm)\s+exec\s+(?:--\s+)?)*?` +
+  String.raw`(?:[\w.~-]*\/)*`
+/**
+ * Commands that check the code: a failure then a pass of the same one, with edits between, is a fix.
+ * Each must be the command a shell segment runs: `cat jest.config.js` or `npm i -D vitest` check nothing.
+ */
 const CHECKS: readonly RegExp[] = [
-  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|build|lint|typecheck|type-check|check|tsc)\b/,
-  /\b(?:jest|vitest|mocha|playwright|cypress|tsc|eslint|biome|ruff|mypy|pyright|pytest|tox|nox|rspec|phpunit)\b/,
-  /\bcargo\s+(?:test|build|check|clippy|nextest)\b/,
-  /\bgo\s+(?:test|build|vet)\b/,
-  /(?:\bmake|\bgradle|\.\/gradlew|\bmvn|\bdotnet|\bswift|\bdeno|\bmix)\s+(?:test|build|check|verify|lint)\b/,
-  /\bpython\d?(?:\.\d+)?\s+-m\s+(?:pytest|unittest|mypy)\b/,
-]
+  String.raw`(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|build|lint|typecheck|type-check|check|tsc)`,
+  String.raw`jest|vitest|mocha|playwright|cypress|tsc|eslint|biome|ruff|mypy|pyright|pytest|tox|nox|rspec|phpunit`,
+  String.raw`cargo\s+(?:test|build|check|clippy|nextest)`,
+  String.raw`go\s+(?:test|build|vet)`,
+  String.raw`(?:make|gradlew?|mvn|dotnet|swift|deno|mix)\s+(?:test|build|check|verify|lint)`,
+  String.raw`python\d?(?:\.\d+)?\s+-m\s+(?:pytest|unittest|mypy)`,
+].map(check => new RegExp(`${LAUNCHED}(${check})(?![\\w./-])`))
+const SEGMENTS = /&&|\|\||[;|&\n(){}]/
 
 const SYSTEM =
   'You distill debugging episodes into one line for a project\'s CLAUDE.md, the instructions future AI coding sessions read. ' +
@@ -47,9 +54,12 @@ function readSettings(options: PluginOptions): Settings {
 
 /** The check a command runs, as one key for its variants (`npm run test` and `npm test` alike); undefined for others. */
 function checkOf(command: string): string | undefined {
+  const segments = command.split(SEGMENTS)
   for (const pattern of CHECKS) {
-    const found = pattern.exec(command)
-    if (found) return found[0].toLowerCase().replace(/\s+/g, ' ').replace(/ run /, ' ')
+    for (const segment of segments) {
+      const found = pattern.exec(segment)?.[1]
+      if (found !== undefined) return found.toLowerCase().replace(/\s+/g, ' ').replace(/ run /, ' ')
+    }
   }
   return undefined
 }
@@ -135,9 +145,9 @@ async function saveLesson($: EngineInterface, id: string, settings: Settings): P
     const text = typeof current === 'string' ? current : ''
     const isPresent = text.split('\n').some(line => normalize(line.replace(/^\s*[-*]\s*/, '')) === normalize(lesson.text))
     if (!isPresent) await $.fs.write(path, withLesson(text, lesson.text))
-    $.ui.toast(isPresent ? `📘 ${MOD}: already in ${settings.file}` : `📘 ${MOD}: saved to ${settings.file}`)
+    $.ui.toast(isPresent ? `📘 Already in ${settings.file}` : `📘 Saved to ${settings.file}`)
   } catch (error) {
-    $.ui.toast(`⚠️ ${MOD}: could not write ${settings.file}: ${error instanceof Error ? error.message : String(error)}`)
+    $.ui.toast(`⚠️ Could not write ${settings.file}: ${error instanceof Error ? error.message : String(error)}`)
     return
   }
   await update($, lessonsAtom, lessons => lessons.filter(one => one.id !== id))

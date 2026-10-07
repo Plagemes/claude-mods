@@ -273,3 +273,14 @@ test('install commands: what counts as a project dependency', () => {
   expect(lookupOf({ ecosystem: 'npm', name: 'p', version: 'beta', isDev: false }).url).toBe('https://registry.npmjs.org/p/beta')
   expect(lookupOf({ ecosystem: 'pypi', name: 'p', isDev: false }).url).toBe('https://pypi.org/pypi/p/json')
 })
+
+test('regression: installs behind bash -lc, eval and wrappers with options are read', () => {
+  const names = (command: string) => installsIn(command).map(r => `${r.ecosystem}:${r.name}`)
+  expect(names('bash -lc "npm install left-pad"')).toEqual(['npm:left-pad'])
+  expect(names(`sh -ec 'cd web && pip install requests'`)).toEqual(['pypi:requests'])
+  expect(names(`eval "yarn add react"`)).toEqual(['npm:react'])
+  expect(names('timeout 120 npm i lodash')).toEqual(['npm:lodash'])
+  expect(names('env -u PROXY CI=1 nice -n 5 pnpm add zod')).toEqual(['npm:zod'])
+  expect(names('sudo -u me -H pip install flask')).toEqual(['pypi:flask'])
+  expect(names('bash ./install.sh npm')).toEqual([])
+})

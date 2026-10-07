@@ -259,3 +259,11 @@ test('regression: a Bash call with a short timeout of its own is bounded and let
   expect(long.deny).toContain('npm run dev')
   expect(ran).toEqual(['npm run dev'])
 })
+
+test('regression: a never-ending command inside bash -lc or sh -c is caught', () => {
+  expect(blocked('bash -lc "cd web && npm run dev"')).toBe('npm run dev')
+  expect(blocked("sh -c 'vitest'")).toBe('vitest')
+  expect(blocked('bash -c "npm run dev" &')).toBeUndefined()
+  expect(blocked('timeout 60 bash -c "npm run dev"')).toBeUndefined()
+  expect(blocked('bash -c "npm run build"')).toBeUndefined()
+})

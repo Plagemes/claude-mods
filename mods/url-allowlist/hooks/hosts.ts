@@ -2,8 +2,24 @@ const URL_START = /^([a-z][a-z0-9+.-]*):\/\/([^/?#\\]*)/i
 const HOSTNAME = /^[a-z0-9._-]+$/
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/
 const FETCH_PROGRAMS = new Set(['curl', 'wget', 'http', 'https', 'httpie'])
-const WRAPPERS = new Set(['sudo', 'env', 'time', 'nohup', 'nice', 'command', 'exec', 'timeout', 'stdbuf'])
-const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U'])
+/** Commands that run the command after their own options, and those options that take a value. */
+const WRAPPERS: Readonly<Record<string, ReadonlySet<string>>> = {
+  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U', '-r', '-t', '--user', '--group', '--host', '--prompt', '--chdir']),
+  doas: new Set(['-u', '-C']),
+  env: new Set(['-u', '--unset', '-C', '--chdir']),
+  time: new Set(['-f', '--format', '-o', '--output']),
+  nohup: new Set(),
+  nice: new Set(['-n', '--adjustment']),
+  ionice: new Set(['-c', '-n', '-p', '--class', '--classdata']),
+  command: new Set(),
+  builtin: new Set(),
+  exec: new Set(['-a']),
+  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+  stdbuf: new Set(['-i', '-o', '-e']),
+}
+const SHELL = /^(?:ba|z|da|k)?sh$/
+/** `-c`, or `-c` grouped with other short options: `bash -lc`, `sh -ec`. */
+const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
 
 /**
  * The host a URL points at, lower-cased: undefined when it cannot be told with certainty (userinfo tricks are
@@ -90,11 +106,12 @@ const programOf = (words: readonly string[]): { name: string; args: readonly str
   let index = 0
   while (index < words.length) {
     const word = words[index] ?? ''
+    const valued = WRAPPERS[basename(word)]
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) index += 1
-    else if (WRAPPERS.has(basename(word))) {
+    else if (valued !== undefined) {
       const wasTimeout = basename(word) === 'timeout'
       index += 1
-      while (words[index]?.startsWith('-') === true) index += WRAPPER_OPTIONS_WITH_VALUE.has(words[index] ?? '') ? 2 : 1
+      while (words[index]?.startsWith('-') === true) index += valued.has(words[index] ?? '') ? 2 : 1
       if (wasTimeout) index += 1
     } else break
   }
@@ -112,6 +129,10 @@ export const urlsInCommand = (command: string, depth = 0): string[] =>
     if (FETCH_PROGRAMS.has(program.name)) {
       return program.args.flatMap((word, index) => (/^[a-z][a-z0-9+.-]*:\/\//i.test(word) ? [word] : word === '--url' && program.args[index + 1] !== undefined ? [program.args[index + 1] ?? ''] : []))
     }
-    const script = program.args[program.args.indexOf('-c') + 1]
-    return depth < MAX_NESTING && /^(?:ba|z|da)?sh$/.test(program.name) && program.args.includes('-c') && script !== undefined ? urlsInCommand(script, depth + 1) : []
+    if (depth >= MAX_NESTING) return []
+    // `eval "curl …"` and `bash -lc "curl …"` run their text as a command line of its own.
+    if (program.name === 'eval') return urlsInCommand(program.args.join(' '), depth + 1)
+    const flag = SHELL.test(program.name) ? program.args.findIndex(arg => SHELL_COMMAND_FLAG.test(arg)) : -1
+    const script = flag === -1 ? undefined : program.args[flag + 1]
+    return script === undefined ? [] : urlsInCommand(script, depth + 1)
   })

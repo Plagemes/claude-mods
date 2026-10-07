@@ -132,3 +132,14 @@ test('leading package-manager options and env do not hide the install', () => {
   expect(names('env CI=1 npm i lodahs')).toEqual(['lodahs'])
   expect(names('pnpm --filter web run build')).toEqual([])
 })
+
+test('regression: DEPS-OK does not carry into a turn the person did not start', async ($, on) => {
+  world(on, {})
+  await $.prompt.submit({ text: 'install it. DEPS-OK', wait: false, origin: { kind: 'composer' } })
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect(await bash($, 'npm install lodahs')).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect(await bash($, 'npm install expresss')).toContain('typo of "express"')
+})

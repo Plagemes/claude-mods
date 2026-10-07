@@ -208,3 +208,14 @@ test('a long run of interpreter options is read at once, without exponential bac
   expect(Date.now() - started).toBeLessThan(200)
   expect(writesFiles(`node --no-warnings -e "require('fs').writeFileSync('a', 'b')"`)).toBe('a script that writes files')
 })
+
+test('regression: writes behind bash -lc, sh -c, eval and wrappers with option values are caught', () => {
+  expect(writesFiles(`bash -lc "sed -i 's/a/b/' src/app.ts"`)).toBe('sed -i')
+  expect(writesFiles(`sh -ec 'cd src && rm old.ts'`)).toBe('rm')
+  expect(writesFiles(`eval "echo hi > notes.txt"`)).toBe('a redirection to notes.txt')
+  expect(writesFiles('sudo -u web rm -rf build')).toBe('rm')
+  expect(writesFiles('timeout 60 prettier --write src')).toBe('prettier --write')
+  expect(writesFiles('nice -n 5 mv a.ts b.ts')).toBe('mv')
+  expect(writesFiles(`bash -c "npm test"`)).toBeUndefined()
+  expect(writesFiles(`git commit -m "rm the old sed -i hack"`)).toBeUndefined()
+})

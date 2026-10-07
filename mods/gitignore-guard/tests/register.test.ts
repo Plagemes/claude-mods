@@ -109,3 +109,11 @@ test('every git add of a chained command is checked, not only the first', async 
   expect((await $.tool.call(bash('git add -u && git add .env'))).deny).toContain('.env (environment file)')
   expect((await $.tool.call(bash('git add src/a.ts && git add -u'))).deny).toBeUndefined()
 })
+
+test('regression: a git add inside bash -lc, sh -ec or eval is checked too', async ($, on) => {
+  engine(on, { status: nul('?? node_modules/a/index.js', '?? src/a.ts') })
+  for (const command of ['bash -lc "git add -A && git commit -m wip"', "sudo -u me sh -ec 'cd /repo && git add .'", "eval 'git add --all'"]) {
+    expect(`${command} => ${(await $.tool.call(bash(command))).deny ?? 'ALLOWED'}`).toContain('node_modules/')
+  }
+  expect((await $.tool.call(bash('bash -c "git add src/a.ts"'))).deny).toBeUndefined()
+})

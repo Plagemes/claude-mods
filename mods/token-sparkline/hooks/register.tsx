@@ -92,11 +92,11 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim().toLowerCase()
     if (arg === 'reset') {
       await update($, points, () => [])
-      return { text: 'token-sparkline: cleared.' }
+      return { text: 'Cleared.' }
     }
     const hide = arg === 'hide' ? true : arg === 'show' ? false : !(await read($, isHidden))
     await setHidden($, hide)
-    return { text: hide ? 'token-sparkline: hidden. /sparkline brings it back.' : 'token-sparkline: shown.' }
+    return { text: hide ? 'Hidden. /sparkline brings it back.' : 'Shown.' }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

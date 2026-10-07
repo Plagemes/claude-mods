@@ -242,3 +242,19 @@ test('/deploy-checklist with nothing waiting reports readiness', async ($, on) =
   expect(result.text).toContain('✓ Changelog: CHANGELOG.md has new, uncommitted entries')
   expect(result.text).toContain('✗ Working tree: 1 uncommitted change: CHANGELOG.md')
 })
+
+test('regression: a command that only names a runner does not count as a test run', () => {
+  for (const command of ['npm i -D vitest', 'cat jest.config.js', 'grep -rn jest src', 'echo pytest', 'git commit -m "run jest"', 'pip install pytest']) {
+    expect(isTestCommand(command)).toBe(false)
+  }
+  for (const command of ['cd web && npx jest', 'bundle exec rspec', 'php artisan test', 'bash -c "npm test"', './gradlew check', 'CI=1 pytest -q']) {
+    expect(isTestCommand(command)).toBe(true)
+  }
+  expect(testsRunFirst('npm i -D vitest && vercel --prod', undefined)).toBe(false)
+})
+
+test('regression: a deploy inside bash -lc or sh -ec is recognised', () => {
+  expect(deployKind(`bash -lc "vercel --prod"`, undefined)).toBe('vercel --prod')
+  expect(deployKind(`sh -ec 'npm test && fly deploy'`, undefined)).toBe('fly deploy')
+  expect(deployKind(`git commit -m "fly deploy"`, undefined)).toBeUndefined()
+})

@@ -170,3 +170,17 @@ test('registers /edit-limit when the session starts', async ($, on) => {
 
   expect(registered).toEqual(['edit-limit'])
 })
+
+test('regression: EDITS-OK does not carry into a turn the person did not start', async ($, on) => {
+  world(on)
+  await say($, 'refactor everything, EDITS-OK')
+  await editMany($, 16)
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await edit($, '/repo/f17.ts')).deny).toBeUndefined()
+  // A notification that starts a turn of its own is held to the limit again.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  await newTurn($)
+  await editMany($, 15, '/other/g')
+  expect((await edit($, '/other/g16.ts')).deny).toBeDefined()
+})
