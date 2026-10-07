@@ -1,5 +1,5 @@
 import { adjustToPass, contrast, over, parseColor, ratioText, toHex } from './color'
-import { backgroundColor, collectVariables, factsOf, fontSizePx, fullSelector, isBold, isDarkBlock, isLargeText, lineOf, lookupFor, parseBlocks, resolveValue } from './css'
+import { backgroundColor, collectVariables, factsOf, fontSizePx, fullSelector, isBold, isDarkBlock, isLargeText, lineFinder, lookupFor, parseBlocks, resolveValue } from './css'
 import type { Block, Decl, Variables } from './css'
 import { classAttributes, classColors } from './tailwind'
 
@@ -134,6 +134,7 @@ const mergeVariables = (all: readonly Variables[]): Variables => ({
  */
 export const analyze = (path: string, text: string, ranges: readonly Range[] | 'all', level: Level): Issue[] => {
   const issues: Issue[] = []
+  const lineOf = lineFinder(text)
   const parsed = segmentsOf(path, text).map(segment => parseBlocks(segment.text, segment.base, segment.label, segment.isScss))
   const variables = mergeVariables(parsed.map(collectVariables))
   const changedVariables = new Set(
@@ -161,7 +162,7 @@ export const analyze = (path: string, text: string, ranges: readonly Range[] | '
         // Name the variables too, so the fix lands where the color is defined.
         const shown = (raw: string, value: string) => (raw.trim() === value ? value : `${raw.trim()} (${value})`)
         const colors = { fg: shown((facts.fg as Decl).value, fgValue), bg: shown(bgRaw ?? '', bgValue) }
-        issues.push({ ...verdict, ...colors, line: lineOf(text, block.start), where: shorten(fullSelector(blocks, index) || block.selector, 60), theme: theme === 'dark' ? 'dark' : null })
+        issues.push({ ...verdict, ...colors, line: lineOf(block.start), where: shorten(fullSelector(blocks, index) || block.selector, 60), theme: theme === 'dark' ? 'dark' : null })
       }
     }
   }
@@ -175,7 +176,7 @@ export const analyze = (path: string, text: string, ranges: readonly Range[] | '
         const bg = theme === 'dark' ? colors.dark.bg ?? colors.light.bg : colors.light.bg
         if (fg === undefined || bg === undefined || (theme === 'dark' && colors.dark.fg === undefined && colors.dark.bg === undefined)) continue
         const verdict = judge(fg, bg, colors.isLarge, level)
-        if (verdict !== undefined) issues.push({ ...verdict, line: lineOf(text, attribute.start), where: `class "${shorten(attribute.value, 50)}"`, theme: theme === 'dark' ? 'dark' : null })
+        if (verdict !== undefined) issues.push({ ...verdict, line: lineOf(attribute.start), where: `class "${shorten(attribute.value, 50)}"`, theme: theme === 'dark' ? 'dark' : null })
       }
     }
     for (const style of inlineStyles(text)) {
@@ -185,7 +186,7 @@ export const analyze = (path: string, text: string, ranges: readonly Range[] | '
       if (fg === undefined || bg === undefined || !touches(ranges, style.start, style.end)) continue
       const size = fontSizePx(style.decls.get('font-size') ?? '')
       const verdict = judge(fg, bg, isLargeText(size, isBold(style.decls.get('font-weight') ?? '')), level)
-      if (verdict !== undefined) issues.push({ ...verdict, line: lineOf(text, style.start), where: 'inline style', theme: null })
+      if (verdict !== undefined) issues.push({ ...verdict, line: lineOf(style.start), where: 'inline style', theme: null })
     }
   }
 

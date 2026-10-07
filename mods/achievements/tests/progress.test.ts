@@ -72,3 +72,16 @@ test('reaching goals unlocks achievements, ten of them unlock the hunter too; fi
   expect(bar(4, 10, 10)).toBe('████░░░░░░')
   expect(bar(12, 10, 5)).toBe('█████')
 })
+
+test('regression: only a command that runs a test runner counts as a test run', () => {
+  expect(testRunnerOf('npx jest --watch=false')).toBe('jest')
+  expect(testRunnerOf('cd app && CI=1 npm test')).toBe('npm test')
+  expect(testRunnerOf('python -m pytest -x')).toBe('pytest')
+  expect(testRunnerOf('poetry run pytest')).toBe('pytest')
+  expect(testRunnerOf('npm run test:unit')).toBe('npm test')
+  expect(testRunnerOf('cat jest.config.js')).toBeUndefined()
+  expect(testRunnerOf('npm install -D vitest')).toBeUndefined()
+  expect(testRunnerOf('pip install pytest')).toBeUndefined()
+  expect(testRunnerOf('grep -rn pytest .')).toBeUndefined()
+  expect(testRunnerOf('rm -rf .pytest_cache')).toBeUndefined()
+})

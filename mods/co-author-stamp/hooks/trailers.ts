@@ -27,11 +27,14 @@ export function mentionsCommit(command: string): boolean {
   return /\bgit\b[\s\S]*\bcommit\b/.test(command)
 }
 
+/** The rest of this commit's own command: up to the next `&&`, `||`, `;`, `|` or line (a `\` line continuation kept). */
+const ownArguments = (rest: string): string => rest.replace(/\\\n/g, ' ').split(/&&|\|\||[;|\n]/)[0] ?? ''
+
 /** Adds `--trailer '...'` right after each `git commit <message flags>`, which git appends after any -m text. */
 export function addTrailers(command: string, coAuthors: readonly CoAuthor[]): string {
   const flags = coAuthors.map(author => `--trailer ${shellQuote(trailerOf(author))}`).join(' ')
   return command.replace(GIT_COMMIT, (match: string, lead: string, head: string, offset: number, whole: string) =>
-    HAS_MESSAGE.test(whole.slice(offset + match.length)) ? `${lead}${head} ${flags}` : match,
+    HAS_MESSAGE.test(ownArguments(whole.slice(offset + match.length))) ? `${lead}${head} ${flags}` : match,
   )
 }
 

@@ -67,6 +67,8 @@ export const register: Register = (on, options) => {
       return next(e)
     }
 
+    // The band holds one tree: what the plugins beneath draw goes under the gauge, so their bands still show.
+    const below = await next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const percent = Math.min(100, Math.max(0, Math.round(gauge.percent)))
     const filled = Math.round((percent / 100) * BAR_CELLS)
@@ -74,15 +76,18 @@ export const register: Register = (on, options) => {
     const color = needsCompact ? 'error' : percent >= warnAt ? 'warning' : 'success'
 
     return (
-      <Box>
-        <Text dimColor>context </Text>
-        <Text color={color}>{'█'.repeat(filled)}</Text>
-        <Text dimColor>{'░'.repeat(BAR_CELLS - filled)}</Text>
-        <Text color={color}>{` ${percent}%`}</Text>
-        <Text dimColor>{` ${compactNumber(gauge.tokens)}/${compactNumber(gauge.window)}`}</Text>
-        {needsCompact && <Text color={color}>{'  /compact'}</Text>}
-        <Text> </Text>
-        <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
+      <Box flexDirection="column">
+        <Box key="gauge">
+          <Text dimColor>context </Text>
+          <Text color={color}>{'█'.repeat(filled)}</Text>
+          <Text dimColor>{'░'.repeat(BAR_CELLS - filled)}</Text>
+          <Text color={color}>{` ${percent}%`}</Text>
+          <Text dimColor>{` ${compactNumber(gauge.tokens)}/${compactNumber(gauge.window)}`}</Text>
+          {needsCompact && <Text color={color}>{'  /compact'}</Text>}
+          <Text> </Text>
+          <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
+        </Box>
+        {below}
       </Box>
     )
   })

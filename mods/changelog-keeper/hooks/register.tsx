@@ -11,6 +11,7 @@ const GIT_TIMEOUT_MS = 10_000
 /** A commit made this long before the Bash call started still counts as its own (clock skew). */
 const COMMIT_GRACE_MS = 2_000
 const COMMIT_COMMAND = /\bgit(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b/
+const AMEND = /\bcommit\b[^;&|\n]*\s--amend\b/
 
 const viewAtom = atom({ plugin: 'changelog-keeper', key: 'view' } as const, null)
 
@@ -83,7 +84,8 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (!COMMIT_COMMAND.test(e.command)) return next(e)
+    // An amend rewrites a commit the changelog already has: its subject is no new change.
+    if (!COMMIT_COMMAND.test(e.command) || AMEND.test(e.command)) return next(e)
     const startedAt = await $.clock.now()
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError === true) return ran

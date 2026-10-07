@@ -91,7 +91,7 @@ test('knows tests from docs from code, comments from code, and what a command wr
   expect(codeOnly('url = "http://x"  # site', 'a.py')).toBe('url = "http://x"')
 
   expect(shellWrites('npm test -- cart 2>&1 | tail -5')).toEqual([])
-  expect(shellWrites('echo hi > src/a.ts && cp a b')).toEqual(['src/a.ts', 'a', 'b'])
+  expect(shellWrites('echo hi > src/a.ts && cp a b')).toEqual(['src/a.ts', 'b'])
   expect(shellWrites("sed -i 's/a/b/' src/a.ts")).toBeUndefined()
   expect(shellWrites("perl -pi -e 's/a/b/' x")).toBeUndefined()
   expect(shellWrites('perl -Mstrict -e 1')).toEqual([])
@@ -176,4 +176,27 @@ test('/presets lists the presets as cards with Use buttons, and hands a task ove
   await seen.clock.advance(0)
   expect(seen.submitted).toEqual(['Use the agent-presets:test-writer agent to cover src/cart.ts'])
   expect((await run('linter go')).text).toContain('There is no preset "linter"')
+})
+
+test('regression: the shell check reads what a command writes, not comparisons, copy sources or read-only git', () => {
+  // A `>` inside quotes or a here-document body is no redirection.
+  expect(shellRefusal('tests', 'python -c "print(1 > 0)"', ROOT)).toBeUndefined()
+  expect(shellRefusal('tests', "jq '.[] | select(.x > 3)' data.json", ROOT)).toBeUndefined()
+  expect(shellRefusal('tests', "cat > tests/test_cart.py <<'EOF'\nassert total([]) > -1\nEOF", ROOT)).toBeUndefined()
+  // cp writes its destination; chmod's mode is no path; a test folder may be made.
+  expect(shellRefusal('tests', 'cp src/data.json tests/fixtures/', ROOT)).toBeUndefined()
+  expect(shellRefusal('tests', 'chmod +x tests/run.sh', ROOT)).toBeUndefined()
+  expect(shellRefusal('tests', 'mkdir -p src/__tests__', ROOT)).toBeUndefined()
+  expect(shellRefusal('tests', 'cp tests/fixtures/a.json src/a.json', ROOT)).toContain('src/a.json')
+  expect(shellRefusal('tests', 'mv src/cart.ts tests/cart.ts', ROOT)).toContain('src/cart.ts')
+  expect(shellRefusal('tests', 'echo x &> src/out.log', ROOT)).toContain('src/out.log')
+  // Read-only git forms pass; global options do not hide a state change.
+  expect(gitStateChange('git merge-base HEAD main')).toBeUndefined()
+  expect(gitStateChange('git stash list')).toBeUndefined()
+  expect(gitStateChange('git tag --contains abc123')).toBeUndefined()
+  expect(gitStateChange('git worktree list')).toBeUndefined()
+  expect(gitStateChange('git stash')).toBe('git stash')
+  expect(gitStateChange('git tag v1.2.0')).toBe('git tag')
+  expect(gitStateChange('git --no-pager commit -m wip')).toBe('git commit')
+  expect(gitStateChange('git -P push origin main')).toBe('git push')
 })

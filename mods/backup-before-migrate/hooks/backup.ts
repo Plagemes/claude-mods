@@ -61,6 +61,12 @@ export const compileExtra = (source: unknown): RegExp | undefined => {
   }
 }
 
+/** The `DATABASE_URL=…` a command sets for itself (`DATABASE_URL=postgres://… npx prisma migrate dev`), unquoted. */
+export const inlineDatabaseUrl = (command: string): string | undefined => {
+  const match = /(?:^|[\s;&|(])(?:export\s+)?DATABASE_URL=("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(command)
+  return match?.[1]?.replace(/^(["'])([\s\S]*)\1$/, '$2')
+}
+
 /** The folder a leading `cd <dir> &&` moves the migration into, if any. */
 export const leadingDirectory = (command: string): string | undefined => {
   const match = /^\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|]+)\s*&&/.exec(command)

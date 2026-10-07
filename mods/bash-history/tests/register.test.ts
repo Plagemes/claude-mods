@@ -98,3 +98,13 @@ test('says so when nothing has run yet', async ($, on) => {
 
   expect(await history($)).toContain('has not run any shell commands yet')
 })
+
+test('regression: minutes never show 60 seconds, and a huge command is not kept whole', async ($, on) => {
+  const run = shell(on)
+  await run($, 'sleep 119', 119_600)
+  await run($, `cat > big.txt <<'EOF'\n${'x'.repeat(50_000)}\nEOF`)
+
+  const rows = (await history($)).split('\n').slice(2)
+  expect(rows[0]).toMatch(/ok\s+2m0s\s+sleep 119$/)
+  expect(rows[1]?.length).toBeLessThan(200)
+})

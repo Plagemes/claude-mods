@@ -111,7 +111,9 @@ export const insertEntry = (markdown: string, entry: Entry, suffix = ''): { mark
     const at = lastFilled(lines, start, before) + 1
     lines.splice(at, before - at, '', `### ${entry.section}`, '', bullet, ...(before < lines.length ? [''] : []))
   }
-  return { markdown: `${lines.join('\n')}\n`, isChanged: true }
+  // A file written with CRLF keeps CRLF: only the new lines should show in a diff.
+  const newline = markdown.includes('\r\n') ? '\r\n' : '\n'
+  return { markdown: `${lines.join(newline)}${newline}`, isChanged: true }
 }
 
 /** The body of `## [Unreleased]`, or undefined when the file has none. */

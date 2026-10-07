@@ -24,6 +24,10 @@ type World = {
 /** The engine beneath the plugin: clock and store in memory, a context gauge, installed plugins and commands, Bash output. */
 const world = (on: On, stored: Record<string, unknown> = {}): World => {
   const clock = mock.clock(on, { now: START })
+  settleClock = async () => {
+    await clock.advance(0)
+    await clock.settle()
+  }
   mock.store(on, stored)
   const state: World = {
     toasts: [],
@@ -67,8 +71,13 @@ const world = (on: On, stored: Record<string, unknown> = {}): World => {
 const startSession = ($: Engine) => $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
 const bash = ($: Engine, command: string) => $.tool.call({ tool: 'Bash', command })
 const say = ($: Engine, text: string) => $.prompt.submit({ text, wait: false, origin: { kind: 'composer' } })
-const endTurn = ($: Engine, extra: { agentId?: string; reason?: 'answer' | 'aborted' } = {}) =>
-  $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't', reason: 'answer', ...extra } as never)
+/** The clock of the running test: the tip is given just after the turn, from a timer. */
+let settleClock: () => Promise<void> = async () => undefined
+const endTurn = async ($: Engine, extra: { agentId?: string; reason?: 'answer' | 'aborted' } = {}) => {
+  const ended = await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't', reason: 'answer', ...extra } as never)
+  await settleClock()
+  return ended
+}
 const coach = async ($: Engine, args = ''): Promise<string> =>
   (
     await $.command.run({
@@ -338,4 +347,34 @@ test('the pattern helpers', () => {
   expect(isLongOutput('x'.repeat(6000))).toBe(true)
   expect(isLongOutput('line\n'.repeat(120))).toBe(true)
   expect(isLongOutput('short')).toBe(false)
+})
+
+test('regression: a turn ends without waiting for the installed-plugins check', async ($, on) => {
+  const clock = mock.clock(on, { now: START })
+  mock.store(on, {})
+  const toasts: string[] = []
+  let release: () => void = () => undefined
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  on('session.usage', () => ({ value: { startedAt: START, context: { window: 200_000, percent: 10 }, rateLimits: [] } }))
+  on('command.list', () => ({ value: [] }))
+  on('env.get', () => ({ value: undefined }))
+  on('process.run', () =>
+    new Promise(resolve => {
+      release = () => resolve({ value: { exitCode: 0, stdout: '[]', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+    }),
+  )
+  on('tool.call', () => ({ result: 'ok', text: 'line\n'.repeat(200) }))
+  on('turn.complete', () => ({ text: '' }))
+
+  for (let i = 0; i < 3; i += 1) await $.tool.call({ tool: 'Bash', command: `cat file${i}` })
+  // With the CLI still running, the turn's end must not hang on it.
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  await clock.advance(0)
+  expect(toasts).toHaveLength(0)
+  release()
+  await clock.settle()
+  expect(toasts[0]).toContain('output-trimmer')
 })

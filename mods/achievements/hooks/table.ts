@@ -97,8 +97,13 @@ const PUSH = /\bgit\s+(?:-C\s+\S+\s+)?push\b(?![^|;&\n]*--dry-run)/g
 const BRANCH = /\bgit\s+(?:-C\s+\S+\s+)?(?:checkout\s+-[bB]|switch\s+(?:-c|-C|--create))\s+[\w./-]|\bgit\s+(?:-C\s+\S+\s+)?branch\s+(?!-)[\w./-]+(?:\s+[\w./-]+)?\s*(?:$|[|;&\n])/g
 const PULL_REQUEST = /\bgh\s+pr\s+create\b/g
 const PLUGIN_INSTALL = /\bclaude\s+plugin\s+(?:install|i)\s+[\w@./-]/g
-const TEST_RUNNER =
-  /\b(jest|vitest|pytest|py\.test|mocha|rspec|phpunit|tox|ctest|go test|cargo (?:test|nextest)|deno test|bun test|dotnet test|mvn test|gradle test|(?:npm|yarn|pnpm)(?: run)? test)\b/
+/** A runner as the command a shell segment runs, after env assignments and launchers (`npx`, `python -m`, `poetry run`, ...). */
+const TEST_RUNNER = new RegExp(
+  String.raw`^\s*(?:\w+=\S*\s+|(?:sudo|time|env|nice|command|npx|pnpx|bunx|yarn|pnpm|bun)\s+|timeout\s+\S+\s+|(?:python3?|py)\s+-m\s+|(?:poetry|uv|pipenv|pdm|hatch|rye)\s+run\s+|(?:bundle|pnpm|yarn|npm)\s+exec\s+(?:--\s+)?)*?` +
+    String.raw`(?:[\w.~-]*\/)*` +
+    String.raw`(jest|vitest|pytest|py\.test|mocha|rspec|phpunit|tox|ctest|go test|cargo (?:test|nextest)|deno test|bun test|dotnet test|mvn test|gradle test|(?:npm|yarn|pnpm)(?: run)? test)(?![\w./])`,
+)
+const SEGMENTS = /&&|\|\||[;|&\n(){}]/
 const FAILURE_REPORT = /\b[1-9]\d* (?:failed|failing|failures?)\b|^FAIL\b|\bFAILED\b/m
 
 const count = (pattern: RegExp, text: string): number => [...text.matchAll(pattern)].length
@@ -115,8 +120,14 @@ export function bashCounts(command: string): BashCounts {
   return Object.fromEntries(Object.entries(counts).filter(([, value]) => value > 0))
 }
 
-/** The test runner a command runs (`npm run test` and `npm test` alike), or undefined. */
-export const testRunnerOf = (command: string): string | undefined => TEST_RUNNER.exec(command)?.[1]?.replace(' run ', ' ')
+/** The test runner a command runs (`npm run test` and `npm test` alike), or undefined; `cat jest.config.js` or `pip install pytest` runs none. */
+export function testRunnerOf(command: string): string | undefined {
+  for (const segment of command.split(SEGMENTS)) {
+    const runner = TEST_RUNNER.exec(segment)?.[1]
+    if (runner !== undefined) return runner.replace(' run ', ' ')
+  }
+  return undefined
+}
 
 /** Whether a test run's output reports failures even though the command exited 0. */
 export const reportsFailure = (output: string): boolean => FAILURE_REPORT.test(output)

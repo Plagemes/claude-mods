@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
+import { findExpensive } from '../hooks/cost'
+
 const PERSON = { wait: false, origin: { kind: 'composer' } } as const
 
 /** Stands in for the engine: records the commands that reach the Bash tool and lets prompts through. */
@@ -121,4 +123,11 @@ test('largeSize sets the size from which ordinary instances count as expensive',
   expect(result.deny).toContain('c6i.4xlarge')
   const small = await $.tool.call({ tool: 'Bash', command: 'aws ec2 run-instances --instance-type c6i.2xlarge --image-id ami-1' })
   expect(small.deny).toBeUndefined()
+})
+
+test('regression: a command handed to bash -c, sh -lc or eval is checked too', () => {
+  expect(findExpensive('bash -c "aws ec2 run-instances --instance-type p3.2xlarge --image-id ami-1"', 32)[0]?.what).toBe('an EC2 instance (p3.2xlarge)')
+  expect(findExpensive("sh -lc 'eksctl create cluster --nodes 3'", 32)[0]?.what).toContain('EKS cluster with 3')
+  expect(findExpensive('eval aws ec2 run-instances --instance-type p4d.24xlarge', 32)).toHaveLength(1)
+  expect(findExpensive('bash -c "echo aws ec2 run-instances --instance-type p3.2xlarge"', 32)).toHaveLength(0)
 })

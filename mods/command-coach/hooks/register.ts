@@ -185,8 +185,9 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('turn.complete', async ($, e, next) => {
-    if (showToasts && e.agentId === undefined && e.reason === 'answer') await coach($, cooldownMs)
+  on('turn.complete', ($, e, next) => {
+    // After the turn, in the background: asking the CLI which mods are installed takes a second or two.
+    if (showToasts && e.agentId === undefined && e.reason === 'answer') $.clock.after(0, () => void coach($, cooldownMs))
     return next(e)
   })
 

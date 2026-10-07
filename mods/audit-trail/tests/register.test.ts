@@ -261,3 +261,10 @@ test('summarize names the subject of each tool, and only the argument names of a
   expect(summarize('mcp__db__query', { tool: 'mcp__db__query', sql: 'select 1' }, 200)).toBe('(sql)')
   expect(summarize('Bash', { command: `echo ${'a'.repeat(300)}` }, 20)).toHaveLength(20)
 })
+
+test('regression: redact masks curl -u passwords and mysql -p passwords', () => {
+  expect(redact('curl -u admin:hunter2 https://api.example.com')).toBe('curl -u admin:[redacted] https://api.example.com')
+  expect(redact('curl --user=admin:hunter2 https://x')).toBe('curl --user=admin:[redacted] https://x')
+  expect(redact('mysql -u root -phunter2 shop')).toBe('mysql -u root -p[redacted] shop')
+  expect(redact('mysql -u root -p shop && mkdir -p a/b && ssh -p 22 host')).toBe('mysql -u root -p shop && mkdir -p a/b && ssh -p 22 host')
+})

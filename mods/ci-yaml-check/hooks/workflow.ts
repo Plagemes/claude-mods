@@ -11,12 +11,23 @@ const USES = /^\s*(?:-\s+)?uses:\s*(['"]?)([^\s'"#]+)\1/
 const UNTRUSTED_REF = /github\.event\.pull_request\.head|github\.head_ref|pull_request\.head\.(?:sha|ref|repo)/
 const PRINTS = /\b(?:echo|printf|cat|Write-Host|Write-Output)\b/
 
+/**
+ * A command that writes a secret to the log: `echo ${{ secrets.X }}`, but not one that pipes or redirects it
+ * (`echo "${{ secrets.X }}" | docker login --password-stdin`, `printf ... > key.pem`), where it never reaches the log.
+ */
+const isSecretPrinted = (command: string): boolean => {
+  const printed = PRINTS.exec(command)
+  if (printed === null || !/\$\{\{\s*secrets\./.test(command)) return false
+  const rest = command.slice(printed.index).replace(/\$\{\{[^}]*\}\}/g, '')
+  return !/[|>]/.test(rest)
+}
+
 const indentOf = (line: string): number => line.length - line.trimStart().length
 const isBlankOrComment = (line: string): boolean => line.trim() === '' || line.trim().startsWith('#')
 /** A line without its trailing ` # comment`. */
 const code = (line: string): string => line.replace(/\s+#.*$/, '')
 
-type Job = { name: string; line: number; hasPermissions: boolean }
+type Job = { name: string; line: number; hasPermissions: boolean; childIndent: number | undefined }
 
 /** The jobs of the workflow, and whether each one has its own `permissions:`. */
 function jobsOf(lines: readonly string[]): Job[] {
@@ -32,11 +43,15 @@ function jobsOf(lines: readonly string[]): Job[] {
     const indent = indentOf(line)
     if (indent < level) break
     const name = indent === level ? /^\s*([\w.-]+)\s*:/.exec(line)?.[1] : undefined
-    if (name !== undefined) jobs.push({ name, line: index + 1, hasPermissions: false })
-    else if (indent === level + 2 && /^\s*permissions\s*:/.test(line)) {
-      const job = jobs.at(-1)
-      if (job !== undefined) job.hasPermissions = true
+    if (name !== undefined) {
+      jobs.push({ name, line: index + 1, hasPermissions: false, childIndent: undefined })
+      continue
     }
+    // A job's own keys sit at its first child's indentation, however wide the file indents (2 or 4 spaces).
+    const job = jobs.at(-1)
+    if (job === undefined) continue
+    job.childIndent ??= indent
+    if (indent === job.childIndent && /^\s*permissions\s*:/.test(line)) job.hasPermissions = true
   }
   return jobs
 }
@@ -102,7 +117,7 @@ export function checkWorkflow(text: string, options: { requireSha: boolean }): F
   for (const [index, line] of lines.entries()) {
     if (isBlankOrComment(line)) continue
     if (/\$\{\{\s*toJSON\(\s*secrets\s*\)/i.test(line)) add(index + 1, 'error', 'toJSON(secrets) puts every secret in one place; pass only the ones a step needs')
-    else if (PRINTS.test(code(line)) && /\$\{\{\s*secrets\./.test(code(line))) add(index + 1, 'error', 'a secret is printed by this command; masking is not guaranteed, so do not echo secrets')
+    else if (isSecretPrinted(code(line))) add(index + 1, 'error', 'a secret is printed by this command; masking is not guaranteed, so do not echo secrets')
   }
   return findings.sort((a, b) => a.line - b.line)
 }

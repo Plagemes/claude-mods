@@ -5,6 +5,7 @@ import {
   SKIP_MARK,
   compileExtra,
   dumpPlan,
+  inlineDatabaseUrl,
   leadingDirectory,
   migrationKind,
   parseIndex,
@@ -41,10 +42,14 @@ async function exists($: EngineInterface, path: string): Promise<boolean> {
   return $.fs.exists(path).catch(() => false)
 }
 
-/** The project's database, only when it is on this machine: the variable from the environment or an env file, else a framework's SQLite file. */
-async function findDatabase($: EngineInterface, root: string): Promise<Found> {
-  let url = (await $.env.get('DATABASE_URL').catch(() => undefined))?.trim()
-  let source = 'the environment'
+/**
+ * The project's database, only when it is on this machine: the variable the command sets for itself, else the one
+ * from the environment or an env file, else a framework's SQLite file.
+ */
+async function findDatabase($: EngineInterface, root: string, inline: string | undefined): Promise<Found> {
+  if (inline !== undefined && inline.includes('$')) return { ok: false, error: `the command sets ${ENV_VAR} from a shell variable that cannot be read here` }
+  let url = inline?.trim() ?? (await $.env.get('DATABASE_URL').catch(() => undefined))?.trim()
+  let source = inline === undefined ? 'the environment' : 'the command'
   if (url === undefined || url === '') {
     url = undefined
     for (const file of ENV_FILES) {
@@ -109,7 +114,7 @@ async function record($: EngineInterface, dir: string, entry: Entry, keep: numbe
 async function backUp($: EngineInterface, command: string, migration: string, settings: Settings): Promise<Outcome> {
   const cwd = (await $.session.cwd()).replace(/[\\/]+$/, '')
   const sub = leadingDirectory(command)
-  const found = await findDatabase($, sub === undefined ? cwd : sub.startsWith('/') ? sub : `${cwd}/${sub}`)
+  const found = await findDatabase($, sub === undefined ? cwd : sub.startsWith('/') ? sub : `${cwd}/${sub}`, inlineDatabaseUrl(command))
   if (!found.ok) return { kind: 'skipped', reason: found.error }
 
   const dir = `${cwd}/${BACKUP_DIR}`

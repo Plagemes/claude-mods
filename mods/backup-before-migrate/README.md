@@ -35,7 +35,7 @@ lets the migration run. Claude is told where the backup is, and `/db-restore` pr
 
 ## How it works
 - A `tool.call` guard on `Bash` spots migrations (quoted text such as a commit message is ignored), finds the
-  database from `DATABASE_URL` (environment, `.env.local`, `.env.development(.local)`, `.env`, `prisma/.env`, or the
+  database from `DATABASE_URL` (set in the command itself, the environment, `.env.local`, `.env.development(.local)`, `.env`, `prisma/.env`, or the
   folder of a leading `cd dir &&`) or a framework SQLite file, and dumps it before calling the migration. If the
   backup step itself crashes, the migration is denied.
 - Local only, fail closed: only `localhost`, `127.0.0.1`, `::1`, Unix sockets and SQLite files are ever dumped,

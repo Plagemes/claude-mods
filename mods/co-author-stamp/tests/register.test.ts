@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 
+import { addTrailers } from '../hooks/trailers'
+
 const ADA = 'Ada Lovelace <ada@example.com>'
 const BOT = 'Pair Bot <bot@example.com>'
 const ADA_TRAILER = "--trailer 'Co-authored-by: Ada Lovelace <ada@example.com>'"
@@ -81,4 +83,11 @@ test('does nothing until coAuthors is set', async ($, on) => {
   expect(ran).toEqual(['git commit -m "x"'])
   expect(gitCalls).toHaveLength(0)
   expect(text.text).toBe('T')
+})
+
+test('regression: a -m that belongs to a later command does not stamp a commit without a message', () => {
+  const ada = [{ name: 'Ada Lovelace', email: 'ada@example.com' }]
+  const chained = 'git commit --amend --no-edit && git tag -a v1.2.0 -m "release"'
+  expect(addTrailers(chained, ada)).toBe(chained)
+  expect(addTrailers('git commit \\\n  -m "fix: x"', ada)).toContain("git commit --trailer 'Co-authored-by: Ada Lovelace <ada@example.com>'")
 })

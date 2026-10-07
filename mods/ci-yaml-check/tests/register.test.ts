@@ -118,7 +118,7 @@ test('toJSON(secrets) and commands that print a secret are flagged; env mapping 
     '    steps:',
     '      - run: echo "${{ toJSON(secrets) }}"',
     '      - run: |',
-    '          printf %s "${{ secrets.KEY }}" > key.pem',
+    '          echo "token is ${{ secrets.KEY }}"',
     '      - run: deploy',
     '        env:',
     '          TOKEN: ${{ secrets.TOKEN }}',
@@ -156,4 +156,24 @@ test('useActionlint can be turned off', { options: { useActionlint: false } }, a
   const result = await $.tool.call({ tool: 'Write', file_path: FILE, content: GOOD })
   expect(seen.actionlintRuns).toBe(0)
   expect(result.context).toBeUndefined()
+})
+
+test('regression: a secret piped or written to a file is not printed, and 4-space job permissions are seen', () => {
+  const piped = [
+    'permissions: read-all',
+    'on: push',
+    'jobs:',
+    '  a:',
+    '    steps:',
+    '      - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u me --password-stdin',
+    '      - run: printf %s "${{ secrets.KEY }}" > key.pem',
+  ].join('\n')
+  expect(checkWorkflow(piped, { requireSha: false })).toEqual([])
+
+  const wide = ['on: push', 'jobs:', '    a:', '        permissions:', '            contents: read', '        runs-on: x', '    b:', '        permissions: read-all', '        runs-on: x'].join('\n')
+  expect(checkWorkflow(wide, { requireSha: false })).toEqual([])
+  const oneMissing = wide.replace('        permissions: read-all\n', '')
+  expect(checkWorkflow(oneMissing, { requireSha: false })).toEqual([
+    { line: 7, severity: 'warn', message: 'job b has no permissions: block while other jobs do; it gets the wide default token' },
+  ])
 })

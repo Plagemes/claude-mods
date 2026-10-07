@@ -251,10 +251,24 @@ function aks(words: readonly string[], command: string): Estimate[] {
   ]
 }
 
+const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh'])
+const MAX_NESTING = 3
+
+/** The script a shell is handed to run (`bash -c "…"`, `sh -lc '…'`, `eval …`), or undefined. */
+function innerScript(words: readonly string[]): string | undefined {
+  const tool = baseName(words[0] ?? '')
+  if (tool === 'eval') return words.slice(1).join(' ')
+  if (!SHELLS.has(tool)) return undefined
+  const flag = words.findIndex((word, index) => index > 0 && /^-[a-z]*c[a-z]*$/.test(word))
+  return flag < 0 ? undefined : words[flag + 1]
+}
+
 /** Commands of the line that create expensive cloud resources, with a rough hourly cost; reads text, runs nothing. */
-export function findExpensive(line: string, large: number): Estimate[] {
+export function findExpensive(line: string, large: number, depth = 0): Estimate[] {
   return parseShell(line).flatMap(segment => {
     const words = withoutPrefix(segment.words)
+    const script = innerScript(words)
+    if (script !== undefined) return depth < MAX_NESTING ? findExpensive(script, large, depth + 1) : []
     const tool = baseName(words[0] ?? '')
     const shown = words.join(' ')
     const command = shown.length > MAX_COMMAND_LENGTH ? `${shown.slice(0, MAX_COMMAND_LENGTH)}...` : shown

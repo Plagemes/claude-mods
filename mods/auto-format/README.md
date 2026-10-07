@@ -8,7 +8,7 @@ After each successful Edit or Write, auto-format finds the formatter your projec
 
 | Language | Formatter | Runs when |
 | --- | --- | --- |
-| JS / TS / JSON / CSS / GraphQL | biome | `biome.json(c)` or `@biomejs/biome` in package.json |
+| JS / TS / JSON / CSS / GraphQL | biome | `biome.json(c)` or `@biomejs/biome` in package.json, unless biome.json turns its formatter off |
 | JS / TS / CSS / SCSS / JSON / Markdown / YAML / HTML / Vue / Svelte | prettier | a prettier config, or `prettier` in package.json |
 | Python | ruff format, else black | `ruff.toml` / `[tool.ruff]`, or black named in pyproject.toml |
 | Go | gofmt | always |

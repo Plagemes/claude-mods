@@ -64,3 +64,13 @@ test('the size limit is configurable', { options: { maxKb: 10 } }, async ($, on)
   expect((await $.tool.call({ tool: 'Read', file_path: '/repo/a.txt' })).deny).toContain('10 KB')
   expect((await $.tool.call({ tool: 'Read', file_path: '/repo/b.txt' })).deny).toBeUndefined()
 })
+
+test('regression: an offset alone is a bounded read', async ($, on) => {
+  answerEngine(on, { '/repo/app.log': 3 * 1024 * 1024 })
+
+  const window = await $.tool.call({ tool: 'Read', file_path: '/repo/app.log', offset: 50_000 })
+  expect(window.deny).toBeUndefined()
+
+  const whole = await $.tool.call({ tool: 'Read', file_path: '/repo/app.log' })
+  expect(whole.deny).toContain('over the 256 KB limit')
+})

@@ -24,6 +24,10 @@ const BEARER = /(\bBearer\s+)[A-Za-z0-9._~+/=-]{8,}/g
 const ASSIGNMENT = new RegExp(String.raw`(${SECRET_WORD}[\w.-]*["']?\s*[=:]\s*)(["']?)[^\s"'&;,]+\2`, 'gi')
 /** `--password hunter2`, `--api-key abc`. */
 const SECRET_FLAG = /(--[\w-]*(?:password|passwd|secret|token|api-?key)[\w-]*\s+)(?!-)\S+/gi
+/** curl's `-u user:password` and `--user user:password`: the user stays, the password goes. */
+const USER_PASSWORD = /((?:^|\s)(?:-u|--user)[\s=]+["']?[^\s:"']+:)[^\s"']+/g
+/** `mysql -phunter2`: the password glued to `-p`. */
+const MYSQL_PASSWORD = /(\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^\n|;&]*?\s-p)[^\s-]\S*/g
 
 /** Masks the credentials in `text`, so a log can hold what Claude ran without holding what it was trusted with. */
 export const redact = (text: string): string => {
@@ -34,6 +38,8 @@ export const redact = (text: string): string => {
     .replace(BEARER, `$1${REDACTED}`)
     .replace(ASSIGNMENT, `$1$2${REDACTED}$2`)
     .replace(SECRET_FLAG, `$1${REDACTED}`)
+    .replace(USER_PASSWORD, `$1${REDACTED}`)
+    .replace(MYSQL_PASSWORD, `$1${REDACTED}`)
 }
 
 /** One line of at most `max` characters: whitespace collapsed, the end replaced by an ellipsis when cut. */

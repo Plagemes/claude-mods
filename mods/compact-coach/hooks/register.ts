@@ -16,8 +16,16 @@ const DEFAULT_MIN_PERCENT = 60
 const DEFAULT_COOLDOWN_TURNS = 10
 
 const COMMIT_OR_PUSH = /\bgit\s+(?:-C\s+\S+\s+)?(?:commit|push)\b|\bgh\s+pr\s+create\b/
-const TEST_RUN =
-  /\b(?:npm|pnpm|yarn|bun|deno)\s+(?:run\s+)?test\b|\b(?:vitest|jest|pytest|mocha|rspec|phpunit)\b|\bgo\s+test\b|\bcargo\s+(?:test|nextest)\b|\b(?:mvn|gradle|gradlew)\s+test\b|\bdotnet\s+test\b|\bmake\s+test\b/
+/** A test runner as the command a shell segment runs, after env assignments and launchers (`npx`, `python -m`, ...). */
+const TEST_RUN = new RegExp(
+  String.raw`^\s*(?:\w+=\S*\s+|(?:sudo|time|env|nice|command|npx|pnpx|bunx|yarn|pnpm|bun)\s+|timeout\s+\S+\s+|(?:python3?|py)\s+-m\s+|(?:poetry|uv|pipenv|pdm|hatch|rye)\s+run\s+|(?:bundle|pnpm|yarn|npm)\s+exec\s+(?:--\s+)?)*?` +
+    String.raw`(?:[\w.~-]*\/)*` +
+    String.raw`(?:(?:npm|pnpm|yarn|bun|deno)\s+(?:run\s+)?test|vitest|jest|pytest|mocha|rspec|phpunit|go\s+test|cargo\s+(?:test|nextest)|(?:mvn|gradle|gradlew)\s+test|dotnet\s+test|make\s+test)(?![\w./])`,
+)
+const SEGMENTS = /&&|\|\||[;|&\n(){}]/
+
+/** A command that runs tests; `cat jest.config.js` or `pip install pytest` runs none. */
+const runsTests = (command: string): boolean => command.split(SEGMENTS).some(segment => TEST_RUN.test(segment))
 
 /** Task-list bookkeeping must not hide that the work before it ended on a commit or a test run. */
 const BOOKKEEPING = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList'])
@@ -28,7 +36,7 @@ const LABELS: Record<CompactCoachMilestone, string> = {
 }
 
 const milestoneOf = (command: string): CompactCoachMilestone | null =>
-  COMMIT_OR_PUSH.test(command) ? 'commit' : TEST_RUN.test(command) ? 'tests' : null
+  COMMIT_OR_PUSH.test(command) ? 'commit' : runsTests(command) ? 'tests' : null
 
 const createdTaskId = (result: unknown): string | undefined => {
   if (typeof result !== 'object' || result === null || !('task' in result)) {

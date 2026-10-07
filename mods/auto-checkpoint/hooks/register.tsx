@@ -6,6 +6,8 @@ import type { AutoCheckpointEntry as Entry, AutoCheckpointNotice as Notice, Auto
 type Repo = { root: string; index: string; head: string | undefined }
 type GitResult = { ok: boolean; out: string; err: string }
 type Saved = { kind: 'created' | 'unchanged'; entry: Entry } | { kind: 'failed'; why: string }
+/** Whether snapshots are paused for this session (one timed out). */
+type Health = { isPaused: boolean }
 
 const PLUGIN = 'auto-checkpoint'
 const PANE = 'checkpoints'
@@ -13,6 +15,8 @@ const REF_PREFIX = 'refs/claude-checkpoints/'
 const INDEX_NAME = 'claude-checkpoint.index'
 const PROMPT_LIMIT = 200
 const GIT_TIMEOUT_MS = 20_000
+/** How `$.process.run` reports a command that outran its timeout. */
+const TIMED_OUT = /still running after/
 const DEFAULT_KEEP = 20
 const MAX_KEEP = 200
 const EDITING_TOOLS = /^(?:Edit|Write|MultiEdit|NotebookEdit|Bash)$/
@@ -100,13 +104,20 @@ const saveCheckpoint = async ($: EngineInterface, repo: Repo, prompt: string, ke
 }
 
 /** Before the first edit of a turn: checkpoint quietly, never failing the tool call. */
-const checkpointTurn = async ($: EngineInterface, prompt: string, keep: number): Promise<void> => {
+const checkpointTurn = async ($: EngineInterface, prompt: string, keep: number, health: Health): Promise<void> => {
   try {
     const repo = await repoAt($)
     if (repo === undefined) return
     const saved = await saveCheckpoint($, repo, prompt, keep)
     if (saved.kind === 'created') $.ui.status(`checkpoint #${saved.entry.n} saved · /checkpoints`)
-    if (saved.kind === 'failed') $.ui.log(`${PLUGIN}: snapshot failed: ${saved.why}`, { to: 'debug' })
+    if (saved.kind === 'failed') {
+      $.ui.log(`${PLUGIN}: snapshot failed: ${saved.why}`, { to: 'debug' })
+      // A snapshot that outran its timeout would make every later turn wait as long again: stop for this session.
+      if (TIMED_OUT.test(saved.why)) {
+        health.isPaused = true
+        $.ui.status(`checkpoints paused: a snapshot took over ${GIT_TIMEOUT_MS / 1000}s in this repository`)
+      }
+    }
   } catch (error) {
     $.ui.log(`${PLUGIN}: snapshot failed: ${String(error)}`, { to: 'debug' })
   }
@@ -148,6 +159,7 @@ export const register: Register = (on, options) => {
   const keep = Math.min(MAX_KEEP, Math.max(1, Math.round(typeof options.keep === 'number' ? options.keep : DEFAULT_KEEP)))
   let turn: { id: string; prompt: string; snapshot?: Promise<void> } | undefined
   let lastPrompt = ''
+  const health: Health = { isPaused: false }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'checkpoints', description: 'auto-checkpoint: list work-tree checkpoints and roll back' })
@@ -163,8 +175,8 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: EDITING_TOOLS }, async ($, e, next) => {
     const isReadOnly = e.tool === 'Bash' && READ_ONLY_BASH.test(e.command)
-    if (turn !== undefined && !isReadOnly) {
-      turn.snapshot ??= checkpointTurn($, turn.prompt, keep)
+    if (turn !== undefined && !isReadOnly && !health.isPaused) {
+      turn.snapshot ??= checkpointTurn($, turn.prompt, keep, health)
       await turn.snapshot
     }
     return next(e)

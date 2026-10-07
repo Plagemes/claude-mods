@@ -181,3 +181,17 @@ test('/db-backups lists backups and /db-restore prints the command without runni
   expect((await command($, 'db-restore', 'last')).text).toContain('Usage: /db-restore <n>')
   expect(state.runs.length).toBe(runsBefore)
 })
+
+test('regression: a DATABASE_URL the command sets for itself is the database backed up', async ($, on) => {
+  const state = world(on, PG_ENV)
+  const result = await bash($, 'DATABASE_URL="postgresql://dev:t3st@localhost:5432/app_test" npx prisma migrate reset --force')
+  const [dump] = state.runs
+  expect(dump?.argv).toContain("--dbname=host='localhost' port='5432' dbname='app_test' user='dev' application_name='claude-mods' connect_timeout='5'")
+  expect(dump?.env).toEqual({ PGPASSWORD: 't3st' })
+  expect(result.context?.[0]).toContain('postgres · app_test @ localhost:5432 was backed up')
+
+  // A URL the shell would expand cannot be read here: no backup of some other database instead.
+  const skipped = await bash($, 'DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy')
+  expect(skipped.context?.[0]).toContain('no backup was taken before this migration (the command sets DATABASE_URL from a shell variable')
+  expect(state.runs.filter(run => run.argv[0] === 'pg_dump')).toHaveLength(1)
+})

@@ -123,3 +123,11 @@ test('nested SCSS rules inherit the background of their parent', () => {
   expect(issue?.bg).toBe('$brand (#7dd3fc)')
   expect(ratioText(issue?.ratio ?? 0)).toBe('1.66:1')
 })
+
+test('regression: a large stylesheet with many failing pairs is checked quickly, with the right lines', () => {
+  const sheet = '.a{color:#777;background:#fff}\n'.repeat(12_000)
+  const started = Date.now()
+  const issues = analyze('big.css', sheet, 'all', 'AA')
+  expect(Date.now() - started).toBeLessThan(1_500)
+  expect(issues.map(issue => issue.line)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+})

@@ -150,3 +150,21 @@ test('/changelog shows the Unreleased section in a pane with Copy', async ($, on
   }
   expect(state.copies).toEqual(['### Fixed\n\n- Handle empty carts', '### Fixed\n\n- Handle empty carts'])
 })
+
+test('regression: an amend is skipped even without the engine git record', async ($, on) => {
+  const state = repo(on, 'feat: reworded subject', { file: EXISTING })
+  on('tool.call', () => ({ result: BASH_OK }))
+
+  await $.tool.call({ tool: 'Bash', command: 'git commit --amend -m "feat: reworded subject"' })
+  expect(state.files.get(PATH)).toBe(EXISTING)
+
+  await $.tool.call({ tool: 'Bash', command: 'git commit -m "feat: reworded subject"' })
+  expect(unreleasedOf(state.files.get(PATH) ?? '')).toContain('- Reworded subject')
+})
+
+test('regression: a CRLF changelog keeps its line endings', () => {
+  const crlf = EXISTING.replace(/\n/g, '\r\n')
+  const { markdown } = insertEntry(crlf, { section: 'Added', text: 'Dark mode' })
+  expect(markdown.replace(/\r\n/g, '')).not.toContain('\n')
+  expect(markdown).toContain('### Added\r\n\r\n- Dark mode\r\n')
+})
