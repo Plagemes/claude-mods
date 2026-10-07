@@ -1,4 +1,4 @@
-import { test, expect } from 'claude-code/testing'
+import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 const FANFARE_ASSET = 'assets/celebrate.wav'
@@ -9,6 +9,7 @@ type Outcome = 'pass' | 'fail' | 'pass-with-failures'
 const engine = (on: On, outcomes: Outcome[]) => {
   const toasts: string[] = []
   const clips: unknown[] = []
+  const clock = mock.clock(on)
   on('tool.call', () => {
     const outcome = outcomes.shift() ?? 'pass'
     if (outcome === 'fail') {
@@ -25,17 +26,18 @@ const engine = (on: On, outcomes: Outcome[]) => {
     clips.push(e.clip)
     return { value: undefined }
   })
-  return { toasts, clips }
+  return { toasts, clips, clock }
 }
 
 test('celebrates when a failing test run goes green', async ($, on) => {
-  const { toasts, clips } = engine(on, ['fail', 'pass'])
+  const { toasts, clips, clock } = engine(on, ['fail', 'pass'])
 
   await $.tool.call({ tool: 'Bash', command: 'npx vitest run' })
   expect(toasts).toHaveLength(0)
 
   await $.tool.call({ tool: 'Bash', command: 'npx vitest run' })
   expect(toasts).toEqual(['🎉 All green: vitest passes again'])
+  await clock.advance(1)
   expect(clips).toEqual([{ asset: FANFARE_ASSET }])
 })
 
@@ -69,11 +71,25 @@ test('treats a run that prints failures but exits 0 as red', async ($, on) => {
 })
 
 test('the sound can be switched off', { options: { sound: false } }, async ($, on) => {
-  const { toasts, clips } = engine(on, ['fail', 'pass'])
+  const { toasts, clips, clock } = engine(on, ['fail', 'pass'])
 
   await $.tool.call({ tool: 'Bash', command: 'jest' })
   await $.tool.call({ tool: 'Bash', command: 'jest' })
+  await clock.advance(1)
 
   expect(toasts).toHaveLength(1)
   expect(clips).toHaveLength(0)
+})
+
+test('regression: commands that only mention a runner are no test runs, so they neither go red nor celebrate', async ($, on) => {
+  const { toasts } = engine(on, ['fail', 'pass', 'fail', 'pass', 'pass'])
+
+  await $.tool.call({ tool: 'Bash', command: 'grep -rn jest src' })
+  await $.tool.call({ tool: 'Bash', command: 'cat jest.config.js' })
+  await $.tool.call({ tool: 'Bash', command: 'ls .pytest_cache' })
+  await $.tool.call({ tool: 'Bash', command: 'pip install pytest' })
+  expect(toasts).toHaveLength(0)
+
+  await $.tool.call({ tool: 'Bash', command: 'cd web && CI=1 npx jest --watch=false' })
+  expect(toasts).toHaveLength(0)
 })

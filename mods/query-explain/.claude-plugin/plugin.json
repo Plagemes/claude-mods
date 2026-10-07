@@ -1,0 +1,25 @@
+{
+  "name": "query-explain",
+  "version": "1.0.0",
+  "description": "/explain-query runs EXPLAIN on your local database and explains the plan in plain words.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#query-explain",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "data", "database", "performance"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "analyze": {
+      "type": "boolean",
+      "title": "Use EXPLAIN ANALYZE",
+      "description": "Really run read-only SELECT queries (in a read-only session, 60 s cap) to get measured times and row counts. Off: estimates only, nothing runs.",
+      "default": false
+    },
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "Model that explains the plan: an alias (haiku, sonnet, opus) or a full model id.",
+      "default": "sonnet"
+    }
+  }
+}

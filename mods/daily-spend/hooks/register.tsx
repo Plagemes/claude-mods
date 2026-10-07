@@ -94,7 +94,7 @@ async function addSpend($: EngineInterface, usd: number, dailyLimit: number): Pr
   const today = dayTotal(after)
   if (dailyLimit > 0 && today > dailyLimit && (await $.store.get(ALERTED_KEY)) !== day) {
     await $.store.set(ALERTED_KEY, day)
-    $.ui.toast(`${NAME}: today's spend ${dollars(today)} passed your ${dollars(dailyLimit)} daily limit.`, { timeoutMs: TOAST_MS })
+    $.ui.toast(`Today's spend ${dollars(today)} passed your ${dollars(dailyLimit)} daily limit.`, { timeoutMs: TOAST_MS })
   }
 }
 
@@ -140,7 +140,7 @@ export const register: Register = (on, options: PluginOptions) => {
   on('command.run', { command: 'spend' }, async $ => {
     const { today, week } = summarize(await loadSnapshot($))
     const opened = await $.ui.open({ id: PANE, title: 'Spend' })
-    const line = `${NAME}: today ${dollars(today)} · this week ${dollars(week)}`
+    const line = `Today ${dollars(today)} · this week ${dollars(week)}`
 
     return { text: opened.isPlaced ? line : `${line} (the pane waits for a wider terminal)` }
   })

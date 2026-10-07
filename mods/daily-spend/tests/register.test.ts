@@ -83,7 +83,7 @@ test('adds each turn to the day and project in the store, and toasts once past t
 
   const today = store.get(key(0)) as Record<string, number>
   expect(Math.round((today['/work/alpha'] ?? 0) * 100)).toBe(180)
-  expect(toasts).toEqual(["daily-spend: today's spend $1.20 passed your $1.00 daily limit."])
+  expect(toasts).toEqual(["Today's spend $1.20 passed your $1.00 daily limit."])
 })
 
 const HISTORY = {
@@ -95,7 +95,7 @@ const HISTORY = {
 
 test('/spend draws today, the week, the fortnight and top projects; a Raster chart on the terminal', async ($, on) => {
   answerEngine(on, HISTORY)
-  expect((await $.command.run(RUN)).text).toBe('daily-spend: today $3.50 · this week $7.50')
+  expect((await $.command.run(RUN)).text).toBe('Today $3.50 · this week $7.50')
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })

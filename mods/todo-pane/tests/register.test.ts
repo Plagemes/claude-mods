@@ -108,7 +108,7 @@ test('/todos opens the pane; at start it stays only where the engine placed it',
     origin: { kind: 'composer' },
     presentation: { isFullscreen: false, columns: 100 },
   })
-  expect(run.text).toBe('todo-pane: no task list yet.')
+  expect(run.text).toBe('No task list yet.')
   expect(engine.opened).toEqual(['Todos', 'Todos'])
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })

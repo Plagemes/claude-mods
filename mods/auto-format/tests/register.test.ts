@@ -72,7 +72,7 @@ test('runs the project prettier on an edited file and tells the model it changed
 
   const ran = await $.tool.call(edit('/repo/src/app.ts'))
 
-  expect(runs).toEqual([{ argv: ['/repo/node_modules/.bin/prettier', '--write', '/repo/src/app.ts'], cwd: '/repo' }])
+  expect(runs).toEqual([{ argv: ['/repo/node_modules/.bin/prettier', '--write', '--ignore-unknown', '/repo/src/app.ts'], cwd: '/repo' }])
   expect(ran.context?.join('\n')).toContain('prettier reformatted src/app.ts')
   expect(statuses.at(-1)).toContain('1 file formatted')
 })
@@ -129,7 +129,7 @@ test('says once that a formatter is missing and stops trying it', async ($, on) 
   await $.tool.call(edit('/repo/main.go'))
 
   expect(runs).toHaveLength(1)
-  expect(toasts).toEqual(['auto-format: gofmt is not installed, so main.go was left as written'])
+  expect(toasts).toEqual(['gofmt is not installed, so main.go was left as written'])
   expect(first.context).toBeUndefined()
 })
 
@@ -149,4 +149,37 @@ test('does nothing for a tool call that errored', async ($, on) => {
   await $.tool.call(edit('/repo/src/app.ts'))
 
   expect(runs).toHaveLength(0)
+})
+
+test('regression: biome skips files its config ignores and prettier skips files it has no parser for, without a false error', async ($, on) => {
+  const { runs } = world(on, {
+    '/repo/.git/HEAD': 'ref: main',
+    '/repo/biome.json': '{}',
+    '/repo/node_modules/.bin/biome': '#!/usr/bin/env node',
+    '/repo/src/gen.ts': 'const a=1',
+    '/web/.git/HEAD': '',
+    '/web/.prettierrc': '{}',
+    '/web/App.svelte': '<p>hi</p>',
+  })
+
+  await $.tool.call(edit('/repo/src/gen.ts'))
+  await $.tool.call(edit('/web/App.svelte'))
+
+  expect(runs.map(run => run.argv)).toEqual([
+    ['/repo/node_modules/.bin/biome', 'format', '--write', '--no-errors-on-unmatched', '/repo/src/gen.ts'],
+    ['prettier', '--write', '--ignore-unknown', '/web/App.svelte'],
+  ])
+})
+
+test('regression: biome used as a linter only (formatter off) leaves the file to prettier', async ($, on) => {
+  const { runs } = world(on, {
+    '/repo/.git/HEAD': 'ref: main',
+    '/repo/biome.json': '{ "formatter": { "enabled": false }, "linter": { "enabled": true } }',
+    '/repo/package.json': JSON.stringify({ devDependencies: { '@biomejs/biome': '^1.9.0', prettier: '^3.0.0' } }),
+    '/repo/src/app.ts': 'const a=1',
+  })
+
+  await $.tool.call(edit('/repo/src/app.ts'))
+
+  expect(runs.map(run => run.argv[0])).toEqual(['prettier'])
 })

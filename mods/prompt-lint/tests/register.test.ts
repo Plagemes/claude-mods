@@ -56,7 +56,7 @@ test('shows a tip for a vague prompt and lets it through', async ($, on) => {
   const result = await send($, 'fix it')
 
   expect(result.text).toBe('fix it')
-  expect(toasts).toEqual(['prompt-lint: Say what to change and where: a file, a function or an error message.'])
+  expect(toasts).toEqual(['Say what to change and where: a file, a function or an error message.'])
 })
 
 test('flags the usual vague prompts, each with the tip that fits', async ($, on) => {
@@ -65,7 +65,7 @@ test('flags the usual vague prompts, each with the tip that fits', async ($, on)
   for (const text of VAGUE) await send($, text)
 
   expect(toasts).toHaveLength(VAGUE.length)
-  expect(toasts.every(toast => toast.startsWith('prompt-lint: '))).toBe(true)
+  expect(toasts.some(toast => toast.startsWith('prompt-lint'))).toBe(false)
   expect(toasts[2]).toContain('paste the exact error') // it doesn't work
   expect(toasts[5]).toContain('Name what you mean') // this
   expect(toasts[7]).toContain('Name the file, function or ticket') // add tests

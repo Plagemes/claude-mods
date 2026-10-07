@@ -150,3 +150,27 @@ test('the Bash reader finds write targets and skips quotes, heredocs and fd dupl
   expect(paths('echo "$(cat x > y)" > z')).toEqual(['y', 'z'])
   expect(writeTargets('cd sub && touch f')[0]?.cdChain).toEqual(['sub'])
 })
+
+test('plan mode and auto memory can write Claude Code\'s own plan and memory files', async ($, on) => {
+  world(on)
+  FILES['/home/me/.claude'] = { kind: 'dir' }
+  try {
+    expect(denial(await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/plans/brave-otter.md', content: '# Plan' }))).toBeUndefined()
+    expect(denial(await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/projects/-proj/memory/MEMORY.md', content: 'x' }))).toBeUndefined()
+    expect(denial(await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/settings.json', content: '{}' }))).toContain('outside the allowed folders')
+    expect(denial(await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/projects/-proj/session.jsonl', content: 'x' }))).toContain('outside the allowed folders')
+  } finally {
+    delete FILES['/home/me/.claude']
+  }
+})
+
+test('the Bash reader sees through bash -lc and wrapper options', () => {
+  const paths = (command: string) => writeTargets(command).map(target => target.path)
+  expect(paths(`bash -lc 'rm -rf /etc/app'`)).toEqual(['/etc/app'])
+  expect(paths(`sh -ec "touch /x/y"`)).toEqual(['/x/y'])
+  expect(paths('sudo -u root rm /etc/hosts')).toEqual(['/etc/hosts'])
+  expect(paths('sudo -E tee /etc/hosts')).toEqual(['/etc/hosts'])
+  expect(paths('timeout 5 rm -rf /opt/x')).toEqual(['/opt/x'])
+  expect(paths('nice -n 10 rm /opt/y')).toEqual(['/opt/y'])
+  expect(paths('sudo rm /etc/z')).toEqual(['/etc/z'])
+})

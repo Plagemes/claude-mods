@@ -116,7 +116,7 @@ test('looks for CODEOWNERS in .github first, then the root, then docs, and repor
   expect(await owners($, 'a.txt')).toBe('📋 a.txt is owned by @docs-team\nrule: * (docs/CODEOWNERS:1)')
 
   delete state.disk['/repo/docs/CODEOWNERS']
-  expect(await owners($, 'a.txt')).toContain('no CODEOWNERS file found')
+  expect(await owners($, 'a.txt')).toContain('No CODEOWNERS file found')
 })
 
 test('re-reads CODEOWNERS when it changes', async ($, on) => {
@@ -135,7 +135,7 @@ test('/owners with no argument uses the last file Claude edited; directories and
   expect(await owners($, '')).toContain('api/users.ts is owned by @org/backend')
 
   expect(await owners($, 'api')).toContain('api is owned by @org/backend @alice') // a directory is asked as "api/"
-  expect(await owners($, '/tmp/x.ts')).toBe('codeowners-hint: /tmp/x.ts is outside the repository.')
+  expect(await owners($, '/tmp/x.ts')).toBe('/tmp/x.ts is outside the repository.')
 })
 
 test('the edit goes ahead when CODEOWNERS cannot be read', async ($, on) => {

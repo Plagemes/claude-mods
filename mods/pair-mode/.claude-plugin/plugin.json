@@ -1,0 +1,25 @@
+{
+  "name": "pair-mode",
+  "version": "1.0.0",
+  "description": "Claude proposes, you type: edits become diffs you apply yourself, for deliberate practice.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#pair-mode",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "learning", "pair-programming", "practice"],
+  "userConfig": {
+    "startOn": {
+      "type": "boolean",
+      "title": "Start in pair mode",
+      "description": "Turn pair mode on at the start of every session.",
+      "default": false
+    },
+    "guardShell": {
+      "type": "boolean",
+      "title": "Block shell writes",
+      "description": "Also block shell commands that write files (sed -i, redirections, rm, formatters with --write) while pair mode is on.",
+      "default": true
+    }
+  },
+  "types": "./types/index.d.ts"
+}

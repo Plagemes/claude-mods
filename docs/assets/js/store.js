@@ -2,7 +2,7 @@
 import { escapeHtml, iconHref, iconSvg, installCommand, sourceUrl, tierOf } from './data.js'
 import { copyText, flashCopied, reducedMotion, toast } from './ui.js'
 
-const RESERVED_IDS = new Set(['top', 'main', 'install', 'features', 'store', 'how', 'build'])
+const RESERVED_IDS = new Set(['top', 'main', 'new', 'install', 'features', 'store', 'how', 'build'])
 
 export function createStore(root, catalog, { media = {} } = {}) {
   const grid = root.querySelector('[data-grid]')
@@ -16,14 +16,16 @@ export function createStore(root, catalog, { media = {} } = {}) {
   const sheet = document.querySelector('[data-sheet]')
   const sheetBody = document.querySelector('[data-sheet-body]')
 
-  const { mods, categories, repository } = catalog
-  const state = { q: '', tokens: [], cat: 'all', tier: 'all' }
+  const { mods, categories, repository, release } = catalog
+  const state = { q: '', tokens: [], cat: 'all', tier: 'all', fresh: false }
   const cards = new Map()
   const catIndex = new Map(categories.map((c, i) => [c.id, i]))
   let groups = new Map()
   let lastFocus = null
 
   search.placeholder = window.innerWidth < 520 ? `Search ${mods.length} mods` : `Search ${mods.length} mods, commands, keywords`
+
+  const newBadge = `<span class="badge-new" title="New in v${escapeHtml(release.version)}"><i aria-hidden="true"></i>New</span>`
 
   /* ---------- Render ---------- */
   renderChips()
@@ -32,17 +34,22 @@ export function createStore(root, catalog, { media = {} } = {}) {
 
   function renderChips() {
     const all = `<button type="button" class="chip" data-cat="all" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-core"/></svg>All<span class="chip__count" data-chip-count>${mods.length}</span></button>`
-    chipsRow.innerHTML = all + categories
+    // "New" is a toggle on top of the category filter, so "New" + "Agents" shows the new agent mods.
+    const fresh = release.newCount
+      ? `<button type="button" class="chip chip--new" data-fresh aria-pressed="false" title="Mods added in ${escapeHtml(release.newLabel)}"><span class="chip__dot" aria-hidden="true"></span>New in ${escapeHtml(release.newLabel)}<span class="chip__count" data-chip-count>${release.newCount}</span></button><span class="chips-row__rule" aria-hidden="true"></span>`
+      : ''
+    chipsRow.innerHTML = all + fresh + categories
       .map(c => `<button type="button" class="chip" data-cat="${escapeHtml(c.id)}" aria-pressed="false" title="${escapeHtml(c.title)}">${iconSvg(c.id)}${escapeHtml(c.short)}<span class="chip__count" data-chip-count>${c.count ?? 0}</span></button>`)
       .join('')
   }
+
 
   function cardHtml(mod) {
     const tier = tierOf(mod.tier)
     const cmd = installCommand(mod.name)
     const name = escapeHtml(mod.name)
     const tierBadge = `<span class="tier"><span class="bars bars--${tier.bars}" aria-hidden="true"><i></i><i></i><i></i></span>${escapeHtml(tier.label)}</span>`
-    const meta = `<p class="card__meta"><span>${escapeHtml(mod.categoryInfo.short)}</span>${mod.version ? `<span class="card__ver">v${escapeHtml(mod.version)}</span>` : ''}</p>`
+    const meta = `<p class="card__meta"><span>${escapeHtml(mod.categoryInfo.short)}</span>${mod.version ? `<span class="card__ver">v${escapeHtml(mod.version)}</span>` : ''}${mod.isNew ? newBadge : ''}</p>`
     const title = `<h3 class="card__title"><button type="button" class="card__open" data-open="${name}" aria-haspopup="dialog" data-hl="name">${name}</button></h3>`
     const desc = `<p class="card__desc" data-hl="desc">${escapeHtml(mod.description)}</p>`
     const commands = mod.commands.length
@@ -71,7 +78,7 @@ export function createStore(root, catalog, { media = {} } = {}) {
       </article>`
     }
 
-    return `<article class="card" id="${name}" data-name="${name}">
+    return `<article class="card${mod.isNew ? ' card--new' : ''}" id="${name}" data-name="${name}">
       <div class="card__top"><span class="card__icon">${iconSvg(mod.category)}</span>${tierBadge}</div>
       <div class="card__id">${title}${meta}</div>
       ${desc}
@@ -128,7 +135,7 @@ export function createStore(root, catalog, { media = {} } = {}) {
   }
 
   function passesTier(mod) {
-    return state.tier === 'all' || mod.tier === state.tier
+    return (state.tier === 'all' || mod.tier === state.tier) && (!state.fresh || mod.isNew)
   }
 
   function apply() {
@@ -166,12 +173,19 @@ export function createStore(root, catalog, { media = {} } = {}) {
       }
     }
 
-    for (const chip of chipsRow.querySelectorAll('.chip')) {
+    for (const chip of chipsRow.querySelectorAll('.chip[data-cat]')) {
       const id = chip.dataset.cat
       const n = id === 'all' ? total : perCat.get(id) ?? 0
       chip.querySelector('[data-chip-count]').textContent = String(n)
       chip.classList.toggle('is-zero', n === 0 && id !== state.cat)
       chip.setAttribute('aria-pressed', String(id === state.cat))
+    }
+    const freshChip = chipsRow.querySelector('[data-fresh]')
+    if (freshChip) {
+      const n = scored.filter(s => s.mod.isNew && (state.tier === 'all' || s.mod.tier === state.tier) && scoreOf(s.mod, state.tokens) > 0 && (state.cat === 'all' || s.mod.category === state.cat)).length
+      freshChip.querySelector('[data-chip-count]').textContent = String(n)
+      freshChip.setAttribute('aria-pressed', String(state.fresh))
+      freshChip.classList.toggle('is-zero', n === 0 && !state.fresh)
     }
 
     renderBanner(visible.length)
@@ -179,7 +193,7 @@ export function createStore(root, catalog, { media = {} } = {}) {
     const catInfo = categories.find(c => c.id === state.cat)
     const quoted = state.q ? ` matching "${state.q}"` : ''
     const scope = catInfo ? ` in ${catInfo.short}` : ''
-    const tierWord = state.tier === 'all' ? '' : ` ${tierOf(state.tier).label.toLowerCase()}`
+    const tierWord = `${state.fresh ? ' new' : ''}${state.tier === 'all' ? '' : ` ${tierOf(state.tier).label.toLowerCase()}`}`
     status.textContent = visible.length === mods.length
       ? `All ${mods.length} mods`
       : `${visible.length}${tierWord} ${visible.length === 1 ? 'mod' : 'mods'}${scope}${quoted}`
@@ -191,6 +205,14 @@ export function createStore(root, catalog, { media = {} } = {}) {
 
   function renderBanner(count) {
     const cat = categories.find(c => c.id === state.cat)
+    if (!cat && state.fresh) {
+      banner.hidden = false
+      banner.classList.remove('has-art')
+      banner.style.removeProperty('--art')
+      banner.innerHTML = `<span class="cat-banner__icon" aria-hidden="true"><span class="shelves-glyph">${'<i></i><i></i><b></b><i class="is-lit"></i><i class="is-lit"></i>'.repeat(3)}</span></span>
+        <div><h3>New in ${escapeHtml(release.newLabel)}</h3><p>${escapeHtml(newSummary())} <span class="t-dim">${count} of ${release.newCount}</span></p></div>`
+      return
+    }
     if (!cat) {
       banner.hidden = true
       return
@@ -202,6 +224,13 @@ export function createStore(root, catalog, { media = {} } = {}) {
     else banner.style.removeProperty('--art')
     banner.innerHTML = `<span class="cat-banner__icon">${iconSvg(cat.id)}</span>
       <div><h3>${escapeHtml(cat.title)}</h3><p>${escapeHtml(cat.tagline ?? '')} <span class="t-dim">${count} of ${cat.count ?? count}</span></p></div>`
+  }
+
+  function newSummary() {
+    const newCats = release.newCategories.length
+    const oldCats = new Set(catalog.newMods.filter(m => !m.categoryInfo.isNew && !release.newCategories.some(c => c.id === m.category)).map(m => m.category)).size
+    const where = [newCats ? `${newCats} new ${newCats === 1 ? 'category' : 'categories'}` : '', oldCats ? `${oldCats} existing ${oldCats === 1 ? 'one' : 'ones'}` : ''].filter(Boolean).join(' and ')
+    return `${release.newCount} ${release.newCount === 1 ? 'mod' : 'mods'} added in v${release.version}${where ? `, across ${where}` : ''}.`
   }
 
   function highlight(text, tokens) {
@@ -267,12 +296,49 @@ export function createStore(root, catalog, { media = {} } = {}) {
   chipsRow.addEventListener('click', event => {
     const chip = event.target.closest('.chip')
     if (!chip) return
+    if (chip.hasAttribute('data-fresh')) {
+      withTransition(() => {
+        state.fresh = !state.fresh
+        apply()
+      })
+      return
+    }
     const next = chip.dataset.cat === state.cat && chip.dataset.cat !== 'all' ? 'all' : chip.dataset.cat
     withTransition(() => {
       state.cat = next
+      if (next === 'all' && chip.dataset.cat === 'all') state.fresh = false
       apply()
     })
+    revealChip(chip)
   })
+
+  // On phones the chips scroll sideways: keep the selected one in view.
+  function revealChip(chip) {
+    if (chipsRow.scrollWidth <= chipsRow.clientWidth) return
+    const row = chipsRow.getBoundingClientRect()
+    const box = chip.getBoundingClientRect()
+    if (box.left < row.left + 16 || box.right > row.right - 16) {
+      chipsRow.scrollBy({ left: box.left - row.left - row.width / 2 + box.width / 2, behavior: reducedMotion() ? 'auto' : 'smooth' })
+    }
+  }
+
+  function scrollToStore() {
+    const head = root.querySelector('.section-head')
+    const top = window.scrollY + head.getBoundingClientRect().bottom - 56
+    window.scrollTo({ top, behavior: reducedMotion() ? 'auto' : 'smooth' })
+  }
+
+  function showFilter({ cat = 'all', fresh = false }) {
+    search.value = ''
+    state.q = ''
+    state.tokens = []
+    state.cat = cat
+    state.fresh = fresh
+    setTier('all', { animate: false })
+    const chip = chipsRow.querySelector(`.chip[data-cat="${CSS.escape(cat)}"]`)
+    if (chip) revealChip(chip)
+    scrollToStore()
+  }
 
   tiers.addEventListener('click', event => {
     const button = event.target.closest('[data-tier]')
@@ -345,6 +411,7 @@ export function createStore(root, catalog, { media = {} } = {}) {
       state.q = ''
       state.tokens = []
       state.cat = 'all'
+      state.fresh = false
       setTier('all', { animate: false })
     }
     for (const c of cards.values()) c.el.classList.toggle('is-target', c.el === card.el)
@@ -380,6 +447,7 @@ export function createStore(root, catalog, { media = {} } = {}) {
             <span>${escapeHtml(mod.categoryInfo.title)}</span>
             <span class="tier"><span class="bars bars--${tier.bars}" aria-hidden="true"><i></i><i></i><i></i></span>${escapeHtml(tier.label)}</span>
             ${mod.version ? `<span class="card__ver">v${escapeHtml(mod.version)}</span>` : ''}
+            ${mod.isNew ? newBadge : ''}
           </div>
         </div>
       </div>
@@ -446,5 +514,9 @@ export function createStore(root, catalog, { media = {} } = {}) {
   window.addEventListener('hashchange', fromHash)
   fromHash()
 
-  return { open }
+  return {
+    open,
+    showCategory: id => showFilter({ cat: id }),
+    showNew: () => showFilter({ fresh: true }),
+  }
 }

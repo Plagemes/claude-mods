@@ -52,7 +52,7 @@ test('shows the meter when the session starts, and /cost-reset clears it', async
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await $.turn.complete(turn('claude-sonnet-5-5'))
   const reset = await $.command.run({ ...TYPED })
-  expect(reset.text).toContain('counters reset (they read $0.12 · 128k tok)')
+  expect(reset.text).toContain('Counters reset (they read $0.12 · 128k tok)')
   expect(lines).toEqual(['$0.00 · 0 tok', '$0.12 · 128k tok', '$0.00 · 0 tok'])
 })
 

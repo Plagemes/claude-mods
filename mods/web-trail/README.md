@@ -15,7 +15,7 @@ Records each page Claude fetches with WebFetch and each query it runs with WebSe
 ## Usage
 Type `/sources` at any time:
 ```
-**web-trail:** 2 pages fetched, 1 search this session
+2 pages fetched, 1 search this session
 
 - **14:02:11** fetched <https://example.com/docs>
 - **14:02:40** searched `react use hook`

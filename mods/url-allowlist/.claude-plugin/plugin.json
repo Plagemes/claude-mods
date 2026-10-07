@@ -1,0 +1,38 @@
+{
+  "name": "url-allowlist",
+  "version": "1.0.0",
+  "description": "Restricts WebFetch to the domains you allow.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#url-allowlist",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "api", "network", "allowlist", "guard"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "allow: only the listed hosts may be fetched. block: every host except the blocked ones may be.",
+      "default": "allow",
+      "options": ["allow", "block"]
+    },
+    "hosts": {
+      "type": "string",
+      "title": "Allowed hosts",
+      "description": "Comma-separated. A host also allows its subdomains (github.com allows api.github.com); *.example.com allows subdomains only. Used in allow mode.",
+      "default": "developer.mozilla.org,docs.python.org,github.com,raw.githubusercontent.com,npmjs.com,pypi.org,stackoverflow.com,docs.anthropic.com,code.claude.com,nodejs.org,typescriptlang.org,react.dev,docs.rs,crates.io,pkg.go.dev,go.dev,learn.microsoft.com,wikipedia.org,readthedocs.io"
+    },
+    "blockedHosts": {
+      "type": "string",
+      "title": "Blocked hosts",
+      "description": "Comma-separated, with the same matching rules. Used in block mode.",
+      "default": ""
+    },
+    "checkBash": {
+      "type": "boolean",
+      "title": "Also check curl and wget",
+      "description": "Apply the same rules to http(s):// URLs in Bash commands that run curl, wget or httpie.",
+      "default": false
+    }
+  }
+}

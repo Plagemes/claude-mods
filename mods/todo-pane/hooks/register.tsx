@@ -57,7 +57,7 @@ export const register: Register = (on, options: PluginOptions) => {
     await $.ui.open({ id: PANE, title: titleOf(list) })
     const { done, total } = progressOf(list)
 
-    return { text: total === 0 ? 'todo-pane: no task list yet.' : `todo-pane: ${done} of ${total} done.` }
+    return { text: total === 0 ? 'No task list yet.' : `${done} of ${total} done.` }
   })
 
   on('tool.call', { tool: 'TodoWrite' }, async ($, e, next) => {

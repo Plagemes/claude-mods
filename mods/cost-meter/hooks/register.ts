@@ -40,6 +40,6 @@ export const register: Register = (on, options) => {
     const before = formatSpend(await read($, spend), showTokens)
     await update($, spend, () => EMPTY)
     await showSpend($, showTokens)
-    return { text: `cost-meter: counters reset (they read ${before}).` }
+    return { text: `Counters reset (they read ${before}).` }
   })
 }

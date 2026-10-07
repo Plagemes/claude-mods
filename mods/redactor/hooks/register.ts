@@ -1,5 +1,5 @@
-import { atom, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 import { ALL_CATEGORIES, redactText } from './patterns'
 import type { Category, RedactOptions } from './patterns'
@@ -9,6 +9,24 @@ type Tally = Record<string, number>
 
 const PLACEHOLDER = '[redactor: this tool result was withheld because it could not be scanned for secrets]'
 const counts = atom({ plugin: 'redactor', key: 'counts' } as const, {})
+const WRITE_TOOLS = /^(?:Edit|Write|MultiEdit|NotebookEdit)$/
+const MASK_MARKER = /\[REDACTED:[a-z-]+\]/g
+
+const markerCount = (text: unknown): number => (typeof text === 'string' ? (text.match(MASK_MARKER)?.length ?? 0) : 0)
+
+/**
+ * How many `[REDACTED:…]` markers a write would add to the file: an edit's new text minus the text it
+ * replaces, or a whole-file write minus what the file holds now. A positive count means the model is
+ * about to write a mask over a real value it never saw.
+ */
+async function addedMasks($: EngineInterface, input: Readonly<Record<string, unknown>>): Promise<number> {
+  const edits = Array.isArray(input.edits) ? (input.edits as Readonly<Record<string, unknown>>[]) : 'old_string' in input ? [input] : undefined
+  if (edits !== undefined) return edits.reduce((sum, edit) => sum + markerCount(edit.new_string) - markerCount(edit.old_string), 0)
+  const added = markerCount(input.content) + markerCount(input.new_source)
+  const path = input.file_path ?? input.notebook_path
+  if (added === 0 || typeof path !== 'string') return added
+  return added - (await $.fs.read(path).then(markerCount, () => 0))
+}
 
 const optionsFrom = (options: Readonly<Record<string, unknown>>): RedactOptions & { allowlistError?: string } => {
   const enabled = new Set<Category>(ALL_CATEGORIES.filter(category => options[category] !== false))
@@ -54,7 +72,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     if (config.allowlistError !== undefined) {
-      $.ui.toast(`redactor: allowlist ignored, not a valid regex (${config.allowlistError})`)
+      $.ui.toast(`Allowlist ignored, not a valid regex (${config.allowlistError})`)
     }
     return next(e)
   })
@@ -70,6 +88,19 @@ export const register: Register = (on, options) => {
     const content = e.message.content.map(block => redactBlock(block, redact))
     return { event: { ...e, message: { ...e.message, content } }, found }
   }
+
+  // Masked values must not reach disk: rewriting a file the model read masked would replace its real secrets.
+  on('tool.call', { tool: WRITE_TOOLS }, async ($, e, next) => {
+    if (Object.keys(await read($, counts)).length === 0) return next(e)
+    const input = e as unknown as Readonly<Record<string, unknown>>
+    if ((await addedMasks($, input)) <= 0) return next(e)
+    const path = input.file_path ?? input.notebook_path
+    return {
+      deny:
+        `redactor: this ${String(e.tool)} would write [REDACTED:…] markers into ${typeof path === 'string' ? path : 'the file'}, replacing real values you were never shown. ` +
+        'Use Edit on the lines that need to change and leave the masked values out of old_string and new_string.',
+    }
+  }).catch(($, e, next) => next(e))
 
   on('session.append', { door: 'tool-result' }, async ($, e, next) => {
     const { event, found } = scrub(e)

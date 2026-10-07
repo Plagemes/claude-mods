@@ -1,0 +1,19 @@
+{
+  "name": "http-client",
+  "version": "1.0.0",
+  "description": "/http sends a request and shows the formatted response in a pane, like a tiny Postman in your terminal.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#http-client",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "api", "http", "rest", "curl"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "timeoutSeconds": {
+      "type": "number",
+      "title": "Timeout (seconds)",
+      "description": "How long /http waits for a response before giving up (1-300).",
+      "default": 30
+    }
+  }
+}

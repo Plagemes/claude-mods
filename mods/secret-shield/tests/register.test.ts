@@ -95,3 +95,32 @@ test('also scans every edit of a MultiEdit, in builds that have that tool', asyn
   const result = await $.tool.call(multiEdit)
   expect(result.deny).toContain('GitHub token')
 })
+
+test('scans a 200KB identifier-like line without catastrophic backtracking', async ($, on) => {
+  on('tool.call', () => ({ result: 'ok' }))
+  const started = Date.now()
+  const result = await $.tool.call({ tool: 'Write', file_path: '/repo/blob.txt', content: 'token'.repeat(40_000) })
+  expect(result.deny).toBeUndefined()
+  expect(Date.now() - started).toBeLessThan(1_000)
+})
+
+test('a .env.example full of made-up values is written; a real key format in it is still refused', async ($, on) => {
+  on('tool.call', () => ({ result: 'ok' }))
+  const template = [
+    'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/myapp',
+    'NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32',
+    'JWT_SECRET=supersecretkey123456789',
+    'SESSION_SECRET=replace_me_with_a_32_char_secret',
+    'API_TOKEN=token_goes_here_1234567890',
+    'SECRET_KEY=django-insecure-abc123def456ghi789',
+  ].join('\n')
+  const example = await $.tool.call({ tool: 'Write', file_path: '/repo/.env.example', content: template })
+  expect(example.deny).toBeUndefined()
+
+  const leaked = await $.tool.call({ tool: 'Write', file_path: '/repo/.env.example', content: `${template}\nGH_TOKEN=${GITHUB_TOKEN}` })
+  expect(leaked.deny).toContain('GitHub token')
+
+  // Outside a template, fill-me-in values pass but a random-looking one does not.
+  const env = await $.tool.call({ tool: 'Write', file_path: '/repo/.env', content: 'NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32\nAPP_SECRET="9fA3kD82hQzL0pX7vB1mW4nE6tY"' })
+  expect(env.deny).toContain('line 2: high-entropy secret assignment')
+})

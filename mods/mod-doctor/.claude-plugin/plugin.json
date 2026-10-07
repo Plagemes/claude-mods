@@ -1,0 +1,37 @@
+{
+  "name": "mod-doctor",
+  "version": "1.0.0",
+  "description": "/mod-doctor checks your installed mods for outdated versions, conflicts and load errors.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#mod-doctor",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "ecosystem", "diagnostics", "plugins"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "repository": {
+      "type": "string",
+      "title": "Repository",
+      "description": "GitHub owner/repo whose .claude-plugin/marketplace.json holds the latest versions.",
+      "default": "plagemes/claude-mods"
+    },
+    "branch": {
+      "type": "string",
+      "title": "Branch",
+      "description": "Branch the catalog is read from.",
+      "default": "main"
+    },
+    "readDebugLog": {
+      "type": "boolean",
+      "title": "Read the debug log",
+      "description": "When the session runs with --debug, report hooks it skipped or trees it refused, per mod.",
+      "default": true
+    },
+    "checkAtStart": {
+      "type": "boolean",
+      "title": "Check at session start",
+      "description": "Run a quiet check when a session starts and toast new load errors or command clashes.",
+      "default": false
+    }
+  }
+}

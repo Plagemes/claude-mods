@@ -1,0 +1,18 @@
+{
+  "name": "shortcut-tips",
+  "version": "1.0.0",
+  "description": "One tip a day about Claude Code shortcuts and features you might not know.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#shortcut-tips",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "learning", "tips", "shortcuts"],
+  "userConfig": {
+    "showAtStart": {
+      "type": "boolean",
+      "title": "Daily tip at start",
+      "description": "Show one tip in a toast the first time a session starts each day. Turn off to see tips only with /tip.",
+      "default": true
+    }
+  }
+}

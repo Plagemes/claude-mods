@@ -2,17 +2,19 @@ import type { EngineInterface, Register } from 'claude-code'
 
 type Rule = { label: string; pattern: RegExp; isDirective?: true }
 
+// Global, so each occurrence counts: two `as any` on one line are two.
 const RULES: Rule[] = [
-  { label: ': any', pattern: /:\s*any\b/ },
-  { label: 'as any', pattern: /\bas\s+any\b/ },
-  { label: '<any>', pattern: /[<,]\s*any\s*[>,]/ },
-  { label: '@ts-ignore', pattern: /@ts-ignore\b/, isDirective: true },
-  { label: '@ts-nocheck', pattern: /@ts-nocheck\b/, isDirective: true },
-  { label: 'eslint-disable', pattern: /\beslint-disable/, isDirective: true },
+  { label: ': any', pattern: /:\s*any\b/g },
+  { label: 'as any', pattern: /\bas\s+any\b/g },
+  { label: '<any>', pattern: /(?<=[<,]\s*)any(?=\s*[>,])/g },
+  { label: '@ts-ignore', pattern: /@ts-ignore\b/g, isDirective: true },
+  { label: '@ts-nocheck', pattern: /@ts-nocheck\b/g, isDirective: true },
+  { label: 'eslint-disable', pattern: /\beslint-disable/g, isDirective: true },
 ]
 
 const TYPESCRIPT_FILE = /\.(ts|tsx|mts|cts)$/
-const STRING_LITERAL = /(['"`])(?:\\.|(?!\1).)*\1/g
+// A backslash is read only as an escape (`\\.`), never as a plain character too: no exponential backtracking.
+const STRING_LITERAL = /(['"`])(?:\\.|(?!\1)[^\\])*\1/g
 const TRAILING_COMMENT = /(^|\s)\/\/.*$/
 const BLOCK_COMMENT_LINE = /^\s*(\/\*|\*)/
 const ALLOW_MARKER = 'no-any: allow'
@@ -22,34 +24,26 @@ const BLOCK = 'block'
 const codeOf = (line: string): string =>
   BLOCK_COMMENT_LINE.test(line) ? '' : line.replace(STRING_LITERAL, '""').replace(TRAILING_COMMENT, '')
 
-const countLines = (text: string): Map<string, number> => {
-  const counts = new Map<string, number>()
-  for (const line of text.split('\n')) {
-    const key = line.trim()
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  return counts
-}
-
-/** Lines of `after` that `before` does not have, compared as a multiset of trimmed lines. */
-const newLines = (before: string, after: string): string[] => {
-  const available = countLines(before)
-  return after.split('\n').filter(line => {
-    const key = line.trim()
-    const left = available.get(key) ?? 0
-    available.set(key, left - 1)
-    return left <= 0
-  })
-}
-
-/** One label per escape hatch found, so two `as any` on a line count twice. */
-const escapeHatches = (lines: string[]): string[] =>
-  lines
+/** One label per escape hatch in the text, so two `as any` on a line count twice. */
+const escapeHatches = (text: string): string[] =>
+  text
+    .split('\n')
     .filter(line => !line.includes(ALLOW_MARKER))
     .flatMap(line => {
       const code = codeOf(line)
-      return RULES.filter(rule => rule.pattern.test(rule.isDirective ? line : code)).map(rule => rule.label)
+      return RULES.flatMap(rule => [...(rule.isDirective ? line : code).matchAll(rule.pattern)].map(() => rule.label))
     })
+
+/** The escape hatches `after` has beyond those `before` already had, kind by kind: one left in place is not added. */
+const addedHatches = (before: string, after: string): string[] => {
+  const had = new Map<string, number>()
+  for (const label of escapeHatches(before)) had.set(label, (had.get(label) ?? 0) + 1)
+  return escapeHatches(after).filter(label => {
+    const left = had.get(label) ?? 0
+    had.set(label, left - 1)
+    return left <= 0
+  })
+}
 
 const summarize = (labels: string[]): string => {
   const counts = new Map<string, number>()
@@ -75,7 +69,7 @@ export const register: Register = (on, options) => {
       e.tool === 'Edit' ? e.old_string : e._host === undefined ? await readLocal($, e.file_path) : ''
     const after = e.tool === 'Edit' ? e.new_string : e.content
 
-    const found = escapeHatches(newLines(before, after))
+    const found = addedHatches(before, after)
     if (found.length === 0) return next(e)
 
     const summary = summarize(found)
@@ -91,7 +85,7 @@ export const register: Register = (on, options) => {
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError) return ran
 
-    $.ui.toast(`no-any: ${summary} added to ${e.file_path.split('/').pop()}`)
+    $.ui.toast(`Added ${summary} to ${e.file_path.split('/').pop()}`)
     const note =
       `no-any: this edit added ${summary} to ${e.file_path}. Replace it with a precise type, ` +
       `unknown plus a narrowing check, or fix the underlying type error. ` +

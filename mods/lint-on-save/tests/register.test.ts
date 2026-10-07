@@ -146,7 +146,7 @@ test('a missing linter is mentioned once; a crashing one only shows in the statu
   const crashed = await $.tool.call(edit('/repo/src/app.ts'))
 
   expect(runs.map(run => run.argv[0])).toEqual(['ruff', '/repo/node_modules/.bin/eslint'])
-  expect(toasts).toEqual(['lint-on-save: ruff is not installed, so app.py was not linted'])
+  expect(toasts).toEqual(['ruff is not installed, so app.py was not linted'])
   expect(crashed.context).toBeUndefined()
   expect(statuses.at(-1)).toBe('✗ lint: eslint failed on app.ts: Oops! Something went wrong! Cannot find module "typescript-eslint"')
 })

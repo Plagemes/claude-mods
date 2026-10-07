@@ -1,0 +1,19 @@
+{
+  "name": "openapi-sync",
+  "version": "1.0.0",
+  "description": "Warns when your API routes change but openapi.yaml doesn't.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#openapi-sync",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "api", "openapi", "swagger", "docs"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "specPath": {
+      "type": "string",
+      "title": "Spec file",
+      "description": "Path of your OpenAPI/Swagger file from the project root. Empty: find openapi.* or swagger.* in the root, api/, docs/, spec/ and similar folders.",
+      "default": ""
+    }
+  }
+}

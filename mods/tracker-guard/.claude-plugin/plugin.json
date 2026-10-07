@@ -1,0 +1,30 @@
+{
+  "name": "tracker-guard",
+  "version": "1.0.0",
+  "description": "Blocks adding analytics and tracking SDKs that haven't been approved.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#tracker-guard",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "compliance", "privacy", "analytics"],
+  "userConfig": {
+    "approved": {
+      "type": "string",
+      "title": "Approved trackers",
+      "description": "Comma-separated trackers that may be added: a name from the list in the README (mixpanel, posthog, google-analytics ...) or a package name (@segment/analytics-next).",
+      "default": ""
+    },
+    "allowWord": {
+      "type": "string",
+      "title": "Approval word",
+      "description": "When your latest prompt contains this word, trackers may be added for that prompt. Leave empty to rely on the approved list alone.",
+      "default": "TRACKER-OK"
+    },
+    "blockErrorTracking": {
+      "type": "boolean",
+      "title": "Also block error tracking",
+      "description": "Sentry, Bugsnag and Rollbar are allowed by default. Turn this on to treat them like analytics.",
+      "default": false
+    }
+  }
+}

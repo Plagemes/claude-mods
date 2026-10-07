@@ -14,6 +14,8 @@ const ALWAYS_EXECUTES_INPUT = new Set(['iex', 'invoke-expression'])
 const WRAPPERS = new Set(['sudo', 'doas', 'env', 'exec', 'command', 'nohup', 'time', 'nice', 'stdbuf'])
 const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-r', '-t', '-U', '-D', '-T'])
 const PROGRAM_OPTIONS = new Set(['-c', '-m', '-e', '-E', '-p', '-r', '--eval', '--print'])
+/** How deep `bash -c "…"` and `eval "…"` strings are opened up to look inside them. */
+const MAX_NESTING = 3
 
 const FETCH = String.raw`(?:curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod|fetch)\b`
 const SUBSTITUTION = String.raw`(?:<\(|\$\(|\x60)\s*(?:sudo\s+)?`
@@ -21,9 +23,10 @@ const EVALUATORS = String.raw`(?:eval|source|iex|invoke-expression)\b|\.(?=\s)`
 const INTERPRETERS = String.raw`(?:sh|bash|zsh|dash|ksh|fish|python[\d.]*|node|nodejs|ruby|perl|php)\b`
 // eval "$(curl ...)", source <(curl ...), . <(wget ...)
 const EVALUATES_SUBSTITUTION = new RegExp(String.raw`(?:^|[\s;&|(])(?:${EVALUATORS})[^;&|\n]*?${SUBSTITUTION}${FETCH}`, 'i')
-// bash <(curl ...), sh -c "$(curl ...)"; but not python script.py "$(curl ...)", where the download is data
+// bash <(curl ...), /bin/sh -c "$(curl ...)", bash < <(curl ...), bash <<< "$(curl ...)";
+// but not python script.py "$(curl ...)", where the download is data
 const INTERPRETS_SUBSTITUTION = new RegExp(
-  String.raw`(?:^|[\s;&|(])(?:sudo\s+(?:-\S+\s+)*)?${INTERPRETERS}(?:\s+-{1,2}[\w-]+)*\s+["']?${SUBSTITUTION}${FETCH}`,
+  String.raw`(?:^|[\s;&|(])(?:sudo\s+(?:-\S+\s+)*)?(?:[^\s;&|()<>]*/)?${INTERPRETERS}(?:\s+-{1,2}[\w-]+)*\s+(?:<{1,3}\s*)?["']?${SUBSTITUTION}${FETCH}`,
   'i',
 )
 // iex (iwr ...), iex ((New-Object Net.WebClient).DownloadString(...))
@@ -37,14 +40,21 @@ function parsePipelines(input: string): Stage[][] {
   let word = ''
   let hasWord = false
   let quote: '"' | "'" | undefined
+  /** A lone `>` or `2>` names its file in the next word: that word is not an argument. */
+  let isRedirectTarget = false
 
   const endWord = () => {
-    if (hasWord && !/^[0-9]*[<>]/.test(word)) words.push(word)
+    if (hasWord) {
+      if (isRedirectTarget) isRedirectTarget = false
+      else if (/^[0-9]*(?:[<>]+|>&|<&)$/.test(word)) isRedirectTarget = true
+      else if (!/^[0-9]*[<>]/.test(word)) words.push(word)
+    }
     word = ''
     hasWord = false
   }
   const endStage = () => {
     endWord()
+    isRedirectTarget = false
     if (words.length > 0) stages.push(words)
     words = []
   }
@@ -67,6 +77,8 @@ function parsePipelines(input: string): Stage[][] {
       word += input[++i]
       hasWord = true
     } else if (ch === '|' && input[i + 1] !== '|') {
+      // `|&` pipes stderr along with stdout: still a pipe.
+      if (input[i + 1] === '&') i += 1
       endStage()
     } else if (ch === '&' && /[<>]$/.test(word)) {
       word += ch
@@ -123,8 +135,29 @@ function urlsIn(stage: Stage): string[] {
   return stage.filter(word => /^https?:\/\//i.test(word))
 }
 
+/** The command strings a stage hands to another shell: `bash -c "…"` (also after `docker exec`, `sudo`, ...) and `eval "…"`. */
+function nestedScripts(stage: Stage): string[] {
+  const scripts: string[] = []
+  stage.forEach((word, index) => {
+    if (!SHELLS.has(baseName(word))) return
+    const flag = stage.findIndex((arg, at) => at > index && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(arg))
+    const script = flag === -1 ? undefined : stage[flag + 1]
+    if (script !== undefined) scripts.push(script)
+  })
+  if (commandOf(stage)?.name === 'eval') scripts.push(commandOf(stage)?.args.join(' ') ?? '')
+  return scripts
+}
+
 /** The first download that would be executed unread, or undefined. */
-export function findPipeToShell(command: string): Finding | undefined {
+export function findPipeToShell(command: string, depth = 0): Finding | undefined {
+  if (depth < MAX_NESTING) {
+    for (const stage of parsePipelines(command).flat()) {
+      for (const script of nestedScripts(stage)) {
+        const found = findPipeToShell(script, depth + 1)
+        if (found !== undefined) return found
+      }
+    }
+  }
   for (const stages of parsePipelines(command)) {
     for (let i = 1; i < stages.length; i++) {
       const runner = commandOf(stages[i] as Stage)

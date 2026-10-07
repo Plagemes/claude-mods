@@ -55,7 +55,7 @@ export const register: Register = (on, options) => {
       case 'skipped':
         return ran
       case 'missing':
-        $.ui.toast(`lint-on-save: ${outcome.linter} is not installed, so ${basename(file)} was not linted`)
+        $.ui.toast(`${outcome.linter} is not installed, so ${basename(file)} was not linted`)
         return ran
       case 'failed':
         $.ui.status(`✗ lint: ${outcome.linter} failed on ${basename(file)}: ${outcome.reason}`)

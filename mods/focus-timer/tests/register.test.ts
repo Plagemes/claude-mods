@@ -53,7 +53,7 @@ test('/pomodoro counts down in the status line, rings at the end, and the break 
   expect(engine.status.at(-1)).toBeUndefined()
   expect(engine.played).toHaveLength(2)
 
-  expect((await $.command.run(pomodoro('status'))).text).toBe('focus-timer: no timer running · 1 round done this session.')
+  expect((await $.command.run(pomodoro('status'))).text).toBe('No timer running · 1 round done this session.')
   expect((await $.command.run(pomodoro(''))).text).toBe('🍅 Focus round 2: 25 min, until 09:28.')
 })
 
@@ -66,7 +66,7 @@ test('a timer left in the store resumes at session start, and /pomodoro stop end
   expect(engine.status.at(-1)).toBe('🍅 9:59')
   expect((await $.command.run(pomodoro('status'))).text).toBe('🍅 Focus round 3: 9:59 left · 0 rounds done this session.')
 
-  expect((await $.command.run(pomodoro('stop'))).text).toBe('focus-timer: stopped.')
+  expect((await $.command.run(pomodoro('stop'))).text).toBe('Stopped.')
   expect(engine.status.at(-1)).toBeUndefined()
   await clock.advance(10 * MINUTE)
   expect(engine.toasts).toHaveLength(0)
@@ -79,14 +79,14 @@ test('a timer that ended long before the session started stays quiet', async ($,
   await clock.advance(5_000)
   expect(engine.status).toHaveLength(0)
   expect(engine.toasts).toHaveLength(0)
-  expect((await $.command.run(pomodoro('status'))).text).toBe('focus-timer: no timer running · 0 rounds done this session.')
+  expect((await $.command.run(pomodoro('status'))).text).toBe('No timer running · 0 rounds done this session.')
 })
 
 test('bad durations are refused, and with the sound off nothing plays', { options: { sound: false, breakMinutes: 0 } }, async ($, on) => {
   const { engine, clock } = answerEngine(on)
 
   expect((await $.command.run(pomodoro('forever'))).text).toContain('is not a duration from 1 to 240 minutes')
-  expect((await $.command.run(pomodoro('stop'))).text).toBe('focus-timer: no timer running.')
+  expect((await $.command.run(pomodoro('stop'))).text).toBe('No timer running.')
 
   await $.command.run(pomodoro('1'))
   await clock.advance(MINUTE)

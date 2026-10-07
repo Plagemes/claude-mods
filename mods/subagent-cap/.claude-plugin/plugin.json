@@ -1,0 +1,18 @@
+{
+  "name": "subagent-cap",
+  "version": "1.0.0",
+  "description": "Caps how many subagents can run at the same time.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#subagent-cap",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "agents", "subagents", "limit"],
+  "userConfig": {
+    "max": {
+      "type": "number",
+      "title": "Maximum subagents",
+      "description": "How many subagents may run at the same time. A new Agent call is refused while this many are running.",
+      "default": 3
+    }
+  }
+}

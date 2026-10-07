@@ -7,7 +7,22 @@ export type PackageRequest = { ecosystem: Ecosystem; name: string; spec: string 
 export const INSTALLER_HINT = /\b(?:npm|pnpm|yarn|bun|npx|bunx|pip3?|pipx|uv|poetry|cargo|go)\b/
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const PREFIXES = new Set(['sudo', 'command', 'exec', 'time', 'nohup'])
+const PREFIXES = new Set(['sudo', 'command', 'exec', 'time', 'nohup', 'env'])
+/** Options a JavaScript package manager takes before its subcommand (`pnpm --filter web add x`), the ones with a value. */
+const LEADING_VALUED: Readonly<Record<string, ReadonlySet<string>>> = {
+  npm: new Set(['-w', '--workspace', '--prefix']),
+  pnpm: new Set(['--filter', '-F', '-C', '--dir']),
+  yarn: new Set(['--cwd']),
+  bun: new Set(['--cwd']),
+}
+
+/** The words from the subcommand on, past the leading options (and `yarn workspace <name>`). */
+const fromSubcommand = (tool: string, args: readonly string[]): string[] => {
+  let at = 0
+  while (at < args.length && (args[at] as string).startsWith('-')) at += LEADING_VALUED[tool]?.has(args[at] as string) === true ? 2 : 1
+  if (tool === 'yarn' && args[at] === 'workspace') at += 2
+  return args.slice(at)
+}
 
 /** Splits a command line into simple commands, each a list of words; quotes are honoured, expansions kept as text. */
 export const simpleCommands = (command: string): string[][] => {
@@ -125,9 +140,10 @@ const requestsOf = (
 const installsOf = (argv: readonly string[]): PackageRequest[] => {
   let start = 0
   while (start < argv.length && (PREFIXES.has(argv[start] as string) || ASSIGNMENT.test(argv[start] as string))) start += 1
-  const [tool = '', sub = '', third = '', ...rest] = argv.slice(start)
-  const afterSub = argv.slice(start + 2)
-  const name = tool.replace(/^.*\//, '')
+  const name = (argv[start] ?? '').replace(/^.*\//, '')
+  const words = ['npm', 'pnpm', 'yarn', 'bun'].includes(name) ? [argv[start] ?? '', ...fromSubcommand(name, argv.slice(start + 1))] : argv.slice(start)
+  const [, sub = '', third = '', ...rest] = words
+  const afterSub = words.slice(2)
 
   if (name === 'npm' || name === 'pnpm' || name === 'bun') {
     if (NPM_INSTALL.has(sub) || (name === 'bun' && sub === 'a')) return requestsOf('npm', operandsOf(afterSub, NPM_VALUED), npmName)

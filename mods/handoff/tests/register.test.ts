@@ -87,7 +87,7 @@ test('the note keeps the six sections under a dated header', async () => {
 test('/handoff forks the session with git facts, saves the note and copies it', async ($, on) => {
   const state = world(on)
   const ran = await $.command.run(handoff('stress the stale mocks'))
-  expect(ran.text).toBe('handoff: wrote .claude/handoff/2026-10-07-1342.md and copied it to the clipboard.')
+  expect(ran.text).toBe('Wrote .claude/handoff/2026-10-07-1342.md and copied it to the clipboard.')
 
   expect(state.forks[0]).toContain('Branch: fix/rounding')
   expect(state.forks[0]).toContain(' M src/cart/total.ts')
@@ -113,7 +113,7 @@ test('/handoff forks the session with git facts, saves the note and copies it', 
 test('a second note in the same minute gets its own file; outside git it still works', async ($, on) => {
   const state = world(on, { repo: false, existing: [`${ROOT}/.claude/handoff/2026-10-07-1342.md`] })
   const ran = await $.command.run(handoff())
-  expect(ran.text).toContain('wrote .claude/handoff/2026-10-07-1342-2.md')
+  expect(ran.text).toContain('Wrote .claude/handoff/2026-10-07-1342-2.md')
   expect(state.forks[0]).not.toContain('Repository facts')
   expect(state.files.get(`${ROOT}/.claude/handoff/2026-10-07-1342-2.md`)).toContain('session `sess-123`')
 })
@@ -121,7 +121,7 @@ test('a second note in the same minute gets its own file; outside git it still w
 test('nothing to hand off: no file, no copy', async ($, on) => {
   const state = world(on, { fork: 'nothing' })
   const ran = await $.command.run(handoff())
-  expect(ran.text).toBe('handoff: nothing to hand off yet: this conversation has no work in it.')
+  expect(ran.text).toBe('Nothing to hand off yet: this conversation has no work in it.')
   expect([...state.files.keys()]).toEqual([])
   expect(state.copies).toEqual([])
 })
@@ -129,6 +129,6 @@ test('nothing to hand off: no file, no copy', async ($, on) => {
 test('copying can be turned off, and the folder moved', { options: { copy: false, dir: 'docs/handoffs/' } }, async ($, on) => {
   const state = world(on)
   const ran = await $.command.run(handoff())
-  expect(ran.text).toBe('handoff: wrote docs/handoffs/2026-10-07-1342.md.')
+  expect(ran.text).toBe('Wrote docs/handoffs/2026-10-07-1342.md.')
   expect(state.copies).toEqual([])
 })

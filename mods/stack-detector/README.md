@@ -15,7 +15,7 @@ When a session starts it reads the project's root files (`package.json`, `pyproj
 ## Usage
 Nothing to do: detection runs at session start. `/stack` shows what was found and why:
 ```
-stack-detector: 6 detected in /work/app
+6 detected in /work/app
   ✓ Next.js (next)           package.json: next 14.2.3
   ✓ React (react)            package.json: react 18.3.1
   ✓ TypeScript (typescript)  package.json: typescript ^5.4.0

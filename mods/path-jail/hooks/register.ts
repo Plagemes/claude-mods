@@ -143,6 +143,35 @@ const loadJail = async ($: EngineInterface, extraRoots: readonly string[]): Prom
   return { roots, sep, cwd, home, tmp }
 }
 
+/**
+ * Claude Code's own folders that plan mode and auto memory write with Write and Edit: `<config>/plans`
+ * and `<config>/projects/<project>/memory` (config: CLAUDE_CONFIG_DIR, else ~/.claude), plus a custom
+ * `autoMemoryDirectory` from settings. Each is the real path of its folder; missing ones are left out.
+ */
+const claudeFolders = async ($: EngineInterface, jail: Jail): Promise<{ plans?: string; projects?: string; memory?: string }> => {
+  const [configured, settings] = await Promise.all([
+    $.env.get('CLAUDE_CONFIG_DIR').catch(() => undefined),
+    $.settings.read().catch(() => ({})),
+  ])
+  const dir = configured !== undefined && configured !== '' ? configured : jail.home === undefined ? undefined : `${jail.home}${jail.sep}.claude`
+  const config = dir === undefined ? undefined : await resolveRoot($, dir, jail.home)
+  const custom = (settings as { autoMemoryDirectory?: unknown }).autoMemoryDirectory
+  const memory = typeof custom === 'string' && custom !== '' ? await resolveRoot($, custom, jail.home) : undefined
+  return {
+    ...(config === undefined ? {} : { plans: `${config}${jail.sep}plans`, projects: `${config}${jail.sep}projects` }),
+    ...(memory === undefined ? {} : { memory }),
+  }
+}
+
+/** Whether a real path is a plan file or an auto-memory file of Claude Code itself. */
+const isClaudeFile = (real: string, folders: { plans?: string; projects?: string; memory?: string }, sep: string): boolean => {
+  if (folders.plans !== undefined && isInside(real, folders.plans, sep)) return true
+  if (folders.memory !== undefined && isInside(real, folders.memory, sep)) return true
+  if (folders.projects === undefined || !isInside(real, folders.projects, sep)) return false
+  const [project, folder] = splitPath(real.slice(folders.projects.length)).filter(part => part !== '')
+  return project !== undefined && folder === 'memory'
+}
+
 export const register: Register = (on, options) => {
   const extraRoots = listOption(options.allowedRoots)
   const isStrict = options.blockUncheckable !== false
@@ -154,8 +183,12 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'jail' }, async $ => {
     const jail = await loadJail($, extraRoots)
+    const folders = await claudeFolders($, jail)
     const lines = jail.roots.map((root, index) => `  ${index === 0 ? '●' : '○'} ${root}`)
-    return { text: `path-jail: writes are allowed under\n${lines.join('\n')}` }
+    const own = [folders.plans, folders.memory, folders.projects === undefined ? undefined : `${folders.projects}${jail.sep}*${jail.sep}memory`]
+      .filter((path): path is string => path !== undefined)
+      .map(path => `  ◦ ${path} (Claude Code's plans and memory)`)
+    return { text: `Writes are allowed under\n${[...lines, ...own].join('\n')}` }
   })
 
   on('classic.DirectoryAdded', async ($, e, next) => {
@@ -168,13 +201,14 @@ export const register: Register = (on, options) => {
     if (targets.length === 0) return next(e)
 
     const jail = await loadJail($, extraRoots)
+    const folders = await claudeFolders($, jail)
     for (const target of targets) {
       const placed = await placeTarget($, target, jail)
       if ('problem' in placed) {
         if (!isStrict && String(e.tool) === 'Bash') continue
         return { deny: `${PLUGIN}: blocked ${target.via} on "${target.path}": ${placed.problem}. Use a literal path inside the project.` }
       }
-      if (!jail.roots.some(root => isInside(placed.real, root, jail.sep))) {
+      if (!jail.roots.some(root => isInside(placed.real, root, jail.sep)) && !isClaudeFile(placed.real, folders, jail.sep)) {
         return {
           deny:
             `${PLUGIN}: blocked ${target.via} on "${target.path}": it resolves to ${placed.real}, outside the allowed folders ` +

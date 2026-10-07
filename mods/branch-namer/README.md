@@ -27,7 +27,7 @@ names the branch from your last prompt.
 /git-branch fix(auth): token refresh race    ->  fix/token-refresh-race
 /git-branch                                  ->  named from your last prompt
 ```
-The answer is a one-line result such as `branch-namer: created and switched to fix/login-redirect-loop`; Claude is
+The answer is a one-line result such as `Created and switched to fix/login-redirect-loop`; Claude is
 told the branch changed. If the branch already exists or you are not in a repository, it says so and changes nothing.
 
 ## Configuration

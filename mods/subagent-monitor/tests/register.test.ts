@@ -85,7 +85,7 @@ test('polls the agent list every two seconds while the pane is open', async ($, 
     origin: { kind: 'composer' },
     presentation: { isFullscreen: true, columns: 160 },
   })
-  expect(ran.text).toContain('watching')
+  expect(ran.text).toContain('Watching')
   await clock.settle()
 
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PANE, props: paneProps })

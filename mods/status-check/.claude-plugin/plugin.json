@@ -1,0 +1,30 @@
+{
+  "name": "status-check",
+  "version": "1.0.0",
+  "description": "/service-status checks whether GitHub, npm, PyPI or the Anthropic API are having an outage before you blame your code.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#status-check",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "api", "status", "outage", "network"],
+  "userConfig": {
+    "extra": {
+      "type": "string",
+      "title": "Extra services",
+      "description": "Comma-separated Statuspage sites to check too, as Name=https://status.example.com (a bare URL is named after its host).",
+      "default": ""
+    },
+    "timeoutSec": {
+      "type": "number",
+      "title": "Timeout (seconds)",
+      "description": "How long /service-status waits for each status page before reporting it as unreachable.",
+      "default": 5
+    },
+    "autoCheck": {
+      "type": "boolean",
+      "title": "Check after network failures",
+      "description": "When a Bash command fails with a network-looking error (timeout, 503, DNS) involving GitHub, npm, PyPI or the Anthropic API, look at that service's status page and tell Claude if there is an incident.",
+      "default": true
+    }
+  }
+}

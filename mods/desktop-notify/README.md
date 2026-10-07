@@ -24,4 +24,4 @@ Nothing to run. The notification title is `Claude Code · <project folder>` and 
 ## How it works
 - Hooks `turn.complete` (main conversation only; interrupted turns and subagents are skipped) and `classic.Notification`.
 - Detects the platform with `$.env` (`OS`) and `uname -s`, then runs the notifier through `$.process.run` with a 5 second timeout; the message text is passed as arguments or environment variables, never spliced into a script.
-- Limits: it cannot tell whether your terminal is focused, so use `minSeconds` to keep it quiet while you watch. Linux needs `notify-send` (libnotify) and a notification daemon; the Windows toast needs Windows PowerShell 5 (`powershell`), not PowerShell 7.
+- Limits: it cannot tell whether your terminal is focused, so use `minSeconds` to keep it quiet while you watch. Linux needs `notify-send` (libnotify) and a notification daemon; the Windows toast needs Windows PowerShell 5 (`powershell`), not PowerShell 7, and shows under Windows PowerShell's name (Windows drops toasts from an app id no shortcut registers).

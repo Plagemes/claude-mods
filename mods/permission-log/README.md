@@ -19,7 +19,7 @@ Records each tool call that did not go ahead: refused by a guard plugin, denied 
 ```
 Output looks like:
 ```
-permission-log: 2 denied tool calls (newest last)
+2 denied tool calls (newest last)
 
 14:02:11  Bash  rm -rf build
           why: rm-rf-guard: refusing to delete outright.

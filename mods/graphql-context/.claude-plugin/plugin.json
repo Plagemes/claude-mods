@@ -1,0 +1,25 @@
+{
+  "name": "graphql-context",
+  "version": "1.0.0",
+  "description": "Gives Claude a compact summary of your GraphQL schema when you work on queries and resolvers.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#graphql-context",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "api", "graphql", "schema", "context"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "schemaPaths": {
+      "type": "string",
+      "title": "Schema files",
+      "description": "Comma-separated schema files or globs from the project root (SDL or introspection JSON). Empty: what codegen.yml / .graphqlrc names, else every .graphql/.gql file that defines types.",
+      "default": ""
+    },
+    "maxChars": {
+      "type": "number",
+      "title": "Summary size",
+      "description": "Most characters of the compact schema handed to Claude (1000-40000).",
+      "default": 6000
+    }
+  }
+}

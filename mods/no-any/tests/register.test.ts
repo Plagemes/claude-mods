@@ -34,7 +34,7 @@ test('in warn mode lets the edit through, tells Claude and toasts', async ($, on
 
   expect(seen.reached).toBe(1)
   expect(result.context?.[0]).toContain('added as any')
-  expect(seen.toasts[0]).toContain('no-any: as any added to user.ts')
+  expect(seen.toasts[0]).toContain('Added as any to user.ts')
 })
 
 test('in block mode refuses the edit before it runs', { options: { mode: 'block' } }, async ($, on) => {
@@ -98,4 +98,31 @@ test('only counts what the edit adds, comparing a Write with the file it replace
     content: 'export const old: any = 1\nexport const more: any = 2\n',
   })
   expect(added.context?.[0]).toContain(': any')
+})
+
+test('an escape hatch already on an edited line is not counted as added; a second one is', { options: { mode: 'block' } }, async ($, on) => {
+  const seen = engine(on)
+  const kept = await $.tool.call({
+    tool: 'Edit',
+    file_path: FILE,
+    old_string: 'const data = JSON.parse(raw) as any',
+    new_string: 'const data = JSON.parse(text) as any',
+  })
+  expect(kept.deny).toBeUndefined()
+  expect(seen.reached).toBe(1)
+
+  const doubled = await $.tool.call({
+    tool: 'Edit',
+    file_path: FILE,
+    old_string: 'const data = JSON.parse(raw) as any',
+    new_string: 'const data = JSON.parse(raw) as any as any',
+  })
+  expect(doubled.deny).toContain('as any')
+})
+
+test('a long run of backslashes after a stray quote does not hang the check', async ($, on) => {
+  engine(on)
+  const started = Date.now()
+  await $.tool.call({ tool: 'Edit', file_path: FILE, old_string: 'a', new_string: `// don't ${'\\'.repeat(60)}` })
+  expect(Date.now() - started).toBeLessThan(1000)
 })

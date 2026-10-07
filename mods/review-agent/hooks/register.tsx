@@ -43,23 +43,23 @@ async function git($: EngineInterface, args: readonly string[]): Promise<{ ok: b
 
 /** What /review [base] looks at: the working tree against HEAD, or against where it forked from base. */
 async function resolveTarget($: EngineInterface, base: string): Promise<Target | { error: string }> {
-  if (!(await git($, ['rev-parse', '--show-toplevel'])).ok) return { error: 'not inside a git repository.' }
+  if (!(await git($, ['rev-parse', '--show-toplevel'])).ok) return { error: 'Not inside a git repository.' }
   let diffArgs = ['HEAD']
   let label = 'uncommitted changes'
   if (base !== '') {
     if (!isSafeRef(base)) return { error: `"${base}" is not a branch, tag or commit name.` }
     const forkPoint = await git($, ['merge-base', base, 'HEAD'])
-    if (!forkPoint.ok) return { error: `cannot find "${base}" or its common ancestor with HEAD.` }
+    if (!forkPoint.ok) return { error: `Cannot find "${base}" or its common ancestor with HEAD.` }
     diffArgs = [forkPoint.out.trim()]
     label = `changes since ${base}`
   }
   const stat = await git($, ['diff', '--shortstat', ...diffArgs])
-  if (!stat.ok) return { error: 'git diff failed (is there a first commit yet?).' }
+  if (!stat.ok) return { error: 'Git diff failed (is there a first commit yet?).' }
   if (stat.out.trim() === '') {
     return {
       error: base === ''
-        ? 'nothing to review: no uncommitted changes. Try /review main to review your branch.'
-        : `nothing to review: no changes since ${base}.`,
+        ? 'Nothing to review: no uncommitted changes. Try /review main to review your branch.'
+        : `Nothing to review: no changes since ${base}.`,
     }
   }
   const diff = await git($, ['diff', '--no-color', '--no-ext-diff', ...diffArgs])
@@ -87,7 +87,7 @@ async function rememberReviewer($: EngineInterface, agentId: string): Promise<vo
 
 async function startReview($: EngineInterface, base: string): Promise<string> {
   const target = await resolveTarget($, base)
-  if ('error' in target) return `${NAME}: ${target.error}`
+  if ('error' in target) return target.error
   const startedAt = await $.clock.now()
   lastSpawn.agentId = undefined
   const spawned = await $.agent.spawn({ subagentType: AGENT_TYPE, prompt: taskFor(target), description: `Review ${target.label}` })
@@ -96,11 +96,11 @@ async function startReview($: EngineInterface, base: string): Promise<string> {
   if (spawned.deny !== undefined || agentId === undefined) {
     const why = spawned.deny ?? 'no agent was started'
     await update($, reviewAtom, (): ReviewState => ({ ...review, status: 'failed', report: why }))
-    return `${NAME}: could not start the reviewer: ${why}`
+    return `Could not start the reviewer: ${why}`
   }
   await rememberReviewer($, agentId)
   await update($, reviewAtom, (): ReviewState => ({ ...review, status: 'running', report: '', agentId }))
-  return `${NAME}: reviewing ${target.label} (${target.stat}) in the background. Findings appear in the Review pane.`
+  return `Reviewing ${target.label} (${target.stat}) in the background. Findings appear in the Review pane.`
 }
 
 async function registerReviewer($: EngineInterface, settings: Settings): Promise<void> {
@@ -168,7 +168,7 @@ export const register: Register = (on, options) => {
     const isDone = e.reason === 'answer' && e.answer.trim() !== ''
     const report = isDone ? e.answer.trim() : `The reviewer stopped (${e.reason}) before reporting.`
     await update($, reviewAtom, () => ({ ...review, status: isDone ? 'done' : 'failed', report }))
-    $.ui.toast(isDone ? `${NAME}: review ready, ${describeCounts(countSeverities(report))}` : `${NAME}: the review did not finish`)
+    $.ui.toast(isDone ? `Review ready, ${describeCounts(countSeverities(report))}` : 'The review did not finish')
     try {
       if (!(await $.ui.panes()).some(pane => pane.id === PANE)) await $.ui.open({ id: PANE, title: 'Review' })
     } catch {
@@ -182,13 +182,13 @@ export const register: Register = (on, options) => {
     const current = await read($, reviewAtom)
     if (current?.status === 'running') {
       await $.ui.open({ id: PANE, title: 'Review' })
-      return { text: `${NAME}: a review of ${current.label} is still running.` }
+      return { text: `A review of ${current.label} is still running.` }
     }
     const text = await startReview($, e.args.trim())
     if ((await read($, reviewAtom))?.status === 'running') await $.ui.open({ id: PANE, title: 'Review', rows: 24 })
     return { text }
   }).catch(($, e, next) =>
-    next.called ? next(e) : { text: `${NAME}: the review could not start (${next.error.message ?? next.error.kind}).` },
+    next.called ? next(e) : { text: `The review could not start (${next.error.message ?? next.error.kind}).` },
   )
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -202,7 +202,7 @@ export const register: Register = (on, options) => {
     }
     const copy = async (surface: typeof e.surface) => {
       const copied = await $.ui.copy({ text: review.report, surface })
-      $.ui.toast(copied.isCopied ? `${NAME}: findings copied` : `${NAME}: could not copy (${copied.reason})`)
+      $.ui.toast(copied.isCopied ? 'Findings copied' : `Could not copy (${copied.reason})`)
     }
 
     return (

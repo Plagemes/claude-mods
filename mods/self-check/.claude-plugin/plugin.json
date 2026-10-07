@@ -1,0 +1,20 @@
+{
+  "name": "self-check",
+  "version": "1.0.0",
+  "description": "At the end of each editing turn, has the model double-check it actually did what you asked.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#self-check",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "agents", "verification", "quality"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "When gaps are found",
+      "description": "notify shows them above the prompt with a Fix gaps button; auto also asks Claude to fix them once, by itself.",
+      "options": ["notify", "auto"],
+      "default": "notify"
+    }
+  }
+}

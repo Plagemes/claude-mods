@@ -13,7 +13,7 @@ After Claude edits or writes a file, file-size-watch checks whether the edit mad
 ```
 
 ## Usage
-Nothing to run. When a growing edit leaves a file over the limit you see `file-size-watch: big.ts is 520 lines. Consider splitting it.` once per file per session, and Claude gets a note on every further edit that makes that file longer. Edits that shrink a file, or leave it the same size, stay silent. JSON, lockfiles, Markdown, CSV, SVG, logs, minified and generated files are skipped.
+Nothing to run. When a growing edit leaves a file over the limit you see `big.ts is 520 lines. Consider splitting it.` once per file per session, and Claude gets a note on every further edit that makes that file longer. Edits that shrink a file, or leave it the same size, stay silent. JSON, lockfiles, Markdown, CSV, SVG, logs, minified and generated files are skipped.
 
 ## Configuration
 | Key | Type | Default | Description |

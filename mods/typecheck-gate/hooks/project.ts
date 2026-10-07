@@ -44,3 +44,49 @@ export const resolveFrom = (dir: string, path: string): string =>
 
 /** True when `$.process.run` rejected because the executable could not start. */
 export const isNotInstalled = (error: unknown): boolean => /failed to start|ENOENT|not found/i.test(String(error))
+
+/** JSON with comments and trailing commas (a tsconfig) as plain JSON text. */
+const withoutJsonComments = (text: string): string => {
+  let out = ''
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i] ?? ''
+    if (char === '"') {
+      const start = i
+      for (i += 1; i < text.length && text[i] !== '"'; i += 1) if (text[i] === '\\') i += 1
+      out += text.slice(start, i + 1)
+    } else if (char === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i += 1
+      out += '\n'
+    } else if (char === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2)
+      i = end === -1 ? text.length : end + 1
+    } else {
+      out += char
+    }
+  }
+  return out.replace(/,(\s*[}\]])/g, '$1')
+}
+
+/**
+ * The configs a "solution" tsconfig points at: `{ "files": [], "references": [...] }` checks nothing itself
+ * (`tsc -p` on it passes whatever the code holds), so each referenced project is checked instead.
+ * Undefined for any other tsconfig, or one that cannot be read.
+ */
+export const referencedConfigs = (text: string, dir: string): string[] | undefined => {
+  let config: unknown
+  try {
+    config = JSON.parse(withoutJsonComments(text))
+  } catch {
+    return undefined
+  }
+  if (typeof config !== 'object' || config === null) return undefined
+  const { files, include, references } = config as Record<string, unknown>
+  if (!Array.isArray(files) || files.length > 0 || include !== undefined || !Array.isArray(references)) return undefined
+  const paths = references.flatMap(reference => {
+    const path = (reference as { path?: unknown } | null)?.path
+    if (typeof path !== 'string' || path === '') return []
+    const resolved = resolveFrom(dir, path.replace(/\/+$/, ''))
+    return [resolved.endsWith('.json') ? resolved : join(resolved, 'tsconfig.json')]
+  })
+  return paths.length > 0 ? paths : undefined
+}

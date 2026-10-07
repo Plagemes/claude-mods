@@ -126,7 +126,7 @@ async function describe($: EngineInterface): Promise<string> {
   const done = await read($, completed)
   const rounds = `${done} round${done === 1 ? '' : 's'} done this session`
 
-  if (running === null) return `${NAME}: no timer running · ${rounds}.`
+  if (running === null) return `No timer running · ${rounds}.`
 
   const left = clockText(running.endsAt - (await $.clock.now()))
 
@@ -182,7 +182,7 @@ export const register: Register = (on, options: PluginOptions) => {
       const wasRunning = (await read($, timer)) !== null
       await save($, null)
       $.ui.status(undefined)
-      return { text: wasRunning ? `${NAME}: stopped.` : `${NAME}: no timer running.` }
+      return { text: wasRunning ? 'Stopped.' : 'No timer running.' }
     }
 
     if (verb === 'status') return { text: await describe($) }
@@ -192,7 +192,7 @@ export const register: Register = (on, options: PluginOptions) => {
     const minutes = asked === undefined || asked === '' ? (isBreak ? settings.breakMinutes || 5 : settings.focusMinutes) : Number(asked)
 
     if (!Number.isFinite(minutes) || minutes <= 0 || minutes > MAX_MINUTES) {
-      return { text: `${NAME}: "${e.args.trim()}" is not a duration from 1 to ${MAX_MINUTES} minutes. ${USAGE}` }
+      return { text: `"${e.args.trim()}" is not a duration from 1 to ${MAX_MINUTES} minutes. ${USAGE}` }
     }
 
     return { text: await start($, isBreak ? 'break' : 'focus', minutes, settings) }

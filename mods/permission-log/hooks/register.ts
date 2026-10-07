@@ -87,13 +87,13 @@ export const register: Register = on => {
     if (e.args.trim() === 'clear') {
       await update($, denied, () => [])
       $.ui.status(undefined)
-      return { text: 'permission-log: cleared the denied-call log.' }
+      return { text: 'Cleared the denied-call log.' }
     }
 
     const all = await read($, denied)
-    if (all.length === 0) return { text: 'permission-log: no tool call has been denied this session.' }
+    if (all.length === 0) return { text: 'No tool call has been denied this session.' }
 
-    const heading = `permission-log: ${all.length} denied tool call${all.length === 1 ? '' : 's'} (newest last)`
+    const heading = `${all.length} denied tool call${all.length === 1 ? '' : 's'} (newest last)`
     return { text: [heading, '', ...all.slice(-SHOWN).flatMap(rows)].join('\n') }
   })
 }

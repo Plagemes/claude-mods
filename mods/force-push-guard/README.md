@@ -32,6 +32,6 @@ Nothing to run. Examples:
 | `protectedBranches` | string | `main,master,develop,release/*` | Comma-separated branch names or `*` globs that may never be force-pushed. |
 
 ## How it works
-- A `tool.call` guard on `Bash`: a small shell lexer finds each `git push` (also behind `&&`, `;`, pipes, `git -C dir`) and works out which branches it updates; `HEAD` or no refspec means the current branch.
+- A `tool.call` guard on `Bash`: a small shell lexer finds each `git push` (also behind `&&`, `;`, pipes, `git -C dir`, `bash -c '…'`) and works out which branches it updates; `HEAD` or no refspec means the current branch.
 - It fails closed: if the check itself throws, or the target branch cannot be determined for a forced push, the command is denied.
-- Limits: shell aliases (`git pf`), scripts that push and `git config` aliases are not seen, and `push.default` rules beyond "the current branch" are not modelled.
+- Limits: a push inside `bash -c '…'` is checked but never rewritten; shell aliases (`git pf`), scripts that push and `git config` aliases are not seen, and `push.default` rules beyond "the current branch" are not modelled.

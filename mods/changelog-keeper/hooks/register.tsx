@@ -11,6 +11,7 @@ const GIT_TIMEOUT_MS = 10_000
 /** A commit made this long before the Bash call started still counts as its own (clock skew). */
 const COMMIT_GRACE_MS = 2_000
 const COMMIT_COMMAND = /\bgit(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b/
+const AMEND = /\bcommit\b[^;&|\n]*\s--amend\b/
 
 const viewAtom = atom({ plugin: 'changelog-keeper', key: 'view' } as const, null)
 
@@ -64,7 +65,7 @@ async function recordCommit($: EngineInterface, settings: Settings, commit: Comm
   await $.fs.write(path, inserted.markdown)
   const view = await loadView($, settings)
   await update($, viewAtom, () => view)
-  $.ui.toast(`${NAME}: ${entry.section} · ${entry.text}`)
+  $.ui.toast(`${entry.section} · ${entry.text}`)
   return `${NAME} added "- ${entry.text}" under ## [Unreleased] › ### ${entry.section} in ${settings.path}${exists ? '' : ' (new file)'}; the change is not committed yet.`
 }
 
@@ -83,7 +84,8 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (!COMMIT_COMMAND.test(e.command)) return next(e)
+    // An amend rewrites a commit the changelog already has: its subject is no new change.
+    if (!COMMIT_COMMAND.test(e.command) || AMEND.test(e.command)) return next(e)
     const startedAt = await $.clock.now()
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError === true) return ran
@@ -105,11 +107,11 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'changelog' }, async $ => {
     const view = await loadView($, settings)
     await update($, viewAtom, () => view)
-    if (view.status === 'no-repo') return { text: `${NAME}: not inside a git repository.` }
+    if (view.status === 'no-repo') return { text: 'Not inside a git repository.' }
     await $.ui.open({ id: PANE, title: 'Unreleased', rows: 18 })
-    if (view.status === 'missing') return { text: `${NAME}: no ${view.path} yet; it starts with your next feat/fix commit.` }
-    if (view.status === 'no-unreleased') return { text: `${NAME}: ${view.path} has no ## [Unreleased] section yet.` }
-    return { text: `${NAME}: ${view.entries} unreleased ${view.entries === 1 ? 'entry' : 'entries'} in ${view.path}.` }
+    if (view.status === 'missing') return { text: `No ${view.path} yet; it starts with your next feat/fix commit.` }
+    if (view.status === 'no-unreleased') return { text: `${view.path} has no ## [Unreleased] section yet.` }
+    return { text: `${view.entries} unreleased ${view.entries === 1 ? 'entry' : 'entries'} in ${view.path}.` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -118,7 +120,7 @@ export const register: Register = (on, options) => {
     const copy = async (surface: typeof e.surface) => {
       if (view === null) return
       const copied = await $.ui.copy({ text: view.unreleased, surface })
-      $.ui.toast(copied.isCopied ? `${NAME}: Unreleased copied` : `${NAME}: could not copy (${copied.reason})`)
+      $.ui.toast(copied.isCopied ? 'Unreleased copied' : `Could not copy (${copied.reason})`)
     }
     const reload = async () => {
       const fresh = await loadView($, settings)

@@ -24,7 +24,7 @@ const GENERATED_NAME = /(\.min\.(js|mjs|cjs|css)|\.(bundle|chunk)\.(js|mjs|cjs|c
 /** Files the Read tool opens in a way of their own (pages, image blocks). */
 const NOT_LINE_BASED = /\.(pdf|png|jpe?g|gif|webp)$/i
 
-const basename = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
+const basename = (path: string): string => path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1)
 
 const isGenerated = (path: string): boolean => {
   const name = basename(path)
@@ -46,7 +46,8 @@ export const register: Register = (on, options) => {
     BYTES_PER_KB
 
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
-    const isBounded = e.limit !== undefined || e.pages !== undefined
+    // An offset alone reads one window of lines (the tool's default count), not the whole file.
+    const isBounded = e.limit !== undefined || e.offset !== undefined || e.pages !== undefined
     const isElsewhere = e._host !== undefined
 
     if (isBounded || isElsewhere || NOT_LINE_BASED.test(e.file_path)) {

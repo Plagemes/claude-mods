@@ -40,6 +40,16 @@ const RUFF_CONFIGS = ['ruff.toml', '.ruff.toml']
 const CLANG_CONFIGS = ['.clang-format', '_clang-format']
 const PHP_CS_CONFIGS = ['.php-cs-fixer.php', '.php-cs-fixer.dist.php']
 
+/** A biome.json that turns its formatter off (biome used as a linter only): the project formats with something else. */
+const BIOME_FORMATTER_OFF = /"formatter"\s*:\s*\{[^{}]*"enabled"\s*:\s*false/
+const isBiomeFormatterOff = async (project: Project): Promise<boolean> => {
+  for (const name of BIOME_CONFIGS) {
+    const [nearest] = await project.readAll(name)
+    if (nearest !== undefined) return BIOME_FORMATTER_OFF.test(nearest.text)
+  }
+  return false
+}
+
 const always = async () => true
 const nearest = (names: string[]) => (project: Project) => project.find(...names)
 const fileOnly = async (file: string) => [file]
@@ -50,11 +60,12 @@ const FORMATTERS: readonly Formatter[] = [
     name: 'biome',
     extensions: new Set([...SCRIPT_EXTENSIONS, 'json', 'jsonc', 'css', 'graphql', 'gql']),
     isWanted: async project =>
-      project.find(...BIOME_CONFIGS) !== undefined || (await hasPackage(project, '@biomejs/biome')),
+      (project.find(...BIOME_CONFIGS) !== undefined || (await hasPackage(project, '@biomejs/biome'))) && !(await isBiomeFormatterOff(project)),
     bin: 'biome',
     localFolders: NODE_BIN,
     configDir: nearest([...BIOME_CONFIGS, 'package.json']),
-    args: async file => ['format', '--write', file],
+    // A file biome.json ignores is no error: without the flag biome exits 1 ("No files were processed").
+    args: async file => ['format', '--write', '--no-errors-on-unmatched', file],
   },
   {
     name: 'prettier',
@@ -81,7 +92,8 @@ const FORMATTERS: readonly Formatter[] = [
     bin: 'prettier',
     localFolders: NODE_BIN,
     configDir: nearest([...PRETTIER_CONFIGS, 'package.json']),
-    args: async file => ['--write', file],
+    // A file prettier has no parser for (a .svelte without its plugin) is skipped, not reported as broken.
+    args: async file => ['--write', '--ignore-unknown', file],
   },
   {
     name: 'ruff',

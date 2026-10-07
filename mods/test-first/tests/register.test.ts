@@ -113,3 +113,25 @@ test('the band shows the phase and the lock on terminal and desktop, and turns T
     await ui.unmount()
   }
 })
+
+test('regression: a command that only names a runner does not count as a test run', async ($, on) => {
+  const { bash } = engine(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await tdd($, 'on')
+
+  // A failing run opens the code to make it pass...
+  bash.fails = true
+  await $.tool.call({ tool: 'Bash', command: 'cd web && npx vitest run' })
+  bash.fails = false
+  await newTurn($, 'turn-2')
+  // ...and reading a config or installing a runner does not close it again.
+  for (const command of ['cat jest.config.js', 'npm install -D vitest', 'grep -rn pytest .', 'git commit -m "add jest tests"']) {
+    await $.tool.call({ tool: 'Bash', command })
+  }
+  expect((await edit($, '/repo/src/app.ts')).deny).toBeUndefined()
+
+  // A real passing run does.
+  await $.tool.call({ tool: 'Bash', command: 'CI=1 npm run test:unit 2>&1 | tail -5' })
+  await newTurn($, 'turn-3')
+  expect((await edit($, '/repo/src/app.ts')).deny).toBeDefined()
+})

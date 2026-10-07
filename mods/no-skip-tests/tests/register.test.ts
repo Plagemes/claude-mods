@@ -107,3 +107,9 @@ test('the escape word is configurable and can be turned off', { options: { allow
   expect(result.deny).toContain('no-skip-tests')
   expect(result.deny).not.toContain('ask them')
 })
+
+test('Windows paths with backslashes are recognised as test files', async ($, on) => {
+  answerEngine(on)
+  const result = await edit($, 'C:\\repo\\tests\\test_api.py', 'def test_a():', '@pytest.mark.skip\ndef test_a():')
+  expect(result.deny).toContain('@pytest.mark.skip')
+})

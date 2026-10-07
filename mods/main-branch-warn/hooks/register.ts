@@ -64,7 +64,7 @@ export const register: Register = (on, options) => {
     }
     if (!hasWarned) {
       hasWarned = true
-      $.ui.toast(`main-branch-warn: Claude is editing directly on "${branch}". Branch first: git switch -c <name> (or /git-branch).`, { timeoutMs: 8000 })
+      $.ui.toast(`Claude is editing directly on "${branch}". Branch first: git switch -c <name> (or /git-branch).`, { timeoutMs: 8000 })
     }
     return next(e)
   }).catch(($, e, next) => (next.called || !shouldBlock ? next(e) : { deny: 'main-branch-warn: its check failed, so the edit was blocked.' }))

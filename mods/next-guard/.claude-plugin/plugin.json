@@ -1,0 +1,18 @@
+{
+  "name": "next-guard",
+  "version": "1.0.0",
+  "description": "Flags missing or needless \"use client\" and server-only imports leaking into client components in Next.js.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#next-guard",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "stacks", "nextjs", "react"],
+  "userConfig": {
+    "hintUnneeded": {
+      "type": "boolean",
+      "title": "Hint on needless \"use client\"",
+      "description": "Also tell Claude when a file marked \"use client\" uses no client-only feature.",
+      "default": true
+    }
+  }
+}

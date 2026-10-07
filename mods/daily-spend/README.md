@@ -13,12 +13,12 @@ Prices every turn from the token usage the engine reports and adds it to a runni
 ```
 
 ## Usage
-- `/spend` prints `daily-spend: today $3.50 · this week $7.50` and opens the **Spend** pane:
+- `/spend` prints `Today $3.50 · this week $7.50` and opens the **Spend** pane:
   - Today / This week / 14 days, with the average per day.
   - Last 14 days: a colour bar chart on the terminal (today in orange, days over the limit in red), one bar row per day on the desktop app, plus the peak day.
   - Top projects: the five project roots that spent most in those 14 days.
 - **Refresh** (`r`) re-reads the totals, picking up what other sessions spent; **Close** closes the pane.
-- With a daily limit set: `daily-spend: today's spend $21.30 passed your $20.00 daily limit.` (once a day, across sessions).
+- With a daily limit set: `Today's spend $21.30 passed your $20.00 daily limit.` (once a day, across sessions).
 
 ## Configuration
 | Key | Default | Meaning |

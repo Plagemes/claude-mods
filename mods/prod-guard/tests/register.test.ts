@@ -105,3 +105,29 @@ test('prodPattern is configurable', { options: { prodPattern: 'eu-west|acme-live
   expect((await $.tool.call({ tool: 'Bash', command: 'kubectl --context=eu-west-1 delete ns x' })).deny).toContain('prod-guard')
   expect((await $.tool.call({ tool: 'Bash', command: 'kubectl --context=prod delete ns x' })).deny).toBeUndefined()
 })
+
+test('commands wrapped in bash -c, sh -lc or eval are read too', async ($, on) => {
+  engine(on)
+  for (const command of [
+    `bash -c 'kubectl delete pod web-1 --context prod'`,
+    `sh -lc "terraform apply -auto-approve"`,
+    `sudo bash -c "cd infra && pulumi destroy"`,
+    `eval "helm upgrade api ./chart --kube-context prod-eu"`,
+  ]) {
+    expect(`${command} => ${(await $.tool.call({ tool: 'Bash', command })).deny ?? 'ALLOWED'}`).toContain('prod-guard')
+  }
+  expect((await $.tool.call({ tool: 'Bash', command: `bash -c 'terraform plan'` })).deny).toBeUndefined()
+})
+
+test('an approval does not carry into a turn the person did not start', async ($, on) => {
+  engine(on)
+  const apply = { tool: 'Bash', command: 'terraform apply' } as const
+  await $.prompt.submit({ ...PERSON, text: 'ship it, PROD-OK' })
+  expect((await $.tool.call(apply)).deny).toBeUndefined()
+  // Delivered into the approved turn: it stays approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' }, turnId: 'turn-1' })
+  expect((await $.tool.call(apply)).deny).toBeUndefined()
+  // A notification that starts a turn of its own is not approved.
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect((await $.tool.call(apply)).deny).toContain('prod-guard')
+})

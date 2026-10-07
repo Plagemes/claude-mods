@@ -6,6 +6,8 @@ import type { BashHistoryEntry, BashHistoryOutcome } from '../types'
 const KEPT = 200
 const DEFAULT_SHOWN = 30
 const MAX_COMMAND_LENGTH = 110
+/** What is kept of a command: enough to show, never a whole heredoc times 200. */
+const MAX_KEPT_COMMAND_LENGTH = 1_000
 
 const entries = atom({ plugin: 'bash-history', key: 'entries' } as const, [])
 
@@ -16,8 +18,9 @@ const clockTime = (ms: number): string => {
 
 const duration = (ms: number): string => {
   if (ms < 1000) return `${ms}ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-  return `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s`
+  if (ms < 59_950) return `${(ms / 1000).toFixed(1)}s`
+  const seconds = Math.round(ms / 1000)
+  return `${Math.floor(seconds / 60)}m${seconds % 60}s`
 }
 
 const oneLine = (command: string): string => {
@@ -46,7 +49,8 @@ export const register: Register = on => {
     const ms = (await $.clock.now()) - startedAt
     const outcome: BashHistoryOutcome = ran.deny !== undefined ? 'denied' : ran.isError ? 'failed' : 'ok'
 
-    await update($, entries, kept => [...kept, { at: startedAt, command: e.command, outcome, ms }].slice(-KEPT))
+    const command = e.command.slice(0, MAX_KEPT_COMMAND_LENGTH)
+    await update($, entries, kept => [...kept, { at: startedAt, command, outcome, ms }].slice(-KEPT))
     return ran
   })
 
@@ -54,10 +58,10 @@ export const register: Register = on => {
     const asked = Number.parseInt(e.args, 10)
     const count = Number.isFinite(asked) ? Math.min(Math.max(asked, 1), KEPT) : DEFAULT_SHOWN
     const all = await read($, entries)
-    if (all.length === 0) return { text: 'bash-history: Claude has not run any shell commands yet.' }
+    if (all.length === 0) return { text: 'Claude has not run any shell commands yet.' }
 
     const shown = all.slice(-count)
-    const heading = `bash-history: last ${shown.length} of ${all.length} shell commands (newest last)`
+    const heading = `Last ${shown.length} of ${all.length} shell commands (newest last)`
     return { text: [heading, '', ...shown.map(row)].join('\n') }
   })
 }

@@ -83,7 +83,7 @@ test('explains itself when there is nothing to save or the name is bad', async (
   const state = engine(on)
   state.messages = [reply('Just prose, no code.')]
 
-  expect(await run($, 'save-snippet', 'x')).toContain('no code block')
+  expect(await run($, 'save-snippet', 'x')).toContain('No code block')
   expect(await run($, 'save-snippet', '')).toContain('usage:')
   expect(await run($, 'save-snippet', 'bad name!')).toContain('usage:')
 })
@@ -102,14 +102,14 @@ test('/snippets lists, saving again updates, /delete-snippet removes', async ($,
 
   expect(await run($, 'delete-snippet', 'ls')).toBe('📎 snippet ls deleted.')
   expect(await run($, 'snippets')).toContain('📎 Snippets (1)')
-  expect(await run($, 'delete-snippet', 'ls')).toContain('no snippet called ls')
+  expect(await run($, 'delete-snippet', 'ls')).toContain('No snippet called ls')
 })
 
 test('an unknown name lists what is saved', async ($, on) => {
   engine(on)
   await run($, 'save-snippet', 'retry')
 
-  expect(await run($, 'snippet', 'nope')).toBe('snippet-vault: no snippet called nope. Saved: retry.')
+  expect(await run($, 'snippet', 'nope')).toBe('No snippet called nope. Saved: retry.')
   expect(await run($, 'snippet')).toContain('📎 Snippets (1)')
 })
 
@@ -119,4 +119,15 @@ test('registers its four commands when the session starts', async ($, on) => {
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
 
   expect(state.commands.sort()).toEqual(['delete-snippet', 'save-snippet', 'snippet', 'snippets'])
+})
+
+test('a snippet named like an Object.prototype key (constructor) is a normal snippet', async ($, on) => {
+  const state = engine(on)
+
+  expect(await run($, 'snippet', 'constructor')).toBe('No snippet called constructor.')
+  expect(await run($, 'delete-snippet', 'constructor')).toBe('No snippet called constructor.')
+  expect(await run($, 'save-snippet', 'constructor')).toBe('📎 snippet constructor saved (5 lines, js).')
+  expect(await run($, 'snippet', 'constructor')).toBe('📎 snippet constructor is in your prompt.')
+  expect(state.filled[0]?.text).toBe(`\`\`\`js\n${RETRY}\n\`\`\``)
+  expect(await run($, 'delete-snippet', 'constructor')).toBe('📎 snippet constructor deleted.')
 })

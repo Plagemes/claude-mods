@@ -1,0 +1,18 @@
+{
+  "name": "leak-hint",
+  "version": "1.0.0",
+  "description": "Flags event listeners, intervals and subscriptions created without cleanup.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#leak-hint",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "performance", "memory-leak", "react"],
+  "userConfig": {
+    "ignore": {
+      "type": "string",
+      "title": "Ignore paths",
+      "description": "Regular expression. Files whose path matches are never checked. Test files, node_modules and build folders are always skipped. Empty = no extra paths.",
+      "default": ""
+    }
+  }
+}

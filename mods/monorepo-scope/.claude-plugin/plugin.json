@@ -1,0 +1,24 @@
+{
+  "name": "monorepo-scope",
+  "version": "1.0.0",
+  "description": "Detects which monorepo package you're in and scopes test, lint and build commands to it.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#monorepo-scope",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "stacks", "monorepo", "workspaces"],
+  "userConfig": {
+    "autoScope": {
+      "type": "boolean",
+      "title": "Rewrite root commands",
+      "description": "Rewrite root-level test/lint/build commands to the current package. Off: leave them and tell Claude the scoped command instead.",
+      "default": true
+    },
+    "scripts": {
+      "type": "string",
+      "title": "Scoped scripts",
+      "description": "Comma-separated scripts and tasks to scope.",
+      "default": "test,lint,build,typecheck,check"
+    }
+  }
+}

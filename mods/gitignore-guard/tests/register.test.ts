@@ -102,3 +102,10 @@ test('extraPatterns adds your own junk', { options: { extraPatterns: '*.sqlite, 
   expect(deny).toContain('db/dev.sqlite (matches *.sqlite)')
   expect(deny).toContain('  coverage/')
 })
+
+test('every git add of a chained command is checked, not only the first', async ($, on) => {
+  engine(on, { status: nul('?? node_modules/a/index.js', '?? src/a.ts') })
+  expect((await $.tool.call(bash('git add src/a.ts && git add -A'))).deny).toContain('node_modules/')
+  expect((await $.tool.call(bash('git add -u && git add .env'))).deny).toContain('.env (environment file)')
+  expect((await $.tool.call(bash('git add src/a.ts && git add -u'))).deny).toBeUndefined()
+})

@@ -55,7 +55,7 @@ export const register: Register = (on, options) => {
       case 'skipped':
         return ran
       case 'missing':
-        $.ui.toast(`auto-format: ${outcome.formatter} is not installed, so ${basename(file)} was left as written`)
+        $.ui.toast(`${outcome.formatter} is not installed, so ${basename(file)} was left as written`)
         return ran
       case 'failed':
         $.ui.status(`✗ auto-format: ${outcome.formatter} could not format ${basename(file)}`)

@@ -118,3 +118,14 @@ test('the context threshold is configurable', { options: { minPercent: 30 } }, a
   await turn($, bash($, 'go test ./...'))
   expect(world.toasts).toHaveLength(1)
 })
+
+test('regression: a command that only mentions a test runner is no passing test run', async ($, on) => {
+  const world = answerEngine(on)
+
+  await turn($, bash($, 'cat jest.config.js'))
+  await turn($, bash($, 'pip install pytest'))
+  expect(world.toasts).toHaveLength(0)
+
+  await turn($, bash($, 'cd api && CI=1 npx vitest run'))
+  expect(world.toasts[0]).toContain('tests just passed')
+})

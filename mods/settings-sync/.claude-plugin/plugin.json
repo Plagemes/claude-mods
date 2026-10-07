@@ -1,0 +1,18 @@
+{
+  "name": "settings-sync",
+  "version": "1.0.0",
+  "description": "Exports and imports your mods' configuration so you can move it between machines.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#settings-sync",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "ecosystem", "settings", "backup"],
+  "userConfig": {
+    "marketplace": {
+      "type": "string",
+      "title": "Marketplace name",
+      "description": "Mods installed from this marketplace are the ones exported and imported. Change it only if you installed claude-mods from a fork with another marketplace name.",
+      "default": "claude-mods"
+    }
+  }
+}

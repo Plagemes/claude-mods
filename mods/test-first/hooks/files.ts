@@ -17,18 +17,24 @@ const CODE_EXTENSIONS = new Set([
   'c', 'h', 'cc', 'cpp', 'hpp', 'm', 'mm', 'ex', 'exs', 'dart', 'lua', 'zig',
 ])
 
-/** A shell command that runs a test suite. */
+/**
+ * A test runner at the start of one part of a command line, after variables and `npx`, `poetry run`, `bundle exec` and the like:
+ * `cd web && npx vitest run` runs tests, `cat jest.config.js` and `npm install -D vitest` only name a runner.
+ */
 const TEST_COMMAND = new RegExp(
-  [
-    '\\b(vitest|jest|mocha|ava|pytest|py\\.test|phpunit|rspec|karma|playwright test)\\b',
-    '\\b(npm|pnpm|yarn|bun)\\s+(run\\s+)?test\\b',
-    '\\b(go|cargo|deno|bun|dotnet|mix|swift|zig)\\s+test\\b',
-    '\\bcargo\\s+nextest\\b',
-    '\\bpython3?\\s+-m\\s+(pytest|unittest)\\b',
-    '\\b(mvn|mvnw|gradle|gradlew)\\b[^|;&]*\\btest\\b',
-    '\\bmake\\s+(test|check)\\b',
-  ].join('|'),
+  '^(?:\\w+=\\S*\\s+)*(?:(?:sudo|time|npx|bunx|pnpx|exec|(?:bundle|pnpm|yarn|npm) exec|(?:poetry|uv|pipenv|pdm|hatch) run)\\s+)*(?:\\S*/)?(?:' +
+    [
+      'vitest|jest|mocha|ava|pytest|py\\.test|phpunit|rspec|karma|playwright\\s+test',
+      '(?:npm|pnpm|yarn|bun)\\s+(?:run\\s+)?test',
+      '(?:go|cargo|deno|bun|dotnet|mix|swift|zig)\\s+test',
+      'cargo\\s+nextest',
+      'python[\\d.]*\\s+-m\\s+(?:pytest|unittest)',
+      '(?:mvnw?|gradlew?)\\b[^|;&]*\\btest',
+      'make\\s+(?:test|check)',
+    ].join('|') +
+    ')(?=[\\s:]|$)',
 )
+const COMMAND_PARTS = /&&|\|\||[;|&\n()]/
 
 /** Output that says tests failed even though the command exited 0 (a pipe, `|| true`). */
 const FAILED_OUTPUT = /\b[1-9]\d* (failed|failing|failures?)\b|^(FAIL|FAILED)\b|^--- FAIL:/m
@@ -41,7 +47,7 @@ export const isProductionCode = (path: string): boolean => {
   return dot > 0 && CODE_EXTENSIONS.has(base.slice(dot + 1).toLowerCase()) && !isTestFile(path)
 }
 
-export const isTestCommand = (command: string): boolean => TEST_COMMAND.test(command)
+export const isTestCommand = (command: string): boolean => command.split(COMMAND_PARTS).some(part => TEST_COMMAND.test(part.trim()))
 
 export const looksFailed = (output: string): boolean => FAILED_OUTPUT.test(output)
 

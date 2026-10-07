@@ -1,0 +1,31 @@
+{
+  "name": "benchmark-compare",
+  "version": "1.0.0",
+  "description": "/bench runs your benchmarks before and after a change and compares the numbers.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#benchmark-compare",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "performance", "benchmarks", "regressions"],
+  "userConfig": {
+    "regressionPercent": {
+      "type": "number",
+      "title": "Regression threshold (%)",
+      "description": "A benchmark slower (or faster) than its baseline by more than this counts; within it is noise.",
+      "default": 5
+    },
+    "command": {
+      "type": "string",
+      "title": "Benchmark command",
+      "description": "The command /bench runs when none is given; empty to detect it from the project.",
+      "default": ""
+    },
+    "timeoutSeconds": {
+      "type": "number",
+      "title": "Timeout (seconds)",
+      "description": "How long one run may take before it is stopped (at most 600).",
+      "default": 600
+    }
+  },
+  "types": "./types/index.d.ts"
+}

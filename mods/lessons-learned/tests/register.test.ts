@@ -126,3 +126,14 @@ test('Dismiss drops the lesson and the same lesson is not offered twice', { opti
   expect(await band.find({ key: 'save' })).toBeUndefined()
   expect(seen.files.size).toBe(0)
 })
+
+test('the lesson band keeps the bands beneath it on screen', async ($, on) => {
+  const seen = world(on, LESSON)
+  await fixCycle($, seen)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const band = await $.ui.mount({ plugin: 'lessons-learned', surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'save' })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    await band.unmount()
+  }
+})

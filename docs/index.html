@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Claude Mods: the mod store for Claude Code</title>
-  <meta name="description" content="101 open-source mods for Claude Code: guardrails, live panes, status lines, slash commands and sounds. Browse, install and update them from a store that lives inside your terminal.">
+  <meta name="description" content="200+ open-source mods for Claude Code: guardrails, live panes, status lines, agent controls and checks that know your stack. Browse, install and update them from a store that lives inside your terminal.">
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0e0d0b" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)">
@@ -14,15 +14,16 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Claude Mods">
   <meta property="og:title" content="Claude Mods: make Claude Code yours, one hook at a time">
-  <meta property="og:description" content="101 open-source mods for Claude Code. Guardrails, live panes, status lines, slash commands and sounds, installed from one in-terminal store.">
+  <meta property="og:description" content="v2: 200+ open-source mods for Claude Code. Guardrails, live panes, agent controls and checks that know your stack, installed from one in-terminal store.">
   <meta property="og:url" content="https://plagemes.github.io/claude-mods/">
   <meta property="og:image" content="https://plagemes.github.io/claude-mods/assets/og.png">
   <meta property="og:image:width" content="1280">
   <meta property="og:image:height" content="640">
-  <meta property="og:image:alt" content="Claude Mods: a grid of 101 mod tiles, some lit in amber, beside the headline Make Claude Code yours.">
+  <meta property="og:image:alt" content="Claude Mods v2: a rack of 200+ mod tiles on two shelves, some lit in amber, beside the headline Make Claude Code yours.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Claude Mods: make Claude Code yours, one hook at a time">
-  <meta name="twitter:description" content="101 open-source mods for Claude Code, installed from one in-terminal store.">
+  <meta name="twitter:description" content="v2: 200+ open-source mods for Claude Code, installed from one in-terminal store.">
+  <meta name="twitter:image:alt" content="Claude Mods v2: a rack of 200+ mod tiles on two shelves, some lit in amber, beside the headline Make Claude Code yours.">
   <meta name="twitter:image" content="https://plagemes.github.io/claude-mods/assets/og.png">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -59,6 +60,17 @@
       <symbol id="i-notifications" viewBox="0 0 24 24"><path d="M6.2 16.2v-5a5.8 5.8 0 0 1 9.4-4.6"/><path d="M17.8 11.4v4.8l1.6 2H4.6l1.6-2"/><path d="M10 20.2a2.1 2.1 0 0 0 4 0"/><circle cx="18" cy="6.4" r="2.4" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
       <symbol id="i-memory" viewBox="0 0 24 24"><path d="M6.8 3.5h10.4c1.1 0 2 .9 2 2v13c0 1.1-.9 2-2 2H6.8c-1.1 0-2-.9-2-2v-13c0-1.1.9-2 2-2Z"/><path d="M8.5 11.5h4.5M8.5 14.8h6.5"/><path d="M12.8 3.5v5.2l1.9-1.4 1.9 1.4V3.5" style="stroke:var(--icon-lit)"/></symbol>
       <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8.2" r="3.2"/><path d="M3.2 19.5c0-3.4 2.6-5.5 5.8-5.5s5.8 2.1 5.8 5.5"/><circle cx="16.8" cy="9" r="2.5" style="stroke:var(--icon-lit)"/><path d="M16.2 14.2c2.9 0 4.8 1.9 4.8 5" style="stroke:var(--icon-lit)"/></symbol>
+      <!-- v2 shelf -->
+      <symbol id="i-stacks" viewBox="0 0 24 24"><path d="m3.5 12.3 8.5 4.2 8.5-4.2"/><path d="m3.5 16.3 8.5 4.2 8.5-4.2"/><path d="M12 3.5 20.5 7.8 12 12 3.5 7.8 12 3.5Z" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-devops" viewBox="0 0 24 24"><path d="M7.4 18.6h9.8a3.9 3.9 0 0 0 .5-7.8 5.7 5.7 0 0 0-11.1.9 3.5 3.5 0 0 0 .8 6.9Z"/><path d="M12 16.2v-5M9.8 13.3l2.2-2.2 2.2 2.2" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="6.2" rx="7" ry="2.7"/><path d="M5 6.2v11.6c0 1.5 3.1 2.7 7 2.7s7-1.2 7-2.7V6.2"/><path d="M5 12c0 1.5 3.1 2.7 7 2.7s7-1.2 7-2.7" style="stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-frontend" viewBox="0 0 24 24"><path d="M2.8 12c2.2-4 5.4-6.2 9.2-6.2s7 2.2 9.2 6.2c-2.2 4-5.4 6.2-9.2 6.2S5 16 2.8 12Z"/><circle cx="12" cy="12" r="2.5" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-api" viewBox="0 0 24 24"><path d="M4 8.5h15M15.5 5 19 8.5 15.5 12" style="stroke:var(--icon-lit)"/><path d="M20 15.5H5M8.5 12 5 15.5 8.5 19"/></symbol>
+      <symbol id="i-agents" viewBox="0 0 24 24"><path d="M12 9.3v3.1M5.6 16.1v-2.1c0-.9.7-1.6 1.6-1.6h9.6c.9 0 1.6.7 1.6 1.6v2.1M12 12.4v3.7"/><circle cx="5.6" cy="18.3" r="2.2"/><circle cx="12" cy="18.3" r="2.2"/><circle cx="18.4" cy="18.3" r="2.2"/><rect x="9.2" y="3.5" width="5.6" height="5.6" rx="1.5" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-learning" viewBox="0 0 24 24"><path d="M12 4.8 21 9.2l-9 4.4-9-4.4 9-4.4Z"/><path d="M6.8 11.7v4.1c0 1.5 2.3 2.9 5.2 2.9s5.2-1.4 5.2-2.9v-4.1"/><path d="M19.4 10v5.2" style="stroke:var(--icon-lit)"/><circle cx="19.4" cy="17.3" r="1.3" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-compliance" viewBox="0 0 24 24"><path d="M12.4 20.5H7.2c-1 0-1.7-.8-1.7-1.7V5.2c0-1 .8-1.7 1.7-1.7h6.6l4.7 4.7v4"/><path d="M13.8 3.5v3.3c0 .8.6 1.4 1.4 1.4h3.3"/><path d="M8.6 11h5.4M8.6 14.3h3"/><circle cx="16.8" cy="17.4" r="2.6" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-performance" viewBox="0 0 24 24"><circle cx="12" cy="13.2" r="7.3"/><path d="M10 3.3h4M12 3.3v2.6M18 6.8l1.4-1.4"/><path d="m12 13.2 3.4-3.4" style="stroke:var(--icon-lit)"/><circle cx="12" cy="13.2" r="1.2" style="fill:var(--icon-lit);stroke:var(--icon-lit)"/></symbol>
+      <symbol id="i-ecosystem" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><path d="M17 13.8v6.4M13.8 17h6.4" style="stroke:var(--icon-lit)"/></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2"/><path d="M15.5 5.6V5.2c0-1-.8-1.7-1.7-1.7H6.2c-1 0-1.7.8-1.7 1.7v7.6c0 1 .8 1.7 1.7 1.7h.4"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13.5M13 6.5l5.5 5.5-5.5 5.5"/></symbol>
@@ -80,6 +92,7 @@
         <span class="lockup__word">Claude <em>Mods</em></span>
       </a>
       <nav class="site-nav" aria-label="Primary">
+        <a href="#new">What&rsquo;s new</a>
         <a href="#store">Store</a>
         <a href="#install">Install</a>
         <a href="#how">How it works</a>
@@ -106,12 +119,12 @@
       </div>
       <div class="wrap hero__inner">
         <div class="hero__copy">
-          <p class="kicker"><span class="kicker__dot" aria-hidden="true"></span><span data-count>101</span> open-source mods for Claude Code</p>
+          <a class="release" href="#new" data-release><span class="release__tag">New</span><span class="release__text" data-release-text>See what&rsquo;s new in v2</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
           <h1 class="display hero__title" id="hero-title"><span class="nowrap">Make Claude Code</span> <em>yours</em>, one&nbsp;hook at&nbsp;a&nbsp;time.</h1>
-          <p class="lede">Guardrails, live panes, status lines, slash commands and sounds. Browse them, install them and keep them current from a store that lives right inside your terminal.</p>
+          <p class="lede"><span data-count>200+</span> open-source mods: guardrails, live panes, status lines, agent controls and checks that know your stack. Browse them, install them and keep them current from a store that lives right inside your terminal.</p>
           <div class="hero__actions">
             <a class="btn btn--primary" href="#install">Install the mod store <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
-            <a class="btn btn--ghost" href="#store"><span>Browse <span data-count>101</span> mods</span></a>
+            <a class="btn btn--ghost" href="#store"><span>Browse <span data-count>200+</span> mods</span></a>
           </div>
           <div class="cmd cmd--hero">
             <span class="cmd__prompt" aria-hidden="true">&gt;</span>
@@ -124,11 +137,11 @@
           <p class="hero__fine">Terminal and desktop Code tab &middot; Claude Code 2.1.292+ &middot; MIT</p>
         </div>
 
-        <figure class="rack" aria-label="A rack of 101 mod tiles: the mod store on top and ten categories of ten mods below. Tiles light up as each mod does its job." data-rack>
+        <figure class="rack" aria-label="A rack of mod tiles: the mod store on top and a column of tiles for each category below, one shelf per release. Tiles light up as each mod does its job." data-rack>
           <div class="rack__bar">
             <span class="led" aria-hidden="true"></span>
-            <span class="rack__title">claude-mods</span>
-            <span class="rack__meta"><span data-count>101</span> mods &middot; <span data-cat-count>11</span> categories</span>
+            <span class="rack__title">claude-mods <span class="rack__ver" data-version></span></span>
+            <span class="rack__meta"><span data-count>200+</span> mods &middot; <span data-cat-count>20+</span> categories</span>
           </div>
           <button class="rack__store" type="button" data-open-mod="mod-store">
             <svg class="icon" aria-hidden="true"><use href="#i-core"/></svg>
@@ -136,8 +149,7 @@
             <span class="rack__store-hint">the store for everything below</span>
             <kbd>/mods</kbd>
           </button>
-          <div class="rack__heads" aria-hidden="true" data-rack-heads></div>
-          <div class="rack__grid" aria-hidden="true" data-rack-grid></div>
+          <div class="rack__deck" aria-hidden="true" data-rack-deck></div>
           <figcaption class="rack__status" aria-hidden="true">
             <span class="rack__status-icon" data-status-icon><svg class="icon"><use href="#i-security"/></svg></span>
             <span class="rack__status-name" data-status-name>secret-shield</span>
@@ -148,11 +160,32 @@
 
       <div class="wrap">
         <dl class="specs reveal">
-          <div><dt>Mods</dt><dd data-count>101</dd></div>
-          <div><dt>Categories</dt><dd data-cat-count>11</dd></div>
-          <div><dt>Config to start</dt><dd>0</dd></div>
+          <div><dt>Mods</dt><dd data-count>200+</dd></div>
+          <div><dt>New in <span data-new-label>v2</span></dt><dd data-new-count>&mdash;</dd></div>
+          <div><dt>Categories</dt><dd data-cat-count>20+</dd></div>
           <div><dt>Commands to install</dt><dd>3</dd></div>
         </dl>
+      </div>
+    </section>
+
+    <!-- What's new -->
+    <section class="section whatsnew" id="new" aria-labelledby="new-title" data-whatsnew>
+      <div class="wrap">
+        <header class="section-head section-head--split">
+          <div>
+            <p class="kicker reveal">New in <span data-new-label>v2</span></p>
+            <h2 class="display h2 reveal" id="new-title">The rack, <em>doubled</em>.</h2>
+          </div>
+          <p class="sub reveal">A second shelf of categories: checks that know your stack, your database and your cloud, and controls that scope, queue and supervise Claude itself. Same store, same two commands.</p>
+        </header>
+
+        <ul class="shelf reveal" aria-label="New categories" data-new-shelf></ul>
+
+        <div class="picks-head reveal">
+          <h3 class="picks-head__title">Start with these</h3>
+          <button type="button" class="btn btn--ghost" data-show-new><span data-show-new-label>Browse the new mods</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+        </div>
+        <div class="picks reveal" data-new-picks></div>
       </div>
     </section>
 
@@ -239,10 +272,10 @@
           <div class="tui__body" aria-hidden="true">
             <div class="tui__head">
               <span class="tui__brand"><svg class="icon"><use href="#i-core"/></svg> Claude Mods</span>
-              <span class="tui__dim"><span data-count>101</span> mods &middot; 4 installed &middot; 1 update</span>
+              <span class="tui__dim"><span data-count>200+</span> mods &middot; 4 installed &middot; 1 update</span>
             </div>
             <div class="tui__search"><span class="tui__dim">search</span> <span data-tui-query>guard</span><span class="caret"></span></div>
-            <div class="tui__tabs"><span>All</span><span class="is-active">Guardrails</span><span>Git</span><span>Cost</span><span>Panes</span><span class="tui__dim">+6</span></div>
+            <div class="tui__tabs"><span>All</span><span class="is-active">Guardrails</span><span>Git</span><span>Cost</span><span>Panes</span><span class="tui__dim" data-tui-more>&hellip;</span></div>
             <ul class="tui__list" data-tui-list>
               <li data-row="0"><span class="tui__sel">&rsaquo;</span><span class="tui__name">secret-shield</span><span class="tui__state is-installed">installed</span></li>
               <li data-row="1"><span class="tui__sel">&rsaquo;</span><span class="tui__name">env-guard</span><span class="tui__state">install</span></li>
@@ -391,7 +424,7 @@
           <label class="search">
             <span class="visually-hidden">Search mods</span>
             <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
-            <input type="search" placeholder="Search 101 mods, commands, keywords" autocomplete="off" spellcheck="false" data-search aria-describedby="store-status">
+            <input type="search" placeholder="Search mods, commands, keywords" autocomplete="off" spellcheck="false" data-search aria-describedby="store-status">
             <kbd class="search__kbd" aria-hidden="true">/</kbd>
           </label>
           <div class="segmented" role="radiogroup" aria-label="Tier" data-tiers>
@@ -519,7 +552,7 @@
       <div class="wrap outro__inner">
         <div class="outro__tiles" aria-hidden="true" data-outro-tiles></div>
         <h2 class="display outro__title reveal" id="outro-title">Make it <em>yours.</em></h2>
-        <p class="sub reveal">One install, <span data-count>101</span> mods, zero lock-in. Every mod is a folder of plain TypeScript you can read in a minute.</p>
+        <p class="sub reveal">One install, <span data-count>200+</span> mods, zero lock-in. Every mod is a folder of plain TypeScript you can read in a minute.</p>
         <div class="cmd cmd--hero outro__cmd reveal">
           <span class="cmd__prompt" aria-hidden="true">&gt;</span>
           <code class="cmd__text">/plugin marketplace add plagemes/claude-mods</code>
@@ -549,6 +582,7 @@
         <nav class="site-footer__nav" aria-label="Footer">
           <div>
             <h2>Store</h2>
+            <a href="#new">What&rsquo;s new</a>
             <a href="#store">Browse mods</a>
             <a href="#install">Install</a>
             <a href="#how">How it works</a>

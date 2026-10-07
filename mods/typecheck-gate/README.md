@@ -10,7 +10,7 @@ When a turn of Claude's edited TypeScript or Python files, typecheck-gate runs y
 
 | Language | Checker | Runs when |
 | --- | --- | --- |
-| TypeScript | `tsc --noEmit -p tsconfig.json` (`node_modules/.bin` first) | the edited file has a `tsconfig.json` above it; the whole project is checked |
+| TypeScript | `tsc --noEmit -p tsconfig.json` (`node_modules/.bin` first); for a solution-style `tsconfig.json` (`"files": []` with `references`, as Vite makes) each referenced project | the edited file has a `tsconfig.json` above it; the whole project is checked |
 | Python | pyright `--outputjson` | `pyrightconfig.json` or `[tool.pyright]` |
 | Python | mypy | `mypy.ini`, `[tool.mypy]` or `[mypy]` in setup.cfg; only the edited files are checked |
 

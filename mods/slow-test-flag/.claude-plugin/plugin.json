@@ -1,0 +1,30 @@
+{
+  "name": "slow-test-flag",
+  "version": "1.0.0",
+  "description": "Points out your slowest tests after each test run.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#slow-test-flag",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "performance", "tests", "timing"],
+  "userConfig": {
+    "top": {
+      "type": "number",
+      "title": "Tests shown",
+      "description": "How many of the slowest tests the toast lists after a run.",
+      "default": 5
+    },
+    "thresholdMs": {
+      "type": "number",
+      "title": "Slow above (ms)",
+      "description": "Tests that took less than this many milliseconds are never called slow.",
+      "default": 100
+    },
+    "status": {
+      "type": "boolean",
+      "title": "Status line",
+      "description": "Keep the slowest test of the last run in the status line.",
+      "default": true
+    }
+  }
+}

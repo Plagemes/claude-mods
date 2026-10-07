@@ -11,7 +11,8 @@ passport nodemon concurrently cross-env rimraf glob minimist semver fs-extra mkd
 react-router react-router-dom @tanstack/react-query swr formik react-hook-form three d3 chart.js electron jquery
 bootstrap husky lint-staged ts-jest @types/node @types/react openai @anthropic-ai/sdk langchain sharp multer nodemailer
 cheerio jsdom marked highlight.js qs mime colors kleur picocolors execa zx hono drizzle-orm @supabase/supabase-js
-firebase stripe @aws-sdk/client-s3 aws-sdk @testing-library/react msw storybook turbo lerna nx npm pnpm yarn`
+firebase stripe @aws-sdk/client-s3 aws-sdk @testing-library/react msw storybook turbo lerna nx npm pnpm yarn
+ms vuex pug globby enquirer xlsx prismjs @swc/core`
 
 const PYPI = `requests numpy pandas scipy matplotlib seaborn scikit-learn tensorflow torch torchvision keras flask django
 fastapi uvicorn gunicorn pydantic sqlalchemy alembic celery redis boto3 botocore pytest pytest-cov black flake8 mypy
@@ -19,7 +20,8 @@ ruff isort pylint tox setuptools wheel pip virtualenv poetry httpx aiohttp urlli
 pillow opencv-python jinja2 click typer rich tqdm pyyaml python-dotenv cryptography paramiko psycopg2 psycopg2-binary
 pymongo openai anthropic transformers langchain jupyter notebook ipython sympy networkx plotly dash streamlit gradio
 attrs six python-dateutil pytz certifi idna charset-normalizer packaging docker kubernetes colorama termcolor
-simplejson ujson orjson marshmallow werkzeug starlette websockets grpcio protobuf pipx uv`
+simplejson ujson orjson marshmallow werkzeug starlette websockets grpcio protobuf pipx uv
+nox psycopg httpie dask cython boto pygame wxpython`
 
 const CRATES = `serde serde_json serde_derive tokio async-std futures rand regex clap structopt anyhow thiserror log
 env_logger tracing tracing-subscriber reqwest hyper axum actix-web rocket warp diesel sqlx chrono time uuid lazy_static

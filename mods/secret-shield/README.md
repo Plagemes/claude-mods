@@ -24,8 +24,9 @@ secret-shield: refusing to write /repo/config.ts; it looks like it contains a se
 Use an environment variable or a secret manager and reference it by name.
 ```
 
-Placeholders (`your-key-here`, `changeme`, `AKIA…EXAMPLE`) and variable references
-(`process.env.X`, `${X}`) are not flagged.
+Placeholders (`your-key-here`, `changeme`, `replace_me…`, `generate-with-…`, `AKIA…EXAMPLE`) and variable references
+(`process.env.X`, `${X}`) are not flagged. In template files (`.env.example`, `*.sample`, `*.template`, `*.dist`)
+only the known key formats are checked, not the high-entropy heuristic, since their values are made up.
 
 ## Configuration
 | Key | Type | Default | Description |

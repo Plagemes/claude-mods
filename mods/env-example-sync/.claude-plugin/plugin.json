@@ -1,0 +1,24 @@
+{
+  "name": "env-example-sync",
+  "version": "1.0.0",
+  "description": "Keeps .env.example in sync with the environment variables your code actually reads.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#env-example-sync",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "stacks", "env", "dotenv"],
+  "userConfig": {
+    "file": {
+      "type": "string",
+      "title": "Example file",
+      "description": "Name of the example file to keep in sync, relative to the project root. Empty = .env.example, then .env.sample. Real .env files are never touched.",
+      "default": ""
+    },
+    "ignore": {
+      "type": "string",
+      "title": "Ignored variables",
+      "description": "Comma-separated variable names to leave out, on top of the built-in list (NODE_ENV, PATH, HOME, CI ...).",
+      "default": ""
+    }
+  }
+}

@@ -66,6 +66,8 @@ test('shows a PowerShell toast on Windows, text in the environment', async ($, o
 
   expect(runs[0]?.argv[0]).toBe('powershell')
   expect(runs[0]?.argv.at(-1)).toContain('ToastNotificationManager')
+  // A registered AppUserModelID: an arbitrary one makes Windows drop the toast silently.
+  expect(runs[0]?.argv.at(-1)).toContain("CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe')")
   expect(runs[0]?.env?.CLAUDE_NOTIFY_TITLE).toBe('Claude Code · shop')
   expect(runs[0]?.env?.CLAUDE_NOTIFY_BODY).toContain('Finished in 1m 35s')
 })

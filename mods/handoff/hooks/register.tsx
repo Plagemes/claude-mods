@@ -5,7 +5,6 @@ import type { HandoffView } from '../types'
 import { composeNote, handoffPrompt, missingSections, sectionsOf, stampOf } from './note'
 import type { GitFacts } from './note'
 
-const NAME = 'handoff'
 const PANE = 'handoff'
 const GIT_TIMEOUT_MS = 10_000
 const STATUS_LINES = 40
@@ -15,6 +14,9 @@ const MAX_SUFFIX = 20
 const viewAtom = atom({ plugin: 'handoff', key: 'view' } as const, null)
 
 type Settings = { dir: string; copy: boolean }
+
+/** A failure's detail is a lowercase clause; as a command answer it starts a sentence. */
+const asSentence = (clause: string): string => clause.charAt(0).toUpperCase() + clause.slice(1)
 
 const capLines = (text: string, max: number): string => {
   const lines = text.trimEnd().split('\n').filter(line => line.trim() !== '')
@@ -99,10 +101,10 @@ export const register: Register = (on, options) => {
     const view = await writeHandoff($, settings, e.args.trim())
     if (view.status !== 'ready') {
       await $.ui.close({ id: PANE })
-      return { text: `${NAME}: ${view.detail}` }
+      return { text: asSentence(view.detail) }
     }
     const copied = view.isCopied ? ' and copied it to the clipboard' : settings.copy ? ' (the clipboard was not reachable; use Copy in the pane)' : ''
-    return { text: `${NAME}: wrote ${view.path}${copied}.` }
+    return { text: `Wrote ${view.path}${copied}.` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -113,7 +115,7 @@ export const register: Register = (on, options) => {
     }
     const copy = async (surface: typeof e.surface) => {
       const copied = await $.ui.copy({ text: view.text, surface })
-      $.ui.toast(copied.isCopied ? `${NAME}: note copied` : `${NAME}: could not copy (${copied.reason})`)
+      $.ui.toast(copied.isCopied ? 'Note copied' : `Could not copy (${copied.reason})`)
     }
 
     return (

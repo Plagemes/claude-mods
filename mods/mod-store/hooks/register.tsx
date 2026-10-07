@@ -827,7 +827,9 @@ export const register: Register = (on, options) => {
       ? mods.filter(mod => statusOf(mod, installed).kind === 'available').map(mod => mod.name)
       : []
     const bodyRows = e.props.scroll.bodyRows > 0 ? e.props.scroll.bodyRows : DEFAULT_BODY_ROWS
-    const chromeRows = 2 + (fields === undefined ? 0 : isWide ? 1 : 2) + statusRows + 2
+    // Header and sync line, the filters, the status lines, the list's top margin, and the footer with its margin
+    // (which wraps to two lines on a narrow pane): what is left is the page.
+    const chromeRows = 2 + (fields === undefined ? 0 : isWide ? 1 : 2) + statusRows + 1 + (isWide ? 2 : 3)
     const pages = paginate(rowsOf(mods, catalog, view.query.trim() === ''), Math.max(MIN_PAGE_ROWS, bodyRows - chromeRows))
     const last = Math.max(0, pages.length - 1)
     const pageIndex = Math.min(Math.max(0, view.page), last)
@@ -871,7 +873,8 @@ export const register: Register = (on, options) => {
           : row.category.tagline === '' ? `(${row.count})` : `(${row.count}) · ${row.category.tagline}`
         return (
           <Box flexDirection="row" columnGap={1}>
-            <Text bold color="claude">{row.category.title}</Text>
+            {/* The title keeps its one line (the page counts one per heading); the tagline is cut instead. */}
+            <Box flexShrink={0}><Text bold color="claude">{row.category.title}</Text></Box>
             <Text dimColor wrap="truncate-end">{tail}</Text>
           </Box>
         )

@@ -125,3 +125,33 @@ test('only rewrites tool results, and counts what it masked in the status line',
   await append($, toolResult(`key ${AWS_KEY}`))
   expect(lines.at(-1)).toBe('redactor: 3 masked (email ×2, aws-key)')
 })
+
+test('refuses a write that would put masks over real values on disk, once something was masked', async ($, on) => {
+  recordRows(on)
+  quietStatus(on)
+  const written: string[] = []
+  on('fs.read', () => ({ value: `REGION=eu\nAWS_KEY=${AWS_KEY}\n` }))
+  on('tool.call', ($, e) => {
+    written.push(String(e.tool))
+    return { result: 'ok' }
+  })
+
+  // Nothing masked yet: a marker the model types on purpose goes through.
+  const before = await $.tool.call({ tool: 'Write', file_path: '/repo/notes.md', content: 'shows [REDACTED:email]' })
+  expect(before.deny).toBeUndefined()
+
+  await append($, toolResult(`REGION=eu\nAWS_KEY=${AWS_KEY}`))
+  const rewrite = await $.tool.call({ tool: 'Write', file_path: '/repo/.env', content: 'REGION=us\nAWS_KEY=[REDACTED:aws-key]\n' })
+  expect(rewrite.deny).toContain('[REDACTED:…] markers into /repo/.env')
+  const edit = await $.tool.call({ tool: 'Edit', file_path: '/repo/.env', old_string: 'REGION=eu', new_string: 'REGION=us' })
+  expect(edit.deny).toBeUndefined()
+  expect(written).toEqual(['Write', 'Edit'])
+})
+
+test('keeps dates on diff lines and digit-free sk- class names visible', async ($, on) => {
+  const rows = recordRows(on)
+  quietStatus(on)
+  await append($, toolResult('+2024-01-15 10:30:00 deploy\n.sk-button-hover-variant-large-size {}'))
+  expect(lastRow(rows)).toContain('+2024-01-15 10:30:00')
+  expect(lastRow(rows)).toContain('sk-button-hover-variant-large-size')
+})

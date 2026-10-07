@@ -1,4 +1,4 @@
-import { baseName, type ShellCommand } from './shell'
+import { baseName, parseShell, type ShellCommand } from './shell'
 
 export type Danger = { what: string; instead: string }
 
@@ -15,6 +15,10 @@ const WORLD_WRITABLE = /^0?777$|^[ugoa]*[+=]rwx$/
 const NOT_A_COMMAND = new Set(['echo', 'printf', 'man', 'which', 'whereis', 'type', 'alias', 'help', 'apropos'])
 const DISK_WIPERS = new Set(['shred', 'wipefs', 'blkdiscard'])
 const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
+/** Programs that run a command string given as an argument (`bash -c "…"`, `su -c "…"`). */
+const SCRIPT_RUNNERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'fish', 'su'])
+const SCRIPT_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+const MAX_NESTING = 4
 
 /** Targets that take a home or a system directory with them (and, if asked, the whole working tree). */
 function isCatastrophic(target: string, includeWorkingTree = true): boolean {
@@ -117,12 +121,30 @@ function findDanger(args: readonly string[]): Danger | undefined {
   return target === undefined ? undefined : { what: `find ${target} -delete would wipe it`, instead: 'narrow the starting directory and preview with -print first.' }
 }
 
-function commandDanger(command: ShellCommand, allowGitReset: boolean): Danger | undefined {
+/** Command strings this command hands to another shell: `bash -c "…"`, `sudo sh -lc '…'`, `eval "…"`. */
+function nestedScripts(words: readonly string[], names: readonly string[]): string[] {
+  const evalAt = names.indexOf('eval')
+  if (evalAt !== -1) return [words.slice(evalAt + 1).join(' ')]
+  const runnerAt = names.findIndex(name => SCRIPT_RUNNERS.has(name))
+  if (runnerAt === -1) return []
+  const args = words.slice(runnerAt + 1)
+  const flagAt = args.findIndex(arg => SCRIPT_FLAG.test(arg))
+  return flagAt === -1 ? [] : args.slice(flagAt + 1).filter(arg => arg !== '--')
+}
+
+function commandDanger(command: ShellCommand, allowGitReset: boolean, depth: number): Danger | undefined {
+  const redirect = command.redirects.find(target => BLOCK_DEVICE.test(target))
+  if (redirect !== undefined) return { what: `redirecting output onto ${redirect}`, instead: 'write to a file, not a disk device.' }
+
   const names = command.words.map(baseName)
   if (NOT_A_COMMAND.has(names[0] ?? '')) return undefined
 
-  const redirect = command.redirects.find(target => BLOCK_DEVICE.test(target))
-  if (redirect !== undefined) return { what: `redirecting output onto ${redirect}`, instead: 'write to a file, not a disk device.' }
+  if (depth < MAX_NESTING) {
+    for (const script of nestedScripts(command.words, names)) {
+      const danger = dangerIn(script, parseShell(script), allowGitReset, depth + 1)
+      if (danger) return danger
+    }
+  }
 
   const index = names.findIndex(name => /^(?:rm|git|chmod|chown|chgrp|find|dd|shred|wipefs|blkdiscard|mkfs(?:\..+)?)$/.test(name))
   const name = names[index]
@@ -137,10 +159,10 @@ function commandDanger(command: ShellCommand, allowGitReset: boolean): Danger | 
 }
 
 /** The first catastrophic thing a command line does, or undefined. */
-export function dangerIn(raw: string, commands: readonly ShellCommand[], allowGitReset: boolean): Danger | undefined {
+export function dangerIn(raw: string, commands: readonly ShellCommand[], allowGitReset: boolean, depth = 0): Danger | undefined {
   if (FORK_BOMB.test(raw.replace(/\s+/g, ''))) return { what: 'this is a fork bomb', instead: 'do not run it.' }
   for (const command of commands) {
-    const danger = commandDanger(command, allowGitReset)
+    const danger = commandDanger(command, allowGitReset, depth)
     if (danger) return danger
   }
   return undefined

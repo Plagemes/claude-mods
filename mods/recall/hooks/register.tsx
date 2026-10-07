@@ -157,7 +157,7 @@ async function forget($: EngineInterface, id: string): Promise<void> {
   const gone = all.find(memory => memory.id === id)
   await $.store.set(STORE_KEY, all.filter(memory => memory.id !== id))
   await showMemories($)
-  if (gone !== undefined) $.ui.toast(`${NAME}: forgot "${preview(gone.text)}"`)
+  if (gone !== undefined) $.ui.toast(`Forgot "${preview(gone.text)}"`)
 }
 
 async function registerAll($: EngineInterface): Promise<void> {
@@ -218,11 +218,11 @@ export const register: Register = (on, options) => {
     const here = inProject(all, root)
     if (text === '') {
       return {
-        text: `${NAME}: usage: /remember <something worth keeping> (add -g to share it with every project). ` +
+        text: `Usage: /remember <something worth keeping> (add -g to share it with every project). ` +
           `${plural(here.length, 'memory', 'memories')} here; /recall lists them.`,
       }
     }
-    if (here.some(memory => memory.text === text)) return { text: `${NAME}: already remembered "${preview(text)}".` }
+    if (here.some(memory => memory.text === text)) return { text: `Already remembered "${preview(text)}".` }
     const memory: RecallMemory = {
       id: `${(await $.clock.now()).toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
       text,
@@ -232,7 +232,7 @@ export const register: Register = (on, options) => {
     await $.store.set(STORE_KEY, [...all, memory].slice(-MAX_MEMORIES))
     const count = (await showMemories($)).length
     return {
-      text: `${NAME}: remembered${isGlobal ? ' for every project' : ''}: "${preview(text)}" ` +
+      text: `Remembered${isGlobal ? ' for every project' : ''}: "${preview(text)}" ` +
         `(${plural(count, 'memory', 'memories')} here; Claude finds them with the recall tool).`,
     }
   })
@@ -242,11 +242,11 @@ export const register: Register = (on, options) => {
     await $.ui.open({ id: PANE, title: 'Recall', rows: 22 })
     const query = e.args.trim()
     if (query === '') {
-      return { text: `${NAME}: ${plural(memories.length, 'memory', 'memories')} here. Search from the pane, or run /recall <words>.` }
+      return { text: `${plural(memories.length, 'memory', 'memories')} here. Search from the pane, or run /recall <words>.` }
     }
     const results = await searchIntoPane($, settings, query)
     const found = results?.hits.length ?? 0
-    return { text: `${NAME}: ${plural(found, 'match', 'matches')} for "${query}" (${results?.searched ?? 'nothing searched'}).` }
+    return { text: `${plural(found, 'match', 'matches')} for "${query}" (${results?.searched ?? 'nothing searched'}).` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

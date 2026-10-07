@@ -51,7 +51,7 @@ test('holds back a typosquat that does not exist on the registry', async ($, on)
   expect(reason).toContain('lodahs looks like a typo of "lodash" (1 edit away)')
   expect(reason).toContain('lodahs does not exist on npm')
   expect(reason).toContain('DEPS-OK')
-  expect(toasts.at(-1)).toContain('held back lodahs')
+  expect(toasts.at(-1)).toContain('Held back lodahs')
 })
 
 test('lets popular packages through without asking any registry', async ($, on) => {
@@ -96,7 +96,7 @@ test('a registry that does not answer in time fails open with a toast', { option
   const pending = bash($, 'cargo add obscure-crate')
   await clock.advance(1000)
   expect(await pending).toBeUndefined()
-  expect(toasts.at(-1)).toContain('could not check obscure-crate on crates.io')
+  expect(toasts.at(-1)).toContain('Could not check obscure-crate on crates.io')
 })
 
 test('finds the packages of each installer and skips paths, URLs and flags', () => {
@@ -108,4 +108,27 @@ test('finds the packages of each installer and skips paths, URLs and flags', () 
   expect(names('go get github.com/gin-gonic/gin@v1.9.1 ./...')).toEqual(['go:github.com/gin-gonic/gin'])
   expect(names('npx -y create-vite my-app')).toEqual(['npm:create-vite'])
   expect(names('npm install && npm run build')).toEqual([])
+})
+
+test('a well-known package that happens to sit near a popular name is not held back', async ($, on) => {
+  world(on, {
+    'https://registry.npmjs.org/chalks': npmDoc(2000, 40),
+    'https://registry.npmjs.org/lodashh': npmDoc(10, 1),
+  })
+  // Popular in their own right, so not even looked up: ms is not a typo of ws, pygame not of pyyaml.
+  expect(await bash($, 'npm install ms vuex globby && pip install pygame dask cython')).toBeUndefined()
+  // Years old with many releases: established, whatever it is close to.
+  expect(await bash($, 'npm install chalks')).toBeUndefined()
+  // Close to lodash and brand new: still a suspect.
+  expect(await bash($, 'npm install lodashh')).toContain('typo of "lodash"')
+})
+
+test('leading package-manager options and env do not hide the install', () => {
+  const names = (command: string) => packageRequests(command).map(request => request.name)
+  expect(names('pnpm --filter web add lodahs')).toEqual(['lodahs'])
+  expect(names('pnpm -C packages/api add zod')).toEqual(['zod'])
+  expect(names('npm -w apps/web install lodahs')).toEqual(['lodahs'])
+  expect(names('yarn workspace web add lodahs')).toEqual(['lodahs'])
+  expect(names('env CI=1 npm i lodahs')).toEqual(['lodahs'])
+  expect(names('pnpm --filter web run build')).toEqual([])
 })

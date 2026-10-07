@@ -49,9 +49,11 @@ export const register: Register = (on, options) => {
   let latestPrompt = ''
 
   // Set before `next`: the turn the prompt starts may call a tool before `next` resolves.
+  // A turn nobody typed (a notification, a schedule, a peer) starts unapproved: approval lasts one person's turn.
   on('prompt.submit', async ($, e, next) => {
     const previous = latestPrompt
     if (isFromPerson(e.origin)) latestPrompt = e.text
+    else if (e.turnId === undefined) latestPrompt = ''
     const result = await next(e)
     if (result.drop !== undefined) latestPrompt = previous
     return result

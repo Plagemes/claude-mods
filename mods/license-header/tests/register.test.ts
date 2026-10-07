@@ -24,7 +24,7 @@ test('adds the SPDX line to a new TypeScript file', async ($, on) => {
   await $.tool.call({ tool: 'Write', file_path: '/repo/src/add.ts', content: 'export const add = (a: number, b: number) => a + b\n' })
 
   expect(written[0]?.content).toBe('// SPDX-License-Identifier: MIT\n\nexport const add = (a: number, b: number) => a + b\n')
-  expect(toasts).toEqual(['license-header: added to add.ts'])
+  expect(toasts).toEqual(['License header added to add.ts'])
 })
 
 test('uses the configured license, holder and year', { options: { license: 'Apache-2.0', holder: 'Acme Inc.', year: '2024', header: '' } }, async ($, on) => {
@@ -95,4 +95,14 @@ test('does nothing when it cannot tell whether the file exists', async ($, on) =
   await $.tool.call({ tool: 'Write', file_path: '/repo/a.ts', content: 'export {}\n' })
 
   expect(written).toEqual(['export {}\n'])
+})
+
+test('a PHP template, whose text outside <?php is output, gets no header', async ($, on) => {
+  const { written } = engine(on)
+  const templates = [
+    ['/repo/resources/views/welcome.blade.php', '<!DOCTYPE html>\n<html>{{ $title }}</html>\n'],
+    ['/repo/page.php', '<?php include "head.php"; ?>\n<h1>Hi</h1>\n'],
+  ] as const
+  for (const [file_path, content] of templates) await $.tool.call({ tool: 'Write', file_path, content })
+  expect(written.map(w => w.content)).toEqual(templates.map(([, content]) => content))
 })

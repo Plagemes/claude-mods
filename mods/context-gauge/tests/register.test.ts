@@ -93,3 +93,16 @@ test('the thresholds come from the configuration', { options: { warnAt: 20, aler
   expect(await ui.find({ type: 'Text', text: '/compact' })).toBeDefined()
   await ui.unmount()
 })
+
+test('regression: another plugin\'s band beneath still shows under the gauge', async ($, on) => {
+  on('session.measure', () => ({ changed: [] }))
+  on('ui.render', () => ({ type: 'Box', props: { key: 'other-band' }, children: [{ type: 'Text', props: {}, children: ['other band'] }] }))
+  await $.session.measure(measure({ tokens: 100_000, window: 200_000, percent: 50 }))
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ type: 'Text', text: '50%' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'other band' })).toBeDefined()
+    await ui.unmount()
+  }
+})

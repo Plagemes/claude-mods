@@ -5,7 +5,6 @@ import type { IssueDraftState } from '../types'
 import { asText, draftPrompt, issueUrl, parseArgs, parseDraft } from './draft'
 import type { IssueKind } from './draft'
 
-const NAME = 'issue-drafter'
 const PANE = 'issue'
 const GH_TIMEOUT_MS = 60_000
 const DEFAULT_TMP = '/tmp'
@@ -25,17 +24,17 @@ async function draft($: EngineInterface, kind: IssueKind | undefined, focus: str
   const reply = await $.model.fork({ prompt: draftPrompt(kind, focus) })
   if (!reply.isAnswered) {
     const why =
-      reply.reason === 'nothing-to-fork' ? 'nothing to draft yet: describe the problem or idea to Claude first.'
-        : reply.reason === 'api-error' ? `the model call failed (${reply.error}${reply.status === null ? '' : `, HTTP ${reply.status}`}).`
-          : reply.reason === 'aborted' ? 'drafting was interrupted.'
-            : 'the model gave no draft.'
+      reply.reason === 'nothing-to-fork' ? 'Nothing to draft yet: describe the problem or idea to Claude first.'
+        : reply.reason === 'api-error' ? `The model call failed (${reply.error}${reply.status === null ? '' : `, HTTP ${reply.status}`}).`
+          : reply.reason === 'aborted' ? 'Drafting was interrupted.'
+            : 'The model gave no draft.'
     await update($, draftAtom, () => null)
     return why
   }
   const parsed = parseDraft(reply.text, kind)
   if (parsed === undefined) {
     await update($, draftAtom, () => null)
-    return 'the draft came back in an unexpected shape; try /issue again.'
+    return 'The draft came back in an unexpected shape; try /issue again.'
   }
   await update($, draftAtom, (): IssueDraftState => ({ status: 'ready', ...parsed, focus, note: '' }))
   return undefined
@@ -61,7 +60,7 @@ async function createIssue($: EngineInterface, settings: Settings): Promise<void
       return
     }
     await update($, draftAtom, (): IssueDraftState => ({ ...current, status: 'created', url, note: '' }))
-    $.ui.toast(`${NAME}: created ${url}`)
+    $.ui.toast(`Created ${url}`)
   } catch (error) {
     const message = errorText(error)
     await fail(/ENOENT|not found|cannot start/i.test(message)
@@ -91,10 +90,10 @@ export const register: Register = (on, options) => {
     const problem = await draft($, kind, focus)
     if (problem !== undefined) {
       await $.ui.close({ id: PANE })
-      return { text: `${NAME}: ${problem}` }
+      return { text: problem }
     }
     const ready = await read($, draftAtom)
-    return { text: `${NAME}: drafted ${ready?.kind ?? 'an'} issue "${ready?.title ?? ''}". Review it in the Issue draft pane, then create it with gh or copy it.` }
+    return { text: `Drafted ${ready?.kind ?? 'an'} issue "${ready?.title ?? ''}". Review it in the Issue draft pane, then create it with gh or copy it.` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -108,7 +107,7 @@ export const register: Register = (on, options) => {
     }
     const copy = async (surface: typeof e.surface, text: string, what: string) => {
       const copied = await $.ui.copy({ text, surface })
-      $.ui.toast(copied.isCopied ? `${NAME}: ${what} copied` : `${NAME}: could not copy (${copied.reason})`)
+      $.ui.toast(copied.isCopied ? `${what} copied` : `Could not copy (${copied.reason})`)
     }
     const retitle = (title: string) =>
       update($, draftAtom, current => (current === null || title.trim() === '' ? current : { ...current, title: title.trim() }))
@@ -135,9 +134,9 @@ export const register: Register = (on, options) => {
         <Box gap={1} flexWrap="wrap">
           {isOpen && <Button key="create" label="Create with gh" hotkey="g" variant="primary" onPress={() => void createIssue($, settings)} />}
           {issue.status === 'created' && issue.url !== undefined ? (
-            <Button key="copy-url" label="Copy link" hotkey="c" onPress={press => void copy(press.surface, issue.url ?? '', 'link')} />
+            <Button key="copy-url" label="Copy link" hotkey="c" onPress={press => void copy(press.surface, issue.url ?? '', 'Link')} />
           ) : (
-            <Button key="copy" label="Copy" hotkey="c" onPress={press => void copy(press.surface, asText(issue), 'issue')} />
+            <Button key="copy" label="Copy" hotkey="c" onPress={press => void copy(press.surface, asText(issue), 'Issue')} />
           )}
           {isOpen && <Button key="redraft" label="Redraft" hotkey="r" onPress={() => void draft($, issue.kind, issue.focus)} />}
           <Button key="close" label="Close" role="dismiss" onPress={() => void $.ui.close({ id: PANE })} />

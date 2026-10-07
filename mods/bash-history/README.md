@@ -19,7 +19,7 @@ Keeps a running record of every Bash command Claude runs in the session: the com
 ```
 Output looks like:
 ```
-bash-history: last 3 of 3 shell commands (newest last)
+Last 3 of 3 shell commands (newest last)
 
 14:02:11  ok       400ms  git status
 14:02:15  FAILED   12.5s  npm test

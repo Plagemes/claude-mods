@@ -1201,7 +1201,7 @@
       "name": "status-check",
       "category": "api",
       "tier": "simple",
-      "description": "/status checks whether GitHub, npm, PyPI or the Anthropic API are having an outage before you blame your code.",
+      "description": "/service-status checks whether GitHub, npm, PyPI or the Anthropic API are having an outage before you blame your code.",
       "spec": "/status: fetch Statuspage JSON endpoints (https://www.githubstatus.com/api/v2/status.json, https://status.npmjs.org/api/v2/status.json, https://status.anthropic.com/api/v2/status.json, https://status.python.org/api/v2/status.json, plus userConfig extra) in parallel with timeouts; show indicator per service. Also: when a Bash command fails with network-ish errors (ETIMEDOUT, 503 from registry), check the relevant status page and add a context note if there's an incident.",
       "since": "2.0.0"
     },
@@ -1609,7 +1609,7 @@
       "name": "daily-goal",
       "category": "ecosystem",
       "tier": "complex",
-      "description": "/goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.",
+      "description": "/daily-goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.",
       "spec": "/goal <text> stores today's goal per project in $.store; AbovePrompt band shows '🎯 Goal: …' with Buttons Done / Edit / Hide; prompt.compose adds the goal as context (session scope, short). On first session after 18:00 (userConfig) or next day start, ask via band whether it was achieved; keep a history; /goal history shows last 14 days with ✓/✗.",
       "since": "2.0.0"
     },

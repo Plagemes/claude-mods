@@ -142,11 +142,41 @@ test('/rollback checks its argument and asks for confirmation in the pane', asyn
   fakeGit(on)
   await startTurn($, 't1', 'first')
   await edit($)
-  expect((await runCommand($, 'rollback', 'seven')).text).toBe('auto-checkpoint: usage /rollback <n>. Checkpoints: #1.')
+  expect((await runCommand($, 'rollback', 'seven')).text).toBe('Usage /rollback <n>. Checkpoints: #1.')
   expect((await runCommand($, 'rollback', '#1')).text).toBe('Confirm the rollback to #1 in the Checkpoints pane.')
 
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'checkpoints', props: PANE_PROPS })
   expect(await ui.find({ key: 'confirm' })).toBeDefined()
   await ui.press({ key: 'cancel' })
   expect(await ui.find({ key: 'confirm' })).toBeUndefined()
+})
+
+test('regression: a snapshot that times out pauses checkpoints for the session instead of slowing every turn', async ($, on) => {
+  const calls: string[] = []
+  const statuses: (string | undefined)[] = []
+  mock.store(on)
+  mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') })
+  on('process.run', ($, e) => {
+    const line = e.argv.slice(1).join(' ')
+    calls.push(line)
+    if (line.startsWith('add -A')) return { deny: 'aborted: still running after 20000ms' }
+    const stdout = line === 'rev-parse --show-toplevel' ? '/work/app\n' : line.startsWith('rev-parse --git-path') ? '.git/claude-checkpoint.index\n' : 'head0\n'
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('ui.status', ($, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('ui.log', () => ({ value: undefined }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('tool.call', () => ({ result: 'ok' }))
+
+  await startTurn($, 't1', 'first')
+  expect((await edit($)).isError).not.toBe(true)
+  expect(calls.filter(line => line.startsWith('add -A'))).toHaveLength(1)
+  expect(statuses.at(-1)).toContain('paused')
+
+  await startTurn($, 't2', 'second')
+  await edit($)
+  expect(calls.filter(line => line.startsWith('add -A'))).toHaveLength(1)
 })

@@ -187,7 +187,7 @@ async function useDraft($: EngineInterface): Promise<void> {
   const { enhanced } = await read($, enhancement)
   const filled = await $.prompt.fill({ text: enhanced, mode: 'replace' })
   if (!filled.isFilled) {
-    $.ui.toast(`prompt-enhancer: the prompt box could not take it${filled.refusal === 'dialog' ? ' while a dialog is open' : ''}`)
+    $.ui.toast(`The prompt box could not take it${filled.refusal === 'dialog' ? ' while a dialog is open' : ''}`)
     return
   }
   await $.ui.close({ id: PANE })
@@ -221,7 +221,7 @@ export const register: Register = (on, options) => {
   on('command.run', { command: COMMAND }, async ($, e) => {
     const draft = e.args.trim() === '' ? (await $.prompt.read()).text.trim() : e.args.trim()
     if (draft === '') {
-      return { text: 'prompt-enhancer: nothing to enhance. Type /enhance followed by your draft.' }
+      return { text: 'Nothing to enhance. Type /enhance followed by your draft.' }
     }
     await update($, enhancement, (): Enhancement => ({ status: 'working', original: draft, enhanced: '', model: settings.model }))
     const opened = await $.ui.open({ id: PANE, title: 'Enhance prompt', focus: true })
@@ -229,8 +229,8 @@ export const register: Register = (on, options) => {
     $.clock.after(1, () => void enhance($, draft))
     return {
       text: opened.isPlaced
-        ? `prompt-enhancer: rewriting with ${settings.model}…`
-        : `prompt-enhancer: rewriting with ${settings.model}; the pane waits for room (${opened.reason}).`,
+        ? `Rewriting with ${settings.model}…`
+        : `Rewriting with ${settings.model}; the pane waits for room (${opened.reason}).`,
     }
   })
 

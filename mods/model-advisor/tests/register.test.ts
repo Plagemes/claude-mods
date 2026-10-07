@@ -1,4 +1,4 @@
-import { test, expect } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptOrigin } from 'claude-code'
 
@@ -85,17 +85,23 @@ test('a hard prompt on haiku suggests opus; continuations and plugin prompts get
   expect(await headlineOn($, 'terminal')).toBeUndefined()
 })
 
-test('with useModel the classifier model decides, and its failure falls back to the local rules', { options: { useModel: true, display: 'both' } }, async ($, on) => {
+test('with useModel the classifier model decides after the prompt entered, and its failure falls back to the local rules', { options: { useModel: true, display: 'both' } }, async ($, on) => {
+  const clock = mock.clock(on)
   const engine = answerEngine(on, 'claude-sonnet-5-5')
 
   engine.classifierReply = 'heavy'
   await $.prompt.submit(typed('make checkout work with the new payments API'))
+  // The prompt entered without waiting for the classifier.
+  expect(engine.entered).toEqual(['make checkout work with the new payments API'])
+  expect(engine.asked).toHaveLength(0)
+  await clock.advance(1)
   expect(engine.asked[0]?.model).toBe('haiku')
   expect(engine.asked[0]?.system).toContain('light, standard or heavy')
   expect(engine.toasts).toEqual(['model-advisor: Hard task (rated heavy by haiku): /model opus is stronger'])
 
   engine.classifierReply = 'no idea'
   await $.prompt.submit(typed('fix the typo in the README'))
+  await clock.advance(1)
   expect(await headlineOn($, 'terminal')).toBe('Simple task (a typo fix): /model haiku would do')
 })
 

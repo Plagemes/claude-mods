@@ -1,0 +1,25 @@
+{
+  "name": "scope-lock",
+  "version": "1.0.0",
+  "description": "/scope locks Claude to the files you name; edits outside the scope are blocked.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#scope-lock",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "agents", "scope", "guard", "glob"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "allowTemp": {
+      "type": "boolean",
+      "title": "Allow temp folders",
+      "description": "Let writes to /tmp (and macOS temp folders) through while a scope is set, for logs and scratch files.",
+      "default": true
+    },
+    "blockUncheckable": {
+      "type": "boolean",
+      "title": "Block uncheckable shell writes",
+      "description": "While a scope is set, block Bash writes whose target uses $VARIABLES, command substitution or a cd that cannot be followed.",
+      "default": true
+    }
+  }
+}

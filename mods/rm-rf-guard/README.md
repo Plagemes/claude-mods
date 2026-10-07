@@ -32,4 +32,5 @@ Instead: delete the specific paths (rm -rf ./build) or move them to a trash fold
 ## How it works
 - One `tool.call` guard on `Bash`; a small shell lexer splits the line into commands, so `echo "rm -rf /"` and `grep "rm -rf" docs/` are not mistaken for the real thing.
 - It fails closed: if the check itself throws, the command is denied.
-- Limits: it reads the text of the command. A script that does the deleting (`./cleanup.sh`), `$VAR` that expands to `/`, or an alias is not seen.
+- Command strings handed to another shell (`bash -c "…"`, `sudo sh -lc '…'`, `eval "…"`) are checked too.
+- Limits: it reads the text of the command. A script that does the deleting (`./cleanup.sh`), text piped into a shell (`echo … | sh`), `$VAR` that expands to `/`, or an alias is not seen.

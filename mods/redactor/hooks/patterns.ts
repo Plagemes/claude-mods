@@ -91,9 +91,12 @@ export const isIban = (value: string): boolean => {
   return remainder === 1
 }
 
-const hasPhoneDigitCount = (value: string): boolean => {
+/** `+2024-01-15 10:30` (a date on an added diff line) is not a phone number. */
+const DATE_LIKE = /^\+?\d{4}-\d{2}-\d{2}/
+
+const isPhoneNumber = (value: string): boolean => {
   const count = digitsOf(value).length
-  return count >= 10 && count <= 15
+  return count >= 10 && count <= 15 && !DATE_LIKE.test(value)
 }
 
 /**
@@ -109,7 +112,8 @@ const RULES: readonly Rule[] = [
   { kind: 'aws-key', category: 'secrets', pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
   { kind: 'github-token', category: 'secrets', pattern: /\bgh[pousr]_[A-Za-z0-9]{36,255}\b|\bgithub_pat_[A-Za-z0-9_]{22,255}\b/g },
   { kind: 'anthropic-key', category: 'secrets', pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}/g },
-  { kind: 'openai-key', category: 'secrets', pattern: /\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}/g },
+  // Real keys always mix in digits; `sk-button-hover-variant-large` is a class name.
+  { kind: 'openai-key', category: 'secrets', pattern: /\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}/g, isValid: value => /\d/.test(value) },
   { kind: 'stripe-key', category: 'secrets', pattern: /\b[sr]k_live_[A-Za-z0-9]{16,}\b/g },
   { kind: 'slack-token', category: 'secrets', pattern: /\bxox[abposr]-[A-Za-z0-9-]{10,}/g },
   { kind: 'google-api-key', category: 'secrets', pattern: /\bAIza[0-9A-Za-z_-]{35}\b/g },
@@ -142,7 +146,7 @@ const RULES: readonly Rule[] = [
     kind: 'phone',
     category: 'phones',
     pattern: /(?<![\w+])\+\d{1,3}(?:[ .-]?\(?\d{1,4}\)?)(?:[ .-]?\d{2,5}){1,4}(?![\w])|(?<![\w.-])(?:\(\d{3}\) ?|\d{3}[.-])\d{3}[.-]\d{4}(?![\w.-])/g,
-    isValid: hasPhoneDigitCount,
+    isValid: isPhoneNumber,
   },
   {
     kind: 'private-ip',

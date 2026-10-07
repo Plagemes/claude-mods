@@ -14,7 +14,7 @@ Measures how long each turn takes, from your prompt to Claude's final answer, an
 
 ## Usage
 - Status line after every turn: `last 34s · avg 21s` (durations over a minute read `2m 05s`, over an hour `1h 02m`).
-- Toast when a turn exceeds the threshold: `turn-timer: that turn took 2m 05s`.
+- Toast when a turn exceeds the threshold: `That turn took 2m 05s`.
 - Interrupted turns and subagent turns are not counted. `/clear` resets the average.
 
 ## Configuration

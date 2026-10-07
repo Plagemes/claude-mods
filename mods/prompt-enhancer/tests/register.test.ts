@@ -48,7 +48,7 @@ test('rewrites the draft with project context and shows original and enhanced si
   const asked = world(on, () => ({ isAnswered: true, text: '```\n' + REWRITE + '\n```', usage: USAGE }))
 
   const ran = await enhance($, 'fix login its broken')
-  expect(ran.text).toContain('rewriting with sonnet')
+  expect(ran.text).toContain('Rewriting with sonnet')
   await clock.advance(1)
 
   expect(asked).toHaveLength(1)
@@ -108,7 +108,7 @@ test('says why there is no rewrite and offers Retry', async ($, on) => {
   )
   on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
 
-  expect((await enhance($, '   ')).text).toContain('nothing to enhance')
+  expect((await enhance($, '   ')).text).toContain('Nothing to enhance')
 
   await enhance($, 'speed up the build')
   await clock.advance(1)

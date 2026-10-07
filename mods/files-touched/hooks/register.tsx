@@ -100,12 +100,12 @@ export const register: Register = on => {
 /** Puts the file's absolute path on the clipboard of the surface the press came from. */
 const copyPath = async ($: EngineInterface, path: string, surface: RenderSurface): Promise<void> => {
   const copied = await $.ui.copy({ text: path, surface }).catch(() => undefined)
-  if (copied?.isCopied === true) $.ui.toast(`files-touched: copied ${shown(path, root)}`)
-  else $.ui.toast(`files-touched: could not copy the path${copied === undefined ? '' : ` (${copied.reason})`}`)
+  if (copied?.isCopied === true) $.ui.toast(`Copied ${shown(path, root)}`)
+  else $.ui.toast(`Could not copy the path${copied === undefined ? '' : ` (${copied.reason})`}`)
 }
 
 /** Inserts `@path` at the cursor in the prompt box. */
 const mention = async ($: EngineInterface, path: string): Promise<void> => {
   const filled = await $.prompt.fill({ text: `${mentionOf(path, root)} `, mode: 'insert' }).catch(() => undefined)
-  if (filled?.isFilled !== true) $.ui.toast('files-touched: the prompt box is not available right now')
+  if (filled?.isFilled !== true) $.ui.toast('The prompt box is not available right now')
 }
