@@ -1,0 +1,32 @@
+{
+  "name": "guardian",
+  "version": "1.0.0",
+  "description": "One security policy for every guard mod — permissive, standard or strict — plus a project safety score.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#guardian",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "security", "policy", "guard"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "level": {
+      "type": "string",
+      "title": "Security level",
+      "description": "The policy for projects that have no .claude/guardian.json of their own. permissive: few interruptions; standard: the guards' own defaults; strict: tightest settings plus guardian's own fallback guard; custom: standard, with the overrides in .claude/guardian.json.",
+      "options": ["permissive", "standard", "strict", "custom"],
+      "default": "standard"
+    },
+    "fallback": {
+      "type": "boolean",
+      "title": "Fallback guard at strict",
+      "description": "At the strict level, block the most critical cases (rm -rf of a root, force push to main, curl | sh, secrets written to files, .env reads, terraform destroy) for each guard mod that is not installed.",
+      "default": true
+    },
+    "marketplace": {
+      "type": "string",
+      "title": "Marketplace",
+      "description": "The marketplace the guard mods are installed from; pluginConfigs keys and install commands use it.",
+      "default": "claude-mods"
+    }
+  }
+}
