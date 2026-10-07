@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Quiz, QuizScore } from '../types'
-import { MAX_QUESTIONS, MIN_QUESTIONS, SYSTEM, materialOf, parseQuestions, parseQuizArgs, percent, quizPrompt, statsText } from './quiz'
+import { MAX_QUESTIONS, MIN_QUESTIONS, SYSTEM, keptChange, materialOf, parseQuestions, parseQuizArgs, percent, quizPrompt, statsText } from './quiz'
 import type { Change } from './quiz'
 
 const PANE = 'quiz'
@@ -186,9 +186,9 @@ export const register: Register = (on, options) => {
     const { turn } = session
     if (turn === undefined || ran.deny !== undefined || ran.isError === true || turn.changes.length >= MAX_CHANGES) return ran
     const root = await rootOf($, session)
-    if (e.tool === 'Edit') turn.changes.push({ path: relativeTo(root, e.file_path), kind: 'edit', before: e.old_string, after: e.new_string })
-    else if (e.tool === 'Write') turn.changes.push({ path: relativeTo(root, e.file_path), kind: 'write', before: '', after: e.content })
-    else if (e.tool === 'NotebookEdit') turn.changes.push({ path: relativeTo(root, e.notebook_path), kind: 'edit', before: '', after: e.new_source })
+    if (e.tool === 'Edit') turn.changes.push(keptChange({ path: relativeTo(root, e.file_path), kind: 'edit', before: e.old_string, after: e.new_string }))
+    else if (e.tool === 'Write') turn.changes.push(keptChange({ path: relativeTo(root, e.file_path), kind: 'write', before: '', after: e.content }))
+    else if (e.tool === 'NotebookEdit') turn.changes.push(keptChange({ path: relativeTo(root, e.notebook_path), kind: 'edit', before: '', after: e.new_source }))
     return ran
   })
 

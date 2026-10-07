@@ -39,7 +39,7 @@ type World = {
   clock: ReturnType<typeof mock.clock>
 }
 
-type Options = { hasPlaywright?: boolean; openPorts?: number[]; output?: { exitCode: number; stdout: string; stderr?: string } }
+type Options = { hasPlaywright?: boolean; openPorts?: number[]; slowPorts?: number[]; output?: { exitCode: number; stdout: string; stderr?: string } }
 
 const world = (on: On, options: Options = {}): World => {
   const state: World = {
@@ -58,9 +58,12 @@ const world = (on: On, options: Options = {}): World => {
     return { value: undefined }
   })
   on('fs.list', () => ({ value: state.listing.map(name => ({ name, kind: 'file' as const, size: 1, mtimeMs: 0, isLink: false })) }))
-  on('http.fetch', ($, e) =>
-    (options.openPorts ?? [3000]).includes(Number(new URL(e.url).port)) ? { value: { status: 200, ok: true, headers: {}, text: '' } } : { deny: 'ECONNREFUSED' },
-  )
+  on('http.fetch', async ($, e) => {
+    const port = Number(new URL(e.url).port)
+    // A dev server compiling its first page answers late.
+    if (options.slowPorts?.includes(port) === true) await state.clock.sleep(20_000)
+    return [...(options.openPorts ?? [3000]), ...(options.slowPorts ?? [])].includes(port) ? { value: { status: 200, ok: true, headers: {}, text: '' } } : { deny: 'ECONNREFUSED' }
+  })
   on('process.run', ($, e) => {
     state.runs.push({ argv: e.argv, cwd: e.init?.cwd })
     const output = e.argv[0] === 'rm' ? { exitCode: 0, stdout: '' } : options.output ?? { exitCode: 0, stdout: e.argv[0] === 'node' ? scriptOutput() : 'Capturing screenshot' }
@@ -180,4 +183,11 @@ test('auto mode is off by default, and old captures are pruned', { options: { ke
   await screenshot($)
   const rm = state.runs.find(run => run.argv[0] === 'rm')
   expect(rm?.argv).toEqual(['rm', '-f', '--', `${DIR}/2026-10-01T10-00-00-desktop.png`, `${DIR}/2026-10-01T10-00-00-mobile.png`])
+})
+
+test('a dev server still compiling its first page when the probe gives up is used, not reported missing', async ($, on) => {
+  const state = world(on, { openPorts: [], slowPorts: [3000] })
+  const pending = screenshot($)
+  await state.clock.advance(1500)
+  expect((await pending).text).toContain('Captured http://localhost:3000/ at desktop and mobile widths')
 })

@@ -14,7 +14,7 @@ When Claude runs `psql -c "SELECT * FROM users"`, `mysql -e "..."` or `sqlite3 a
 ## Usage
 Nothing to run. Claude writes `psql -d app -c "SELECT id, email FROM users WHERE active;"`, the shell receives `... WHERE active LIMIT 50;` and Claude reads a note: `query-result-cap: the SELECT in this command had no row limit, so " LIMIT 50" was added (the command shown is the one that ran). ...`.
 
-Left alone: queries that already have `LIMIT`, `TOP`, `OFFSET` or `FETCH FIRST`; aggregate-only queries (`SELECT count(*) FROM t`) and queries with no `FROM` (`SELECT now()`); anything that is not a plain SELECT (INSERT, UPDATE, `EXPLAIN`, `\d`, `SELECT ... INTO`, `FOR UPDATE`, a `WITH` that modifies data); several statements in one string; SQL fed through a pipe, heredoc or `-f`; SQL built with `$(...)`, backticks or an unquoted word. Put `/* nocap */` in a query to exempt it.
+Left alone: queries that already have `LIMIT`, `TOP`, `OFFSET` or `FETCH FIRST`; aggregate-only queries (`SELECT count(*) FROM t`) and queries with no `FROM` (`SELECT now()`); anything that is not a plain SELECT (INSERT, UPDATE, `EXPLAIN`, `\d`, `SELECT ... INTO`, `FOR UPDATE`, a `WITH` that modifies data); several statements in one string; SQL fed through a pipe, heredoc or `-f`; SQL built with `$(...)`, backticks or an unquoted word; a query ended by a client command (`\G`, `\gx`); and results that go to a file or another command (`> users.csv`, `| wc -l`, `psql -o`, `mysql --tee`, sqlite `.output`), since a cap there would silently change the answer. Put `/* nocap */` in a query to exempt it.
 
 ## Configuration
 | Key | Type | Default | Description |

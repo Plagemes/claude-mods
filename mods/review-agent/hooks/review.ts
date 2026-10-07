@@ -38,13 +38,19 @@ export const REVIEWER_DESCRIPTION =
 
 const READ_ONLY_GIT = /^\s*git\s+(?:--no-pager\s+)?(diff|log|show|status|blame|merge-base|rev-parse|ls-files|grep|shortlog|describe|cat-file)(\s|$)/
 const SHELL_SYNTAX = /[;&|`$<>(){}\n\\]/
-const WRITING_OPTION = /(^|\s)(--output(=|\s|$)|--ext-diff|--textconv|-o\s)/
+/**
+ * Options that write files or run programs. `git grep -O<cmd>` / `--open-files-in-pager=<cmd>` (any `--op…` abbreviation,
+ * or `-O` inside a cluster such as `-iO`) runs a command on every matching file.
+ */
+const WRITING_OPTION = /(^|\s)(--output(=|\s|$)|--ext-diff|--textconv|-o\s|-[a-zA-Z]*O|--op)/
 
 /** Why a reviewer's Bash command is refused, or undefined when it is a plain read-only git command. */
 export const whyNotReadOnly = (command: string): string | undefined => {
   if (SHELL_SYNTAX.test(command)) return 'no shell operators, redirections or substitutions'
-  if (!READ_ONLY_GIT.test(command)) return 'only git diff, log, show, status, blame and grep'
-  if (WRITING_OPTION.test(command)) return 'no output files or external diff programs'
+  // The shell drops quotes, so `"--output=x"` and `-O'rm'` must be read as git sees them.
+  const unquoted = command.replace(/["']/g, '')
+  if (!READ_ONLY_GIT.test(unquoted)) return 'only git diff, log, show, status, blame and grep'
+  if (WRITING_OPTION.test(unquoted)) return 'no output files or external programs'
   return undefined
 }
 

@@ -31,6 +31,11 @@ const BLOCKED = [
   ':(){ :|:& };:',
   'find / -delete',
   'wipefs -a /dev/nvme0n1',
+  'bash -c "rm -rf /"',
+  "sudo sh -lc 'rm -rf ~'",
+  'eval "rm -rf /usr"',
+  'zsh -c "git reset --hard"',
+  'echo garbage > /dev/sda',
 ]
 
 const ALLOWED = [
@@ -54,6 +59,11 @@ const ALLOWED = [
   'grep -r "rm -rf" docs/',
   'find . -name "*.orig" -delete',
   'ls -la /',
+  'bash -c "npm run build"',
+  'sh -c \'echo rm -rf /\'',
+  'bash scripts/clean.sh',
+  'git commit -m "guard against sh -c \'rm -rf /\'"',
+  'echo done > /dev/null',
 ]
 
 test('denies catastrophic commands with an explanation and a safer alternative', async ($, on) => {

@@ -29,6 +29,8 @@ const CARGO_BINARY = /^\s*(?:Running|Doc-tests)\s+(.+?)(?:\s+\(.*\))?\s*$/
 const CARGO_RESULT = new RegExp(String.raw`^test result: .*finished in ${NUMBER}s`)
 const NEXTEST_TEST = new RegExp(String.raw`^\s*(?:PASS|FAIL|SLOW|TIMEOUT|LEAK)\s+\[\s*${NUMBER}s\]\s+(.+?)\s*$`)
 const TEST_COUNT = /\s*\(\d+ tests?[^)]*\)/
+/** Timing lines are short; longer ones (dumped JSON, minified code) are skipped, which also keeps the lazy patterns linear. */
+const MAX_LINE_CHARS = 1_000
 
 /** What each runner prints once it has run tests, whatever its timings. */
 const SIGNATURES: ReadonlyArray<readonly [Runner, RegExp]> = [
@@ -107,6 +109,7 @@ export const parseTimings = (output: string): Timing[] => {
   const place: Place = { file: undefined, binary: undefined }
   const timings: Timing[] = []
   for (const line of stripAnsi(output).split('\n')) {
+    if (line.length > MAX_LINE_CHARS) continue
     for (const [pattern, read] of RULES) {
       const match = pattern.exec(line)
       if (match === null) continue

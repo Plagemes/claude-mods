@@ -4,7 +4,7 @@
 **Category:** Databases & Data · **Version:** 1.0.0
 
 ## What it does
-Before Claude runs a Bash command, seed-guard checks whether it seeds, resets or drops a database: `prisma migrate reset`, `prisma db push --force-reset`, `rails db:reset/db:drop/db:seed`, `php artisan migrate:fresh/db:seed`, Django `flush`, `knex seed:run`, `sequelize db:seed`, `dropdb`, and package scripts such as `npm run seed` or `npm run db:reset`. It then finds out which database the command would hit and refuses it unless that database is on your own machine.
+Before Claude runs a Bash command, seed-guard checks whether it seeds, resets or drops a database: `prisma migrate reset`, `prisma db push --force-reset`, `rails db:reset/db:drop/db:seed`, `php artisan migrate:fresh/db:seed`, Django `flush`, `knex seed:run`, `sequelize db:seed`, `dropdb`, and package scripts such as `npm run seed`, `npm run reset` or `npm run db:reset` (not unrelated ones like `reset-cache`). It then finds out which database the command would hit and refuses it unless that database is on your own machine.
 
 ## Install
 ```
@@ -29,6 +29,6 @@ The target is read, in this order, from `DATABASE_URL=...` in the command (or an
 | `denyUnknown` | boolean | `false` | Also refuse when no `DATABASE_URL` can be found at all. Off by default: the tool then uses its own config (`database.yml`, `settings.py`), which usually means a local database. |
 
 ## How it works
-- A `tool.call` guard on `Bash` reads the command line like a shell (quotes respected, `npx`/`bundle exec`/`pnpm exec` wrappers skipped), matches it against the destructive commands above, and resolves the database URL with `$.env` and `$.fs.read`. It never runs anything.
+- A `tool.call` guard on `Bash` reads the command line like a shell (quotes respected, `npx`/`bundle exec`/`pnpm exec` wrappers skipped, `bash -c "…"` and `eval` strings read too), matches it against the destructive commands above, and resolves the database URL with `$.env` and `$.fs.read`. It never runs anything.
 - It fails closed: if the check itself throws, a command that mentions seed, reset, drop, fresh, flush or wipe is refused; other commands are not affected.
 - Limits: commands run inside `docker compose exec` or over `ssh` use that machine's own environment and are not checked; a URL that is built at run time (`${HOST}`) cannot be resolved (see `denyUnknown`); a database named only in `database.yml` or `settings.py` is not read.

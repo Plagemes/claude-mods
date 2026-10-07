@@ -34,6 +34,8 @@ type World = {
 }
 
 type Answer = { exitCode: number; stdout: string; stderr?: string }
+/** A model reply that makes `$.model.complete` reject instead of answering. */
+const REJECT = 'REJECT'
 
 const world = (on: On, files: Record<string, string>, answers: Answer[], modelReply: string | null = EXPLANATION): World => {
   const state: World = { runs: [], prompts: [], fills: [], clock: mock.clock(on) }
@@ -48,6 +50,7 @@ const world = (on: On, files: Record<string, string>, answers: Answer[], modelRe
   })
   on('model.complete', ($, e) => {
     state.prompts.push({ system: e.system ?? '', prompt: e.prompt })
+    if (modelReply === REJECT) return { deny: 'network down' }
     return modelReply === null
       ? { value: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded' as const, usage: USAGE } }
       : { value: { isAnswered: true, text: modelReply, usage: USAGE } }
@@ -168,6 +171,15 @@ test('a model failure is shown, and Ask Claude prepares an optimisation prompt',
   await ui.press({ key: 'ask' })
   expect(state.fills[0]).toContain("select u.email from users u where u.role = 'admin'")
   expect(state.fills[0]).toContain('Seq Scan on users u')
+})
+
+test('a model call that rejects ends the explaining phase with the reason', async ($, on) => {
+  const state = world(on, PG_ENV, [{ exitCode: 0, stdout: `${PG_PLAN}\n` }, { exitCode: 0, stdout: '' }], REJECT)
+  await explainQuery($, QUERY)
+  await state.clock.settle()
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ key: 'error' }))?.text).toContain('No explanation:')
+  expect((await ui.find({ key: 'error' }))?.text).toContain('network down')
 })
 
 test('a database error lands in the pane', async ($, on) => {

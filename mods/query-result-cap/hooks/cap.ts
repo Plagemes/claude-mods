@@ -17,6 +17,8 @@ const CONTAINER_RUNNERS = new Set(['docker', 'podman', 'nerdctl', 'kubectl', 'oc
 const WRAPPER_OPTIONS_WITH_VALUE = new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-R', '-T', '-U'])
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const SQLITE_OPTIONS_WITH_VALUE = new Set(['-cmd', '-init', '-separator', '-newline', '-nullvalue', '-vfs'])
+/** Client options and sqlite dot-commands that send the result to a file. */
+const OUTPUT_FILE = { psql: /^(?:-o|--output)(?:=|$)|^-o./, mysql: /^--tee(?:=|$)/, sqlite: /^\.(?:output|once|excel)\b/ } as const
 const FLAGS = {
   psql: { short: 'c', long: '--command', cluster: /^-[AtqXxabeEHnsSz01]*c$/ },
   mysql: { short: 'e', long: '--execute', cluster: /^-[NBsrvEtHXqwGAfknoTUb]*e$/ },
@@ -106,9 +108,11 @@ export const capQueries = (command: string, limit: number): Capped | undefined =
   if (parsed === undefined || parsed.hasHeredoc) return undefined
 
   const points: number[] = []
-  for (const words of parsed.commands) {
+  for (const [position, words] of parsed.commands.entries()) {
     const program = findProgram(words)
     if (program === undefined) continue
+    // Output saved to a file or read by another command (`| wc -l`, `> users.csv`) must stay complete.
+    if (parsed.isOutputElsewhere[position] === true || words.slice(program.index + 1).some(word => OUTPUT_FILE[program.dialect].test(word.value))) continue
     for (const target of sqlTargets(program.dialect, words, program.index)) {
       const at = insertionPoint(command, target)
       if (at !== undefined && !points.includes(at)) points.push(at)

@@ -17,8 +17,16 @@ const RUNNERS: readonly (readonly string[])[] = [
   ['bundle', 'exec'], ['spring'], ['poetry', 'run'], ['pipenv', 'run'], ['uv', 'run'],
 ]
 const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun'])
-/** Script names that seed, reset or drop a database: db:reset, seed:dev, reset-db, prisma:seed, migrate:fresh ... */
-const DESTRUCTIVE_SCRIPT = /^(?:(?:db|database)[:_-])?(?:seed|reset|drop|wipe|fresh)(?:[:_-]\w+)?$|^(?:seed|reset)[:_-](?:db|database)$|^prisma[:_-](?:seed|reset)$|^migrate[:_-](?:fresh|reset|refresh)$/
+/**
+ * Script names that seed, reset or drop a database: db:reset, seed:dev, reset-db, prisma:seed, migrate:fresh ...
+ * A bare reset/drop/wipe/fresh only counts with a database-ish suffix, so reset-project or reset-cache pass.
+ */
+const DESTRUCTIVE_SCRIPT =
+  /^(?:(?:db|database)[:_-](?:seed|reset|drop|wipe|fresh)|seed)(?:[:_-]\w+)?$|^(?:reset|drop|wipe|fresh)(?:[:_-](?:db|database|data|all|dev|local))?$|^prisma[:_-](?:seed|reset)$|^migrate[:_-](?:fresh|reset|refresh)$/
+/** Programs that run a command string given as an argument: `bash -c "…"`. */
+const SCRIPT_RUNNERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
+const SCRIPT_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+const MAX_NESTING = 4
 const RAILS_TASKS = new Set([
   'db:reset', 'db:drop', 'db:drop:all', 'db:seed', 'db:setup', 'db:migrate:reset', 'db:seed:replant', 'db:schema:load', 'db:structure:load', 'db:purge',
 ])
@@ -136,8 +144,16 @@ export function moveTo(directory: string, target: string): string {
   return parts.join('/')
 }
 
+/** The command string a shell is handed: `bash -lc "…"`, `eval "…"`. */
+function nestedScript(words: readonly string[]): string | undefined {
+  if (words[0] === 'eval') return words.slice(1).join(' ')
+  if (!SCRIPT_RUNNERS.has(baseName(words[0] ?? ''))) return undefined
+  const flagAt = words.findIndex((word, index) => index > 0 && SCRIPT_FLAG.test(word))
+  return flagAt === -1 ? undefined : words[flagAt + 1]
+}
+
 /** Destructive database commands of the line, with the `cd` and `export` words that came before them. Reads text; runs nothing. */
-export function findDestructive(line: string): Hit[] {
+export function findDestructive(line: string, depth = 0): Hit[] {
   const hits: Hit[] = []
   const exported: Record<string, string> = {}
   let directory = ''
@@ -153,6 +169,10 @@ export function findDestructive(line: string): Hit[] {
     } else {
       const label = destructiveLabel(words)
       if (label !== undefined) hits.push({ label, directory, assignments: { ...exported, ...assignments } })
+      const script = depth < MAX_NESTING ? nestedScript(words) : undefined
+      for (const inner of script === undefined ? [] : findDestructive(script, depth + 1)) {
+        hits.push({ ...inner, directory: moveTo(directory, inner.directory), assignments: { ...exported, ...assignments, ...inner.assignments } })
+      }
     }
   }
   return hits

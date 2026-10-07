@@ -68,6 +68,7 @@ const world = (on: On, files: Record<string, string> = PROJECT, registry: Record
   on('http.fetch', ($, e) => {
     state.fetched.push(e.url)
     const text = registry[e.url]
+    if (text === 'OFFLINE') return { deny: 'ENOTFOUND' }
     return { value: { status: text === undefined ? 404 : 200, ok: text !== undefined, headers: {}, text: text ?? 'Not found' } }
   })
   on('store.get', ($, e) => ({ value: store.get(e.key) }))
@@ -236,4 +237,20 @@ test('package URLs, store paths and the documents keep to their specs', () => {
   const spdx = JSON.parse(toSpdx(deps, meta)) as { documentNamespace: string; packages: { versionInfo?: string }[] }
   expect(spdx.documentNamespace).toBe('https://spdx.org/spdxdocs/x-00000000-0000-4000-8000-000000000000')
   expect(spdx.packages[1]?.versionInfo).toBeUndefined()
+})
+
+test('a lookup that got no answer (offline) is tried again on the next scan; a 404 is remembered', { options: { registryLookup: true } }, async ($, on) => {
+  const files = {
+    '/repo/Cargo.lock':
+      '[[package]]\nname = "itoa"\nversion = "1.0.9"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n\n' +
+      '[[package]]\nname = "private-crate"\nversion = "0.1.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n',
+  }
+  const registry: Record<string, string> = { 'https://crates.io/api/v1/crates/itoa/1.0.9': 'OFFLINE' }
+  const state = world(on, files, registry)
+  await sbom($)
+  registry['https://crates.io/api/v1/crates/itoa/1.0.9'] = JSON.stringify({ version: { license: 'MIT OR Apache-2.0' } })
+  await sbom($, 'md')
+  expect(state.fetched.filter(url => url.includes('itoa'))).toHaveLength(2)
+  expect(state.fetched.filter(url => url.includes('private-crate'))).toHaveLength(1)
+  expect(state.writes.get('/repo/SBOM.md')).toContain('| itoa | 1.0.9 | crates.io | MIT OR Apache-2.0 |  |')
 })

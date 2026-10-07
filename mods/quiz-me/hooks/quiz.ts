@@ -26,6 +26,9 @@ export type Change = { path: string; kind: 'edit' | 'write'; before: string; aft
 
 const cut = (text: string, chars: number): string => (text.length > chars ? `${text.slice(0, chars)}\n[…cut]` : text)
 
+/** A change as it is kept (in memory and the store): only as much text as a quiz can ever show. */
+export const keptChange = (change: Change): Change => ({ ...change, before: cut(change.before, SNIPPET_CHARS), after: cut(change.after, SNIPPET_CHARS) })
+
 /** The changes of a turn as the material of a quiz, within a size budget. */
 export function materialOf(changes: readonly Change[]): string {
   const parts: string[] = []

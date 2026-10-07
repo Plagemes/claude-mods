@@ -22,11 +22,14 @@ const RULES: readonly Rule[] = [
 ]
 
 // NAME_KEY = "value", SECRET: 'value', apiToken=value ...
-const GENERIC_ASSIGNMENT =
-  /\b[A-Za-z0-9_]*(?:API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE_?KEY|ACCESS_?KEY)[A-Za-z0-9_]*["']?\s*[:=]\s*["']?([A-Za-z0-9+/=_.-]{20,})["']?/i
+// The name is matched as a plain identifier and checked separately: putting the keyword between two
+// `[A-Za-z0-9_]*` runs backtracks quadratically on long identifier-like lines.
+const ASSIGNMENT = /\b([A-Za-z0-9_]+)["']?\s*[:=]\s*["']?([A-Za-z0-9+/=_.-]{20,})/g
+const SECRET_NAME = /API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE_?KEY|ACCESS_?KEY/i
 
-// Documentation keys (AKIA...EXAMPLE) and references to a variable are not secrets.
-const PLACEHOLDER = /example|sample|placeholder|changeme|your[_-]|xxxx|\*{4}|<[^>]*>|process\.env|import\.meta|\$\{|os\.environ|getenv/i
+// Documentation keys (AKIA...EXAMPLE), fill-me-in values and references to a variable are not secrets.
+const PLACEHOLDER =
+  /example|sample|placeholder|changeme|change[_-]?this|replace[_-]?(?:me|this|with)|generate[_-]?(?:with|one|me)|goes[_-]?here|dummy|fake|insecure|your[_-]|xxxx|\*{4}|<[^>]*>|process\.env|import\.meta|\$\{|os\.environ|getenv/i
 const MAX_PREVIEW = 120
 const MIN_ENTROPY_BITS = 3.5
 
@@ -48,24 +51,30 @@ export function mask(text: string): string {
   return masked.length > MAX_PREVIEW ? `${masked.slice(0, MAX_PREVIEW)}…` : masked
 }
 
-function matchLine(line: string): { name: string; secret: string } | undefined {
+function matchLine(line: string, isTemplate: boolean): { name: string; secret: string } | undefined {
   for (const { name, regex } of RULES) {
     const hit = regex.exec(line)
     if (hit && !PLACEHOLDER.test(hit[0])) return { name, secret: hit[0] }
   }
-  const assigned = GENERIC_ASSIGNMENT.exec(line)
-  const value = assigned?.[1]
+  // A template (`.env.example`) is full of made-up values: only the known key formats above count there.
+  if (isTemplate) return undefined
+  const value = [...line.matchAll(ASSIGNMENT)].find(([, name]) => SECRET_NAME.test(name ?? ''))?.[2]
   if (value && !PLACEHOLDER.test(line) && looksRandom(value)) {
     return { name: 'high-entropy secret assignment', secret: value }
   }
   return undefined
 }
 
+/** Files meant to be committed with made-up values: `.env.example`, `config.sample.yml`, `settings.dist`, `app.template.json`. */
+const TEMPLATE_FILE = /\.(?:example|sample|template|dist|tmpl)(?:\.[^./\\]+)?$/i
+
+export const isTemplatePath = (path: string): boolean => TEMPLATE_FILE.test(path)
+
 /** One finding per offending line; `isAllowed` filters by matched secret, line or path. */
-export function findSecrets(text: string, isAllowed: (secret: string, line: string) => boolean): Finding[] {
+export function findSecrets(text: string, isAllowed: (secret: string, line: string) => boolean, isTemplate = false): Finding[] {
   const findings: Finding[] = []
   text.split(/\r?\n/).forEach((line, index) => {
-    const hit = matchLine(line)
+    const hit = matchLine(line, isTemplate)
     if (hit && !isAllowed(hit.secret, line)) {
       findings.push({ pattern: hit.name, line: index + 1, preview: mask(line) })
     }

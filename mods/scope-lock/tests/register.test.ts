@@ -127,3 +127,13 @@ test('temp folders and uncheckable writes follow the configuration', { options: 
   expect(denial(await $.tool.call({ tool: 'Bash', command: 'cp a "$OUT/b"' }))).toBeUndefined()
   expect(denial(await $.tool.call({ tool: 'NotebookEdit', notebook_path: `${ROOT}/notebooks/a.ipynb`, new_source: 'x' } as never))).toContain('blocked NotebookEdit')
 })
+
+test('read-only git stash subcommands pass; git -C and bash -lc writes are still seen', () => {
+  const paths = (command: string) => writeTargets(command).map(target => target.path)
+  expect(paths('git stash list')).toEqual([])
+  expect(paths('git stash show -p')).toEqual([])
+  expect(paths('git stash pop')).toEqual(['.'])
+  expect(paths('git -C app rm old.ts')).toEqual(['app/old.ts'])
+  expect(paths('git -c core.quotepath=off rm old.ts')).toEqual(['old.ts'])
+  expect(paths('bash -lc "rm -rf build"')).toEqual(['build'])
+})

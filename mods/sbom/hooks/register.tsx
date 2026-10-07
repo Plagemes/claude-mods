@@ -221,15 +221,20 @@ async function homeDir($: EngineInterface, below: string): Promise<string | unde
   return home === undefined || home === '' ? undefined : joinPath(home, below)
 }
 
-/** Fetches with a deadline: `$.http.fetch` has none of its own. */
-async function fetchText($: EngineInterface, url: string, headers: Record<string, string>): Promise<string | undefined> {
+/**
+ * Fetches with a deadline (`$.http.fetch` has none of its own): the body of a 2xx answer, null when the registry
+ * answered that it has no such package (4xx), undefined when there was no real answer (offline, timeout, 5xx, 429).
+ */
+async function fetchText($: EngineInterface, url: string, headers: Record<string, string>): Promise<string | null | undefined> {
   let timer: { cancel: () => void } | undefined
   const deadline = new Promise<undefined>(resolve => {
     timer = $.clock.after(LOOKUP_TIMEOUT_MS, () => resolve(undefined))
   })
   try {
     const response = await Promise.race([$.http.fetch(url, { headers }), deadline])
-    return response?.ok === true ? response.text : undefined
+    if (response === undefined) return undefined
+    if (response.ok) return response.text
+    return response.status >= 400 && response.status < 500 && response.status !== 429 ? null : undefined
   } catch {
     return undefined
   } finally {
@@ -249,17 +254,22 @@ async function lookUpLicenses($: EngineInterface, dependencies: readonly Depende
       return
     }
     const { name, version } = dependency
-    let license: string | undefined
-    if (dependency.ecosystem === 'npm') {
-      const text = await fetchText($, `https://registry.npmjs.org/${name.replace('/', '%2f')}/${encodeURIComponent(version)}`, {})
-      license = text === undefined ? undefined : licenseFromPackageJson(text).license
-    } else if (dependency.ecosystem === 'pypi') {
-      const text = await fetchText($, `https://pypi.org/pypi/${name}/${encodeURIComponent(version)}/json`, {})
-      license = text === undefined ? undefined : licenseFromPypiJson(text)
-    } else {
-      const text = await fetchText($, `https://crates.io/api/v1/crates/${name}/${encodeURIComponent(version)}`, { 'User-Agent': USER_AGENT })
-      license = text === undefined ? undefined : licenseFromCratesJson(text)
-    }
+    const text =
+      dependency.ecosystem === 'npm'
+        ? await fetchText($, `https://registry.npmjs.org/${name.replace('/', '%2f')}/${encodeURIComponent(version)}`, {})
+        : dependency.ecosystem === 'pypi'
+          ? await fetchText($, `https://pypi.org/pypi/${name}/${encodeURIComponent(version)}/json`, {})
+          : await fetchText($, `https://crates.io/api/v1/crates/${name}/${encodeURIComponent(version)}`, { 'User-Agent': USER_AGENT })
+    // No answer (offline, a timeout, a 5xx): try again next scan rather than remember "unknown" for good.
+    if (text === undefined) return
+    const license =
+      text === null
+        ? undefined
+        : dependency.ecosystem === 'npm'
+          ? licenseFromPackageJson(text).license
+          : dependency.ecosystem === 'pypi'
+            ? licenseFromPypiJson(text)
+            : licenseFromCratesJson(text)
     dependency.license = license
     await $.store.set(key, license ?? '').catch(() => undefined)
   })

@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { findSecrets } from './scan'
+import { findSecrets, isTemplatePath } from './scan'
 
 const WRITE_TOOLS = /^(?:Edit|Write|MultiEdit|NotebookEdit)$/
 const MAX_REPORTED = 3
@@ -35,7 +35,7 @@ export const register: Register = (on, options) => {
     const path = targetPath(e)
     const isAllowed = (secret: string, line: string) =>
       allowlist !== undefined && [secret, line, path].some(text => allowlist.test(text))
-    const findings = addedTexts(e).flatMap(text => findSecrets(text, isAllowed))
+    const findings = addedTexts(e).flatMap(text => findSecrets(text, isAllowed, isTemplatePath(path)))
 
     if (findings.length === 0) return next(e)
 

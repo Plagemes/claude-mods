@@ -54,6 +54,10 @@ const DESTRUCTIVE = [
   'pnpm --filter api db:reset',
   'npm --prefix api run seed',
   'pnpm -F api exec prisma migrate reset',
+  'bash -c "npx prisma migrate reset --force"',
+  "cd api && sh -lc 'rails db:reset'",
+  'npm run reset',
+  'npm run drop:db',
 ]
 
 const HARMLESS = [
@@ -76,6 +80,10 @@ const HARMLESS = [
   'echo "run rails db:reset later"',
   'git commit -m "add seed script"',
   'ls -la',
+  'npm run reset-project',
+  'npm run reset-cache',
+  'yarn fresh-install',
+  'bash -c "npm run build"',
 ]
 
 test('denies seed, reset and drop commands when .env points at a remote database', async ($, on) => {

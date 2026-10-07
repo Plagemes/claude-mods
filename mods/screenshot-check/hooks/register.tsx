@@ -35,20 +35,19 @@ async function projectRoot($: EngineInterface): Promise<string> {
   return (await $.session.cwd()).replace(/[\\/]+$/, '')
 }
 
-/** The first local dev server that answers, the project's own port first. */
+/**
+ * The first local dev server that answers, the project's own port first. A closed port refuses at once; one still
+ * busy when the probe gives up is listening (Next.js and friends compile a page on its first request), so it counts
+ * when no port answered in time.
+ */
 async function findDevServer($: EngineInterface, root: string): Promise<string | undefined> {
   const packageJson = await $.fs.read(`${root}/package.json`).catch(() => undefined)
   const ports = candidatePorts(portsFromPackage(typeof packageJson === 'string' ? packageJson : undefined))
-  const probe = async (port: number): Promise<boolean> => {
-    try {
-      await $.http.fetch(`http://localhost:${port}/`)
-      return true
-    } catch {
-      return false
-    }
-  }
-  const answers = await Promise.race([Promise.all(ports.map(probe)), $.clock.sleep(PROBE_TIMEOUT_MS).then(() => [] as boolean[])])
-  const index = answers.indexOf(true)
+  const givenUp = $.clock.sleep(PROBE_TIMEOUT_MS).then(() => 'busy' as const)
+  const probe = (port: number) =>
+    Promise.race([$.http.fetch(`http://localhost:${port}/`).then(() => 'up' as const, () => 'closed' as const), givenUp])
+  const answers = await Promise.all(ports.map(probe))
+  const index = answers.includes('up') ? answers.indexOf('up') : answers.indexOf('busy')
   return index === -1 ? undefined : `http://localhost:${ports[index]}/`
 }
 

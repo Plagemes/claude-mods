@@ -150,3 +150,15 @@ test('quizzes on a file you name, says when there is nothing, and retries a bad 
   expect(progress).toContain('src/money.ts')
   await ui.unmount()
 })
+
+test('a huge Write is kept only as far as a quiz can show it, in memory and in the store', async ($, on) => {
+  const seen = world(on)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.start({ text: 'Add the fixture', turnId: 't1' })
+  await $.tool.call({ tool: 'Write', file_path: `${ROOT}/fixtures/big.json`, content: 'x'.repeat(2_000_000) })
+  await $.turn.complete({ answer: 'Done.', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+  await seen.clock.advance(0)
+  const stored = JSON.stringify(seen.store.get(`work:${ROOT}`))
+  expect(stored).toContain('[…cut]')
+  expect(stored.length).toBeLessThan(10_000)
+})

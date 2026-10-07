@@ -111,8 +111,16 @@ async function runClient($: EngineInterface, target: DbTarget, invocation: Invoc
 
 /** Asks the model to read the plan, then shows its answer if the pane still holds that query. */
 async function explain($: EngineInterface, settings: Settings, current: Run, prompt: string): Promise<void> {
-  const reply = await $.model.complete({ model: settings.model, system: SYSTEM_PROMPT, prompt, maxTokens: MAX_TOKENS, timeoutMs: MODEL_TIMEOUT_MS })
   const isSame = (latest: Run | null): latest is Run => latest !== null && latest.sql === current.sql && latest.plan === current.plan
+  let reply: Awaited<ReturnType<EngineInterface['model']['complete']>>
+  try {
+    reply = await $.model.complete({ model: settings.model, system: SYSTEM_PROMPT, prompt, maxTokens: MAX_TOKENS, timeoutMs: MODEL_TIMEOUT_MS })
+  } catch (error) {
+    // Without this the pane would say "explaining" forever.
+    const why = error instanceof Error ? error.message : String(error)
+    await update($, run, (latest: Run | null) => (isSame(latest) ? { ...latest, phase: 'ready' as const, error: `No explanation: ${why}.` } : latest))
+    return
+  }
   if (!reply.isAnswered) {
     const why = reply.reason === 'api-error' ? `the API answered ${reply.status ?? 'nothing'} (${reply.error})` : reply.reason
     await update($, run, (latest: Run | null) => (isSame(latest) ? { ...latest, phase: 'ready' as const, error: `No explanation: ${why}.` } : latest))

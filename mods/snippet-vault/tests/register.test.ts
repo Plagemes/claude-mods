@@ -120,3 +120,14 @@ test('registers its four commands when the session starts', async ($, on) => {
 
   expect(state.commands.sort()).toEqual(['delete-snippet', 'save-snippet', 'snippet', 'snippets'])
 })
+
+test('a snippet named like an Object.prototype key (constructor) is a normal snippet', async ($, on) => {
+  const state = engine(on)
+
+  expect(await run($, 'snippet', 'constructor')).toBe('snippet-vault: no snippet called constructor.')
+  expect(await run($, 'delete-snippet', 'constructor')).toBe('snippet-vault: no snippet called constructor.')
+  expect(await run($, 'save-snippet', 'constructor')).toBe('📎 snippet constructor saved (5 lines, js).')
+  expect(await run($, 'snippet', 'constructor')).toBe('📎 snippet constructor is in your prompt.')
+  expect(state.filled[0]?.text).toBe(`\`\`\`js\n${RETRY}\n\`\`\``)
+  expect(await run($, 'delete-snippet', 'constructor')).toBe('📎 snippet constructor deleted.')
+})

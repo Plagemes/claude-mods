@@ -11,6 +11,12 @@ const PREFIXES = new Set(['sudo', 'command', 'builtin', 'nohup', 'time', 'exec',
 const ASSIGNMENT = /^[A-Za-z_]\w*=/
 const SAFE_DEVICE = /^\/dev\/(?:null|zero|stdout|stderr|stdin|tty|fd\/\d+)$/
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+/** `-c`, `-lc`, `-ec`: the shell runs the next word as a script. */
+const SCRIPT_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/
+/** Git's own options that take the next word as their value. */
+const GIT_VALUED = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
+/** `git stash` subcommands that leave the working tree alone. */
+const STASH_READS = new Set(['list', 'show', 'drop', 'clear', 'create', 'store'])
 const PLAIN_WRITERS = new Set(['tee', 'rm', 'rmdir', 'unlink', 'touch', 'mkdir', 'truncate', 'shred'])
 const COPIERS = new Set(['cp', 'ln', 'install', 'rsync'])
 const OWNERSHIP = new Set(['chmod', 'chown', 'chgrp'])
@@ -200,17 +206,27 @@ const writesOf = (argv: readonly string[]): { path: string; via: string }[] => {
     return each(starts.length === 0 ? ['.'] : starts)
   }
   if (name === 'git') {
-    const [sub = '', ...rest] = args.filter(arg => !/^-C$|^-c$/.test(arg))
+    let at = 0
+    let directory: string | undefined
+    while (at < args.length && (args[at] as string).startsWith('-')) {
+      if (args[at] === '-C') directory = args[at + 1]
+      at += GIT_VALUED.has(args[at] as string) ? 2 : 1
+    }
+    const [sub = '', ...rest] = args.slice(at)
+    // `git -C app rm x` removes app/x.
+    const inRepo = (paths: readonly string[]) => (directory === undefined ? paths : paths.map(path => (/^(?:[A-Za-z]:)?[\\/]/.test(path) ? path : `${directory}/${path}`)))
     const files = operandsOf('git', rest)
-    if (sub === 'rm' || sub === 'mv' || sub === 'restore') return each(files, `git ${sub}`)
-    if (sub === 'checkout' && rest.includes('--')) return each(rest.slice(rest.indexOf('--') + 1), 'git checkout')
-    if ((sub === 'clean' && rest.some(arg => /^-[a-zA-Z]*f/.test(arg))) || (sub === 'reset' && rest.includes('--hard')) || sub === 'stash') {
-      return each(['.'], `git ${sub}`)
+    if (sub === 'rm' || sub === 'mv' || sub === 'restore') return each(inRepo(files), `git ${sub}`)
+    if (sub === 'checkout' && rest.includes('--')) return each(inRepo(rest.slice(rest.indexOf('--') + 1)), 'git checkout')
+    const isStashWrite = sub === 'stash' && !STASH_READS.has(rest[0] ?? '')
+    if ((sub === 'clean' && rest.some(arg => /^-[a-zA-Z]*f/.test(arg))) || (sub === 'reset' && rest.includes('--hard')) || isStashWrite) {
+      return each(inRepo(['.']), `git ${sub}`)
     }
     return []
   }
-  if (SHELLS.has(name) && args.includes('-c')) {
-    const script = args[args.indexOf('-c') + 1]
+  const scriptFlag = SHELLS.has(name) ? args.findIndex(arg => SCRIPT_FLAG.test(arg)) : -1
+  if (scriptFlag !== -1) {
+    const script = args[scriptFlag + 1]
     return script === undefined ? [] : writeTargets(script).map(target => ({ path: target.path, via: target.via }))
   }
   return []

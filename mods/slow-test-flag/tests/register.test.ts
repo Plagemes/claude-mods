@@ -266,3 +266,10 @@ test('runnerOf trusts the command, then the shape of the output', () => {
 test('formatMs reads naturally from milliseconds to minutes', () => {
   expect([formatMs(80), formatMs(1520), formatMs(75_000)]).toEqual(['80 ms', '1.52 s', '1m 15s'])
 })
+
+test('parseTimings skips very long lines instead of backtracking over them', () => {
+  const started = Date.now()
+  const timings = parseTimings(`✓ a${' '.repeat(100_000)}x\n0.1s call x${' '.repeat(100_000)}y\n  ✓ renders (120 ms)`)
+  expect(Date.now() - started).toBeLessThan(1_000)
+  expect(timings.map(timing => timing.name)).toEqual(['renders'])
+})

@@ -66,6 +66,9 @@ const findSource = async ($: EngineInterface): Promise<Block | undefined> => {
   return undefined
 }
 
+/** The snippet saved under `name`; own keys only, so `constructor` is not read off Object.prototype. */
+const snippetIn = (vault: Vault, name: string): Snippet | undefined => (Object.hasOwn(vault, name) ? vault[name] : undefined)
+
 const parseName = (args: string): string | undefined => {
   const name = args.trim().toLowerCase()
   return NAME_PATTERN.test(name) ? name : undefined
@@ -80,7 +83,7 @@ const saveSnippet = async ($: EngineInterface, args: string): Promise<Reply> => 
   if (source.code.length > MAX_CODE_LENGTH) return { text: `snippet-vault: that is over ${MAX_CODE_LENGTH} characters, too large to keep.` }
 
   const vault = await readVault($)
-  const isNew = vault[name] === undefined
+  const isNew = snippetIn(vault, name) === undefined
   if (isNew && Object.keys(vault).length >= MAX_SNIPPETS) {
     return { text: `snippet-vault: the vault holds ${MAX_SNIPPETS} snippets already; /delete-snippet one first.` }
   }
@@ -104,7 +107,7 @@ const useSnippet = async ($: EngineInterface, args: string): Promise<Reply> => {
   if (args.trim() === '') return listSnippets($)
   const name = parseName(args)
   const vault = await readVault($)
-  const snippet = name === undefined ? undefined : vault[name]
+  const snippet = name === undefined ? undefined : snippetIn(vault, name)
   if (name === undefined || snippet === undefined) {
     const known = Object.keys(vault).sort()
     return { text: `snippet-vault: no snippet called ${args.trim()}.${known.length === 0 ? '' : ` Saved: ${known.join(', ')}.`}` }
@@ -118,10 +121,10 @@ const deleteSnippet = async ($: EngineInterface, args: string): Promise<Reply> =
   const name = parseName(args)
   if (name === undefined) return { text: 'usage: /delete-snippet <name>' }
 
-  const { [name]: removed, ...rest } = await readVault($)
-  if (removed === undefined) return { text: `snippet-vault: no snippet called ${name}.` }
+  const vault = await readVault($)
+  if (snippetIn(vault, name) === undefined) return { text: `snippet-vault: no snippet called ${name}.` }
 
-  await $.store.set(VAULT_KEY, rest)
+  await $.store.set(VAULT_KEY, Object.fromEntries(Object.entries(vault).filter(([key]) => key !== name)))
   return { text: `📎 snippet ${name} deleted.` }
 }
 

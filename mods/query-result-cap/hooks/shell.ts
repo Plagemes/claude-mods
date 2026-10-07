@@ -93,7 +93,12 @@ const readWord = (reader: Reader): Word | undefined => {
   return word
 }
 
-export type Parsed = { commands: Word[][]; hasHeredoc: boolean }
+export type Parsed = {
+  commands: Word[][]
+  /** Per command: its standard output goes to a file or into a pipe instead of back to Claude. */
+  isOutputElsewhere: boolean[]
+  hasHeredoc: boolean
+}
 
 /**
  * Splits a shell command line into simple commands made of words, remembering where each
@@ -103,8 +108,10 @@ export type Parsed = { commands: Word[][]; hasHeredoc: boolean }
 export const parseCommand = (text: string): Parsed | undefined => {
   const reader: Reader = { text, index: 0 }
   const commands: Word[][] = [[]]
+  const isOutputElsewhere: boolean[] = [false]
   let hasHeredoc = false
   let skipTarget = false
+  let isStdoutTarget = false
 
   while (reader.index < text.length) {
     const char = text[reader.index] ?? ''
@@ -113,23 +120,39 @@ export const parseCommand = (text: string): Parsed | undefined => {
     } else if (char === '#' && (reader.index === 0 || SPACE.test(text[reader.index - 1] ?? '') || OPERATOR_CHARS.has(text[reader.index - 1] ?? ''))) {
       const newline = text.indexOf('\n', reader.index)
       reader.index = newline < 0 ? text.length : newline
+    } else if (char === '&' && text[reader.index + 1] === '>') {
+      // `&>file`: both streams go to the file; the `>` is read next.
+      reader.index += 1
     } else if (OPERATOR_CHARS.has(char)) {
+      // `a | b` (not `||`): a's output feeds b.
+      if (char === '|' && text[reader.index + 1] !== '|' && text[reader.index - 1] !== '|') isOutputElsewhere[commands.length - 1] = true
       // `&` after a `>` is a file descriptor (2>&1), not a separator.
-      if (!(char === '&' && /[<>]/.test(text[reader.index - 1] ?? '')) && commands.at(-1)?.length !== 0) commands.push([])
+      if (!(char === '&' && /[<>]/.test(text[reader.index - 1] ?? '')) && commands.at(-1)?.length !== 0) {
+        commands.push([])
+        isOutputElsewhere.push(false)
+      }
       reader.index += 1
     } else if (char === '<' || char === '>') {
       if (text.startsWith('<<', reader.index)) hasHeredoc = true
       // "2>file": the digit belongs to the redirection.
       const previous = commands.at(-1)?.at(-1)
-      if (previous !== undefined && /^\d+$/.test(previous.value) && previous.segments.at(-1)?.end === reader.index) commands.at(-1)?.pop()
+      const isNumbered = previous !== undefined && /^\d+$/.test(previous.value) && previous.segments.at(-1)?.end === reader.index
+      if (isNumbered) commands.at(-1)?.pop()
+      const start = reader.index
       while (/[<>&|]/.test(text[reader.index] ?? '')) reader.index += 1
+      // `>file`, `1>>file`, `&>file` move standard output; `2>file` and `>&2` do not.
+      const operator = text.slice(start, reader.index)
+      isStdoutTarget = operator.startsWith('>') && !operator.includes('&') && (!isNumbered || previous?.value === '1')
       skipTarget = true
     } else {
       const word = readWord(reader)
       if (word === undefined) return undefined
-      if (skipTarget) skipTarget = false
-      else commands.at(-1)?.push(word)
+      if (skipTarget) {
+        if (isStdoutTarget) isOutputElsewhere[commands.length - 1] = true
+        skipTarget = false
+      } else commands.at(-1)?.push(word)
     }
   }
-  return { commands: commands.filter(command => command.length > 0), hasHeredoc }
+  const kept = commands.map((command, index) => ({ command, isElsewhere: isOutputElsewhere[index] === true })).filter(({ command }) => command.length > 0)
+  return { commands: kept.map(({ command }) => command), isOutputElsewhere: kept.map(({ isElsewhere }) => isElsewhere), hasHeredoc }
 }

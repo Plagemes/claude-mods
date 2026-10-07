@@ -73,8 +73,8 @@ test('it finds the client behind sudo, env assignments, containers and shell cha
   expect(capped(`sudo -u postgres psql -c "select * from t"`)).toBe(`sudo -u postgres psql -c "select * from t LIMIT 50"`)
   expect(capped(`PGPASSWORD=x psql -h db -c "select * from t"`)).toBe(`PGPASSWORD=x psql -h db -c "select * from t LIMIT 50"`)
   expect(capped(`docker exec -it db psql -U app -c "select * from t"`)).toBe(`docker exec -it db psql -U app -c "select * from t LIMIT 50"`)
-  expect(capped(`cd /app && psql -c "select * from t" | head -5 2>&1`)).toBe(`cd /app && psql -c "select * from t LIMIT 50" | head -5 2>&1`)
-  expect(capped(`timeout 20 psql -c "select * from t" > out.txt`)).toBe(`timeout 20 psql -c "select * from t LIMIT 50" > out.txt`)
+  expect(capped(`cd /app && psql -c "select * from t" 2>&1; echo done`)).toBe(`cd /app && psql -c "select * from t LIMIT 50" 2>&1; echo done`)
+  expect(capped(`timeout 20 psql -c "select * from t" 2> err.txt`)).toBe(`timeout 20 psql -c "select * from t LIMIT 50" 2> err.txt`)
   expect(capped(`for t in a b; do psql -c "select * from $t"; done`)).toBe(`for t in a b; do psql -c "select * from $t LIMIT 50"; done`)
 })
 
@@ -133,4 +133,26 @@ test('grouped, joined and CTE queries are capped; aggregate-only ones are not', 
   expect(isCappable('select count(*) as n, max(created_at) from orders where x in (select id from y)')).toBe(false)
   expect(isCappable('select count(*) over () from t')).toBe(true)
   expect(isCappable('')).toBe(false)
+})
+
+test('output saved to a file or read by another command, and client backslash terminators, are left alone', () => {
+  const untouched = [
+    `sqlite3 app.db "select * from users" > users.csv`,
+    `psql -c "select * from users" >> dump.txt`,
+    `psql -c "select * from users" &> out.txt`,
+    `psql -c "select email from users" | wc -l`,
+    `mysql -e "select * from users" | grep alice`,
+    `psql -o users.txt -c "select * from users"`,
+    `psql --output=users.txt -c "select * from users"`,
+    `mysql --tee=out.log -e "select * from users"`,
+    `sqlite3 app.db ".output users.csv" "select * from users"`,
+    `mysql -e "select * from users\\G"`,
+    `psql -c "select * from users \\gx"`,
+  ]
+  for (const command of untouched) expect(`${command} => ${capped(command)}`).toBe(`${command} => undefined`)
+  // Only standard output counts: errors to a file, or a chain with ||, still get the cap.
+  expect(capped(`psql -c "select * from t" 2>/dev/null`)).toBe(`psql -c "select * from t LIMIT 50" 2>/dev/null`)
+  expect(capped(`psql -c "select * from t" 2>&1`)).toBe(`psql -c "select * from t LIMIT 50" 2>&1`)
+  expect(capped(`psql -c "select * from t" || echo failed`)).toBe(`psql -c "select * from t LIMIT 50" || echo failed`)
+  expect(capped(`cat ids.txt | psql -c "select * from t"`)).toBe(`cat ids.txt | psql -c "select * from t LIMIT 50"`)
 })

@@ -136,10 +136,10 @@ async function clearOkStatus($: EngineInterface): Promise<void> {
   if (view === null || (view.generate?.status === 'ok' && view.missing === null)) $.ui.status(undefined)
 }
 
-async function publish($: EngineInterface, project: Project, schema: string, generate: Generate | null, missing: string[] | null): Promise<void> {
+async function publish($: EngineInterface, project: Project, schema: string, generation: Generate | null, missing: string[] | null): Promise<void> {
   const view = await update($, viewAtom, (previous: View | null): View => {
-    const isSame = previous !== null && previous.root === project.root && JSON.stringify(previous.missing) === JSON.stringify(missing) && previous.generate?.error === generate?.error
-    return { kind: project.kind, root: project.root, schema, generate, missing, isHidden: isSame && previous.isHidden }
+    const isSame = previous !== null && previous.root === project.root && JSON.stringify(previous.missing) === JSON.stringify(missing) && previous.generate?.error === generation?.error
+    return { kind: project.kind, root: project.root, schema, generate: generation, missing, isHidden: isSame && previous.isHidden }
   })
   showStatus($, view)
 }

@@ -60,7 +60,8 @@ export const maskSql = (sql: string): Masked => {
       blank(close < 0 ? sql.length : close + tag.length, false)
     } else {
       // "#" starts a comment in MySQL and is an operator in PostgreSQL: not worth guessing.
-      if (char === '#') isUnsure = true
+      // A backslash ends the query with a client command (mysql `\G`, psql `\gx`): a LIMIT after it breaks it.
+      if (char === '#' || char === '\\') isUnsure = true
       text += char
       index += 1
     }
