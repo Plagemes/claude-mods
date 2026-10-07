@@ -1,0 +1,24 @@
+{
+  "name": "main-branch-warn",
+  "version": "1.0.0",
+  "description": "Warns you the moment Claude starts editing files directly on main or master.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#main-branch-warn",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "git", "branch", "guard"],
+  "userConfig": {
+    "branches": {
+      "type": "string",
+      "title": "Protected branches",
+      "description": "Comma-separated branch names that count as \"main\".",
+      "default": "main,master,trunk"
+    },
+    "block": {
+      "type": "boolean",
+      "title": "Block edits",
+      "description": "Refuse Edit/Write/NotebookEdit on those branches instead of only warning, and tell Claude to branch first.",
+      "default": false
+    }
+  }
+}

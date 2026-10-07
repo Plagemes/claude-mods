@@ -1,0 +1,24 @@
+{
+  "name": "git-status-line",
+  "version": "1.0.0",
+  "description": "Shows the current branch, ahead/behind and dirty file count in the status line.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#git-status-line",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "git", "status-line", "branch"],
+  "userConfig": {
+    "debounceMs": {
+      "type": "number",
+      "title": "Debounce (ms)",
+      "description": "After a tool call, wait this long for more activity before running git status once.",
+      "default": 600
+    },
+    "showUntracked": {
+      "type": "boolean",
+      "title": "Count untracked files",
+      "description": "Include untracked files in the dirty count. Turn off in repositories where git status is slow.",
+      "default": true
+    }
+  }
+}

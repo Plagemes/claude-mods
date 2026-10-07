@@ -1,0 +1,18 @@
+{
+  "name": "co-author-stamp",
+  "version": "1.0.0",
+  "description": "Adds configurable Co-authored-by trailers to commits Claude makes.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#co-author-stamp",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "git", "commit", "attribution"],
+  "userConfig": {
+    "coAuthors": {
+      "type": "string",
+      "title": "Co-authors",
+      "description": "Comma-separated \"Name <email>\" entries added as Co-authored-by trailers, e.g. Ada Lovelace <ada@example.com>, Pair Bot <bot@example.com>. Empty = do nothing.",
+      "default": ""
+    }
+  }
+}

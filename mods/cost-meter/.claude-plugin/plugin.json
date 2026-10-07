@@ -1,0 +1,25 @@
+{
+  "name": "cost-meter",
+  "version": "1.0.0",
+  "description": "Live session cost estimate in the status line, from real token usage.",
+  "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
+  "homepage": "https://plagemes.github.io/claude-mods/#cost-meter",
+  "repository": "https://github.com/plagemes/claude-mods",
+  "license": "MIT",
+  "keywords": ["claude-mods", "cost", "tokens", "status-line"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "pricing": {
+      "type": "string",
+      "title": "Pricing override (JSON)",
+      "description": "USD per million tokens, keyed by a model-id fragment, e.g. {\"opus\":{\"input\":5,\"output\":25,\"cacheRead\":0.5,\"cacheWrite\":6.25}}. cacheRead and cacheWrite default to 0.1x and 1.25x input. Empty = built-in table.",
+      "default": ""
+    },
+    "showTokens": {
+      "type": "boolean",
+      "title": "Show token count",
+      "description": "Add the total token count (input, output and cache) after the cost.",
+      "default": true
+    }
+  }
+}
