@@ -33,6 +33,8 @@
 
 **Claude Mods** is a curated collection of more than 200 open-source mods for Claude Code: small plugins of function hooks that add guardrails, live panes, status lines, agent controls and stack-aware checks to the terminal and the desktop Code tab. Install one store, then browse, install and update everything else without leaving Claude Code. Each mod does one thing, works with zero configuration, and is a folder of plain TypeScript you can read in a minute.
 
+<p align="center"><img src="assets/demo-secret-shield.svg" alt="secret-shield blocking Claude from writing an API key" width="760"></p>
+
 ## What's new in v2
 
 **v2.0.0 turns the collection into a platform: 118 new mods (219 in all, in 21 categories) and a shared core that lets them work together.** The store and the two install commands stay the same, and every v1 mod keeps its name and install command. Browse the new ones with `/mods`, or turn on the **New** filter in the [web store](https://plagemes.github.io/claude-mods/#new).
@@ -92,6 +94,12 @@ Search, filter by category, then install, update or uninstall from a pane inside
 
 > [!NOTE]
 > Claude Mods needs Claude Code **2.1.292** or later. Run `/reload-plugins` after installing or updating a mod.
+
+### Try these 3 first
+
+- **secret-shield**: refuses any edit or write that would put an API key, token or private key in a file. `/plugin install secret-shield@claude-mods`
+- **auto-checkpoint**: snapshots your work tree as a git ref before each editing turn, so `/rollback` can undo it. `/plugin install auto-checkpoint@claude-mods`
+- **cost-meter**: shows a live session cost estimate in the status line, from the token usage the API reports. `/plugin install cost-meter@claude-mods`
 
 <p align="center">
   <a href="https://plagemes.github.io/claude-mods/#store">
@@ -162,6 +170,14 @@ Search, filter by category, then install, update or uninstall from a pane inside
     </td>
   </tr>
 </table>
+
+## Limits
+
+The guardrail mods are hook-based checks on tool calls, not a sandbox around Claude.
+
+- They match patterns, so they catch the common cases and can miss unusual ones. [secret-shield](mods/secret-shield) only knows well-known key formats and high-entropy values on names like `*_KEY` or `*_TOKEN`; a secret in an unknown format slips through.
+- secret-shield scans the text being written. It does not look at what is already on disk or at secrets written through `Bash`.
+- Treat them as a safety net, not a guarantee: keep real secrets out of the repo and your backups current. The cost figure in cost-meter is an estimate, not your invoice.
 
 ## Catalog
 
