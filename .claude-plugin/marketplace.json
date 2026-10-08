@@ -31,7 +31,7 @@
       "name": "mods-hub",
       "source": "./mods/mods-hub",
       "description": "The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3726,7 +3726,7 @@
       "name": "whatsapp-bridge",
       "source": "./mods/whatsapp-bridge",
       "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"

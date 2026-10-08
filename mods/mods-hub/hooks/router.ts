@@ -147,7 +147,22 @@ export function route(input: Pick<ModsNotifyInput, 'level' | 'audience' | 'kind'
 /** The toast line of a notification: `✓ ci-watch: CI passed — main · 3m`. */
 export function noticeLine(notice: { level: ModsLevel; source: string; title: string; body?: string }): string {
   const body = notice.body === undefined || notice.body === '' ? '' : ` — ${notice.body}`
-  return `${GLYPH[notice.level]} ${notice.source}: ${notice.title}${body}`.slice(0, 300)
+  return `${GLYPH[notice.level]} ${notice.source}: ${withoutSource(notice.title, notice.source)}${body}`.slice(0, 300)
+}
+
+const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * A notice's or toast's text without the source's own name in front ("speak-summary: …", "🔇 speak-summary: …",
+ * "mods-hub: speak-summary: …"): the hub names the source itself, and the engine prefixes the toasts it shows with
+ * the plugin's name, so a name the text repeats would be stacked two or three times. A leading glyph stays.
+ */
+export function withoutSource(text: string, source: string): string {
+  const names = [...new Set(['mods-hub', source])].filter(name => name !== '').map(escape).join('|')
+  const prefix = new RegExp(`^(\\s*(?:[^\\p{L}\\p{N}\\s]+\\s+)?)(?:${names})\\s*:\\s*`, 'iu')
+  let result = text
+  for (let match = prefix.exec(result); match !== null && result.length > match[0].length; match = prefix.exec(result)) result = `${match[1] ?? ''}${result.slice(match[0].length)}`
+  return result
 }
 
 export type HubCommand =

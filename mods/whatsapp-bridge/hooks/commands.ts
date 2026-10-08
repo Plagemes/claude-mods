@@ -1,3 +1,5 @@
+import { isHelpText } from './inbound'
+
 /** What an owner's WhatsApp message asks for. Anything that is not a command is a `prompt` for Claude. */
 export type PhoneCommand =
   | { kind: 'status' }
@@ -79,6 +81,8 @@ export const parseCommand = (raw: string, pin = ''): ParsedCommand => {
 }
 
 const commandOf = (text: string): PhoneCommand => {
+  // "/help" and "/aiuto" are the bridge's help, never a slash command run in a session.
+  if (isHelpText(text)) return { kind: 'help' }
   const slash = SLASH.exec(text)
   if (slash !== null) return { kind: 'slash', command: slash[1] ?? '', args: (slash[2] ?? '').trim() }
   const queue = QUEUE.exec(text)
@@ -113,6 +117,8 @@ export const HELP_TEXT = [
   '• *interact on|off* · *night* / notte — may Claude ask you things',
   '• *digest* / riepilogo · *cost* / costo · *report* / grafico',
   '• *queue <task>* / coda <task> — save a task for later',
-  '• anything else becomes a prompt; start with *#label* or *@project* to pick a session, or reply to its message',
+  '• ask anything ("what are you doing?", "status of the build?"): answered right away, nothing runs',
+  '• ask for work ("fix the failing test"): you confirm, then Claude runs it and posts the result here',
+  '• start with *#label* or *@project* to pick a session, or reply to its message',
   '• react 👍 approve · ❌ reject · ⏸ pause · 🔁 retry on a question or alert',
 ].join('\n')

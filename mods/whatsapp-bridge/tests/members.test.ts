@@ -24,7 +24,7 @@ test('a member’s question is answered from the transcript by a fork, with cost
   expect(seen.submitted).toEqual([])
 })
 
-test('members cannot command: chatter is ignored, "? stop" is only a question, the owner’s stop works', async ($, on) => {
+test('members cannot command: chatter is ignored, "? stop" is refused, a question is answered, the owner’s stop works', async ($, on) => {
   const seen = world(on, { files: noConfirm() })
   await lead($, seen)
   await $.turn.start({ text: 'refactor the cart', turnId: 'turn-1' })
@@ -36,9 +36,21 @@ test('members cannot command: chatter is ignored, "? stop" is only a question, t
   expect(sends(seen)).toEqual([])
 
   arrive(seen, { chatId: GROUP, author: MEMBER, body: '? stop' })
+  arrive(seen, { chatId: GROUP, author: MEMBER, body: 'claude run the tests and deploy' })
   await pass(seen, 12_000)
-  expect(seen.forks).toHaveLength(1)
+  expect(seen.forks).toEqual([])
+  expect(seen.completions).toEqual([])
   expect(seen.aborted).toEqual([])
+  expect(seen.submitted).toEqual([])
+  expect(sends(seen).map(send => send.text)).toEqual([expect.stringContaining('Only the owner can ask Claude to do things'), expect.stringContaining('Only the owner can ask Claude to do things')])
+
+  arrive(seen, { chatId: GROUP, author: MEMBER, body: '? how is the cart refactor going?' })
+  await pass(seen, 12_000)
+  // A turn runs: the answer comes from one completion over the facts, not a fork of a transcript mid-turn.
+  expect(seen.completions).toHaveLength(1)
+  expect(seen.completions[0]).toContain('not the owner')
+  expect(seen.completions[0]).not.toContain('src/secret-notes.md')
+  expect(seen.completions[0]).toContain('2 file(s) changed')
 
   arrive(seen, { chatId: GROUP, author: OWNER_CHAT, body: 'ferma' })
   await pass(seen, 12_000)
