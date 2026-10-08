@@ -48,13 +48,16 @@ import {
   estimateUsd,
   groupKeyFor,
   groupNameFor,
+  helperCandidates,
   inboundHealth,
   inboxText,
   isMemberCommand,
   maskChat,
   normalizeJid,
+  parseGroupCreate,
   parseGroupKey,
   parseInvitees,
+  parseMembers,
   qaPrompt,
   takeQa,
 } from './inbound'
@@ -202,7 +205,7 @@ const PARKED_QUESTIONS_KEEP = 10
 const tabAtom = atom({ plugin: 'whatsapp-bridge', key: 'tab' } as const, 'status' as WaTab)
 const connectionAtom = atom({ plugin: 'whatsapp-bridge', key: 'connection' } as const, EMPTY_CONNECTION)
 const setupAtom = atom({ plugin: 'whatsapp-bridge', key: 'setup' } as const, EMPTY_SETUP)
-const groupAtom = atom({ plugin: 'whatsapp-bridge', key: 'group' } as const, { link: null, note: '', choices: [] } as WaGroupCard)
+const groupAtom = atom({ plugin: 'whatsapp-bridge', key: 'group' } as const, { link: null, note: '', choices: [], removeHelper: false } as WaGroupCard)
 const sessionsAtom = atom({ plugin: 'whatsapp-bridge', key: 'sessions' } as const, [] as WaSessionInfo[])
 const conversationAtom = atom({ plugin: 'whatsapp-bridge', key: 'conversation' } as const, [] as WaLogEntry[])
 const prefsAtom = atom({ plugin: 'whatsapp-bridge', key: 'prefs' } as const, defaultPrefs(readSettings({})))
@@ -382,6 +385,8 @@ type Runtime = {
   ownerChats: string[]
   /** What the person typed in the Groups name field, kept out of state so typing never redraws the pane. */
   groupNameDraft: string
+  /** The Members field as typed (null: untouched, so the proposed helper numbers apply). */
+  groupMembersDraft: string | null
   groupInviteDraft: string
   /** The live sessions as the last refresh found them (the Groups rows' status). */
   lastSessions: WaSessionInfo[]
@@ -479,6 +484,7 @@ const newRuntime = (settings: Settings): Runtime => ({
   isHubGreeted: false,
   ownerChats: [],
   groupNameDraft: '',
+  groupMembersDraft: null,
   groupInviteDraft: '',
   lastSessions: [],
 })
@@ -1200,7 +1206,7 @@ function inBackground($: EngineInterface, rt: Runtime, work: () => Promise<strin
 
 async function refreshGroupCard($: EngineInterface, rt: Runtime, note: string): Promise<void> {
   const link = projectGroup(rt) ?? null
-  await putIf(await read($, groupAtom), card => ({ link, note: note || (link === null ? card.note : ''), choices: link === null ? card.choices : [] }), fn => update($, groupAtom, fn))
+  await putIf(await read($, groupAtom), card => ({ ...card, link, note: note || (link === null ? card.note : ''), choices: link === null ? card.choices : [] }), fn => update($, groupAtom, fn))
   await putIf(await read($, groupsAtom), () => groupRows(rt, rt.lastSessions), fn => update($, groupsAtom, fn))
 }
 
@@ -1220,17 +1226,43 @@ function groupRows(rt: Runtime, sessions: readonly WaSessionInfo[]): WaGroupRow[
 /** The name a new group of this session gets: "Claude · <project>", per session "Claude · <project> · <label>". */
 const defaultGroupName = (rt: Runtime): string => groupNameFor(rt.project, rt.label, rt.settings.groupScope)
 
+/** Shown instead of calling OpenWA when the linked number is the owner's own and nobody else was named: WhatsApp refuses a one-member group. */
+const NEEDS_MEMBER_NOTE =
+  'WhatsApp needs at least one other member to create a group: add a number (a teammate or your second phone), or create the group on your phone and link it below.'
+
+type GroupCreateOptions = { members?: string; removeHelper?: boolean; isPane?: boolean }
+
+/** Other numbers worth proposing as a group's member (self mode): owners and allowed direct chats that are not the linked number. */
+const proposedMembers = (rt: Runtime): string[] => helperCandidates(rt.owners, rt.settings.extraChats, rt.botPhone)
+
+/** The Members field's text: what was typed, else (self mode) the proposed numbers. */
+const membersFieldText = (rt: Runtime): string => rt.groupMembersDraft ?? (rt.mode === 'self' ? proposedMembers(rt).map(n => `+${n}`).join(', ') : '')
+
+/** Fills the pane note and the "Link an existing group" list (from GET /groups) and returns the groups. */
+async function showGroupChoices($: EngineInterface, rt: Runtime, note: string): Promise<void> {
+  const listed = await waCall($, rt, api.groups(rt.sessionId))
+  const choices = parseGroups(listed.json).map(({ id, name: title }) => ({ id, name: title }))
+  await putIf(await read($, groupAtom), card => ({ ...card, note, choices }), fn => update($, groupAtom, fn))
+}
+
 /**
- * Creates a WhatsApp group for this project (or session, by the group scope) with the owner in it, links it, and posts
- * a welcome that mentions "help". Group creation is Baileys-only in OpenWA (501 on whatsapp-web.js): then the answer
- * says so and offers the manual way (create it on the phone with the bot in it, then link it here).
+ * Creates a WhatsApp group for this project (or session, by the group scope), links it, and posts a welcome that
+ * mentions "help". Members: the owners (bot number) plus the extra numbers typed; with the owner's own number linked
+ * the owner is the creator, and OpenWA's CreateGroupDto needs a non-empty `participants`, so at least one other number
+ * is required (without one nothing is called and the pane note says what to do). Group creation is Baileys-only in
+ * OpenWA (501 on whatsapp-web.js): then the answer offers the manual way (create it on the phone, then link it here).
  */
-async function createGroup($: EngineInterface, rt: Runtime, requested: string): Promise<string> {
+async function createGroup($: EngineInterface, rt: Runtime, requested: string, options: GroupCreateOptions = {}): Promise<string> {
   if (!isConfigured(rt)) return 'Set up the connection first: /wa setup'
   const name = (requested.trim() || defaultGroupName(rt)).slice(0, 100)
-  // With the owner's own number linked the owner is the creator: nobody else needs adding.
-  const participants = rt.mode === 'self' ? [] : rt.owners.map(directChat)
-  const created = await waCall($, rt, api.createGroup(rt.sessionId, name, participants))
+  const isSelf = rt.mode === 'self'
+  const extras = parseMembers(options.members ?? '').filter(number => number !== rt.botPhone)
+  const phones = isSelf ? extras : [...new Set([...rt.owners.map(canonicalOwner), ...extras])]
+  if (isSelf && phones.length === 0) {
+    await showGroupChoices($, rt, NEEDS_MEMBER_NOTE)
+    return options.isPane === true ? '' : NEEDS_MEMBER_NOTE
+  }
+  const created = await waCall($, rt, api.createGroup(rt.sessionId, name, phones.map(directChat)))
   const groupId = isRecord(created.json) && typeof created.json.id === 'string' ? created.json.id : ''
   if (!created.ok || groupId === '') {
     const isUnsupported = created.status === 501
@@ -1239,10 +1271,14 @@ async function createGroup($: EngineInterface, rt: Runtime, requested: string): 
       : created.status === 403
         ? 'the key is chat-scoped or WhatsApp refused it'
         : failure(created)
-    const manual = `Create "${name}" on your phone${rt.mode === 'self' ? '' : ` with the bot number${rt.botPhone !== '' ? ` (+${rt.botPhone})` : ''} in it`}, then pick it under "Link an existing group" (/wa link-project).`
-    const listed = await waCall($, rt, api.groups(rt.sessionId))
-    await putIf(await read($, groupAtom), card => ({ ...card, note: `${isUnsupported ? 'Group creation is not supported by this engine.' : 'Could not create the group.'} ${manual}`, choices: parseGroups(listed.json).map(({ id, name: title }) => ({ id, name: title })) }), fn => update($, groupAtom, fn))
-    return `Could not create the group: ${why}. ${manual}`
+    const manual = `Create "${name}" on your phone${isSelf ? '' : ` with the bot number${rt.botPhone !== '' ? ` (+${rt.botPhone})` : ''} in it`}, then pick it under "Link an existing group" (/wa link-project).`
+    await showGroupChoices($, rt, `${isUnsupported ? 'Group creation is not supported by this engine.' : `Could not create the group: ${why}.`} ${manual}`)
+    return options.isPane === true ? 'Could not create the group: see the note in the panel.' : `Could not create the group: ${why}. ${manual}`
+  }
+  let removed = ''
+  if (isSelf && options.removeHelper === true) {
+    const dropped = await waCall($, rt, api.removeParticipants(rt.sessionId, groupId, phones.map(directChat)))
+    removed = dropped.ok ? ' The helper member was removed again.' : ` The helper member could not be removed (${failure(dropped)}).`
   }
   await linkGroup($, rt, groupId, name, ownGroupKey(rt))
   void waCall($, rt, api.groupDescription(rt.sessionId, groupId, `Claude Code updates for ${rt.project}. Owner: send "help". Members: start with "?" to ask about progress, "bug:" to report a bug.`))
@@ -1251,7 +1287,15 @@ async function createGroup($: EngineInterface, rt: Runtime, requested: string): 
     kind: 'welcome',
     text: `🤖 This group gets Claude Code updates for *${rt.project}*${rt.settings.groupScope === 'session' ? ` (session #${rt.label})` : ''}.\nSend *help* for what you can do from here. Ask anything ("what are you doing?"); members start with *?*, or report a bug with *bug:* …`,
   })
-  return `Created the WhatsApp group "${name}" and linked it to ${rt.settings.groupScope === 'session' ? `#${rt.label} (${rt.project})` : rt.project}.`
+  return `Created the WhatsApp group "${name}" and linked it to ${rt.settings.groupScope === 'session' ? `#${rt.label} (${rt.project})` : rt.project}.${removed}`
+}
+
+/** The Members field and the helper checkbox as the pane's Create presses read them. */
+const paneCreateOptions = (rt: Runtime, card: WaGroupCard): GroupCreateOptions => ({ members: membersFieldText(rt), removeHelper: card.removeHelper, isPane: true })
+
+async function toggleRemoveHelper($: EngineInterface, rt: Runtime): Promise<string> {
+  await putIf(await read($, groupAtom), card => ({ ...card, removeHelper: !card.removeHelper }), fn => update($, groupAtom, fn))
+  return ''
 }
 
 async function linkGroup($: EngineInterface, rt: Runtime, groupId: string, name: string, key: string): Promise<void> {
@@ -1363,7 +1407,7 @@ const groupListText = (groups: readonly { id: string; name: string; participants
 /** `/wa groups`: the managed groups, numbered for `/wa group … <n>`. */
 const managedGroupsText = (rt: Runtime): string => {
   const rows = groupRows(rt, rt.lastSessions)
-  if (rows.length === 0) return `No managed group yet. Create one: /wa group create [name] (default "${defaultGroupName(rt)}").`
+  if (rows.length === 0) return `No managed group yet. Create one: /wa group create [name] [--with +39…,+44…] (default "${defaultGroupName(rt)}").`
   return [
     'Managed groups — /wa group rename|link|invite|unlink|leave <n>:',
     ...rows.map((row, index) => `${index + 1}. ${row.name} → ${row.routesTo} · ${plural(row.members, 'member')} · ${row.status === 'this' ? 'this session' : row.status === 'live' ? 'live' : 'no session running'}`),
@@ -3569,8 +3613,10 @@ async function runGroup($: EngineInterface, rt: Runtime, args: string): Promise<
   const ref = numbered?.[1] ?? ''
   const more = numbered !== null ? (numbered[2] ?? '').trim() : tail
   switch (verb.toLowerCase()) {
-    case 'create':
-      return createGroup($, rt, tail)
+    case 'create': {
+      const { name, members, removeHelper } = parseGroupCreate(tail)
+      return createGroup($, rt, name, { members, removeHelper })
+    }
     case 'rename':
       return renameGroup($, rt, ref, more)
     case 'link':
@@ -3583,7 +3629,7 @@ async function runGroup($: EngineInterface, rt: Runtime, args: string): Promise<
     case 'leave':
       return unlinkGroup($, rt, ref, true)
     default:
-      return `${managedGroupsText(rt)}\n\nUsage: /wa group create [name] · rename [n] <name> · link [n] · invite [n] <+numbers> · unlink [n] · leave [n]`
+      return `${managedGroupsText(rt)}\n\nUsage: /wa group create [name] [--with +39…,+44…] [--remove-helper] · rename [n] <name> · link [n] · invite [n] <+numbers> · unlink [n] · leave [n]`
   }
 }
 
@@ -3972,11 +4018,35 @@ function drawGroups(
               onInput={value => {
                 rt.groupNameDraft = value
               }}
-              onSubmit={value => void paneAction($, rt, () => createGroup($, rt, value))}
+              onSubmit={value => void paneAction($, rt, () => createGroup($, rt, value, paneCreateOptions(rt, card)))}
+            />
+          )}
+          {Input !== undefined && (
+            <Input
+              key="grp-members"
+              label="Members "
+              placeholder="+39333…, +44…"
+              value={membersFieldText(rt)}
+              submitLabel="create"
+              onInput={value => {
+                rt.groupMembersDraft = value
+              }}
+              onSubmit={value => {
+                rt.groupMembersDraft = value
+                void paneAction($, rt, () => createGroup($, rt, rt.groupNameDraft, paneCreateOptions(rt, card)))
+              }}
+            />
+          )}
+          {rt.mode === 'self' && (
+            <Button
+              key="grp-remove-helper"
+              plain
+              label={`${card.removeHelper ? '☑' : '☐'} Remove the helper member afterwards`}
+              onPress={() => void paneAction($, rt, () => toggleRemoveHelper($, rt))}
             />
           )}
           <Box flexDirection="row" gap={1} flexWrap="wrap">
-            <Button key="grp-create-btn" label={`Create group for ${target}`} variant="primary" onPress={() => void paneAction($, rt, () => createGroup($, rt, rt.groupNameDraft))} />
+            <Button key="grp-create-btn" label={`Create group for ${target}`} variant="primary" onPress={() => void paneAction($, rt, () => createGroup($, rt, rt.groupNameDraft, paneCreateOptions(rt, card)))} />
             <Button key="grp-list" plain label="Link an existing group" onPress={() => void paneAction($, rt, () => linkProject($, rt, '#list'))} />
           </Box>
           {card.note !== '' && <Text dimColor wrap="wrap">{card.note}</Text>}

@@ -6512,7 +6512,7 @@
       "category": "notifications",
       "tier": "complex",
       "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "keywords": [
         "claude-mods",
         "notifications",

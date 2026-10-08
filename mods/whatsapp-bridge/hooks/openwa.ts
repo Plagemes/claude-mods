@@ -22,7 +22,7 @@ export type WaRow = {
 export type WaSessionRecord = { id: string; name: string; status: string; phone: string; pushName: string; lastError: string }
 
 /** One OpenWA call. `key` sends that key instead of the stored one (the setup's one-time admin key). */
-export type Request = { method: 'GET' | 'POST' | 'PUT'; path: string; body?: Record<string, unknown>; isPublic?: boolean; key?: string }
+export type Request = { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; path: string; body?: Record<string, unknown>; isPublic?: boolean; key?: string }
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '')
 const record = (value: unknown): Record<string, unknown> => (typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {})
@@ -90,6 +90,12 @@ export const api = {
     path: `/sessions/${enc(id)}/groups/${enc(groupId)}/participants`,
     body: { participants },
   }),
+  /** `DELETE …/groups/{groupId}/participants` `{ participants }` (openapi.json v0.24.0: "Remove participants from a group"). */
+  removeParticipants: (id: string, groupId: string, participants: string[]): Request => ({
+    method: 'DELETE',
+    path: `/sessions/${enc(id)}/groups/${enc(groupId)}/participants`,
+    body: { participants },
+  }),
   /** `POST …/groups/{groupId}/leave`. */
   leaveGroup: (id: string, groupId: string): Request => ({ method: 'POST', path: `/sessions/${enc(id)}/groups/${enc(groupId)}/leave` }),
   inviteCode: (id: string, groupId: string): Request => ({ method: 'GET', path: `/sessions/${enc(id)}/groups/${enc(groupId)}/invite-code` }),
@@ -107,7 +113,8 @@ export const parseJson = (text: string): unknown => {
 /** The error text of an OpenWA error body (`message` may be a list), or the status. */
 export const errorText = (status: number, text: string): string => {
   const body = record(parseJson(text))
-  const message = Array.isArray(body.message) ? body.message.map(str).join('; ') : str(body.message)
+  const messageOf = (item: unknown): string => (typeof item === 'object' && item !== null ? str(record(item).message) || Object.values(record(record(item).constraints)).map(str).join(', ') : str(item))
+  const message = Array.isArray(body.message) ? body.message.map(messageOf).filter(one => one !== '').join('; ') : messageOf(body.message)
   const code = str(body.code)
   return `${status}${code !== '' ? ` ${code}` : ''}${message !== '' ? `: ${message}` : ''}`
 }

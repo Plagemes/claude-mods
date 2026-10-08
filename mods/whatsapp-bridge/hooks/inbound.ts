@@ -208,3 +208,50 @@ export const parseInvitees = (text: string): string[] =>
         .filter(digits => digits.length >= 6 && digits.length <= 15),
     ),
   ]
+
+/** Longest phone number WhatsApp accepts (E.164). */
+const PHONE_MAX_DIGITS = 15
+const PHONE_MIN_DIGITS = 6
+/** A whitespace-separated token with at least this many digits is a whole number by itself (`393331112222 393331113333`). */
+const WHOLE_NUMBER_DIGITS = 8
+
+const phoneDigits = (raw: string): string => {
+  const digits = canonicalOwner(raw)
+  return digits.length >= PHONE_MIN_DIGITS && digits.length <= PHONE_MAX_DIGITS ? digits : ''
+}
+
+/**
+ * The members typed for a new group: numbers separated by commas, semicolons, new lines or spaces (`+39 333 111 2222`
+ * stays one number; `+39333… +44…` and `393331112222 393331113333` are two), as unique digit strings.
+ */
+export const parseMembers = (text: string): string[] => {
+  const numbers = text.split(/[,;\n]+/).flatMap(part => {
+    const trimmed = part.trim()
+    const plusParts = trimmed.split(/\s*(?=\+)/).filter(one => one !== '')
+    if (plusParts.length > 1) return plusParts
+    const tokens = trimmed.split(/\s+/).filter(one => one !== '')
+    return tokens.length > 1 && tokens.every(token => token.replace(/\D/g, '').length >= WHOLE_NUMBER_DIGITS) ? tokens : [trimmed]
+  })
+  return [...new Set(numbers.map(phoneDigits).filter(digits => digits !== ''))]
+}
+
+/** `[name] [--with +39…,+44…] [--remove-helper]` after `/wa group create`. */
+export const parseGroupCreate = (tail: string): { name: string; members: string; removeHelper: boolean } => {
+  const removeHelper = /(^|\s)--remove-helper(?=\s|$)/.test(tail)
+  const rest = tail.replace(/(^|\s)--remove-helper(?=\s|$)/g, ' ')
+  const at = rest.search(/(^|\s)--with(?=\s|=|$)/)
+  if (at < 0) return { name: rest.trim(), members: '', removeHelper }
+  const after = rest.slice(at).replace(/^\s*--with[\s=]*/, '')
+  const stop = after.search(/\s--\S/)
+  return { name: rest.slice(0, at).trim(), members: (stop < 0 ? after : after.slice(0, stop)).trim(), removeHelper }
+}
+
+/** The numbers worth proposing as a group's other member: owners and allowed direct chats that are not the linked number. */
+export const helperCandidates = (owners: readonly string[], allowedChats: readonly string[], ownPhone: string): string[] =>
+  [
+    ...new Set(
+      [...owners, ...allowedChats.filter(chat => normalizeJid(chat).endsWith('@c.us')).map(chat => normalizeJid(chat).split('@')[0] ?? '')]
+        .map(phoneDigits)
+        .filter(digits => digits !== '' && digits !== ownPhone),
+    ),
+  ]

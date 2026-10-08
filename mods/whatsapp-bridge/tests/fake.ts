@@ -41,6 +41,8 @@ export type FakeWa = {
   canCreateGroups: boolean
   rows: FakeRow[]
   groups: { id: string; name: string; participants: string[] }[]
+  /** When set, creating a group answers this instead. */
+  createError?: { status: number; body: unknown }
   calls: { method: string; path: string; body: Record<string, unknown> }[]
   next: number
   /** The next this many sends fail with a 500 (the engine restarting). */
@@ -206,6 +208,9 @@ function openwa(seen: World, method: string, url: string, body: Record<string, u
   if (route === `/sessions/${SESSION}/groups` && method === 'GET') return json(200, wa.groups.map(group => ({ id: group.id, name: group.name, participantsCount: group.participants.length })))
   if (route === `/sessions/${SESSION}/groups` && method === 'POST') {
     if (!wa.canCreateGroups) return json(501, { statusCode: 501, message: 'Not supported by the active engine: group creation is Baileys-only.' })
+    if (wa.createError !== undefined) return json(wa.createError.status, wa.createError.body)
+    // OpenWA's CreateGroupDto: `@ArrayNotEmpty() participants`.
+    if (!Array.isArray(body.participants) || body.participants.length === 0) return json(400, { statusCode: 400, message: ['participants should not be empty'], error: 'Bad Request' })
     const id = wa.groups.some(one => one.id === GROUP) ? `1203630000000000${String(wa.groups.length + 1).padStart(2, '0')}@g.us` : GROUP
     const group = { id, name: String(body.name), participants: (body.participants as string[]) ?? [] }
     wa.groups.push(group)
@@ -226,6 +231,11 @@ function openwa(seen: World, method: string, url: string, body: Record<string, u
       const results = asked.map(id => ({ id, success: !wa.refuseAdd.includes(id.split('@')[0] ?? ''), ...(wa.refuseAdd.includes(id.split('@')[0] ?? '') ? { status: 403, message: 'not-authorized' } : { status: 200 }) }))
       group.participants.push(...results.filter(one => one.success).map(one => one.id))
       return json(200, { success: true, message: 'Participants processed', results })
+    }
+    if (groupInfo[2] === '/participants' && method === 'DELETE') {
+      const gone = (body.participants as string[]) ?? []
+      group.participants = group.participants.filter(id => !gone.includes(id))
+      return json(200, { success: true, message: 'Participants processed', results: gone.map(id => ({ id, success: true, status: 200 })) })
     }
     if (groupInfo[2] === '/leave' && method === 'POST') {
       wa.groups = wa.groups.filter(one => one !== group)
