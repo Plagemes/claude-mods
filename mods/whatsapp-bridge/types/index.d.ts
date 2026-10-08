@@ -131,6 +131,8 @@ export type WaGroupCard = {
   link: WaGroupLink | null
   note: string
   choices: { id: string; name: string }[]
+  /** The pane's "Remove the helper member afterwards" checkbox (self mode). */
+  removeHelper: boolean
 }
 
 /** A group member's question (or bug report) and what happened to it. */
