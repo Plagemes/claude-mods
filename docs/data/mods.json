@@ -2399,7 +2399,7 @@
       "category": "notifications",
       "tier": "complex",
       "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "notifications",

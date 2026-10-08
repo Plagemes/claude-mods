@@ -1344,7 +1344,7 @@
       "name": "speak-summary",
       "source": "./mods/speak-summary",
       "description": "Reads a one-line summary of what Claude did out loud when a turn ends.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
