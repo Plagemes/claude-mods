@@ -1,7 +1,7 @@
 # secret-shield
 > Blocks edits and writes that would commit API keys, tokens or private keys.
 
-**Category:** Security & Guardrails · **Version:** 1.0.0
+**Category:** Security & Guardrails · **Version:** 1.1.1
 
 ## What it does
 Before Claude edits or writes a file, secret-shield scans the new text for well-known credential formats:
@@ -39,3 +39,8 @@ only the known key formats are checked, not the high-entropy heuristic, since th
 - It fails closed: if the scan itself throws, the write is denied.
 - With [mods-hub](../mods-hub) installed, every refusal also publishes `secret.detected` for each kind found (where `edit`, action `blocked`, the path) and `risk.blocked` (rule `secret-in-file`, severity `high`); never the value. Without the hub nothing changes.
 - Limits: pattern-based, so a secret in an unknown format slips through, and it does not look at what is already on disk or at secrets written through `Bash`.
+
+## Data and network
+- **Reads:** only the text a write-type tool call (`Edit`, `Write`, `MultiEdit`, `NotebookEdit`) is about to put on disk, plus its target path, and (once per session) this plugin's own `.claude-plugin/plugin.json` to get its version. It does not read the conversation, your files on disk, environment variables, or any credential or token store; the secret patterns it matches are regexes, not stored credentials.
+- **Sends:** nothing over the network. It makes no HTTP requests, opens no sockets and has no telemetry.
+- **The only outbound call** is `$.mods.publish` (and `$.mods.hello` at session start), an in-process call to the separate [mods-hub](../mods-hub) plugin's local event bus, made only when mods-hub is installed. On a refusal it publishes `secret.detected` (kind, `edit`, `blocked`, path) and `risk.blocked` (tool, pattern names, severity, path). The path is passed through the shared redaction; the secret value or its preview is never published. If mods-hub is absent the call fails silently and nothing is sent anywhere.
