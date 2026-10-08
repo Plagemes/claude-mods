@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Give it a goal and success criteria; it plans, delegates, verifies and retries until the criteria pass or it needs you.",
   "author": {
     "name": "Plagemes",

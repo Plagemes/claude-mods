@@ -1,6 +1,6 @@
 {
   "name": "outdated-deps",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "/outdated shows stale dependencies and how risky each upgrade is.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#outdated-deps",

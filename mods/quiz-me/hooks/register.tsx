@@ -4,6 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { Quiz, QuizScore } from '../types'
 import { MAX_QUESTIONS, MIN_QUESTIONS, SYSTEM, keptChange, materialOf, parseQuestions, parseQuizArgs, percent, quizPrompt, statsText } from './quiz'
 import type { Change } from './quiz'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'quiz'
 const PANE_TITLE = 'Quiz'
@@ -308,7 +309,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'quiz-me', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

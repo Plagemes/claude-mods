@@ -134,11 +134,13 @@ How a tab works (verified, section 2): the owner registers it (`registerTab`), t
 on('ui.render', { component: 'Pane', requestId: 'claude-mods' }, async ($, e, next) => {
   if (!(await hubTabIs($, 'router'))) return next(e)      // not our tab: pass through
   const { Box } = $.ui.resolve(e)
-  return <Box flexDirection="column">{await next(e)}{await drawRouter($, e)}</Box>
-})
+  return <Box flexDirection="column">{hubTabBelow(await next(e))}{await drawRouter($, e)}</Box>
+}).catch(async ($, e, next) =>                              // a throw draws a card with Retry, never a blank pane
+  next.error.kind === 're-entry' ? next(e)
+    : paneFailure($.ui.resolve(e), { title: 'router', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }))
 ```
 
-Above the hub, `next(e)` returns the hub's frame (tab strip) and the owner appends its body; beneath it, the hub calls `next(e)` for the body and puts its strip on top. Either way the person sees strip + body, and the owner's buttons, inputs and state reads stay its own. Without the hub, `hubTabIs` reads `undefined` and the hook passes through; the mod keeps its own pane (opened by its own command). `$.mods.showTab` from a command the person typed opens the panel at any width.
+Above the hub, `next(e)` returns the hub's frame (tab strip) and the owner appends its body; beneath it, the hub calls `next(e)` for the body and puts its strip on top. Beneath every plugin `next(e)` is the engine's own drawing (`{ type: 'engine' }`): blank in the terminal, "Nothing to show yet — <plugin> has not drawn in this pane" on the desktop, and under the hub's sized Boxes it made the engine refuse the whole panel. `hubTabBelow` (shared/render-safe.ts) drops it and the hub's empty-tab note; `scripts/check-render.mjs` enforces it. Either way the person sees strip + body, and the owner's buttons, inputs and state reads stay its own. Without the hub, `hubTabIs` reads `undefined` and the hook passes through; the mod keeps its own pane (opened by its own command). `$.mods.showTab` from a command the person typed opens the panel at any width.
 
 **Placement rules** (applied to every mod in section 10):
 

@@ -4,6 +4,7 @@ import type { EngineInterface, PromptOrigin, Register, ToolCallResult } from 'cl
 import type { K8sDryRunApproval as Approval, K8sDryRunObject as K8sObject, K8sDryRunPreview as Preview } from '../types'
 import { approvalKey, findKubectls, parseDeleted, parseDiff, previewArgv } from './kubectl'
 import type { KubectlCall } from './kubectl'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'k8s-diff'
 const DEFAULT_PROD = /(^|[-_./:=\s])(prod|production|prd|live)([-_./:=\s]|$)/i
@@ -351,7 +352,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'k8s-dry-run', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

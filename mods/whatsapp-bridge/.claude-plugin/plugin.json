@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-bridge",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#whatsapp-bridge",

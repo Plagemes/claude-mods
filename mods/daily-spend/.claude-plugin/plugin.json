@@ -1,6 +1,6 @@
 {
   "name": "daily-spend",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Tracks spend per day and week across sessions with a /spend report.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#daily-spend",

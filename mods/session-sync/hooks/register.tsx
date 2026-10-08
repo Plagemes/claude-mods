@@ -40,6 +40,7 @@ import {
   withLease,
   withoutLeasesOf,
 } from './sync'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 // ── Constants ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -697,11 +698,15 @@ export const register: Register = (on, options) => {
     }
     return (
       <Box flexDirection="column">
-        {above}
+        {hubTabBelow(above)}
         {section}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'session-sync', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
     if (!(await hubTabIs($, MISSION_TAB))) return next(e)
@@ -710,11 +715,15 @@ export const register: Register = (on, options) => {
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {section}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'session-sync', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

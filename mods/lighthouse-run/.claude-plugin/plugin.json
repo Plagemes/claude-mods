@@ -1,6 +1,6 @@
 {
   "name": "lighthouse-run",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "/lighthouse runs Lighthouse on a URL and shows performance, a11y, SEO and best-practice scores in a pane.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#lighthouse-run",

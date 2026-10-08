@@ -62,6 +62,7 @@ import {
 import type { Evidence, IntentIndex, IntentScored, ProjectFacts, Scored } from './score'
 import { hasInstallSignal, SIGNAL_TOPICS, signalPicks } from './signals'
 import type { Signal } from './signals'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 type Dollar = EngineInterface
 
@@ -1600,7 +1601,11 @@ export const register: Register = (on, options) => {
     )
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawAdvisor($, e, rt, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawAdvisor($, e, rt, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'mod-advisor', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Advisor tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -1611,11 +1616,15 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawAdvisor($, e, rt, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'mod-advisor', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

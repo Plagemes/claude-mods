@@ -18,6 +18,7 @@ import {
   scrubber,
   stamp,
 } from './timeline'
+import { paneFailure } from './shared/render-safe'
 
 type Dollar = EngineInterface
 /** The full steps of the last build, by id: the pane's state keeps only the step on screen. */
@@ -306,7 +307,11 @@ export const register: Register = on => {
         <Box flexDirection="column" marginTop={1}>{body}</Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'session-replay', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

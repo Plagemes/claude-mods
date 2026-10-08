@@ -4,6 +4,14 @@ All notable changes to Claude Mods are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the collection uses [Semantic Versioning](https://semver.org/).
 Each mod also carries its own version in `mods/<name>/.claude-plugin/plugin.json`.
 
+## [Unreleased]
+
+### Fixed
+
+- **The Claude Mods panel no longer goes blank** ("Nothing to show yet — mods-hub has not drawn in this pane" in Claude Code Desktop, an empty panel in the terminal) on any tab a mod fills. Tab owners composed with `{await next(e)}`; beneath every plugin that is the engine's own drawing, which the engine refuses under the hub's sized Boxes, so it threw away the whole panel. The hub and the 28 tab owners now drop it (`hubTabBelow`, new `shared/render-safe.ts`), and a tab whose owner draws nothing shows a friendly empty state.
+- Every pane (75 mods) now draws a card with **Retry** when its drawing fails, instead of leaving the engine's blank pane; log-tail draws a note for a tail that has ended.
+- New `scripts/check-render.mjs` (in `check-all.sh` and CI) flags render hooks that embed the engine's node, answer nothing, open a pane they do not draw, are unguarded, or wait on slow work.
+
 ## [2.0.0] - 2026-10-07
 
 ### Added

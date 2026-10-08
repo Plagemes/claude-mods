@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { LighthouseRunResult as Result, LighthouseRunView as View } from '../types'
 import { CATEGORY_IDS, CATEGORY_SHORT, band, deltaText, fixPrompt, gaugeSvg, parseReport } from './report'
 import { candidatePorts, pageUrl, portsFromPackage } from './server'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'lighthouse'
 const HISTORY_KEY = 'history'
@@ -325,7 +326,11 @@ export const register: Register = (on, options) => {
         </Text>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'lighthouse-run', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

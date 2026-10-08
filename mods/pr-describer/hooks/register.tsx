@@ -4,6 +4,7 @@ import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 import type { PrDescriberDraft as Draft } from '../types'
 import { FALLBACK_BASES, TEMPLATE_PATHS, parseDescription, promptText, systemPrompt, userPrompt } from './describe'
 import type { BranchContext } from './describe'
+import { paneFailure } from './shared/render-safe'
 
 type Git = { ok: boolean; out: string; err: string }
 type Settings = { model: string; root: string; base: string }
@@ -286,7 +287,11 @@ export const register: Register = (on, options) => {
         )}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'pr-describer', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

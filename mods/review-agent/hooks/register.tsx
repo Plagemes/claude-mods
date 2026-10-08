@@ -3,6 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { ReviewState } from '../types'
 import { countSeverities, describeCounts, isSafeRef, REVIEWER_DESCRIPTION, REVIEWER_PROMPT, SEVERITIES, whyNotReadOnly } from './review'
+import { paneFailure } from './shared/render-safe'
 
 const NAME = 'review-agent'
 const AGENT = 'reviewer'
@@ -255,7 +256,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'review-agent', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 // #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.

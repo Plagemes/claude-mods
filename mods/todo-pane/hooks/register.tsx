@@ -3,6 +3,7 @@ import type { EngineInterface, PluginOptions, Register, RenderElement, RenderInp
 
 import type { TodoPaneItem, TodoPaneStatus } from '../types'
 import { fromTaskList, fromTodoWrite, progressOf, taskEvents, withCreated, withUpdated } from './todos'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'todos'
 /** The hub's shared panel, and this mod's tab in it (order 260: after the platform's fixed tabs and the Changes tab). */
@@ -142,7 +143,11 @@ export const register: Register = (on, options: PluginOptions) => {
     return ran
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTodos($, e, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTodos($, e, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'todo-pane', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Tasks tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -151,11 +156,15 @@ export const register: Register = (on, options: PluginOptions) => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawTodos($, e, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'todo-pane', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** The task list: this mod's own pane, or the Tasks tab of the hub's panel (`isTab`, no Close button). */

@@ -4,6 +4,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 import type { LogTailEntry as Entry, LogTailLine as Line, LogTailStatus as Status, LogTailView as View } from '../types'
 import { compileFilter, kindOf, splitLines, targetOf, uniqueId, visible } from './lines'
 import type { Target } from './lines'
+import { paneFailure } from './shared/render-safe'
 
 const PANE_PREFIX = 'log-tail-'
 const START_LINES = 200
@@ -361,9 +362,10 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: /^log-tail-/ }, async ($, e, next) => {
     const view = await read($, memberOf(viewFamily, e))
-    if (view === null) return next(e)
     const elements = $.ui.resolve(e)
     const { Box, Button, Text } = elements
+    // A pane whose tail this session no longer knows: say so, never leave the engine's blank pane.
+    if (view === null) return <Text dimColor>{'This tail has ended. /tail <file or command> starts a new one.'}</Text>
     // Every surface but mobile draws a text field.
     const Input = 'Input' in elements ? elements.Input : undefined
     const lines = await read($, memberOf(linesFamily, e))
@@ -447,7 +449,11 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'log-tail', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

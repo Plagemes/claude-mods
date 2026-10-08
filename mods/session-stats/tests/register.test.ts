@@ -16,7 +16,7 @@ const PANE = {
 const RUN = { command: 'session-stats', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } } as const
 
 /** The engine beneath the plugin: a session that began at 0 and has cost $1.84. */
-const engine = (on: On, options: { hasLedger?: boolean } = {}) => {
+const engine = (on: On, options: { hasLedger?: boolean; renderBottom?: unknown } = {}) => {
   const clock = mock.clock(on, { now: 0 })
   const opened: string[] = []
   const registered: string[] = []
@@ -32,7 +32,7 @@ const engine = (on: On, options: { hasLedger?: boolean } = {}) => {
     opened.push(e.id)
     return { value: { isPlaced: true } }
   })
-  on('ui.render', () => ({ type: 'Box' }))
+  on('ui.render', () => (options.renderBottom ?? { type: 'Box' }) as never)
   on('prompt.submit', ($, e) => ({ text: e.text }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('tool.call', ($, e) => {
@@ -229,4 +229,42 @@ test('regression: session.start waits on nothing slow; the hub hello and the fir
   await clock.advance(1_500)
   expect(hub.hellos).toHaveLength(1)
   expect(hub.tabs.map(tab => tab.id)).toEqual(['stats'])
+})
+
+/** Every node of a drawn tree whose type is the engine's own drawing. */
+const engineNodes = (tree: unknown): number => {
+  if (tree === null || typeof tree !== 'object') return 0
+  if (Array.isArray(tree)) return tree.reduce((sum: number, child) => sum + engineNodes(child), 0)
+  const node = tree as { type?: unknown; children?: unknown }
+  return (node.type === 'engine' ? 1 : 0) + engineNodes(node.children)
+}
+
+test('regression: the Stats tab beneath the hub keeps the engine\'s own drawing out of its tree (the desktop drew "has not drawn in this pane")', async ($, on) => {
+  // At the bottom of a real chain next(e) is the engine's node; the hub nests the tab in sized Boxes, where the engine
+  // refuses a tree holding one, and on the desktop the node itself draws as the placeholder.
+  const { clock } = engine(on, { renderBottom: { type: 'engine', ref: 0 } })
+  const hub = fakeHub(on, {}, clock)
+  await work($, clock)
+  hub.tab = 'stats'
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...HUB_PANE, surface })
+    expect(await ui.find({ type: 'Text', text: 'Top tools' })).toBeDefined()
+    expect(engineNodes(await ui.drawn())).toBe(0)
+    await ui.unmount()
+  }
+})
+
+test('a drawing that throws shows a card with Retry in the pane, not the engine\'s blank pane', async ($, on) => {
+  engine(on)
+  // A stats value of the wrong shape (as a damaged or older state could hold): the drawing throws reading it.
+  let isBroken = true
+  on('state.get', { plugin: 'session-stats', key: 'stats' }, () => ({ value: { value: isBroken ? null : undefined, version: isBroken ? 1 : 2 } }))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'session-stats could not draw this view' })).toBeDefined()
+  expect((await ui.find({ key: 'pane-retry' }))?.props).toMatchObject({ label: 'Retry' })
+  isBroken = false
+  await ui.press({ key: 'pane-retry' })
+  expect(await ui.find({ key: 'pane-failure' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Top tools' })).toBeDefined()
+  await ui.unmount()
 })

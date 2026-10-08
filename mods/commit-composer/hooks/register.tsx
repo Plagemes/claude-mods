@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { CommitComposerDraft as Draft } from '../types'
 import { COMMITLINT_FILES, cleanMessage, problemsOf, rulesFrom, systemPrompt, userPrompt, withSubject } from './message'
 import type { DiffContext, Rules } from './message'
+import { paneFailure } from './shared/render-safe'
 
 type Git = { ok: boolean; out: string; err: string }
 type Settings = { model: string; root: string }
@@ -323,7 +324,11 @@ export const register: Register = (on, options) => {
         )}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'commit-composer', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   on('ui.close', { id: PANE }, async ($, e, next) => {
     await update($, draft, () => IDLE)

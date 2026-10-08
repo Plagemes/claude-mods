@@ -5,6 +5,7 @@ import type { ScreenshotCheckCapture as Capture, ScreenshotCheckShot as Shot, Sc
 import { CAPTURE_SCRIPT, NOT_UI_PATH, UI_FILE, VIEWPORTS, captureNote, cellsFor, cliArgs, parseCapture, stampOf, thumbSvg } from './capture'
 import type { ViewName } from './capture'
 import { candidatePorts, pageUrl, portsFromPackage } from './server'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'screenshots'
 const SHOTS_DIR = '.claude/screenshots'
@@ -360,7 +361,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'screenshot-check', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

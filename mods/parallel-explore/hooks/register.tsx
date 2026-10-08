@@ -19,6 +19,7 @@ import {
 import type { Angle } from './explore'
 import { READ_TOOLS, whyNotReadOnly } from './readonly'
 import { routesOf } from './routes'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'explore'
 const BUILT_IN_TYPE = 'Explore'
@@ -378,7 +379,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'parallel-explore', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

@@ -15,6 +15,7 @@ import type { Applied, PresenceKind } from './presence'
 import { readSettings } from './settings'
 import type { Settings } from './settings'
 import { addDays, startOfDay } from './zones'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const NAME = 'calendar-sync'
 const TAB = 'calendar'
@@ -535,14 +536,22 @@ export const register: Register = (on, options) => {
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawCalendar($, e, rt)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'calendar-sync', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // Without the hub: the same drawing in a pane of its own.
-  on('ui.render', { component: 'Pane', requestId: 'calendar-sync' }, async ($, e) => drawCalendar($, e, rt))
+  on('ui.render', { component: 'Pane', requestId: 'calendar-sync' }, async ($, e) => drawCalendar($, e, rt)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'calendar-sync', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

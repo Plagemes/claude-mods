@@ -1,6 +1,6 @@
 {
   "name": "data-map",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "/data-map lists where your code collects, stores and sends personal data — a head start for GDPR.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#data-map",

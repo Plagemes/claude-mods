@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { AgentInfo, EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentRow, AgentRowStatus } from '../types'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'subagent-monitor'
 const COMMAND = 'agents-live'
@@ -408,7 +409,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'subagent-monitor', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

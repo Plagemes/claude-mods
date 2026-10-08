@@ -18,6 +18,7 @@ import type { SecretCategory } from './shared/secrets'
 import { eventFromHub, eventFromNotice, gitLogArgv, mergeEvents, parseDaily, parseGitLog, parseJournal } from './sources'
 import type { Commit, DigestEvent, Journal } from './sources'
 import { addDays, dateKey, epochToWall, startOfDay } from './zones'
+import { paneFailure } from './shared/render-safe'
 
 const NAME = 'email-digest'
 const PANE = 'email-digest'
@@ -804,7 +805,11 @@ export const register: Register = (on, options) => {
     }
   })
 
-  on('ui.render', { component: 'Pane', requestId: 'email-digest' }, async ($, e) => drawDigest($, e, rt))
+  on('ui.render', { component: 'Pane', requestId: 'email-digest' }, async ($, e) => drawDigest($, e, rt)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'email-digest', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

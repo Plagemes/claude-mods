@@ -1,6 +1,6 @@
 {
   "name": "mock-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "/mock starts a fake API server from your OpenAPI spec so you can build the frontend before the backend.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#mock-server",

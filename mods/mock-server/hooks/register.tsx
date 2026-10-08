@@ -5,6 +5,7 @@ import type { MockServerState } from '../types'
 import { BUILTIN_SERVER, parseBuiltinLine, parseMockArgs, parsePrismLine } from './server'
 import type { ServerEvent } from './server'
 import { mockSpecOf } from './spec'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'mock'
 const DEFAULT_PORT = 4010
@@ -291,7 +292,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'mock-server', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

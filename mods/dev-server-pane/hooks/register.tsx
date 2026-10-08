@@ -5,6 +5,7 @@ import type { DevServerLine as Line, DevServerRun as Run, DevServerStatus as Sta
 import { NESTED_PATHS, VENV_PYTHONS, detectCommand, shortCommand } from './detect'
 import type { Detected, Project } from './detect'
 import { findUrl, kindOf, lastErrorBlock, splitLines } from './output'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'dev-server'
 const PANE_TITLE = 'Dev server'
@@ -391,7 +392,11 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawDevServer($, e, host, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawDevServer($, e, host, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'dev-server-pane', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Dev server tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -400,11 +405,15 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawDevServer($, e, host, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'dev-server-pane', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** The dev server view: this mod's own pane, or its Dev server tab in the hub's panel (`isTab`: no Close, a button to pop it out into its own pane). */

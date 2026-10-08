@@ -7,6 +7,7 @@ import type { Level, Project } from './project'
 import { PYTHON_EXTENSIONS, SCRIPT_EXTENSIONS, commandFor, pythonTestLookups, scriptTestLookups, statusOf, stemOf } from './runners'
 import type { Lookup, Runner } from './runners'
 import { countsOf, isTestFile, stripAnsi } from './shared/test-runners'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'tests-last'
 const COMMAND = 'tests-last'
@@ -81,7 +82,11 @@ export const register: Register = (on, options) => {
     return ran
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTests($, e, settings, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTests($, e, settings, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'test-watch', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Tests tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -90,11 +95,15 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawTests($, e, settings, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'test-watch', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** The last run: this mod's own pane, or its tab in the hub's panel (`isTab`, no Close button). */

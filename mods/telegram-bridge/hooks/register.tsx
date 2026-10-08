@@ -18,6 +18,7 @@ import { clean, oneLine } from './privacy'
 import { LIVE_MS, defaultLabel, extractTag, isLive, projectOfChat, route } from './routing'
 import { idOf, readSettings } from './settings'
 import type { Settings } from './settings'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const NAME = 'telegram-bridge'
 const CHANNEL = 'telegram'
@@ -1886,12 +1887,20 @@ export const register: Register = (on, options) => {
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawTab($, rt, e)}
       </Box>
     )
-  })
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTab($, rt, e))
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'telegram-bridge', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTab($, rt, e)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'telegram-bridge', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

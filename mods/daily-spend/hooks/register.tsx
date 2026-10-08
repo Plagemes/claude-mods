@@ -5,6 +5,7 @@ import type { DailySpendDay, DailySpendSnapshot } from '../types'
 import { dayKey, lastDays, shortDate, weekStart, weekdayDate } from './calendar'
 import { barChartCells } from './chart'
 import { costOf } from './shared/prices'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const NAME = 'daily-spend'
 const PANE = 'daily-spend'
@@ -294,7 +295,11 @@ export const register: Register = (on, options: PluginOptions) => {
 
   on('command.run', { command: 'spend' }, async $ => ({ text: await openSpend($) }))
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawSpend($, e, dailyLimit, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawSpend($, e, dailyLimit, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'daily-spend', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Cost tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -303,11 +308,15 @@ export const register: Register = (on, options: PluginOptions) => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawSpend($, e, dailyLimit, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'daily-spend', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

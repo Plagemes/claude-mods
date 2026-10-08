@@ -34,6 +34,7 @@ import {
 } from './recipe'
 import type { AutopilotPlan } from './recipe'
 import { parseYaml } from './yaml'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'workflow-studio'
 const PANE_TITLE = 'Workflows'
@@ -834,18 +835,26 @@ export const register: Register = on => {
     return result
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawBody($, e, ctx))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawBody($, e, ctx)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'workflow-studio', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   on('ui.render', { component: 'Pane', requestId: 'claude-mods' }, async ($, e, next) => {
     if (!(await hubTabIs($, TAB))) return next(e)
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawBody($, e, ctx)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'workflow-studio', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

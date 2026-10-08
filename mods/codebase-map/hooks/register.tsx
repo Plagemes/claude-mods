@@ -4,6 +4,7 @@ import type { EngineInterface, FsEntry, Register } from 'claude-code'
 import type { CodebaseMapSaved } from '../types'
 import { bodyOf, buildMap, parseMeta } from './map'
 import type { MapSource } from './map'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'codebase-map'
 const MAP_FILE = '.claude/codebase-map.md'
@@ -260,7 +261,11 @@ export const register: Register = (on, options) => {
         {map !== null && <Markdown key="map" text={bodyOf(map.markdown)} />}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'codebase-map', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

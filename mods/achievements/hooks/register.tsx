@@ -5,6 +5,7 @@ import { bar, bump, emptyPending, emptyProgress, localDate, merge, noteActiveDay
 import type { Pending, Progress } from './progress'
 import { ACHIEVEMENTS, GROUPS, bashCounts, isPluginInstall, languageOf, reportsFailure, testRunnerOf } from './table'
 import type { Achievement, SumCounter } from './table'
+import { paneFailure } from './shared/render-safe'
 
 type Dollar = EngineInterface
 /** A change to the progress, applied once it is loaded: `now` and the local `day` it happened. */
@@ -422,7 +423,11 @@ export const register: Register = (on, options) => {
         ))}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'achievements', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

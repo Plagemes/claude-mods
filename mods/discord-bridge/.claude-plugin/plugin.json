@@ -1,6 +1,6 @@
 {
   "name": "discord-bridge",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
   "author": {
     "name": "Plagemes",

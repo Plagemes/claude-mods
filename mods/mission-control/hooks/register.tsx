@@ -35,6 +35,7 @@ import {
 } from './model'
 import { costOf } from './shared/prices'
 import { redactText } from './shared/secrets'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 // ── Constants ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -871,10 +872,14 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {await drawBoard($, e, rt)}
-        {below ?? null}
+        {hubTabBelow(below)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'mission-control', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Mission Control tab of the hub's Claude Mods panel.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -882,11 +887,15 @@ export const register: Register = (on, options) => {
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawBoard($, e, rt)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'mission-control', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

@@ -1,6 +1,6 @@
 {
   "name": "issue-pilot",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Picks up a GitHub, Jira or Linear issue, sizes it with smart-router, works it in a dedicated session and opens the PR.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#issue-pilot",

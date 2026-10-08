@@ -4,6 +4,7 @@ import type { EngineInterface, FsEntry, Register } from 'claude-code'
 import type { ComponentCatalogScan } from '../types'
 import { catalogSection, componentNameFromPath, describeProps, factOf, isComponentFile, parseComponents, searchComponents, similarComponents } from './catalog'
 import type { Component } from './catalog'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'components'
 const SECTION_ID = 'component-catalog:components'
@@ -329,7 +330,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'component-catalog', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

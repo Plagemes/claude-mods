@@ -1,6 +1,6 @@
 {
   "name": "mods-hub",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#mods-hub",

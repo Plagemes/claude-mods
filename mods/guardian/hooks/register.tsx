@@ -7,6 +7,7 @@ import type { Finding } from './fallback'
 import { GUARDS, GUARD_NAMES, POLICY_LEVELS, applyChanges, describeChange, isObject, isPolicyLevel, planApply, policyFile, policyFor, readPolicyFile, stamp } from './policy'
 import type { Change, Json, Overrides, Policy, PolicyLevel } from './policy'
 import { computeScore, scoreLine } from './score'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 // ── Constants ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -759,12 +760,20 @@ export const register: Register = (on, options) => {
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawBody($, e, rt)}
       </Box>
     )
-  })
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawBody($, e, rt))
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'guardian', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawBody($, e, rt)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'guardian', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

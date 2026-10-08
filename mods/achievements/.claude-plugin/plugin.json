@@ -1,6 +1,6 @@
 {
   "name": "achievements",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Unlock achievements as you work: first commit, 100 green test runs, a week-long streak and more.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#achievements",

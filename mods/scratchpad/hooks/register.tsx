@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderInput } from 'claude-code'
 
 import type { ScratchpadNote } from '../types'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'scratchpad'
 /** The hub's shared panel, and this mod's tab in it (order 280: among the later tabs, after Tasks). */
@@ -131,7 +132,11 @@ export const register: Register = on => {
     return { text: `Noted. ${countText(notes.length)} for ${projectName(project)}.` }
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawNotes($, e, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawNotes($, e, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'scratchpad', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Notes tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -140,11 +145,15 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawNotes($, e, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'scratchpad', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** The notes: this mod's own pane, or the Notes tab of the hub's panel (`isTab`: the field does not take the keyboard on its own, so the tab strip keeps its hotkeys). */

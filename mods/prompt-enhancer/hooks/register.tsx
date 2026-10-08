@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, ModelCompleteResult, Register, RenderElement } from 'claude-code'
 
 import type { Enhancement } from '../types'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'prompt-enhancer'
 const COMMAND = 'enhance'
@@ -323,7 +324,11 @@ export const register: Register = (on, options) => {
         )}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'prompt-enhancer', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

@@ -4,6 +4,7 @@ import type { EngineInterface, FsEntry, Register, RenderSurface } from 'claude-c
 import type { GraphqlContextSchema } from '../types'
 import { compactSchema, countsOf, definesTypes, filterSchema, fullText, globToRegExp, isAboutGraphql, isGraphqlFile, parseIntrospection, parseSdl, schemaPointers } from './sdl'
 import type { GqlType } from './sdl'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'gql-schema'
 const DEFAULT_MAX_CHARS = 6000
@@ -304,7 +305,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'graphql-context', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

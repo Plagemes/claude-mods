@@ -1,6 +1,6 @@
 {
   "name": "explain-diff",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "/explain-diff explains in plain words what changed in the last turn and why.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#explain-diff",

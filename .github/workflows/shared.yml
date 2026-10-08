@@ -2,9 +2,9 @@
 name: shared
 on:
   push:
-    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', 'scripts/check-prompt-budget.mjs', '.github/workflows/shared.yml']
+    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', 'scripts/check-prompt-budget.mjs', 'scripts/check-render.mjs', '.github/workflows/shared.yml']
   pull_request:
-    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', 'scripts/check-prompt-budget.mjs', '.github/workflows/shared.yml']
+    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', 'scripts/check-prompt-budget.mjs', 'scripts/check-render.mjs', '.github/workflows/shared.yml']
 jobs:
   shared:
     runs-on: ubuntu-latest
@@ -24,3 +24,5 @@ jobs:
         run: node scripts/check-collisions.mjs
       - name: Tool and agent descriptions stay within the prompt budget
         run: node scripts/check-prompt-budget.mjs
+      - name: Every pane draws a tree of its own (no engine node, no unguarded throw, no slow wait)
+        run: npm i -g typescript@5.6.3 && node scripts/check-render.mjs

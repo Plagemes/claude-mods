@@ -1,7 +1,7 @@
 # mods-hub
 > The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.
 
-**Category:** Core · **Version:** 1.1.2
+**Category:** Core · **Version:** 1.1.3
 
 ## What it does
 Adds `$.mods` to every mod: an event bus with typed standard events (`test.result`, `ci.result`, `cost.update`, `deploy.failed`, …), a blackboard of shared facts, and a notification router that knows whether you are here, idle or away, Silent, or inside your Night hours, and sends each notification to the terminal, your phone or your team's channel accordingly. It also opens one **Claude Mods** panel whose tabs other mods fill (Advisor, Router, Mission Control, Channels, …), with a Home tab for the global mode, channels, routing and the last notifications.

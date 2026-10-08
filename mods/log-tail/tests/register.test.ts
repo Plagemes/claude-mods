@@ -294,3 +294,13 @@ test('reads targets, levels and filters', () => {
   expect(compileFilter('/^GET/').keeps('POST /x')).toBe(false)
   expect(compileFilter('/[/').error).toContain('Not a regex')
 })
+
+test('a tail pane this session no longer follows says so, never the engine\'s blank pane (the desktop\'s "has not drawn")', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mountPane($, surface, 'log-tail-gone')
+    expect(await ui.find({ type: 'Text', text: 'This tail has ended. /tail <file or command> starts a new one.' })).toBeDefined()
+    await ui.unmount()
+  }
+})

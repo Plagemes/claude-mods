@@ -3,6 +3,7 @@ import type { EngineInterface, PluginOptions, Register, RenderElement, RenderInp
 
 import type { QueueFinished, QueueItem, QueueOutcome, QueueView } from '../types'
 import { EMPTY_VIEW, fromStore, listText, moveItem, oneLine, parseQueueArgs, shortDuration, statusText } from './queue'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'queue'
 const PANE_TITLE = 'Queue'
@@ -519,7 +520,11 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawQueue($, e, session, settings, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawQueue($, e, session, settings, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'task-queue', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Queue tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -527,11 +532,15 @@ export const register: Register = (on, options) => {
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawQueue($, e, session, settings, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'task-queue', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

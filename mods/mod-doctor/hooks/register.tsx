@@ -5,6 +5,7 @@ import type { DoctorCatalog, DoctorFinding, DoctorFix, DoctorNotice, DoctorRepor
 import { argv, claudeBinary, parseOutcome } from './cli'
 import { DEFAULT_MARKETPLACE, debugHints, diagnose, parseInstalled, parseMarketplace, parseMarketplaceFolders, parseProfile } from './diagnose'
 import type { Installed, Profile, Unchecked } from './diagnose'
+import { paneFailure } from './shared/render-safe'
 
 type Dollar = EngineInterface
 /** The doctor's settings, read from userConfig. */
@@ -562,7 +563,11 @@ export const register: Register = (on, options) => {
         {report.findings.map(drawFinding)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'mod-doctor', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
