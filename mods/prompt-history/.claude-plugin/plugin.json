@@ -1,6 +1,6 @@
 {
   "name": "prompt-history",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "/history searches every prompt you have sent across sessions and reuses one.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#prompt-history",

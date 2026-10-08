@@ -1,6 +1,6 @@
 {
   "name": "tool-timeline",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "A timeline pane of every tool call with duration, status and input summary.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#tool-timeline",

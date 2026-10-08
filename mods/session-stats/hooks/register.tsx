@@ -4,6 +4,7 @@ import type { EngineInterface, Register, RenderElement, RenderInput, ToolCallInp
 import type { SessionStatsData, SessionStatsHub } from '../types'
 import { EMPTY_STATS, bar, compact, fit, formatCost, formatDuration, toolLabel, topTools } from './format'
 import { EMPTY_HUB, describeRun, foldEvents, toolsPerTurn } from './hubstats'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'session-stats'
 /** The hub's shared panel, and this mod's tab in it (order 290: among the later tabs, after Notes). */
@@ -108,7 +109,11 @@ export const register: Register = on => {
     return {}
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawStats($, e, hub))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawStats($, e, hub)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'session-stats', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Stats tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -117,11 +122,15 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawStats($, e, hub)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'session-stats', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** The dashboard: this mod's own pane, or the Stats tab of the hub's panel (the same tiles). */

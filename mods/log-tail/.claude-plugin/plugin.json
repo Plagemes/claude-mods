@@ -1,6 +1,6 @@
 {
   "name": "log-tail",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "/tail follows a log file or container in a live pane, with an errors-only filter.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#log-tail",

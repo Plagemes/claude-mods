@@ -1,7 +1,7 @@
 # whatsapp-bridge
 > Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.
 
-**Category:** Notifications & Audio · **Version:** 1.2.0
+**Category:** Notifications & Audio · **Version:** 1.2.1
 
 ## What it does
 Every Claude Code session on your machine shares one WhatsApp number, served by your own [OpenWA](https://github.com/rmyndharis/OpenWA) gateway on `127.0.0.1`. While you are away, Claude reports long jobs, failures, red tests, CI results and budget steps, and it can ask you a question and wait for the answer. From your phone you can ask Claude anything ("what are you doing?") and get a short answer at once, ask for work (confirmed, then run, with the result posted back), stop turns, approve permission prompts with 👍, queue tasks, and ask for status, cost or a digest. Each project (or session) gets its own WhatsApp group, created and managed from the panel: you can add teammates, who can ask Claude about progress or report bugs but can never run anything.

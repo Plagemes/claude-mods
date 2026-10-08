@@ -7,6 +7,7 @@ import type { History } from './history'
 import { isTestCommand, parseRun } from './runners'
 import type { RunReport } from './runners'
 import { isTestCommand as isTestCommandAnywhere } from './shared/test-runners'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 /** What this load counts: Claude's file edits (the fingerprint outside git) and the project root once found. */
 type Memory = { edits: number; root: string | undefined }
@@ -228,7 +229,7 @@ export const register: Register = on => {
     const hidden = current.flaky.length - shown.length
     return (
       <Box flexDirection="column" gap={1}>
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         <Box key="flaky-section" flexDirection="column">
           <Box flexDirection="row" justifyContent="space-between" gap={2}>
             <Text bold color={current.flaky.length > 0 ? 'warning' : undefined}>
@@ -252,7 +253,11 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'flaky-detector', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
@@ -335,7 +340,11 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'flaky-detector', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

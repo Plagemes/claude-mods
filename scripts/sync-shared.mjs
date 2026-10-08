@@ -4,7 +4,7 @@
 // A mod cannot import from another plugin's folder at run time, so code shared by several mods lives once in
 // shared/ and is COPIED into each mod that needs it, with a header naming its source and the source's hash:
 //
-//   shared/<lib>.ts                    → mods/<mod>/hooks/shared/<lib>.ts      (shell, test-runners, prices, secrets, line-index)
+//   shared/<lib>.ts                    → mods/<mod>/hooks/shared/<lib>.ts      (shell, test-runners, prices, secrets, line-index, render-safe)
 //   mods/mods-hub/types/index.d.ts     → mods/<mod>/types/mods-hub.d.ts         (hub-types: the hub's contract, for `$.mods`)
 //   shared/hub-client.ts  (its region) → a region of mods/<mod>/hooks/<entry>  (hub-client: functions taking `$` must
 //                                         live in the hooks file itself, so they are pasted between markers)
@@ -32,6 +32,7 @@ const LIBS = {
   prices: { kind: 'file', source: 'shared/prices.ts', target: 'hooks/shared/prices.ts' },
   secrets: { kind: 'file', source: 'shared/secrets.ts', target: 'hooks/shared/secrets.ts' },
   'line-index': { kind: 'file', source: 'shared/line-index.ts', target: 'hooks/shared/line-index.ts' },
+  'render-safe': { kind: 'file', source: 'shared/render-safe.ts', target: 'hooks/shared/render-safe.ts' },
   'hub-types': { kind: 'file', source: `mods/${HUB}/types/index.d.ts`, target: 'types/mods-hub.d.ts' },
   'hub-client': { kind: 'region', source: 'shared/hub-client.ts', region: 'hub-client' },
   'fake-hub': { kind: 'file', source: 'shared/testing/hub.ts', target: 'tests/hub.ts' },

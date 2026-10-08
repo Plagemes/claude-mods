@@ -16,6 +16,7 @@ import {
   utf8Bytes,
 } from './request'
 import type { Request } from './request'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'http'
 const STORE_KEY = 'history'
@@ -351,7 +352,11 @@ export const register: Register = (on, options) => {
         {bodyView()}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'http-client', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

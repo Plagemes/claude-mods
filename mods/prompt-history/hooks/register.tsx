@@ -3,6 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { PromptHistoryEntry, PromptHistoryView } from '../types'
 import { MAX_TEXT_CHARS, asEntries, search, withEntry } from './history'
+import { paneFailure } from './shared/render-safe'
 
 const NAME = 'prompt-history'
 const PANE = 'prompt-history'
@@ -180,7 +181,11 @@ export const register: Register = on => {
         ))}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'prompt-history', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

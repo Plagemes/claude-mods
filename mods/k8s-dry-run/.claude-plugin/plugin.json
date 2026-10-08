@@ -1,6 +1,6 @@
 {
   "name": "k8s-dry-run",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Turns kubectl apply into a server-side dry run with a diff you approve first.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#k8s-dry-run",

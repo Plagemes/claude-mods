@@ -1,6 +1,6 @@
 {
   "name": "mod-profiles",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Switch between sets of mods — work, personal, demo — with one command.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#mod-profiles",

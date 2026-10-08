@@ -4,6 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { Tour, TourStep } from '../types'
 import { IGNORED, PROJECT_FILES, SOURCE_DIRS, SYSTEM, excerptOf, parseSteps, tourPrompt, treeOf } from './tour'
 import type { Entry } from './tour'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'tour'
 const PANE_TITLE = 'Tour'
@@ -242,7 +243,11 @@ export const register: Register = (on, options: PluginOptions) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'onboarding-tour', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

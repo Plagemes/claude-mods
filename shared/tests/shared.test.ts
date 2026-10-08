@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { columnAt, lineAt, lineFinder, lineText } from '../line-index'
 import { costOf, familyOf, formatUsd, priceOf, pricesWith } from '../prices'
+import { HUB_TAB_EMPTY_KEY, hubTabBelow, isBlankTree, paneFailure } from '../render-safe'
 import { findSecrets, hasSecret, redactSummary, redactText } from '../secrets'
 import { commandNames, embeddedShellScripts, simpleCommands, tokenize, unwrap } from '../shell'
 import { describeRun, isTestCommand, runnerOfCommand, summarizeRun } from '../test-runners'
@@ -169,5 +170,42 @@ describe('line-index', () => {
     expect(columnAt(text, 9)).toBe(2)
     expect(lineText(text, 3)).toBe('three')
     expect(lineText(text, 4)).toBe('')
+  })
+})
+
+describe('render-safe', () => {
+  const ENGINE = { type: 'engine', ref: 0 }
+  const box = (children: unknown[], props: Record<string, unknown> = {}) => ({ type: 'Box', props, children })
+  const text = (value: string) => ({ type: 'Text', props: {}, children: [value] })
+  const table = {
+    Box: (props: Record<string, unknown>) => ({ type: 'Box', props, children: props.children }),
+    Text: (props: Record<string, unknown>) => ({ type: 'Text', props, children: props.children }),
+    Button: (props: Record<string, unknown>) => ({ type: 'Button', props }),
+  } as never
+
+  test('hubTabBelow drops the engine node and the hub\'s empty note, keeps the rest as it was', () => {
+    expect(hubTabBelow(ENGINE)).toBeNull()
+    expect(hubTabBelow(undefined)).toBeNull()
+    expect(hubTabBelow(box([ENGINE]))).toBeNull()
+    const frame = box([text('Hub'), box([], { height: 1 }), box([box([text('nothing')], { key: HUB_TAB_EMPTY_KEY })], { key: 'tab-body' })], { minWidth: 0 })
+    expect(hubTabBelow(frame)).toEqual(box([text('Hub'), box([], { height: 1 })], { minWidth: 0 }))
+    const kept = box([text('mine')])
+    expect(hubTabBelow(kept)).toBe(kept)
+  })
+
+  test('isBlankTree: nothing, the engine node, or Boxes of nothing', () => {
+    expect(isBlankTree(null)).toBe(true)
+    expect(isBlankTree(box([ENGINE, box([])]))).toBe(true)
+    expect(isBlankTree(box(['x']))).toBe(false)
+    expect(isBlankTree(box([text('')]))).toBe(false)
+  })
+
+  test('paneFailure draws what failed and Retry after what was beneath, never the engine node', () => {
+    const card = JSON.stringify(paneFailure(table, { title: 'stats', failure: { kind: 'throw', message: 'x is   null' }, below: box([ENGINE]), onRetry: () => undefined }))
+    expect(card).toContain('stats could not draw this view')
+    expect(card).toContain('x is null')
+    expect(card).toContain('"key":"pane-retry"')
+    expect(card).not.toContain('engine')
+    expect(JSON.stringify(paneFailure(table, { title: 't', failure: { kind: 'timeout' }, below: text('frame'), onRetry: () => undefined }))).toContain('"frame"')
   })
 })

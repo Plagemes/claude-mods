@@ -1,6 +1,6 @@
 {
   "name": "changelog-keeper",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Keeps CHANGELOG.md's Unreleased section up to date as you commit.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#changelog-keeper",

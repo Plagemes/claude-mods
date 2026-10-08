@@ -97,6 +97,7 @@ import {
   WALK,
 } from './profile'
 import type { TranscriptUsage, Use } from './profile'
+import { paneFailure } from './shared/render-safe'
 
 type Dollar = EngineInterface
 type Action = 'install' | 'update' | 'uninstall'
@@ -1461,7 +1462,11 @@ export const register: Register = (on, options) => {
     }
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawStore($, e, config))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawStore($, e, config)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'mod-store', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 // ── The pane ─────────────────────────────────────────────────────────────────

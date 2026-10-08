@@ -1,6 +1,6 @@
 {
   "name": "calendar-sync",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Reads your calendar (private iCal link) so notifications and questions respect meetings and time off, and suggests slots for long jobs.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#calendar-sync",

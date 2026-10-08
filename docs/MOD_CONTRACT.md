@@ -62,9 +62,12 @@ on('session.start', async ($, e, next) => {
      on('ui.render', { component: 'Pane', requestId: 'claude-mods' }, async ($, e, next) => {
        if (!(await hubTabIs($, 'router'))) return next(e)
        const { Box } = $.ui.resolve(e)
-       return <Box flexDirection="column">{await next(e)}{await drawRouter($, e)}</Box>
-     })
+       return <Box flexDirection="column">{hubTabBelow(await next(e))}{await drawRouter($, e)}</Box>
+     }).catch(async ($, e, next) =>
+       next.error.kind === 're-entry' ? next(e)
+         : paneFailure($.ui.resolve(e), { title: 'router', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }))
      ```
+     `hubTabBelow` and `paneFailure` come from `shared/render-safe.ts` (`node scripts/sync-shared.mjs add <mod> render-safe`). Never put `await next(e)` in a Pane tree bare: beneath every plugin it is the engine's own drawing, which the desktop shows as "has not drawn in this pane" and which makes the engine refuse a whole tree under a sized Box. `node scripts/check-render.mjs` checks this, and every pane hook's guard.
   3. your command opens it: `if (!(await hubShowTab($, 'router'))) await $.ui.open({ id: 'router', title: 'Router' })` (your own pane is the no-hub fallback; keep both drawing from the same function). Size to `e.props.bodyColumns`.
 - [ ] A tab body never binds hotkeys `0`–`9`: the hub's tab strip owns them. Use letters.
 - [ ] Workspace, dialog or many instances → your own pane. One line that matters now → a band that composes with `next(e)`. One tiny value → the status line. On-demand report → command output.

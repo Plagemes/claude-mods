@@ -1,6 +1,6 @@
 {
   "name": "mod-doctor",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "/mod-doctor checks your installed mods for outdated versions, conflicts and load errors.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#mod-doctor",

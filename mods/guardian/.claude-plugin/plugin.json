@@ -1,6 +1,6 @@
 {
   "name": "guardian",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "One security policy for every guard mod — permissive, standard or strict — plus a project safety score.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#guardian",

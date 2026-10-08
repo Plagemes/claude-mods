@@ -1,6 +1,6 @@
 {
   "name": "mod-advisor",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Recommends the right mods for your project and for what you're asking, with the commands to type, and installs them in one click.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#mod-advisor",

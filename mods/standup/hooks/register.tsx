@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { StandupView } from '../types'
 import { defaultDays, fallbackSections, formatSections, neighboursOf, parseLog, parseSections, sinceLabel, unseenCommits } from './standup'
 import type { Commit, Neighbours, Style } from './standup'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'standup'
 const GIT_TIMEOUT_MS = 15_000
@@ -255,7 +256,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'standup', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

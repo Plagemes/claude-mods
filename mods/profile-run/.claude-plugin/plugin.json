@@ -1,6 +1,6 @@
 {
   "name": "profile-run",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "/profile runs a command under a profiler and shows the hottest functions.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#profile-run",

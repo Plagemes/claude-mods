@@ -3,6 +3,7 @@ import type { EngineInterface, Register, RenderElement, RenderInput, Timer } fro
 
 import type { DiffPaneFile as File, DiffPaneView as View } from '../types'
 import { EMPTY_TREE, barCells, cutDiff, parseTracked, parseUntracked, shortPath, untrackedEntry } from './parse'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 type Git = { ok: boolean; out: string; err: string }
 
@@ -303,7 +304,11 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawChanges($, e, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawChanges($, e, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'diff-pane', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Changes tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -312,11 +317,15 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawChanges($, e, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'diff-pane', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

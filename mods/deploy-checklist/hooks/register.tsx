@@ -18,6 +18,7 @@ import {
 } from './checks'
 import { deployTargetOf, failureOf, urlIn } from './events'
 import type { DeployTarget } from './events'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'deploy-checklist'
 const GIT_TIMEOUT_MS = 5000
@@ -411,7 +412,11 @@ export const register: Register = (on, options) => {
         )}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'deploy-checklist', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

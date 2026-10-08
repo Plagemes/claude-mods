@@ -4,6 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { ExplainChange, ExplainFile, ExplainLevel, Explanation } from '../types'
 import { cutDiff, unifiedDiff } from './diff'
 import { SYSTEM, explainPrompt, noteMarkdown, parseExplanation } from './explain'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'explain-diff'
 const PANE_TITLE = 'Explain diff'
@@ -255,7 +256,11 @@ export const register: Register = (on, options: PluginOptions) => {
         })}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'explain-diff', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

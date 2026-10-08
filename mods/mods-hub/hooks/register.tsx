@@ -64,6 +64,7 @@ import {
   statusText,
   tabLayout,
 } from './look'
+import { HUB_TAB_EMPTY_KEY, hubTabBelow, isBlankTree } from './shared/render-safe'
 import { costOf } from './shared/prices'
 import { redactText } from './shared/secrets'
 import { isTestCommand, summarizeRun } from './shared/test-runners'
@@ -1595,14 +1596,15 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>, next: (e: Re
     )
   }
   // A registered tab: its owner draws the body by hooking this same pane (see MOD_CONTRACT.md); whatever the hooks
-  // beneath the hub drew comes back from `next`. Never under a sized Box: the owner sizes its own body.
-  let body: RenderElement | undefined
+  // beneath the hub drew comes back from `next`. At the bottom of the chain that is the engine's own drawing (on the
+  // desktop its "has not drawn in this pane" placeholder), which the engine refuses under a sized Box: it never goes
+  // into the frame (shared/render-safe.ts). Never under a sized Box either way: the owner sizes its own body.
+  let body: RenderElement | null
   try {
-    body = await next(e)
+    body = hubTabBelow(await next(e))
   } catch {
-    body = undefined
+    body = null
   }
-  if (isEmptyTree(body)) body = undefined
   return (
     <Box flexDirection="column" rowGap={1} minWidth={0}>
       {frame}
@@ -1614,8 +1616,11 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>, next: (e: Re
         {look.line(`by ${current.owner}${current.command === undefined ? '' : ` · full view: /${current.command}`}`, look.columns - current.title.length - 4, { dimColor: true })}
       </Box>
       <Box key="tab-body" flexDirection="column">
-        {body ?? (
-          <Box flexDirection="column">
+        {body !== null && !isBlankTree(body) ? (
+          body
+        ) : (
+          // Owners that draw above the hub drop this note (hubTabBelow), so it never sits over their content.
+          <Box key={HUB_TAB_EMPTY_KEY} flexDirection="column">
             <Text dimColor>{`${current.title} has nothing to show here yet.`}</Text>
             {current.command === undefined ? null : <Text dimColor>{`/${current.command} opens it.`}</Text>}
           </Box>
@@ -1625,11 +1630,42 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>, next: (e: Re
   )
 }
 
-/** Whether what came back from beneath draws nothing: no tree, or a bare Box with no children. */
-function isEmptyTree(tree: RenderElement | undefined): boolean {
-  if (tree === undefined || tree === null) return true
-  const node = tree as unknown as { type?: unknown; children?: unknown }
-  return node.type === 'Box' && (!Array.isArray(node.children) || node.children.length === 0)
+/**
+ * The panel's render hook: always answers with a tree of its own. A drawing that throws (a value of an unexpected
+ * shape, a surface element missing) is logged and drawn as a card with Retry, never left to the engine: on the desktop
+ * the engine's own drawing of the pane is the blank "has not drawn in this pane" placeholder.
+ */
+async function drawPanel($: EngineInterface, e: RenderInput<'Pane'>, next: (e: RenderInput<'Pane'>) => Promise<RenderElement>, rt: Runtime): Promise<RenderElement> {
+  try {
+    return await drawPane($, e, next, rt)
+  } catch (error) {
+    const reason = oneLine(error instanceof Error ? error.message : String(error), 240)
+    $.ui.log(`mods-hub: the Claude Mods panel failed to draw on the ${e.surface} surface: ${reason}`, { to: 'debug' })
+    return drawPanelError($, e, reason)
+  }
+}
+
+/** The card shown in place of a panel that failed to draw: what happened, and Retry. */
+function drawPanelError($: EngineInterface, e: RenderInput<'Pane'>, reason: string): RenderElement {
+  const { Box, Button, Text } = $.ui.resolve(e)
+  return (
+    <Box key="panel-error" flexDirection="column" rowGap={1} minWidth={0}>
+      <Text bold color="error">
+        ▪▪▪ Claude Mods could not draw this panel
+      </Text>
+      <Text dimColor wrap="wrap">
+        {reason === '' ? 'Something went wrong while drawing.' : reason}
+      </Text>
+      <Box flexDirection="row">
+        <Button key="panel-retry" label="Retry" variant="primary" onPress={() => retryPanel($)} />
+      </Box>
+    </Box>
+  )
+}
+
+/** Retry: draw the panel again (the failed drawing may have read no state that would redraw it on its own). */
+function retryPanel($: EngineInterface): void {
+  $.ui.invalidate('ui.render')
 }
 
 // Button handlers: each returns at once (the handler is `void`), and the work it starts writes the state once: a
@@ -1997,5 +2033,5 @@ export const register: Register = (on, options) => {
   })
 
   // ── The panel ──
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => drawPane($, e, next, rt))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => drawPanel($, e, next, rt))
 }

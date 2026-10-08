@@ -62,6 +62,7 @@ import {
 import type { JiraConfig, RawIssue } from './providers'
 import { formatUsd } from './shared/prices'
 import { describeRun, summarizeRun } from './shared/test-runners'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const VERSION = '1.0.0'
 const PANE = 'issue-pilot'
@@ -834,18 +835,26 @@ export const register: Register = (on, options) => {
     return done
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, ($, e) => drawBody($, rt, e))
+  on('ui.render', { component: 'Pane', requestId: PANE }, ($, e) => drawBody($, rt, e)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'issue-pilot', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   on('ui.render', { component: 'Pane', requestId: 'claude-mods' }, async ($, e, next) => {
     if (!(await hubTabIs($, TAB))) return next(e)
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawBody($, rt, e)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'issue-pilot', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

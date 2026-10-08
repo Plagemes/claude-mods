@@ -38,6 +38,7 @@ import {
 import type { CommandRun, PilotSettings, Submission, TurnEnd } from './pilot'
 import { costOf } from './shared/prices'
 import { summarizeRun } from './shared/test-runners'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'autopilot'
 const PANE_TITLE = 'Autopilot'
@@ -850,18 +851,26 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawBody($, e, ctx))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawBody($, e, ctx)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'autopilot', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   on('ui.render', { component: 'Pane', requestId: 'claude-mods' }, async ($, e, next) => {
     if (!(await hubTabIs($, TAB))) return next(e)
     const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawBody($, e, ctx)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'autopilot', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

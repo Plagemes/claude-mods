@@ -3,6 +3,7 @@ import type { EngineInterface, Register, RenderElement, RenderInput } from 'clau
 
 import type { ToolTimelineCall, ToolTimelineOutcome } from '../types'
 import { describeTurn, durationBar, durationOf, fit, formatDuration, formatOffset, summarize, toolLabel, turnEnds, turnMarksOf } from './format'
+import { hubTabBelow, paneFailure } from './shared/render-safe'
 
 const PANE = 'timeline'
 /** The hub's shared panel, and this mod's tab in it (order 270: after Tasks). */
@@ -97,7 +98,11 @@ export const register: Register = on => {
     }
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTimeline($, e, false))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawTimeline($, e, false)).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'tool-timeline', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 
   // The Timeline tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
@@ -106,11 +111,15 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        {await next(e)}
+        {hubTabBelow(await next(e))}
         {await drawTimeline($, e, true)}
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'tool-timeline', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** The timeline: this mod's own pane, or the Timeline tab of the hub's panel (`isTab`). */

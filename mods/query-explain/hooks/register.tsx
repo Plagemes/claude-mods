@@ -19,6 +19,7 @@ import {
   referencedTables,
   userPrompt,
 } from './sql'
+import { paneFailure } from './shared/render-safe'
 
 const PANE = 'query-plan'
 const QUERY_TIMEOUT_MS = 75_000
@@ -275,7 +276,11 @@ export const register: Register = (on, options) => {
         </Box>
       </Box>
     )
-  })
+  }).catch(async ($, e, next) =>
+    next.error.kind === 're-entry'
+      ? next(e)
+      : paneFailure($.ui.resolve(e), { title: 'query-explain', failure: next.error, below: await next(e).catch(() => null), onRetry: () => $.ui.invalidate('ui.render') }),
+  )
 }
 
 /** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */

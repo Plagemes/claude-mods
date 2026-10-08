@@ -332,7 +332,7 @@
       "category": "core",
       "tier": "complex",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
-      "version": "1.4.1",
+      "version": "1.4.2",
       "keywords": [
         "claude-mods",
         "core",
@@ -360,7 +360,7 @@
       "category": "core",
       "tier": "complex",
       "description": "The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "keywords": [
         "claude-mods",
         "core",
@@ -700,7 +700,7 @@
       "category": "git",
       "tier": "complex",
       "description": "Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "git",
@@ -729,7 +729,7 @@
       "category": "git",
       "tier": "complex",
       "description": "/commit writes a Conventional Commit message from your staged diff and commits it.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "git",
@@ -817,7 +817,7 @@
       "category": "git",
       "tier": "complex",
       "description": "A live pane listing changed files with +/- line counts, updated after every edit.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "git",
@@ -844,7 +844,7 @@
       "category": "git",
       "tier": "complex",
       "description": "/pr-desc drafts a pull request title and description from your branch diff.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "git",
@@ -876,7 +876,7 @@
       "category": "git",
       "tier": "complex",
       "description": "Detects merge-conflict markers and walks you through resolving each one.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "git",
@@ -1144,7 +1144,7 @@
       "category": "cost",
       "tier": "complex",
       "description": "Tracks spend per day and week across sessions with a /spend report.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "cost",
@@ -1283,7 +1283,7 @@
       "category": "productivity",
       "tier": "complex",
       "description": "A live pane of Claude's current task list with progress.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -1337,7 +1337,7 @@
       "category": "productivity",
       "tier": "complex",
       "description": "A persistent per-project notes pane you can type into without leaving Claude Code.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -1421,7 +1421,7 @@
       "category": "productivity",
       "tier": "complex",
       "description": "/history searches every prompt you have sent across sessions and reuses one.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -1581,7 +1581,7 @@
       "category": "quality",
       "tier": "complex",
       "description": "Runs the tests related to what changed and shows pass/fail in the status line.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "quality",
@@ -1824,7 +1824,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "A timeline pane of every tool call with duration, status and input summary.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1851,7 +1851,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "A pane of every file read, edited or created in the session, with counts.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1878,7 +1878,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "/session-stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1905,7 +1905,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "Watch running subagents live: type, status, duration and last activity.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1932,7 +1932,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "Collects every failed command and tool error in one pane.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "observability",
@@ -1959,7 +1959,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "A heat map of when you use Claude Code, by hour and weekday.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "observability",
@@ -2179,7 +2179,7 @@
       "category": "prompting",
       "tier": "complex",
       "description": "/enhance rewrites your draft prompt into a precise, well-scoped request.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "prompting",
@@ -2633,7 +2633,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "/decide records an Architecture Decision Record in docs/decisions.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "memory",
@@ -2814,7 +2814,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "/map builds a compact map of your repository and gives it to Claude.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "memory",
@@ -2899,7 +2899,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "keywords": [
         "claude-mods",
         "memory",
@@ -2933,7 +2933,7 @@
       "category": "team",
       "tier": "complex",
       "description": "Keeps CHANGELOG.md's Unreleased section up to date as you commit.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -2994,7 +2994,7 @@
       "category": "team",
       "tier": "complex",
       "description": "/standup summarises what you did yesterday, from git history, ready to paste.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -3021,7 +3021,7 @@
       "category": "team",
       "tier": "complex",
       "description": "Adds a dedicated code-reviewer subagent and a /review command.",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "keywords": [
         "claude-mods",
         "team",
@@ -3078,7 +3078,7 @@
       "category": "team",
       "tier": "complex",
       "description": "/issue turns the current conversation into a well-structured GitHub issue.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -3105,7 +3105,7 @@
       "category": "team",
       "tier": "complex",
       "description": "/handoff writes a handoff note so a teammate can pick up exactly where you left off.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -3619,7 +3619,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "Turns kubectl apply into a server-side dry run with a diff you approve first.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "devops",
@@ -3656,7 +3656,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "Shows terraform plan as a clear pane of resources to create, change and destroy.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "devops",
@@ -3744,7 +3744,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "Starts your dev server in the background and shows its errors in a live pane.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "devops",
@@ -3827,7 +3827,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "/tail follows a log file or container in a live pane, with an errors-only filter.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "devops",
@@ -3894,7 +3894,7 @@
       "category": "devops",
       "tier": "complex",
       "description": "Shows a pre-deploy checklist (tests, branch, changelog) and asks you to confirm before deploying.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "devops",
@@ -3977,7 +3977,7 @@
       "category": "data",
       "tier": "complex",
       "description": "/explain-query runs EXPLAIN on your local database and explains the plan in plain words.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "data",
@@ -4052,7 +4052,7 @@
       "category": "data",
       "tier": "complex",
       "description": "A pane of your local database's tables and columns, ready to hand to Claude as context.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "data",
@@ -4286,7 +4286,7 @@
       "category": "data",
       "tier": "complex",
       "description": "/fixtures generates realistic test data that matches your schema or types.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "data",
@@ -4367,7 +4367,7 @@
       "category": "frontend",
       "tier": "complex",
       "description": "After UI edits, takes a Playwright screenshot of the page and shows it to Claude.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -4485,7 +4485,7 @@
       "category": "frontend",
       "tier": "complex",
       "description": "/lighthouse runs Lighthouse on a URL and shows performance, a11y, SEO and best-practice scores in a pane.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -4655,7 +4655,7 @@
       "category": "frontend",
       "tier": "complex",
       "description": "/components lists your existing UI components so Claude reuses them instead of creating duplicates.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "frontend",
@@ -4693,7 +4693,7 @@
       "category": "api",
       "tier": "complex",
       "description": "/http sends a request and shows the formatted response in a pane, like a tiny Postman in your terminal.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "api",
@@ -4817,7 +4817,7 @@
       "category": "api",
       "tier": "complex",
       "description": "/mock starts a fake API server from your OpenAPI spec so you can build the frontend before the backend.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "api",
@@ -4948,7 +4948,7 @@
       "category": "api",
       "tier": "complex",
       "description": "Gives Claude a compact summary of your GraphQL schema when you work on queries and resolvers.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "api",
@@ -5049,7 +5049,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "/second-opinion has a different model critique Claude's last answer or plan.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -5077,7 +5077,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "keywords": [
         "claude-mods",
         "agents",
@@ -5130,7 +5130,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "/queue lines up prompts that run one after another whenever Claude is free.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -5157,7 +5157,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "Runs your queued tasks at a scheduled time, like overnight, and leaves you a report.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -5288,7 +5288,7 @@
       "category": "learning",
       "tier": "complex",
       "description": "/explain-diff explains in plain words what changed in the last turn and why.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "learning",
@@ -5315,7 +5315,7 @@
       "category": "learning",
       "tier": "complex",
       "description": "/quiz asks you questions about the code Claude just wrote, to check you really understand it.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "learning",
@@ -5369,7 +5369,7 @@
       "category": "learning",
       "tier": "complex",
       "description": "/tour walks a newcomer through the repository step by step.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "learning",
@@ -5625,7 +5625,7 @@
       "category": "compliance",
       "tier": "complex",
       "description": "/data-map lists where your code collects, stores and sends personal data — a head start for GDPR.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -5748,7 +5748,7 @@
       "category": "compliance",
       "tier": "complex",
       "description": "/sbom generates a software bill of materials with every dependency and its license.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -5817,7 +5817,7 @@
       "category": "compliance",
       "tier": "complex",
       "description": "After installs, runs npm audit or pip-audit and shows any vulnerabilities in a pane.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "compliance",
@@ -5885,7 +5885,7 @@
       "category": "performance",
       "tier": "complex",
       "description": "/bench runs your benchmarks before and after a change and compares the numbers.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "performance",
@@ -5957,7 +5957,7 @@
       "category": "performance",
       "tier": "complex",
       "description": "Detects tests that pass and fail at random and keeps a list of the suspects.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "performance",
@@ -6015,7 +6015,7 @@
       "category": "performance",
       "tier": "complex",
       "description": "/outdated shows stale dependencies and how risky each upgrade is.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "performance",
@@ -6049,7 +6049,7 @@
       "category": "performance",
       "tier": "complex",
       "description": "/profile runs a command under a profiler and shows the hottest functions.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "performance",
@@ -6210,7 +6210,7 @@
       "category": "ecosystem",
       "tier": "complex",
       "description": "/mod-doctor checks your installed mods for outdated versions, conflicts and load errors.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -6237,7 +6237,7 @@
       "category": "ecosystem",
       "tier": "complex",
       "description": "Switch between sets of mods — work, personal, demo — with one command.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -6319,7 +6319,7 @@
       "category": "ecosystem",
       "tier": "complex",
       "description": "Unlock achievements as you work: first commit, 100 green test runs, a week-long streak and more.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -6427,7 +6427,7 @@
       "category": "ecosystem",
       "tier": "complex",
       "description": "/replay steps through the session — prompts, tool calls, edits — in a pane, like a video timeline.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "ecosystem",
@@ -6454,7 +6454,7 @@
       "category": "core",
       "tier": "complex",
       "description": "Recommends the right mods for your project and for what you're asking, with the commands to type, and installs them in one click.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "core",
@@ -6482,7 +6482,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "keywords": [
         "claude-mods",
         "agents",
@@ -6512,7 +6512,7 @@
       "category": "notifications",
       "tier": "complex",
       "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -6540,7 +6540,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "Give it a goal and success criteria; it plans, delegates, verifies and retries until the criteria pass or it needs you.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -6565,7 +6565,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "keywords": [
         "claude-mods",
         "memory",
@@ -6592,7 +6592,7 @@
       "category": "cost",
       "tier": "complex",
       "description": "Keeps the context lean automatically: trims noise, picks the right moment to compact and shows the tokens it saved.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "cost",
@@ -6616,7 +6616,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "Build, save and share reusable workflows — release, dependency update, security audit — and run them with one command.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -6642,7 +6642,7 @@
       "category": "observability",
       "tier": "complex",
       "description": "One dashboard for every Claude session on your machine: what each is doing, cost, blockers, with pause and priorities.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "observability",
@@ -6669,7 +6669,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "Coordinates sessions working on the same repo: file leases against conflicts, overlap warnings and hand-offs.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -6697,7 +6697,7 @@
       "category": "team",
       "tier": "simple",
       "description": "A shared panel of team conventions, recommended mods, budgets and rules, synced through the repo.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -6723,7 +6723,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -6747,7 +6747,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Posts progress and reports to Slack and takes questions and commands from a channel, through the mods-hub channel system.",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -6771,7 +6771,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -6795,7 +6795,7 @@
       "category": "productivity",
       "tier": "simple",
       "description": "Reads your calendar (private iCal link) so notifications and questions respect meetings and time off, and suggests slots for long jobs.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "productivity",
@@ -6821,7 +6821,7 @@
       "category": "team",
       "tier": "simple",
       "description": "Daily or weekly email summaries in plain language for clients and managers who don't live in chat.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -6845,7 +6845,7 @@
       "category": "team",
       "tier": "complex",
       "description": "Picks up a GitHub, Jira or Linear issue, sizes it with smart-router, works it in a dedicated session and opens the PR.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -6870,7 +6870,7 @@
       "category": "security",
       "tier": "complex",
       "description": "One security policy for every guard mod — permissive, standard or strict — plus a project safety score.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "security",
