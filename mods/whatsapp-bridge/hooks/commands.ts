@@ -121,4 +121,5 @@ export const HELP_TEXT = [
   '• ask for work ("fix the failing test"): you confirm, then Claude runs it and posts the result here',
   '• start with *#label* or *@project* to pick a session, or reply to its message',
   '• react 👍 approve · ❌ reject · ⏸ pause · 🔁 retry on a question or alert',
+  '• in a project group, members can just write their questions (or *help*, *status*, *report*, *digest*); only you can ask for work or steer',
 ].join('\n')

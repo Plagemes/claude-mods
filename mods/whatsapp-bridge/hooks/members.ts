@@ -1,4 +1,10 @@
-import { normalizeJid, ownerForms } from './inbound'
+import type { WaSessionInfo } from '../types'
+import { parseCommand } from './commands'
+import type { PhoneCommand } from './commands'
+import type { DigestItem } from './format'
+import { clockTime, minutes, tagOf } from './format'
+import { isMemberCommand, normalizeJid, ownerForms } from './inbound'
+import { clean, oneLine } from './privacy'
 
 const WINDOW_MS = 10 * 60_000
 const DAY_MS = 24 * 60 * 60_000
@@ -25,7 +31,7 @@ export const isOwnerPhone = (phone: string, owners: readonly string[]): boolean 
     .flatMap(ownerForms)
     .some(owner => owner === phone || (owner.length >= 8 && phone.length > owner.length && phone.length - owner.length <= MAX_COUNTRY_CODE && phone.endsWith(owner)))
 
-export type Trigger = { isTriggered: boolean; isBug: boolean; text: string }
+export type Trigger = { isTriggered: boolean; isBug: boolean; text: string; isAck?: boolean }
 
 /**
  * Whether a group member's message is meant for Claude: it mentions the bot, replies to the bot, starts with
@@ -51,6 +57,104 @@ export const memberTrigger = (
   }
   return { isTriggered: input.isReplyToBot && text !== '', isBug: false, text }
 }
+
+/** Words that only acknowledge ("ok", "grazie", "thanks"): nothing to answer. */
+const ACK_WORDS: ReadonlySet<string> = new Set([
+  'ok', 'okay', 'okk', 'oki', 'k', 'kk', 'okey', 'thanks', 'thank', 'you', 'thx', 'ty', 'tnx', 'grazie', 'mille', 'tante',
+  'perfetto', 'perfect', 'great', 'cool', 'nice', 'good', 'bene', 'va', 'benissimo', 'ottimo', 'top', 'yes', 'yep', 'yup', 'no', 'nope',
+  'si', 'sì', 'sure', 'certo', 'daccordo', "d'accordo", 'capito', 'got', 'it', 'lol', 'haha', 'ahah', 'ahahah', 'hahaha', 'ciao', 'bravo',
+  'brava', 'bravi', 'wow', 'super', 'fine', 'alright', 'np', 'grande', 'yeah', 'ah', 'oh', 'ahh', 'ohh', 'mh', 'mmh', 'hmm', 'vabbè', 'vabbe',
+])
+const ACK_MAX_WORDS = 4
+
+/**
+ * Whether a message only acknowledges: emoji, punctuation, or a few words like "ok grazie" / "thanks!". Answering
+ * those would be noise.
+ */
+export const isAcknowledgement = (raw: string): boolean => {
+  const words = raw
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}'\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(word => word !== '')
+  return words.length === 0 || (words.length <= ACK_MAX_WORDS && words.every(word => ACK_WORDS.has(word)))
+}
+
+/**
+ * Whether a member's message is for Claude. With `isOpen` (members mode "all", in a group linked to a project or
+ * session) every message is, except acknowledgements; otherwise only the trigger rule of `memberTrigger`.
+ * Triggers, mentions and `bug:` keep working in both modes.
+ */
+export const memberRoute = (
+  raw: string,
+  input: { triggers: readonly string[]; botPhone: string; isReplyToBot: boolean; isOpen: boolean },
+): Trigger => {
+  const triggered = memberTrigger(raw, input)
+  if (triggered.isTriggered || !input.isOpen) return triggered
+  const text = raw.trim()
+  if (isAcknowledgement(text)) return { isTriggered: false, isBug: false, text, isAck: true }
+  return { isTriggered: true, isBug: false, text }
+}
+
+/** The commands a member may use: they only read, and what they show is member-safe. */
+export type MemberCommand = 'help' | 'status' | 'report' | 'digest' | 'cost'
+const MEMBER_COMMANDS: ReadonlySet<PhoneCommand['kind']> = new Set(['help', 'status', 'report', 'digest', 'cost'])
+
+/**
+ * What a member's message asks for: a read-only command, something only the owner may do (a command, a slash
+ * command or a work request: refused), or a question.
+ */
+export const memberIntent = (text: string): { kind: 'command'; command: MemberCommand } | { kind: 'refuse' } | { kind: 'question' } => {
+  const kind = parseCommand(text).command.kind
+  if (MEMBER_COMMANDS.has(kind)) return { kind: 'command', command: kind as MemberCommand }
+  return isMemberCommand(text, kind !== 'prompt') ? { kind: 'refuse' } : { kind: 'question' }
+}
+
+/** The one-line refusal of a member's command or work request. */
+export const memberRefusal = (isOpen: boolean): string =>
+  isOpen
+    ? '🔒 Only the owner can ask Claude to do things. You can ask about the work, or send *help* to see what you can use.'
+    : '🔒 Only the owner can ask Claude to do things. You can ask questions about the work (start with *?*).'
+
+/** Help for group members: what they can write, and what stays with the owner. */
+export const memberHelpText = (input: { isOpen: boolean; seesCost: boolean }): string =>
+  [
+    '🤖 *Claude in this group* — for members:',
+    input.isOpen ? '• just write your question ("how is the login going?"): answered right away, nothing runs' : '• start with *?* to ask ("? how is the login going?"): answered right away, nothing runs',
+    '• *status* / stato — what Claude is doing on this project',
+    '• *report* / grafico — test results (charts)',
+    '• *digest* / riepilogo — the latest updates',
+    ...(input.seesCost ? ['• *cost* / costo — what the sessions cost'] : []),
+    '• *bug:* … (or 🐞) — report a bug: the owner decides whether to file it',
+    '• only the owner can ask for work or stop, pause or steer Claude',
+  ].join('\n')
+
+/** A relative path or a file name ("src/auth/login.ts", "./app.env", "README.md"): never shown to members. */
+const RELATIVE_PATH = /(?:\.{0,2}\/)?(?:[\w@.-]+\/)+[\w@.-]*|\b[\w-]+\.(?:[a-z][a-z0-9]{0,5})\b/gi
+
+/** A text for members, one line: secrets, figures, paths (absolute and relative), env values and code masked. */
+export const memberSafe = (text: string, max: number, root: string): string =>
+  oneLine(clean(text, { audience: 'member', maxChars: 4_000, root, shareCode: false }).text.replace(RELATIVE_PATH, '[file]'), max)
+
+/** `status` for a member: per live session of the group's project, its state, how long, prompts so far and a safe one-line task. */
+export const memberStatusText = (sessions: readonly WaSessionInfo[], now: number): string => {
+  if (sessions.length === 0) return '🤖 Claude is not running for this project right now.'
+  const lines = sessions.map(session => {
+    const task = session.task !== '' ? `: ${memberSafe(session.task, 70, session.root)}` : ''
+    const doing = session.state === 'working' ? `⚙️ working for ${minutes(now - session.lastActiveAt)}${task}` : `💤 idle${task !== '' ? ` · last${task}` : ''}`
+    return `*${tagOf(session)}*\n${doing}\n${session.turns} prompt${session.turns === 1 ? '' : 's'} in this session`
+  })
+  return `🤖 *Status*\n\n${lines.join('\n\n')}`
+}
+
+/** `digest` for a member: how many updates in the last day and the latest few, each member-safe. */
+export const memberDigestText = (items: readonly DigestItem[], now: number, root: string): string => {
+  const recent = items.filter(item => now - item.at < DAY_MS).sort((a, b) => a.at - b.at)
+  if (recent.length === 0) return '🗞 *Digest* — nothing new in the last day.'
+  const latest = recent.slice(-MEMBER_DIGEST_LINES).map(item => `• ${clockTime(item.at)} ${item.session} — ${memberSafe(item.text, 120, root)}`)
+  return [`🗞 *Digest* — ${recent.length} update${recent.length === 1 ? '' : 's'} in the last day${recent.length > latest.length ? `, the latest ${latest.length}` : ''}:`, ...latest].join('\n')
+}
+const MEMBER_DIGEST_LINES = 5
 
 export type RateBook = { times: Record<string, number[]>; day: string; dayCount: number }
 

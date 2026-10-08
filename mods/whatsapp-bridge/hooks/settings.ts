@@ -21,6 +21,10 @@ export type Settings = {
   briefingTime: string
   eveningTime: string
   memberTriggers: string[]
+  /** all: in a linked project/session group every member message is for Claude; trigger: only with a trigger word, mention or reply. */
+  memberMode: 'all' | 'trigger'
+  /** Members may ask for the cost (`cost` / `costo`). */
+  memberSeesCost: boolean
   memberRate: number
   memberDailyCap: number
   shareCodeWithMembers: boolean
@@ -119,6 +123,8 @@ export const readSettings = (options: Readonly<Record<string, unknown>>): Settin
     briefingTime: text(options.briefingTime, '08:30'),
     eveningTime: text(options.eveningTime, '19:00'),
     memberTriggers: list(options.memberTrigger ?? '?,claude').map(t => t.toLowerCase()),
+    memberMode: options.memberMode === 'trigger' ? 'trigger' : 'all',
+    memberSeesCost: options.memberSeesCost === true,
     memberRate: clampNumber(options.memberRate, 1, 60, 5),
     memberDailyCap: clampNumber(options.memberDailyCap, 1, 1000, 40),
     shareCodeWithMembers: options.shareCodeWithMembers === true,
