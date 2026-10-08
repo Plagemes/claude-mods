@@ -1,6 +1,6 @@
 {
   "name": "quiz-me",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/quiz asks you questions about the code Claude just wrote, to check you really understand it.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#quiz-me",

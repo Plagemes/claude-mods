@@ -1,6 +1,6 @@
 {
   "name": "todo-tracker",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Notices every TODO, FIXME and HACK Claude adds and lists them at turn end.",
   "author": {
     "name": "Plagemes",

@@ -44,6 +44,8 @@ import {
   route,
   sanitizePrefs,
 } from './router'
+import { categoryOf, dotSvg, glyphOf, iconSvg, markSvg } from './icons'
+import { CHANNEL_DOT, type Tone, badge, controlLine, feedRow, headerCounts, modCounts, modePill, plural, statusReport, statusText } from './look'
 import { costOf } from './shared/prices'
 import { redactText } from './shared/secrets'
 import { isTestCommand, summarizeRun } from './shared/test-runners'
@@ -65,6 +67,8 @@ const ACTIVITY_WRITE_MS = 30_000
 /** A session whose heartbeat is older than this is gone. */
 const SESSION_STALE_MS = 10 * 60_000
 const DEDUPE_MS = 30_000
+/** Notification keys remembered for the 30-second repeat check, at most. */
+const MAX_RECENT_NOTICES = 500
 const REPEATS_TO_REPORT = 3
 const CONTEXT_STEPS = [70, 85, 95] as const
 const LIST_TIMEOUT_MS = 15_000
@@ -84,6 +88,12 @@ const CONTROL_MAX_AGE_MS = 60 * 60_000
 const CONTROL_ACTIONS: readonly ModsControlAction[] = ['stop', 'pause', 'resume']
 const CONTROL_SCOPES: readonly ModsControlScope[] = ['session', 'all']
 const PERSON_ORIGINS = new Set(['composer', 'bridge', 'sdk', 'slack-ping'])
+/** Changed values are copied to state on the next turn of the clock, once per round however many calls changed them. */
+const FLUSH_MS = 0
+const FLUSH_RETRY_MS = 1_000
+const MAX_FLUSH_ROUNDS = 20
+/** A mode derived this recently answers `mods.mode` from memory. */
+const MODE_FRESH_MS = 1_000
 
 // ── State the panel draws from ──────────────────────────────────────────────────────────────────────
 
@@ -136,6 +146,25 @@ const BOTTOM: Mods = {
 
 type Options = { idleMs: number; awayMs: number; sensors: boolean; captureToasts: boolean }
 
+/**
+ * The hub's own values, held in memory: every `mods.*` call answers from here and writes here, and `flush` copies
+ * what changed to `$.state` (for drawings and the mods that read the hub's state) at most once per round, with plain
+ * writes. The hub is the only writer of its keys, so no read-modify-write (`update`) is needed: with ~165 mods calling
+ * at once, `update`'s retry-on-conflict made every call re-read and re-write the same key hundreds of times.
+ */
+type Memory = {
+  mode: ModsMode
+  prefs: ModsPrefs
+  tabs: ModsTab[]
+  channels: ModsChannel[]
+  feed: ModsEvent[]
+  inbox: ModsNotice[]
+  installed: ModsInstalled
+  outbox: Record<string, ModsNotice[]>
+  control: ModsControl | null
+}
+type MemoryKey = keyof Memory
+
 type Runtime = {
   options: Options
   sessionId: string
@@ -168,6 +197,28 @@ type Runtime = {
   controlSeen: Set<string>
   /** control.json entries older than this were raised before this session (or load) looked. */
   controlFloor: number
+  mem: Memory
+  /** The latest event per topic this load recorded (older ones are read from state). */
+  latest: Map<string, ModsEvent>
+  /** Whether `mem` holds what state held when this load began (state outlives a hot reload; module variables do not). */
+  isHydrated: boolean
+  hydrating: Promise<void> | undefined
+  dirty: Set<MemoryKey>
+  dirtyLatest: Set<string>
+  isFlushScheduled: boolean
+  flushing: Promise<void> | undefined
+  /** Changes of the shared prefs run one after another, so two at once never drop each other's change. */
+  prefsChain: Promise<unknown>
+  /** Timer work in flight: a tick, a control poll or a listing never overlaps itself on a busy worker. */
+  isTicking: boolean
+  isPolling: boolean
+  listing: Promise<void> | undefined
+  /** Shared files already read, by path, with the mtime they had: unchanged files are not read again. */
+  files: Map<string, { mtimeMs: number; value: unknown }>
+  /** When `mem.mode` was last derived, in wall-clock milliseconds (how fresh a cached answer is, not the session's time). */
+  modeComputedAt: number
+  /** What this load last put on the status line. */
+  statusText: string | undefined
 }
 
 const newRuntime = (options: Options): Runtime => ({
@@ -198,6 +249,21 @@ const newRuntime = (options: Options): Runtime => ({
   controlTimer: undefined,
   controlSeen: new Set(),
   controlFloor: 0,
+  mem: { mode: INITIAL_MODE, prefs: DEFAULT_PREFS, tabs: [], channels: [], feed: [], inbox: [], installed: EMPTY_INSTALLED, outbox: {}, control: null },
+  latest: new Map(),
+  isHydrated: false,
+  hydrating: undefined,
+  dirty: new Set(),
+  dirtyLatest: new Set(),
+  isFlushScheduled: false,
+  flushing: undefined,
+  prefsChain: Promise.resolve(),
+  isTicking: false,
+  isPolling: false,
+  listing: undefined,
+  files: new Map(),
+  modeComputedAt: 0,
+  statusText: undefined,
 })
 
 /** The prefix of the ids this load gives notices and controls: session, then load. */
@@ -211,6 +277,130 @@ const minuteOfDay = (now: number): number => {
 const oneLine = (text: string, max = MAX_TEXT): string => text.replace(/\s+/g, ' ').trim().slice(0, max)
 
 const asJson = (value: unknown): ModsJson => JSON.parse(JSON.stringify(value ?? null)) as ModsJson
+
+// ── Memory, and its copy in state ───────────────────────────────────────────────────────────────────
+
+/** Loads what state held into memory (state outlives a hot reload, module variables do not). */
+async function hydrate($: EngineInterface, rt: Runtime): Promise<void> {
+  const [mode, prefs, tabs, channels, feed, inbox, installed, outbox, control, now] = await Promise.all([
+    read($, modeAtom),
+    read($, prefsAtom),
+    read($, tabsAtom),
+    read($, channelsAtom),
+    read($, feedAtom),
+    read($, inboxAtom),
+    read($, installedAtom),
+    read($, outboxAtom),
+    read($, controlAtom),
+    $.clock.now(),
+  ])
+  if (rt.isHydrated) return
+  rt.mem = { mode, prefs, tabs, channels, feed, inbox, installed, outbox, control }
+  // A mod that asks before the hub's own session.start ran: the person counts as here from now, not since 1970.
+  if (rt.lastActivityAt === 0) {
+    rt.lastActivityAt = now
+    rt.presenceSince = now
+  }
+  rt.isHydrated = true
+}
+
+/** Every hook awaits this first; one load reads state once, whoever asks first (single flight). */
+async function ready($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.isHydrated) return
+  rt.hydrating ??= hydrate($, rt).finally(() => {
+    rt.hydrating = undefined
+  })
+  try {
+    await rt.hydrating
+  } catch {
+    // The dispatch that started it was abandoned; this caller reads for itself below.
+  }
+  if (!rt.isHydrated) await hydrate($, rt)
+}
+
+/** Changes a value in memory and has it copied to state with the next flush. */
+function remember<K extends MemoryKey>($: EngineInterface, rt: Runtime, key: K, value: Memory[K]): Memory[K] {
+  rt.mem[key] = value
+  rt.dirty.add(key)
+  scheduleFlush($, rt, FLUSH_MS)
+  return value
+}
+
+function scheduleFlush($: EngineInterface, rt: Runtime, delayMs: number): void {
+  if (rt.isFlushScheduled) return
+  rt.isFlushScheduled = true
+  $.clock.after(delayMs, () => {
+    rt.isFlushScheduled = false
+    void flush($, rt)
+  })
+}
+
+/** Copies what changed to state: one plain write per changed key per round, however many calls changed it. */
+function flush($: EngineInterface, rt: Runtime): Promise<void> {
+  rt.flushing ??= writeDirty($, rt).finally(() => {
+    rt.flushing = undefined
+  })
+  return rt.flushing
+}
+
+async function writeDirty($: EngineInterface, rt: Runtime): Promise<void> {
+  let hasFailed = false
+  for (let round = 0; round < MAX_FLUSH_ROUNDS && !hasFailed && (rt.dirty.size > 0 || rt.dirtyLatest.size > 0); round += 1) {
+    const keys = [...rt.dirty]
+    const topics = [...rt.dirtyLatest]
+    rt.dirty.clear()
+    rt.dirtyLatest.clear()
+    const writes = [
+      ...keys.map(key =>
+        writeKey($, rt, key).then(
+          () => true,
+          () => {
+            rt.dirty.add(key)
+            return false
+          },
+        ),
+      ),
+      ...topics.map(topic => {
+        const event = rt.latest.get(topic)
+        if (event === undefined) return Promise.resolve(true)
+        return $.state.set({ ...LATEST, id: topic }, event).then(
+          () => true,
+          () => {
+            rt.dirtyLatest.add(topic)
+            return false
+          },
+        )
+      }),
+    ]
+    hasFailed = (await Promise.all(writes)).includes(false)
+  }
+  // A failed write (or a burst longer than the rounds) is tried again a moment later, never in a tight loop.
+  if (rt.dirty.size > 0 || rt.dirtyLatest.size > 0) scheduleFlush($, rt, hasFailed ? FLUSH_RETRY_MS : FLUSH_MS)
+}
+
+function writeKey($: EngineInterface, rt: Runtime, key: MemoryKey): Promise<unknown> {
+  const mem = rt.mem
+  switch (key) {
+    case 'mode':
+      return $.state.set({ plugin: 'mods-hub', key: 'mode' }, mem.mode)
+    case 'prefs':
+      return $.state.set({ plugin: 'mods-hub', key: 'prefs' }, mem.prefs)
+    case 'tabs':
+      return $.state.set({ plugin: 'mods-hub', key: 'tabs' }, mem.tabs)
+    case 'channels':
+      return $.state.set({ plugin: 'mods-hub', key: 'channels' }, mem.channels)
+    case 'feed':
+      return $.state.set({ plugin: 'mods-hub', key: 'feed' }, mem.feed)
+    case 'inbox':
+      return $.state.set({ plugin: 'mods-hub', key: 'inbox' }, mem.inbox)
+    case 'installed':
+      return $.state.set({ plugin: 'mods-hub', key: 'installed' }, mem.installed)
+    case 'outbox':
+      return $.state.set({ plugin: 'mods-hub', key: 'outbox' }, mem.outbox)
+    case 'control':
+      return $.state.set({ plugin: 'mods-hub', key: 'control' }, mem.control)
+  }
+}
 
 // ── Files shared by sessions ────────────────────────────────────────────────────────────────────────
 
@@ -230,6 +420,20 @@ async function writeJsonFile($: EngineInterface, path: string, value: unknown): 
   }
 }
 
+/** A shared file a listing found: read again only when its mtime moved (a listing without mtimes reads every time). */
+async function readJsonCached($: EngineInterface, rt: Runtime, path: string, mtimeMs: number): Promise<unknown> {
+  const known = rt.files.get(path)
+  if (mtimeMs > 0 && known !== undefined && known.mtimeMs === mtimeMs) return known.value
+  const value = await readJsonFile($, path)
+  if (mtimeMs > 0) rt.files.set(path, { mtimeMs, value })
+  return value
+}
+
+/** Drops what is remembered of files under `prefix` that the last listing no longer showed. */
+function forgetFiles(rt: Runtime, prefix: string, seen: ReadonlySet<string>): void {
+  for (const path of rt.files.keys()) if (path.startsWith(prefix) && !seen.has(path)) rt.files.delete(path)
+}
+
 /**
  * Reads prefs.json (another session may have changed it) and the shared last activity. A missing or unreadable file
  * changes nothing: a home where the write failed must not undo, 30 s later, what the person just set.
@@ -237,21 +441,34 @@ async function writeJsonFile($: EngineInterface, path: string, value: unknown): 
 async function loadShared($: EngineInterface, rt: Runtime): Promise<void> {
   if (rt.dir === '') return
   const raw = await readJsonFile($, `${rt.dir}/prefs.json`)
-  const prefs = raw === undefined ? await read($, prefsAtom) : sanitizePrefs(raw)
-  const current = await read($, prefsAtom)
-  if (JSON.stringify(current) !== JSON.stringify(prefs)) await update($, prefsAtom, () => prefs)
+  if (raw !== undefined) {
+    const prefs = sanitizePrefs(raw)
+    if (JSON.stringify(rt.mem.prefs) !== JSON.stringify(prefs)) remember($, rt, 'prefs', prefs)
+  }
   const activity = (await readJsonFile($, `${rt.dir}/activity.json`)) as { at?: unknown } | undefined
   if (typeof activity?.at === 'number' && activity.at > rt.lastActivityAt) rt.lastActivityAt = activity.at
 }
 
-/** Changes the prefs every session shares, then recomputes the mode. */
-async function changePrefs($: EngineInterface, rt: Runtime, change: (prefs: ModsPrefs) => ModsPrefs): Promise<ModsMode> {
+/** Changes the prefs every session shares, then recomputes the mode; changes made at once run one after another. */
+function changePrefs($: EngineInterface, rt: Runtime, change: (prefs: ModsPrefs) => ModsPrefs): Promise<ModsMode> {
+  const next = rt.prefsChain.then(
+    () => applyPrefs($, rt, change),
+    () => applyPrefs($, rt, change),
+  )
+  rt.prefsChain = next.catch(() => undefined)
+  return next
+}
+
+async function applyPrefs($: EngineInterface, rt: Runtime, change: (prefs: ModsPrefs) => ModsPrefs): Promise<ModsMode> {
   // From the file, not this session's copy (up to 30 s old): what another session changed meanwhile is kept.
   const onDisk = rt.dir === '' ? undefined : await readJsonFile($, `${rt.dir}/prefs.json`)
-  const next = sanitizePrefs(change(onDisk === undefined ? await read($, prefsAtom) : sanitizePrefs(onDisk)))
-  await update($, prefsAtom, () => next)
+  const next = sanitizePrefs(change(onDisk === undefined ? rt.mem.prefs : sanitizePrefs(onDisk)))
+  remember($, rt, 'prefs', next)
   if (rt.dir !== '') await writeJsonFile($, `${rt.dir}/prefs.json`, next)
-  return refreshMode($, rt, 'manual')
+  const mode = await refreshMode($, rt, 'manual')
+  // A change someone made is drawn (and read by other mods) right away.
+  await flush($, rt)
+  return mode
 }
 
 /**
@@ -263,7 +480,7 @@ async function heartbeat($: EngineInterface, rt: Runtime, isEnding = false): Pro
   if (rt.dir === '' || rt.sessionId === '') return
   const now = await $.clock.now()
   rt.lastHeartbeatAt = now
-  const mode = await read($, modeAtom)
+  const mode = rt.mem.mode
   const own = {
     id: rt.sessionId,
     project: rt.project,
@@ -294,15 +511,19 @@ async function mergedSessions($: EngineInterface, rt: Runtime, now: number): Pro
   const sessions: Record<string, unknown> = {}
   const spoken = new Set<string>()
   const entries = await $.fs.list(`${rt.dir}/sessions`).catch(() => [])
+  const seen = new Set<string>()
   for (const entry of entries) {
     if (entry.kind !== 'file' || !entry.name.endsWith('.json') || (entry.mtimeMs > 0 && now - entry.mtimeMs >= SESSION_STALE_MS)) continue
-    const one = (await readJsonFile($, `${rt.dir}/sessions/${entry.name}`)) as { id?: unknown; lastSeen?: unknown; ended?: unknown } | undefined
+    const path = `${rt.dir}/sessions/${entry.name}`
+    seen.add(path)
+    const one = (await readJsonCached($, rt, path, entry.mtimeMs)) as { id?: unknown; lastSeen?: unknown; ended?: unknown } | undefined
     if (typeof one?.id !== 'string' || typeof one.lastSeen !== 'number') continue
     spoken.add(one.id)
     if (one.ended === true || now - one.lastSeen >= SESSION_STALE_MS) continue
     const { ended: _ended, ...line } = one
     sessions[one.id] = line
   }
+  forgetFiles(rt, `${rt.dir}/sessions/`, seen)
   const legacy = ((await readJsonFile($, `${rt.dir}/sessions.json`)) ?? {}) as Record<string, { lastSeen?: unknown } | null>
   for (const [id, entry] of Object.entries(legacy)) {
     if (!spoken.has(id) && id !== rt.sessionId && typeof entry?.lastSeen === 'number' && now - entry.lastSeen < SESSION_STALE_MS) sessions[id] = entry
@@ -312,13 +533,20 @@ async function mergedSessions($: EngineInterface, rt: Runtime, now: number): Pro
 
 // ── Presence and the mode ───────────────────────────────────────────────────────────────────────────
 
-/** Recomputes presence and the mode; a change of presence is published as session.idle / away / back. */
+/**
+ * Recomputes presence and the mode from memory (no state read, no file read: one clock read); the mode goes to state
+ * only when it changed, and a change of presence is published as session.idle / away / back.
+ */
 async function refreshMode($: EngineInterface, rt: Runtime, reason: ModsPresenceReason): Promise<ModsMode> {
   const now = await $.clock.now()
-  const prefs = await read($, prefsAtom)
+  const prefs = rt.mem.prefs
   const presence = presenceOf(prefs.presence, { lastActivityAt: rt.lastActivityAt, now, idleMs: rt.options.idleMs, awayMs: rt.options.awayMs })
   const mode = deriveMode(prefs, presence, now, minuteOfDay(now), { idleMinutes: rt.options.idleMs / MINUTE_MS, awayMinutes: rt.options.awayMs / MINUTE_MS })
-  await update($, modeAtom, () => mode)
+  if (!sameMode(rt.mem.mode, mode)) remember($, rt, 'mode', mode)
+  rt.modeComputedAt = Date.now()
+  showStatus($, rt, now)
+  const isNightOver = rt.wasNight && !mode.isNight
+  rt.wasNight = mode.isNight
   if (presence !== rt.presence) {
     const since = rt.presenceSince
     const wasAway = rt.presence === 'away'
@@ -332,17 +560,26 @@ async function refreshMode($: EngineInterface, rt: Runtime, reason: ModsPresence
       await publishSelf($, rt, { topic: 'session.away', data: { since: now, reason } })
     }
   }
-  if (rt.wasNight && !mode.isNight) await sendDigest($, rt)
-  rt.wasNight = mode.isNight
+  if (isNightOver) await sendDigest($, rt)
   return mode
 }
+
+/** The status line entry, set only when it changes (Silent, Night, away or held work; cleared otherwise). */
+function showStatus($: EngineInterface, rt: Runtime, now: number): void {
+  const text = statusText(rt.mem.mode, rt.mem.control, now)
+  if (text === rt.statusText) return
+  rt.statusText = text
+  $.ui.status(text)
+}
+
+const MODE_FIELDS: readonly (keyof ModsMode)[] = ['presence', 'isSilent', 'silentUntil', 'isNight', 'isNightOn', 'quietHours', 'idleMinutes', 'awayMinutes', 'interaction', 'canAsk']
+const sameMode = (a: ModsMode, b: ModsMode): boolean => MODE_FIELDS.every(field => a[field] === b[field])
 
 /** The person did something: they are here, and a manual "away" ends. */
 async function noteActivity($: EngineInterface, rt: Runtime): Promise<void> {
   const now = await $.clock.now()
   rt.lastActivityAt = now
-  const prefs = await read($, prefsAtom)
-  if (prefs.presence === 'away') {
+  if (rt.mem.prefs.presence === 'away') {
     await changePrefs($, rt, current => ({ ...current, presence: 'auto' }))
   } else {
     await refreshMode($, rt, 'activity')
@@ -353,18 +590,28 @@ async function noteActivity($: EngineInterface, rt: Runtime): Promise<void> {
   }
 }
 
-/** Every 30 s: other sessions' prefs and activity, presence timers, silent's end, night's end, the heartbeat. */
+/**
+ * Every 30 s: other sessions' prefs and activity, presence timers, silent's end, night's end, the heartbeat. A tick
+ * still running when the next is due (a busy worker) lets it pass rather than stacking a second one on it.
+ */
 async function tick($: EngineInterface, rt: Runtime): Promise<void> {
-  await loadShared($, rt)
-  const prefs = await read($, prefsAtom)
-  const now = await $.clock.now()
-  if (prefs.isSilent && prefs.silentUntil !== null && now >= prefs.silentUntil) {
-    await changePrefs($, rt, current => ({ ...current, isSilent: false, silentUntil: null }))
-    $.ui.toast('Silent is over: toasts and sounds are back.')
-  } else {
-    await refreshMode($, rt, 'timer')
+  if (rt.isTicking) return
+  rt.isTicking = true
+  try {
+    await ready($, rt)
+    await loadShared($, rt)
+    const prefs = rt.mem.prefs
+    const now = await $.clock.now()
+    if (prefs.isSilent && prefs.silentUntil !== null && now >= prefs.silentUntil) {
+      await changePrefs($, rt, current => ({ ...current, isSilent: false, silentUntil: null }))
+      $.ui.toast('Silent is over: toasts and sounds are back.')
+    } else {
+      await refreshMode($, rt, 'timer')
+    }
+    if (now - rt.lastHeartbeatAt >= HEARTBEAT_MS) await heartbeat($, rt)
+  } finally {
+    rt.isTicking = false
   }
-  if (now - rt.lastHeartbeatAt >= HEARTBEAT_MS) await heartbeat($, rt)
 }
 
 // ── The bus ─────────────────────────────────────────────────────────────────────────────────────────
@@ -395,14 +642,16 @@ async function record($: EngineInterface, rt: Runtime, input: ModsPublishInput, 
     session: rt.sessionId,
     scope: input.scope ?? 'session',
   }
-  await update($, feedAtom, feed => [...feed, event].slice(-FEED_SIZE))
-  await $.state.set({ ...LATEST, id: event.topic }, event)
+  remember($, rt, 'feed', [...rt.mem.feed.slice(1 - FEED_SIZE), event])
+  rt.latest.set(event.topic, event)
+  rt.dirtyLatest.add(event.topic)
+  scheduleFlush($, rt, FLUSH_MS)
   if (event.scope === 'global') rt.globalFeed = [...rt.globalFeed, event].slice(-GLOBAL_FEED_SIZE)
   return event
 }
 
-async function recentEvents($: EngineInterface, input: { topic?: string; prefix?: string; since?: number; limit?: number }): Promise<ModsEvent[]> {
-  const feed = await read($, feedAtom)
+function recentEvents(rt: Runtime, input: { topic?: string; prefix?: string; since?: number; limit?: number }): ModsEvent[] {
+  const feed = rt.mem.feed
   const limit = Math.max(1, Math.min(FEED_SIZE, input.limit ?? FEED_SIZE))
   return feed
     .filter(event => (input.topic === undefined || event.topic === input.topic) && (input.prefix === undefined || topicMatches(event.topic, input.prefix)))
@@ -419,8 +668,8 @@ const problemWithNotice = (input: ModsNotifyInput): string | undefined => {
   return undefined
 }
 
-async function addToInbox($: EngineInterface, notice: ModsNotice): Promise<void> {
-  await update($, inboxAtom, inbox => [...inbox, notice].slice(-INBOX_SIZE))
+function addToInbox($: EngineInterface, rt: Runtime, notice: ModsNotice): void {
+  remember($, rt, 'inbox', [...rt.mem.inbox.slice(1 - INBOX_SIZE), notice])
 }
 
 /** Routes one notification: toast, channels (in the background), or held for the digest. */
@@ -428,15 +677,19 @@ async function dispatch($: EngineInterface, rt: Runtime, input: ModsNotifyInput,
   const now = await $.clock.now()
   // Identical means the same text too: two different "CI failed" bodies (two repos) are two notifications.
   const key = `${source}|${input.level}|${input.title}|${input.body ?? ''}`
+  // Oldest first (a key is set again only after it expired and was dropped): stop at the first fresh one.
+  for (const [old, at] of rt.recentNotices) {
+    if (now - at <= DEDUPE_MS && rt.recentNotices.size <= MAX_RECENT_NOTICES) break
+    rt.recentNotices.delete(old)
+  }
   const seen = rt.recentNotices.get(key)
-  for (const [old, at] of rt.recentNotices) if (now - at > DEDUPE_MS) rt.recentNotices.delete(old)
   rt.seq += 1
   const id = `n-${idTag(rt)}-${rt.seq}`
   if (seen !== undefined && now - seen < DEDUPE_MS) return { id, targets: [], held: false, reason: 'a repeat of the last 30 seconds' }
   rt.recentNotices.set(key, now)
 
   const mode = await refreshMode($, rt, 'timer')
-  const decision = route(input, mode, await read($, prefsAtom), await read($, channelsAtom))
+  const decision = route(input, mode, rt.mem.prefs, rt.mem.channels)
   const targets = [...(decision.toast ? ['toast'] : []), ...decision.channels]
   const notice: ModsNotice = {
     ...input,
@@ -449,7 +702,7 @@ async function dispatch($: EngineInterface, rt: Runtime, input: ModsNotifyInput,
     held: decision.held,
     ...(decision.reason === undefined ? {} : { reason: decision.reason }),
   }
-  await addToInbox($, notice)
+  addToInbox($, rt, notice)
   if (decision.toast) $.ui.toast(noticeLine(notice))
   if (decision.held) rt.held = [...rt.held, notice].slice(-INBOX_SIZE)
   if (decision.channels.length > 0) $.clock.after(0, () => void deliverAll($, rt, notice, decision.channels))
@@ -467,7 +720,7 @@ const forChannels = (notice: ModsNotice): ModsNotice => ({
 /** Hands a notice to each channel: push channels answer `mods.deliver`, pull channels find it in their outbox. */
 async function deliverAll($: EngineInterface, rt: Runtime, notice: ModsNotice, ids: readonly string[]): Promise<void> {
   const safe = forChannels(notice)
-  const channels = await read($, channelsAtom)
+  const channels = rt.mem.channels
   for (const id of ids) {
     const channel = channels.find(one => one.id === id)
     if (channel === undefined) continue
@@ -479,7 +732,12 @@ async function deliverAll($: EngineInterface, rt: Runtime, notice: ModsNotice, i
         isDelivered = false
       }
     }
-    if (!isDelivered) await update($, outboxAtom, box => ({ ...box, [id]: [...(box[id] ?? []), safe].slice(-OUTBOX_SIZE) }))
+    if (!isDelivered) {
+      const box = rt.mem.outbox
+      remember($, rt, 'outbox', { ...box, [id]: [...(box[id] ?? []).slice(1 - OUTBOX_SIZE), safe] })
+      // In state before anything else happens: a hot reload must not lose a notice its channel has not drained.
+      await flush($, rt)
+    }
   }
 }
 
@@ -488,18 +746,21 @@ async function deliverAll($: EngineInterface, rt: Runtime, notice: ModsNotice, i
  * everything up to that id and returns what still waits, keeping it: at-least-once. Without one (the first
  * contract) it hands the notices over and forgets them.
  */
-async function drainOutbox($: EngineInterface, input: ModsDrainInput): Promise<ModsNotice[]> {
-  let waiting: ModsNotice[] = []
-  await update($, outboxAtom, box => {
-    const list = box[input.channel] ?? []
-    if (input.after === undefined) {
-      waiting = list
-      return { ...box, [input.channel]: [] }
-    }
-    const handled = input.after === null ? -1 : list.findIndex(notice => notice.id === input.after)
-    waiting = list.slice(handled + 1)
-    return handled < 0 ? box : { ...box, [input.channel]: waiting }
-  })
+async function drainOutbox($: EngineInterface, rt: Runtime, input: ModsDrainInput): Promise<ModsNotice[]> {
+  const box = rt.mem.outbox
+  const list = box[input.channel] ?? []
+  if (input.after === undefined) {
+    if (list.length === 0) return []
+    remember($, rt, 'outbox', { ...box, [input.channel]: [] })
+    await flush($, rt)
+    return list
+  }
+  const handled = input.after === null ? -1 : list.findIndex(notice => notice.id === input.after)
+  const waiting = list.slice(handled + 1)
+  if (handled >= 0) {
+    remember($, rt, 'outbox', { ...box, [input.channel]: waiting })
+    await flush($, rt)
+  }
   return waiting
 }
 
@@ -520,8 +781,8 @@ async function sendDigest($: EngineInterface, rt: Runtime): Promise<void> {
     targets: [],
     held: false,
   }
-  const channels = (await read($, channelsAtom)).filter(channel => channel.audience === 'me' && channel.status !== 'unconfigured').map(channel => channel.id)
-  await addToInbox($, { ...digest, targets: channels })
+  const channels = rt.mem.channels.filter(channel => channel.audience === 'me' && channel.status !== 'unconfigured').map(channel => channel.id)
+  addToInbox($, rt, { ...digest, targets: channels })
   if (channels.length > 0) await deliverAll($, rt, digest, channels)
 }
 
@@ -551,8 +812,12 @@ const problemWithStop = (input: ModsStopInput): string | undefined => {
 
 /** One control file's list: `{ controls: [...] }`. */
 async function readControlFile($: EngineInterface, path: string): Promise<ModsControl[]> {
-  const raw = (await readJsonFile($, path)) as { controls?: unknown } | undefined
-  return Array.isArray(raw?.controls) ? raw.controls.filter(isControl) : []
+  return controlsIn(await readJsonFile($, path))
+}
+
+const controlsIn = (raw: unknown): ModsControl[] => {
+  const controls = (raw as { controls?: unknown } | undefined)?.controls
+  return Array.isArray(controls) ? controls.filter(isControl) : []
 }
 
 /**
@@ -562,17 +827,24 @@ async function readControlFile($: EngineInterface, path: string): Promise<ModsCo
  */
 async function readControls($: EngineInterface, rt: Runtime, now: number): Promise<ModsControl[]> {
   const controls = await readControlFile($, `${rt.dir}/control.json`)
+  const seen = new Set<string>()
   for (const entry of await $.fs.list(`${rt.dir}/control`).catch(() => [])) {
     if (entry.kind !== 'file' || !entry.name.endsWith('.json') || (entry.mtimeMs > 0 && now - entry.mtimeMs >= CONTROL_MAX_AGE_MS)) continue
-    controls.push(...(await readControlFile($, `${rt.dir}/control/${entry.name}`)))
+    const path = `${rt.dir}/control/${entry.name}`
+    seen.add(path)
+    controls.push(...controlsIn(await readJsonCached($, rt, path, entry.mtimeMs)))
   }
+  forgetFiles(rt, `${rt.dir}/control/`, seen)
   return controls
 }
 
 /** A control takes effect here: the `control` state, and `control.<action>` on the bus with the asking mod as source. */
 async function applyControl($: EngineInterface, rt: Runtime, control: ModsControl): Promise<void> {
   rt.controlSeen.add(control.id)
-  await update($, controlAtom, () => control)
+  remember($, rt, 'control', control)
+  showStatus($, rt, await $.clock.now())
+  // Mods that run on their own read it from state: written before they hear of it.
+  await flush($, rt)
   const input = { topic: `control.${control.action}`, data: { id: control.id, scope: control.scope, reason: control.reason, by: control.by, session: control.session } } as ModsPublishInput
   await record($, rt, input, control.source)
   try {
@@ -607,12 +879,18 @@ async function raiseControl($: EngineInterface, rt: Runtime, input: ModsStopInpu
 
 /** Every 5 s: what other sessions raised for all sessions since this one started, applied in order, once. */
 async function pollControls($: EngineInterface, rt: Runtime): Promise<void> {
-  if (rt.dir === '') return
-  if (rt.controlFloor === 0) rt.controlFloor = await $.clock.now()
-  const fresh = (await readControls($, rt, await $.clock.now()))
-    .filter(one => one.scope === 'all' && one.session !== rt.sessionId && one.at >= rt.controlFloor && !rt.controlSeen.has(one.id))
-    .sort((a, b) => a.at - b.at)
-  for (const control of fresh) await applyControl($, rt, control)
+  if (rt.dir === '' || rt.isPolling) return
+  rt.isPolling = true
+  try {
+    await ready($, rt)
+    if (rt.controlFloor === 0) rt.controlFloor = await $.clock.now()
+    const fresh = (await readControls($, rt, await $.clock.now()))
+      .filter(one => one.scope === 'all' && one.session !== rt.sessionId && one.at >= rt.controlFloor && !rt.controlSeen.has(one.id))
+      .sort((a, b) => a.at - b.at)
+    for (const control of fresh) await applyControl($, rt, control)
+  } finally {
+    rt.isPolling = false
+  }
 }
 
 // ── Sensors: standard events from what the session does ─────────────────────────────────────────────
@@ -655,8 +933,19 @@ async function observeTurn($: EngineInterface, rt: Runtime, usage: Parameters<ty
 
 // ── Installed plugins ───────────────────────────────────────────────────────────────────────────────
 
-/** `claude plugin list --json`, in the background; the Home tab shows what it found. */
-async function listPlugins($: EngineInterface): Promise<void> {
+/**
+ * `claude plugin list --json`, in the background, when the last listing is missing or older than 10 minutes; one at a
+ * time however many mods ask (`installed()` and `hello` answer from memory meanwhile).
+ */
+function refreshInstalled($: EngineInterface, rt: Runtime, now: number): void {
+  const listedAt = rt.mem.installed.listedAt
+  if (rt.listing !== undefined || (listedAt !== null && now - listedAt <= LIST_REFRESH_MS)) return
+  rt.listing = listPlugins($, rt).finally(() => {
+    rt.listing = undefined
+  })
+}
+
+async function listPlugins($: EngineInterface, rt: Runtime): Promise<void> {
   try {
     const ran = await $.process.run(['claude', 'plugin', 'list', '--json'], { timeoutMs: LIST_TIMEOUT_MS })
     if (ran.exitCode !== 0) return
@@ -668,7 +957,7 @@ async function listPlugins($: EngineInterface): Promise<void> {
         return { name, marketplace, version: typeof row.version === 'string' ? row.version : '', isEnabled: row.enabled !== false }
       })
     const now = await $.clock.now()
-    await update($, installedAtom, installed => ({ ...installed, plugins, listedAt: now }))
+    remember($, rt, 'installed', { ...rt.mem.installed, plugins, listedAt: now })
   } catch {
     // No `claude` on PATH, or an older CLI: the Home tab lists the mods that said hello.
   }
@@ -676,8 +965,10 @@ async function listPlugins($: EngineInterface): Promise<void> {
 
 // ── The /hub command ────────────────────────────────────────────────────────────────────────────────
 
-async function openPanel($: EngineInterface, tab: string): Promise<boolean> {
-  await update($, tabAtom, () => tab)
+async function openPanel($: EngineInterface, rt: Runtime, tab: string): Promise<boolean> {
+  // What the panel draws from is in state before it opens.
+  await flush($, rt)
+  await $.state.set({ plugin: 'mods-hub', key: 'tab' }, tab)
   const opened = await $.ui.open({ id: PANE, title: PANE_TITLE })
   return opened.isPlaced
 }
@@ -691,18 +982,11 @@ async function runHub($: EngineInterface, rt: Runtime, args: string): Promise<st
   const now = await $.clock.now()
   switch (command.kind) {
     case 'open':
-      return (await openPanel($, HOME)) ? 'Claude Mods panel opened.' : 'Claude Mods panel opened; widen the terminal to see it.'
+      return (await openPanel($, rt, HOME)) ? 'Claude Mods panel opened.' : 'Claude Mods panel opened; widen the terminal to see it.'
     case 'status': {
       const mode = await refreshMode($, rt, 'timer')
-      const channels = await read($, channelsAtom)
-      const tabs = await read($, tabsAtom)
-      const control = await read($, controlAtom)
-      return [
-        `Mode: ${describeMode(mode, now)}`,
-        `Automatic work: ${control === null || control.action === 'resume' ? 'running' : `${control.action === 'stop' ? 'stopped' : 'paused'} by ${control.by} (${control.reason})`}`,
-        `Channels: ${channels.length === 0 ? 'none registered' : channels.map(channel => `${channel.id} (${channel.status})`).join(', ')}`,
-        `Tabs: ${['home', ...tabs.map(tab => tab.id)].join(', ')}`,
-      ].join('\n')
+      const { channels, tabs, control, installed } = rt.mem
+      return statusReport({ mode, modeLine: describeMode(mode, now), control, channels, tabs, installed })
     }
     case 'silent': {
       const until = command.minutes === null ? null : now + command.minutes * MINUTE_MS
@@ -714,7 +998,7 @@ async function runHub($: EngineInterface, rt: Runtime, args: string): Promise<st
       return 'Silent is off.'
     case 'night':
       await changePrefs($, rt, prefs => ({ ...prefs, isNightOn: command.isOn, quietHours: command.quietHours ?? prefs.quietHours }))
-      return command.isOn ? `Night mode on (${command.quietHours ?? (await read($, prefsAtom)).quietHours}).` : 'Night mode off.'
+      return command.isOn ? `Night mode on (${command.quietHours ?? rt.mem.prefs.quietHours}).` : 'Night mode off.'
     case 'away':
       await changePrefs($, rt, prefs => ({ ...prefs, presence: 'away' }))
       return 'Marked away until your next prompt: notifications routed "away" go to your channels.'
@@ -729,9 +1013,9 @@ async function runHub($: EngineInterface, rt: Runtime, args: string): Promise<st
       await changePrefs($, rt, prefs => ({ ...prefs, routes: { ...prefs.routes, [command.level]: command.value } }))
       return `${command.level} → ${command.value}.`
     case 'tab': {
-      const tabs = await read($, tabsAtom)
+      const tabs = rt.mem.tabs
       if (command.id !== HOME && !tabs.some(tab => tab.id === command.id)) return `No tab "${command.id}". Tabs: ${['home', ...tabs.map(tab => tab.id)].join(', ')}.`
-      await openPanel($, command.id)
+      await openPanel($, rt, command.id)
       return `Showing ${command.id}.`
     }
     case 'test': {
@@ -751,165 +1035,412 @@ async function runHub($: EngineInterface, rt: Runtime, args: string): Promise<st
 }
 
 // ── The panel ───────────────────────────────────────────────────────────────────────────────────────
-
-const ago = (ms: number): string => (ms < MINUTE_MS ? 'now' : ms < 60 * MINUTE_MS ? `${Math.floor(ms / MINUTE_MS)}m` : `${Math.floor(ms / (60 * MINUTE_MS))}h`)
+//
+// One frame for every tab (docs/DESIGN.md, as mod-store draws it): the Slot mark with "Claude Mods · Hub", the counts
+// and the mode as a pill; then the tab bar (the owner's category glyph in the terminal, its icon elsewhere, `0`–`9`);
+// then the tab. Home is cards: the mode as segmented controls, the automatic-work strip, the channels with health
+// dots, routing, the mods, and the activity feed. Every row is one line (truncated, never wrapped), so a redraw with
+// new data never moves what is below it; a tab's own body (from `next`) is never put under a sized Box.
 
 const ROUTE_LABEL: Record<string, string> = { terminal: 'terminal', away: 'when away', always: 'always', off: 'off' }
-const STATUS_GLYPH: Record<ModsChannel['status'], string> = { connected: '●', connecting: '◐', disconnected: '○', error: '✗', unconfigured: '·' }
+/** The width of the label column of the mode rows and of the feed's mod badge. */
+const LABEL_COLUMNS = 13
+const BADGE_COLUMNS = 16
+/** Tabs past the ninth get no digit (the contract is `0`–`9`); the bar still shows them. */
+const HOTKEY_TABS = 9
 
-async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime): Promise<RenderElement> {
-  const { Box, Button, Text } = $.ui.resolve(e)
-  const mode = await read($, modeAtom)
-  const prefs = await read($, prefsAtom)
-  const channels = await read($, channelsAtom)
-  const inbox = await read($, inboxAtom)
-  const installed = await read($, installedAtom)
-  const tabs = await read($, tabsAtom)
-  const control = await read($, controlAtom)
-  const isHalted = control !== null && control.action !== 'resume'
-  const now = await $.clock.now()
-  const ours = installed.plugins.filter(plugin => plugin.marketplace === 'claude-mods')
-  const room = Math.max(3, (e.props.scroll.bodyRows || 24) - 16)
+/** The pieces every section draws with, made once per drawing for its surface. */
+function kit($: EngineInterface, e: RenderInput<'Pane'>) {
+  const { Box, Text } = $.ui.resolve(e)
+  const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
+  const isTerminal = e.surface === 'terminal'
+  const icon = (category: string, size = 14): RenderElement =>
+    Svg === undefined ? <Text color="claude">{glyphOf(category)}</Text> : <Svg source={iconSvg(category, size)} alt={category} width={size} height={size} />
+  const kicker = (text: string, aside?: string): RenderElement => (
+    <Box flexDirection="row" columnGap={1}>
+      <Text color="claude">▪</Text>
+      <Text bold dimColor>
+        {text.toUpperCase()}
+      </Text>
+      {aside === undefined ? null : <Text dimColor>{aside}</Text>}
+    </Box>
+  )
+  const pill = (text: string, tone: Tone): RenderElement =>
+    isTerminal ? (
+      <Text color={tone}>{text}</Text>
+    ) : (
+      <Box borderStyle="round" borderColor={tone} paddingX={1} flexShrink={0}>
+        <Text color={tone}>{text}</Text>
+      </Box>
+    )
+  const dot = (status: ModsChannel['status']): RenderElement => {
+    const look = CHANNEL_DOT[status]
+    return Svg === undefined ? <Text color={look.tone}>{look.glyph}</Text> : <Svg source={dotSvg(look.hex, look.isHollow)} alt={status} width={8} height={8} />
+  }
+  return { isTerminal, Svg, icon, kicker, pill, dot }
+}
 
+/** The frame's header: mark and name, then the counts and the mode pill (the counts give way first when narrow). */
+function drawHeader($: EngineInterface, e: RenderInput<'Pane'>, look: ReturnType<typeof kit>, mem: { mode: ModsMode; installed: ModsInstalled; tabs: ModsTab[]; channels: ModsChannel[] }, now: number): RenderElement {
+  const { Box, Text } = $.ui.resolve(e)
+  const mark =
+    look.Svg === undefined ? (
+      <Text>
+        <Text dimColor>▪▪</Text>
+        <Text color="claude">▪</Text>
+      </Text>
+    ) : (
+      <look.Svg source={markSvg(18)} alt="Claude Mods" width={18} height={18} />
+    )
+  const width = e.props.bodyColumns || 80
+  const pill = modePill(mem.mode, now)
   return (
-    <Box key="home" flexDirection="column">
-      <Text bold>Mode</Text>
-      <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-        <Text dimColor>{describeMode(mode, now)}</Text>
-      </Box>
-      <Box key="mode-buttons" flexDirection="row" flexWrap="wrap" columnGap={1}>
-        <Button key="interaction" label={`Interaction: ${prefs.interaction}`} onPress={() => cycleInteraction($, rt)} />
-        <Button key="silent" label={mode.isSilent ? 'Silent: on' : 'Silent: off'} onPress={() => toggleSilent($, rt)} />
-        <Button key="night" label={`Night ${prefs.quietHours}: ${prefs.isNightOn ? 'on' : 'off'}`} onPress={() => toggleNight($, rt)} />
-        <Button key="presence" label={mode.presence === 'away' ? "I'm back" : "I'm away"} onPress={() => togglePresence($, rt)} />
-      </Box>
-      {isHalted ? (
-        <Box key="control" flexDirection="row" flexWrap="wrap" columnGap={1}>
-          <Text color="warning">{`${control.action === 'stop' ? '⏹ Stopped' : '⏸ Paused'} by ${control.by}: ${control.reason}`}</Text>
-          <Button key="resume" label="Resume" onPress={() => resumeFromPanel($, rt, control.scope)} />
-        </Box>
-      ) : null}
-
-      <Box marginTop={1} flexDirection="column">
-        <Text bold>Channels</Text>
-        {channels.length === 0 ? (
-          <Text dimColor>No channel mods yet: install whatsapp-bridge, telegram-bridge, slack-bridge or desktop-notify to get notified away from the terminal.</Text>
-        ) : (
-          channels.map(channel => {
-            const setting = prefs.channels[channel.id]
-            const isOn = setting?.isEnabled !== false
-            return (
-              <Box key={`channel-${channel.id}`} flexDirection="row" columnGap={1}>
-                <Text color={channel.status === 'connected' ? 'success' : channel.status === 'error' ? 'error' : 'subtle'}>{STATUS_GLYPH[channel.status]}</Text>
-                <Text>{channel.title}</Text>
-                <Text dimColor>
-                  {channel.status}
-                  {channel.detail === undefined ? '' : ` · ${channel.detail}`} · {channel.audience === 'team' ? 'team' : 'you'}
-                </Text>
-                <Button key={`toggle-${channel.id}`} plain label={isOn ? '[on]' : '[off]'} onPress={() => toggleChannel($, rt, channel.id)} />
-              </Box>
-            )
-          })
-        )}
-      </Box>
-
-      <Box marginTop={1} flexDirection="column">
-        <Text bold>Routing</Text>
-        <Box key="routes" flexDirection="row" flexWrap="wrap" columnGap={1}>
-          {LEVELS.map(level => (
-            <Button key={`route-${level}`} label={`${GLYPH[level]} ${level}: ${ROUTE_LABEL[prefs.routes[level]] ?? prefs.routes[level]}`} onPress={() => cycleRoute($, rt, level)} />
-          ))}
-        </Box>
-      </Box>
-
-      <Box marginTop={1} flexDirection="column">
-        <Text bold>Mods</Text>
-        <Text dimColor wrap="truncate-end">
-          {installed.listedAt === null ? 'Installed: (listing…)' : `Installed: ${ours.length} Claude Mods${ours.length > 0 ? ` (${ours.filter(plugin => plugin.isEnabled).length} enabled)` : ''}`}
-          {` · on the bus: ${installed.hello.length === 0 ? 'none yet' : installed.hello.map(hello => hello.name).join(', ')}`}
-          {tabs.length === 0 ? '' : ` · tabs: ${tabs.map(tab => tab.title).join(', ')}`}
+    <Box key="header" flexDirection="row" justifyContent="space-between" columnGap={2}>
+      <Box flexDirection="row" columnGap={1} flexShrink={0}>
+        {mark}
+        <Text>
+          <Text bold>Claude </Text>
+          <Text bold italic color="claude">
+            Mods
+          </Text>
+          <Text dimColor> · Hub</Text>
         </Text>
       </Box>
-
-      <Box marginTop={1} flexDirection="column">
-        <Text bold>Recent</Text>
-        {inbox.length === 0 ? (
-          <Text dimColor>Nothing yet. Notifications and other mods' toasts land here.</Text>
-        ) : (
-          inbox
-            .slice(-room)
-            .reverse()
-            .map(notice => (
-              <Text key={`n-${notice.id}`} wrap="truncate-end" dimColor={notice.targets.length === 0}>
-                {ago(now - notice.at).padStart(3)} {noticeLine(notice)}
-                {notice.held ? ' · held' : notice.targets.some(target => target !== 'toast') ? ` → ${notice.targets.filter(target => target !== 'toast').join(', ')}` : ''}
-              </Text>
-            ))
-        )}
+      <Box flexDirection="row" columnGap={2} flexShrink={1} justifyContent="flex-end">
+        {width >= 64 ? (
+          <Text dimColor wrap="truncate-end">
+            {headerCounts(mem.installed, mem.tabs, mem.channels)}
+          </Text>
+        ) : null}
+        {look.pill(pill.text, pill.tone)}
       </Box>
     </Box>
   )
 }
 
-async function drawPane($: EngineInterface, e: RenderInput<'Pane'>, next: (e: RenderInput<'Pane'>) => Promise<RenderElement>, rt: Runtime): Promise<RenderElement> {
+/** The tab bar: Home and every registered tab in order, the shown one drawn as the primary; a hairline under it. */
+function drawTabBar($: EngineInterface, e: RenderInput<'Pane'>, look: ReturnType<typeof kit>, tabs: readonly ModsTab[], current: ModsTab | undefined): RenderElement {
   const { Box, Button, Text } = $.ui.resolve(e)
-  const active = await read($, tabAtom)
-  const tabs = [...(await read($, tabsAtom))].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
+  const width = Math.max(10, e.props.bodyColumns || 80)
+  const tabButton = (key: string, id: string, title: string, category: string, hotkey: string | undefined, isActive: boolean): RenderElement => (
+    <Box key={`slot-${key}`} flexDirection="row" columnGap={look.isTerminal ? 0 : 1} flexShrink={0}>
+      {look.isTerminal ? null : look.icon(category)}
+      <Button
+        key={key}
+        plain
+        {...(hotkey === undefined ? {} : { hotkey })}
+        dimColor={!isActive}
+        variant={isActive ? 'primary' : 'secondary'}
+        label={look.isTerminal ? `${glyphOf(category)} ${title}` : title}
+        onPress={() => $.state.set({ plugin: 'mods-hub', key: 'tab' }, id)}
+      />
+    </Box>
+  )
+  return (
+    <Box key="tab-bar" flexDirection="column">
+      <Box key="tabs" flexDirection="row" flexWrap="wrap" columnGap={2}>
+        {tabButton('tab-home', HOME, 'Home', 'core', '0', current === undefined)}
+        {tabs.map((tab, index) => tabButton(`tab-${tab.id}`, tab.id, tab.title, categoryOf(tab.owner), index < HOTKEY_TABS ? String(index + 1) : undefined, tab.id === current?.id))}
+      </Box>
+      {look.isTerminal ? <Text dimColor>{'─'.repeat(Math.min(width, 160))}</Text> : null}
+    </Box>
+  )
+}
+
+/** One segmented control: a fixed label column, then one button per value, the current one the primary. */
+function segmented<T extends string>(
+  $: EngineInterface,
+  e: RenderInput<'Pane'>,
+  input: { key: string; label: string; aside?: string; values: readonly { value: T; label: string }[]; current: T; onPick: (value: T) => Promise<unknown> },
+): RenderElement {
+  const { Box, Button, Text } = $.ui.resolve(e)
+  return (
+    <Box key={`seg-${input.key}`} flexDirection="row" columnGap={1}>
+      <Box width={LABEL_COLUMNS} flexShrink={0}>
+        <Text dimColor wrap="truncate-end">
+          {input.label}
+        </Text>
+      </Box>
+      <Box flexDirection="row" columnGap={1} flexWrap="wrap">
+        {input.values.map(one => (
+          <Button
+            key={`${input.key}-${one.value}`}
+            label={one.label}
+            dimColor={one.value !== input.current}
+            variant={one.value === input.current ? 'primary' : 'secondary'}
+            onPress={() => (one.value === input.current ? undefined : input.onPick(one.value))}
+          />
+        ))}
+        {input.aside === undefined ? null : <Text dimColor>{input.aside}</Text>}
+      </Box>
+    </Box>
+  )
+}
+
+async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime, look: ReturnType<typeof kit>): Promise<RenderElement> {
+  const { Box, Button, Text } = $.ui.resolve(e)
+  const [mode, prefs, channels, inbox, installed, control, now] = await Promise.all([
+    read($, modeAtom),
+    read($, prefsAtom),
+    read($, channelsAtom),
+    read($, inboxAtom),
+    read($, installedAtom),
+    read($, controlAtom),
+    $.clock.now(),
+  ])
+  const work = controlLine(control)
+  const counts = modCounts(installed)
+  const width = e.props.bodyColumns || 80
+  const isNarrow = width < 64
+  // The feed fills what is left of the pane; never fewer than three rows.
+  const room = Math.max(3, (e.props.scroll.bodyRows || 24) - 22 - channels.length)
+  const badgeColumns = isNarrow ? 10 : BADGE_COLUMNS
+
+  const modeCard = (
+    <Box key="card-mode" flexDirection="column">
+      {look.kicker('Mode', describeMode(mode, now))}
+      {segmented($, e, {
+        key: 'presence',
+        label: 'Presence',
+        values: [
+          { value: 'here', label: 'Here' },
+          { value: 'away', label: 'Away' },
+        ],
+        current: mode.presence === 'away' ? 'away' : 'here',
+        onPick: value => setPresenceFromPanel($, rt, value),
+      })}
+      {segmented($, e, {
+        key: 'interaction',
+        label: 'Interaction',
+        values: [
+          { value: 'auto', label: 'Auto' },
+          { value: 'on', label: 'On' },
+          { value: 'off', label: 'Off' },
+        ],
+        current: prefs.interaction,
+        onPick: value => setFromPanel($, rt, current => ({ ...current, interaction: value })),
+      })}
+      {segmented($, e, {
+        key: 'silent',
+        label: 'Silent',
+        values: [
+          { value: 'off', label: 'Off' },
+          { value: 'on', label: mode.isSilent && mode.silentUntil !== null ? `On · ${Math.max(1, Math.ceil((mode.silentUntil - now) / MINUTE_MS))}m` : 'On' },
+        ],
+        current: mode.isSilent ? 'on' : 'off',
+        onPick: value => setFromPanel($, rt, current => ({ ...current, isSilent: value === 'on', silentUntil: null })),
+      })}
+      {segmented($, e, {
+        key: 'night',
+        label: 'Night',
+        aside: prefs.quietHours,
+        values: [
+          { value: 'off', label: 'Off' },
+          { value: 'on', label: 'On' },
+        ],
+        current: prefs.isNightOn ? 'on' : 'off',
+        onPick: value => setFromPanel($, rt, current => ({ ...current, isNightOn: value === 'on' })),
+      })}
+    </Box>
+  )
+
+  // The control strip: one line, the same height whether the work runs or is held.
+  const controlStrip = (
+    <Box key="control" flexDirection="row" columnGap={1}>
+      <Box flexGrow={1} flexShrink={1}>
+        <Text color={work.tone} wrap="truncate-end">
+          {work.isHalted ? work.text : `● ${work.text}`}
+        </Text>
+      </Box>
+      {work.isHalted && control !== null ? (
+        <Button key="resume" label="Resume" variant="primary" onPress={() => resumeFromPanel($, rt, control.scope)} />
+      ) : (
+        <Box flexDirection="row" columnGap={1} flexShrink={0}>
+          <Button key="control-pause" label="Pause" dimColor onPress={() => holdFromPanel($, rt, 'pause')} />
+          <Button key="control-stop" label="Stop" dimColor onPress={() => holdFromPanel($, rt, 'stop')} />
+        </Box>
+      )}
+    </Box>
+  )
+
+  const channelsCard = (
+    <Box key="card-channels" flexDirection="column">
+      {look.kicker('Channels', channels.length === 0 ? undefined : `${channels.filter(channel => channel.status === 'connected').length}/${channels.length} connected`)}
+      {channels.length === 0 ? (
+        <Text dimColor wrap="truncate-end">
+          No channels yet: whatsapp-bridge, telegram-bridge, slack-bridge or desktop-notify reach you away from the terminal.
+        </Text>
+      ) : (
+        channels.map(channel => {
+          const setting = prefs.channels[channel.id]
+          const isOn = setting?.isEnabled !== false
+          return (
+            <Box key={`channel-${channel.id}`} flexDirection="row" columnGap={1}>
+              <Box key={`dot-${channel.id}`} width={2} flexShrink={0} alignItems="center">
+                {look.dot(channel.status)}
+              </Box>
+              <Box width={isNarrow ? 10 : 14} flexShrink={0}>
+                <Text wrap="truncate-end" dimColor={!isOn}>
+                  {channel.title}
+                </Text>
+              </Box>
+              <Box flexGrow={1} flexShrink={1}>
+                <Text dimColor wrap="truncate-end">
+                  {channel.status}
+                  {channel.detail === undefined ? '' : ` · ${channel.detail}`} · {channel.audience === 'team' ? 'team' : 'you'}
+                </Text>
+              </Box>
+              <Button key={`toggle-${channel.id}`} plain dimColor={!isOn} label={isOn ? '[on]' : '[off]'} onPress={() => toggleChannel($, rt, channel.id)} />
+            </Box>
+          )
+        })
+      )}
+    </Box>
+  )
+
+  const routingCard = (
+    <Box key="card-routing" flexDirection="column">
+      {look.kicker('Routing', 'where each level goes')}
+      <Box key="routes" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {LEVELS.map(level => (
+          <Button key={`route-${level}`} label={`${GLYPH[level]} ${level}: ${ROUTE_LABEL[prefs.routes[level]] ?? prefs.routes[level]}`} onPress={() => cycleRoute($, rt, level)} />
+        ))}
+      </Box>
+    </Box>
+  )
+
+  const modsCard = (
+    <Box key="card-mods" flexDirection="column">
+      {look.kicker('Mods')}
+      <Text dimColor wrap="truncate-end">
+        {installed.listedAt === null && counts.onBus === 0
+          ? 'Listing the installed mods…'
+          : `${plural(counts.installed, 'Claude Mod')} installed${counts.isListed ? ` · ${counts.enabled} enabled` : ''} · ${counts.onBus} on the bus`}
+      </Text>
+    </Box>
+  )
+
+  const feed = inbox.slice(-room).reverse()
+  const feedCard = (
+    <Box key="card-recent" flexDirection="column">
+      {look.kicker('Recent', inbox.length === 0 ? undefined : `${inbox.length} kept`)}
+      {feed.length === 0 ? (
+        <Text dimColor wrap="truncate-end">
+          Nothing yet. Notifications and other mods' toasts land here.
+        </Text>
+      ) : (
+        feed.map(notice => {
+          const row = feedRow(notice, now)
+          return (
+            <Box key={`n-${notice.id}`} flexDirection="row" columnGap={1}>
+              <Box width={3} flexShrink={0}>
+                <Text dimColor>{row.when}</Text>
+              </Box>
+              <Box width={1} flexShrink={0}>
+                <Text color={row.tone}>{row.glyph}</Text>
+              </Box>
+              <Box width={badgeColumns} flexShrink={0}>
+                <Text color="claude" dimColor wrap="truncate-end">
+                  {badge(row.source, badgeColumns)}
+                </Text>
+              </Box>
+              <Box flexGrow={1} flexShrink={1}>
+                <Text wrap="truncate-end" dimColor={notice.targets.length === 0}>
+                  {row.text}
+                </Text>
+              </Box>
+              {row.where === '' || isNarrow ? null : (
+                <Box flexShrink={0}>
+                  <Text dimColor wrap="truncate-end">
+                    {row.where}
+                  </Text>
+                </Box>
+              )}
+            </Box>
+          )
+        })
+      )}
+    </Box>
+  )
+
+  return (
+    <Box key="home" flexDirection="column" rowGap={1}>
+      {modeCard}
+      {controlStrip}
+      {channelsCard}
+      {routingCard}
+      {modsCard}
+      {feedCard}
+    </Box>
+  )
+}
+
+async function drawPane($: EngineInterface, e: RenderInput<'Pane'>, next: (e: RenderInput<'Pane'>) => Promise<RenderElement>, rt: Runtime): Promise<RenderElement> {
+  const { Box, Text } = $.ui.resolve(e)
+  const look = kit($, e)
+  const [active, registered, mode, installed, channels, now] = await Promise.all([read($, tabAtom), read($, tabsAtom), read($, modeAtom), read($, installedAtom), read($, channelsAtom), $.clock.now()])
+  const tabs = [...registered].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
   const current = tabs.find(tab => tab.id === active)
-  const strip = (
-    <Box key="tabs" flexDirection="row" flexWrap="wrap" columnGap={1}>
-      <Button key="tab-home" plain hotkey="0" dimColor={current !== undefined} variant={current === undefined ? 'primary' : 'secondary'} label="Home" onPress={() => update($, tabAtom, () => HOME)} />
-      {tabs.slice(0, 9).map((tab, index) => (
-        <Button key={`tab-${tab.id}`} plain hotkey={String(index + 1)} dimColor={tab.id !== current?.id} variant={tab.id === current?.id ? 'primary' : 'secondary'} label={tab.title} onPress={() => update($, tabAtom, () => tab.id)} />
-      ))}
+  const frame = (
+    <Box key="frame" flexDirection="column">
+      {drawHeader($, e, look, { mode, installed, tabs, channels }, now)}
+      {drawTabBar($, e, look, tabs, current)}
     </Box>
   )
   if (current === undefined) {
     return (
-      <Box flexDirection="column">
-        {strip}
-        <Box marginTop={1}>{await drawHome($, e, rt)}</Box>
+      <Box flexDirection="column" rowGap={1}>
+        {frame}
+        {await drawHome($, e, rt, look)}
       </Box>
     )
   }
-  // A registered tab: its owner draws the body by hooking this same pane (see MOD_CONTRACT.md); whatever
-  // the hooks beneath the hub drew comes back from `next`.
+  // A registered tab: its owner draws the body by hooking this same pane (see MOD_CONTRACT.md); whatever the hooks
+  // beneath the hub drew comes back from `next`. Never under a sized Box: the owner sizes its own body.
   let body: RenderElement | undefined
   try {
     body = await next(e)
   } catch {
     body = undefined
   }
+  if (isEmptyTree(body)) body = undefined
   return (
-    <Box flexDirection="column">
-      {strip}
-      {current.command === undefined ? null : <Text dimColor>{`${current.title} by ${current.owner} · full view: /${current.command}`}</Text>}
-      <Box key="tab-body" marginTop={1} flexDirection="column">
-        {body ?? <Text dimColor>{`${current.title} is not drawing here right now.`}</Text>}
+    <Box flexDirection="column" rowGap={1}>
+      {frame}
+      <Box key="tab-title" flexDirection="row" columnGap={1}>
+        {look.icon(categoryOf(current.owner))}
+        <Text bold>{current.title}</Text>
+        <Text dimColor wrap="truncate-end">
+          {`by ${current.owner}${current.command === undefined ? '' : ` · full view: /${current.command}`}`}
+        </Text>
+      </Box>
+      <Box key="tab-body" flexDirection="column">
+        {body ?? (
+          <Box flexDirection="column">
+            <Text dimColor>{`${current.title} has nothing to show here yet.`}</Text>
+            {current.command === undefined ? null : <Text dimColor>{`/${current.command} opens it.`}</Text>}
+          </Box>
+        )}
       </Box>
     </Box>
   )
 }
 
-// Button handlers: each reads the prefs fresh and writes through changePrefs.
-async function cycleInteraction($: EngineInterface, rt: Runtime): Promise<void> {
-  await noteActivity($, rt)
-  await changePrefs($, rt, prefs => ({ ...prefs, interaction: cycle(INTERACTIONS, prefs.interaction) }))
+/** Whether what came back from beneath draws nothing: no tree, or a bare Box with no children. */
+function isEmptyTree(tree: RenderElement | undefined): boolean {
+  if (tree === undefined || tree === null) return true
+  const node = tree as unknown as { type?: unknown; children?: unknown }
+  return node.type === 'Box' && (!Array.isArray(node.children) || node.children.length === 0)
 }
 
-async function toggleSilent($: EngineInterface, rt: Runtime): Promise<void> {
+// Button handlers: each is the person at the keyboard (activity), then a change written through changePrefs.
+async function setFromPanel($: EngineInterface, rt: Runtime, change: (prefs: ModsPrefs) => ModsPrefs): Promise<void> {
   await noteActivity($, rt)
-  await changePrefs($, rt, prefs => (prefs.isSilent ? { ...prefs, isSilent: false, silentUntil: null } : { ...prefs, isSilent: true, silentUntil: null }))
+  await changePrefs($, rt, change)
 }
 
-async function toggleNight($: EngineInterface, rt: Runtime): Promise<void> {
-  await noteActivity($, rt)
-  await changePrefs($, rt, prefs => ({ ...prefs, isNightOn: !prefs.isNightOn }))
-}
-
-async function togglePresence($: EngineInterface, rt: Runtime): Promise<void> {
-  const mode = await read($, modeAtom)
-  if (mode.presence === 'away') {
+async function setPresenceFromPanel($: EngineInterface, rt: Runtime, presence: 'here' | 'away'): Promise<void> {
+  if (presence === 'here') {
     await noteActivity($, rt)
     await changePrefs($, rt, prefs => ({ ...prefs, presence: 'auto' }))
   } else {
@@ -920,6 +1451,11 @@ async function togglePresence($: EngineInterface, rt: Runtime): Promise<void> {
 async function resumeFromPanel($: EngineInterface, rt: Runtime, scope: ModsControlScope): Promise<void> {
   await noteActivity($, rt)
   await raiseControl($, rt, { action: 'resume', scope, reason: 'Resume in the Claude Mods panel', by: 'you, at the terminal' }, 'mods-hub')
+}
+
+async function holdFromPanel($: EngineInterface, rt: Runtime, action: 'pause' | 'stop'): Promise<void> {
+  await noteActivity($, rt)
+  await raiseControl($, rt, { action, scope: 'session', reason: `${action === 'stop' ? 'Stop' : 'Pause'} in the Claude Mods panel`, by: 'you, at the terminal' }, 'mods-hub')
 }
 
 async function cycleRoute($: EngineInterface, rt: Runtime, level: ModsLevel): Promise<void> {
@@ -938,6 +1474,7 @@ async function toggleChannel($: EngineInterface, rt: Runtime, id: string): Promi
 // ── Session lifecycle ───────────────────────────────────────────────────────────────────────────────
 
 async function startSession($: EngineInterface, rt: Runtime): Promise<void> {
+  await ready($, rt)
   const now = await $.clock.now()
   rt.startedAt = now
   rt.lastActivityAt = now
@@ -948,9 +1485,10 @@ async function startSession($: EngineInterface, rt: Runtime): Promise<void> {
   rt.project = root.slice(root.lastIndexOf('/') + 1) || root
   const home = await $.env.get('HOME')
   rt.dir = home === undefined || home === '' ? '' : `${home}/${HUB_DIR}`
+  // Small reads only (its own prefs and activity files); the mode, the bus and the listing wait for afterStart, so
+  // ~200 mods' session.start chain never waits on the hub (scripts/check-startup.mjs).
   await loadShared($, rt)
-  await refreshMode($, rt, 'activity')
-  await $.command.register({
+  await registerCommand($, {
     name: 'hub',
     description: 'Opens the Claude Mods panel (Home: mode, channels, routing, mods); with a word, sets silent, night, away, interaction or a route.',
     argumentHint: '[status | silent [min|off] | night [on|off|22:00-07:00] | away | back | interaction auto|on|off | route <level> <where> | tab <id> | test]',
@@ -964,11 +1502,22 @@ async function startSession($: EngineInterface, rt: Runtime): Promise<void> {
 }
 
 async function afterStart($: EngineInterface, rt: Runtime): Promise<void> {
+  await refreshMode($, rt, 'activity')
   if (rt.options.sensors) await publishSelf($, rt, { topic: 'session.started', data: { project: rt.project, cwd: rt.cwd }, scope: 'global' })
   await heartbeat($, rt)
-  const installed = await read($, installedAtom)
-  const now = await $.clock.now()
-  if (installed.listedAt === null || now - installed.listedAt > LIST_REFRESH_MS) await listPlugins($)
+  refreshInstalled($, rt, await $.clock.now())
+  await rt.listing
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is logged, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`mods-hub: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }
 
 // ── Registration ────────────────────────────────────────────────────────────────────────────────────
@@ -987,6 +1536,9 @@ export const register: Register = (on, options) => {
   })
 
   // ── $.mods: the hub's answers ──
+  // Every answer comes from memory: no state read-modify-write and no file read per call, so a burst of hundreds of
+  // calls (every mod's session.start after a reload) is answered at once. A hook that fails anyway answers from
+  // memory in its `.catch` rather than leaving the caller with nothing.
   on('mods.publish', async ($, e, next) => {
     // The hub's own events are recorded by publishSelf.
     if (next.origin.plugin === 'mods-hub') return next(e)
@@ -995,20 +1547,38 @@ export const register: Register = (on, options) => {
     if (problem !== undefined) return { deny: `mods-hub: ${problem}` }
     const ran = await next(e)
     if (ran.deny !== undefined) return ran
+    await ready($, rt)
     const event = await record($, rt, e, next.origin.plugin)
     return { value: { id: event.id } }
   })
-  on('mods.recent', async ($, e) => ({ value: await recentEvents($, e) }))
-  on('mods.latest', async ($, e) => ({ value: (await $.state.get({ ...LATEST, id: e.topic })).value ?? null }))
+  on('mods.recent', async ($, e) => {
+    await ready($, rt)
+    return { value: recentEvents(rt, e) }
+  }).catch(($, e) => ({ value: recentEvents(rt, e) }))
+  on('mods.latest', async ($, e) => {
+    await ready($, rt)
+    const kept = rt.latest.get(e.topic)
+    if (kept !== undefined) return { value: kept }
+    // An event an earlier load recorded: state outlives a reload, the map does not.
+    return { value: (await $.state.get({ ...LATEST, id: e.topic })).value ?? null }
+  }).catch(($, e) => ({ value: rt.latest.get(e.topic) ?? null }))
   on('mods.notify', async ($, e, next) => {
     const problem = problemWithNotice(e)
     if (problem !== undefined) return { deny: `mods-hub: ${problem}` }
     const ran = await next(e)
     if (ran.deny !== undefined) return ran
+    await ready($, rt)
     return { value: await dispatch($, rt, e, next.origin.plugin) }
   })
-  on('mods.mode', async $ => ({ value: await refreshMode($, rt, 'timer') }))
+  on('mods.mode', async $ => {
+    await ready($, rt)
+    // Recomputed at most once a second however many mods ask; the tick, every activity and every change of the
+    // prefs recompute it too, so the answer from memory is never staler than that.
+    if (Date.now() - rt.modeComputedAt < MODE_FRESH_MS) return { value: rt.mem.mode }
+    return { value: await refreshMode($, rt, 'timer') }
+  }).catch(() => ({ value: rt.mem.mode }))
   on('mods.setMode', async ($, e) => {
+    await ready($, rt)
     const now = await $.clock.now()
     const mode = await changePrefs($, rt, prefs => ({
       ...prefs,
@@ -1028,62 +1598,75 @@ export const register: Register = (on, options) => {
     return { value: mode }
   })
   on('mods.setPresence', async ($, e) => {
+    await ready($, rt)
     if (e.presence === 'here' || e.presence === 'auto') rt.lastActivityAt = await $.clock.now()
     const mode = await changePrefs($, rt, prefs => ({ ...prefs, presence: e.presence === 'here' ? 'auto' : e.presence }))
     return { value: mode }
   })
   on('mods.registerTab', async ($, e, next) => {
     if (!TAB_ID.test(e.id) || e.id === HOME) return { deny: `mods-hub: a tab id is 1-32 of a-z, 0-9 and -, and not "home"` }
+    await ready($, rt)
     const owner = next.origin.plugin
     const tab: ModsTab = { id: e.id, title: oneLine(e.title, 24) || e.id, owner, order: e.order ?? 50, ...(e.command === undefined ? {} : { command: e.command }) }
-    const taken = (await read($, tabsAtom)).find(one => one.id === e.id && one.owner !== owner)
+    const taken = rt.mem.tabs.find(one => one.id === e.id && one.owner !== owner)
     if (taken !== undefined) return { deny: `mods-hub: tab "${e.id}" belongs to ${taken.owner}` }
-    const tabs = await update($, tabsAtom, list => [...list.filter(one => one.id !== e.id), tab])
+    const tabs = remember($, rt, 'tabs', [...rt.mem.tabs.filter(one => one.id !== e.id), tab])
     return { value: { tabs } }
   })
   on('mods.showTab', async ($, e) => {
-    const tabs = await read($, tabsAtom)
-    if (e.id !== HOME && !tabs.some(tab => tab.id === e.id)) return { deny: `mods-hub: no tab "${e.id}"` }
-    return { value: { isPlaced: await openPanel($, e.id) } }
+    await ready($, rt)
+    if (e.id !== HOME && !rt.mem.tabs.some(tab => tab.id === e.id)) return { deny: `mods-hub: no tab "${e.id}"` }
+    return { value: { isPlaced: await openPanel($, rt, e.id) } }
   })
   on('mods.registerChannel', async ($, e, next) => {
     if (!CHANNEL_ID.test(e.id)) return { deny: 'mods-hub: a channel id is 1-32 of a-z, 0-9 and -' }
+    await ready($, rt)
     const owner = next.origin.plugin
-    const taken = (await read($, channelsAtom)).find(one => one.id === e.id && one.owner !== owner)
+    const taken = rt.mem.channels.find(one => one.id === e.id && one.owner !== owner)
     if (taken !== undefined) return { deny: `mods-hub: channel "${e.id}" belongs to ${taken.owner}` }
     const channel: ModsChannel = { ...e, title: oneLine(e.title, 32) || e.id, owner }
-    const channels = await update($, channelsAtom, list => [...list.filter(one => one.id !== e.id), channel])
+    const channels = remember($, rt, 'channels', [...rt.mem.channels.filter(one => one.id !== e.id), channel])
     return { value: { channels } }
   })
   on('mods.channelStatus', async ($, e, next) => {
-    const list = await read($, channelsAtom)
-    const channel = list.find(one => one.id === e.id)
+    await ready($, rt)
+    const channel = rt.mem.channels.find(one => one.id === e.id)
     if (channel === undefined || channel.owner !== next.origin.plugin) return { deny: `mods-hub: no channel "${e.id}" of yours` }
-    const channels = await update($, channelsAtom, current =>
-      current.map(one => (one.id === e.id ? { ...one, status: e.status, ...(e.detail === undefined ? {} : { detail: oneLine(e.detail, 80) }) } : one)),
+    const channels = remember(
+      $,
+      rt,
+      'channels',
+      rt.mem.channels.map(one => (one.id === e.id ? { ...one, status: e.status, ...(e.detail === undefined ? {} : { detail: oneLine(e.detail, 80) }) } : one)),
     )
     return { value: { channels } }
   })
   on('mods.drain', async ($, e, next) => {
-    const channel = (await read($, channelsAtom)).find(one => one.id === e.channel)
+    await ready($, rt)
+    const channel = rt.mem.channels.find(one => one.id === e.channel)
     if (channel === undefined || channel.owner !== next.origin.plugin) return { deny: `mods-hub: no channel "${e.channel}" of yours` }
     if (e.after !== undefined && e.after !== null && typeof e.after !== 'string') return { deny: 'mods-hub: after is the id of the last notice you handled, or null' }
-    return { value: await drainOutbox($, e) }
+    return { value: await drainOutbox($, rt, e) }
   })
   on('mods.stop', async ($, e, next) => {
     const problem = problemWithStop(e)
     if (problem !== undefined) return { deny: `mods-hub: ${problem}` }
     const ran = await next(e)
     if (ran.deny !== undefined) return ran
+    await ready($, rt)
     return { value: await raiseControl($, rt, e, next.origin.plugin) }
   })
   on('mods.hello', async ($, e, next) => {
+    await ready($, rt)
     const name = next.origin.plugin
     const hello = { name, version: String(e.version), publishes: [...(e.publishes ?? [])], consumes: [...(e.consumes ?? [])] }
-    const installed = await update($, installedAtom, current => ({ ...current, hello: [...current.hello.filter(one => one.name !== name), hello] }))
+    const installed = remember($, rt, 'installed', { ...rt.mem.installed, hello: [...rt.mem.installed.hello.filter(one => one.name !== name), hello] })
     return { value: { installed } }
-  })
-  on('mods.installed', async $ => ({ value: await read($, installedAtom) }))
+  }).catch(() => ({ value: { installed: rt.mem.installed } }))
+  on('mods.installed', async $ => {
+    await ready($, rt)
+    refreshInstalled($, rt, await $.clock.now())
+    return { value: rt.mem.installed }
+  }).catch(() => ({ value: rt.mem.installed }))
   on('mods.share', async ($, e, next) => {
     if (!FACT_NAME.test(e.name)) return { deny: 'mods-hub: a fact name is 1-64 of a-z, 0-9, ., _ and -' }
     if (JSON.stringify(e.value ?? null).length > MAX_FACT_CHARS) return { deny: `mods-hub: a fact holds at most ${MAX_FACT_CHARS} characters of JSON` }
@@ -1155,10 +1738,11 @@ export const register: Register = (on, options) => {
   on('ui.toast', async ($, e, next) => {
     const origin = next.origin
     if (origin.tier !== 'user' || origin.plugin === 'mods-hub' || !rt.options.captureToasts) return next(e)
-    const mode = await read($, modeAtom)
+    await ready($, rt)
+    const mode = rt.mem.mode
     const now = await $.clock.now()
     rt.seq += 1
-    await addToInbox($, {
+    addToInbox($, rt, {
       id: `t-${idTag(rt)}-${rt.seq}`,
       level: 'info',
       title: oneLine(e.text, 200),
@@ -1172,12 +1756,14 @@ export const register: Register = (on, options) => {
   })
   on('audio.play', async ($, e, next) => {
     const origin = next.origin
-    const mode = await read($, modeAtom)
+    await ready($, rt)
+    const mode = rt.mem.mode
     return origin.tier === 'user' && origin.plugin !== 'mods-hub' && (mode.isSilent || mode.isNight) ? { value: undefined } : next(e)
   })
   on('audio.speak', async ($, e, next) => {
     const origin = next.origin
-    const mode = await read($, modeAtom)
+    await ready($, rt)
+    const mode = rt.mem.mode
     return origin.tier === 'user' && origin.plugin !== 'mods-hub' && (mode.isSilent || mode.isNight) ? { value: { via: 'system' as const } } : next(e)
   })
 

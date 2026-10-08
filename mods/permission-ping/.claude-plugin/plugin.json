@@ -1,6 +1,6 @@
 {
   "name": "permission-ping",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Pings you with a sound and toast when Claude is waiting on your approval.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#permission-ping",

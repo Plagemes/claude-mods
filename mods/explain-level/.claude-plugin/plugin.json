@@ -1,6 +1,6 @@
 {
   "name": "explain-level",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/eli5, /normal and /expert set how deep Claude's explanations go.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#explain-level",

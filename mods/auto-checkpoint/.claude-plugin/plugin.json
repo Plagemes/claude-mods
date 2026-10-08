@@ -1,6 +1,6 @@
 {
   "name": "auto-checkpoint",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Snapshots your work tree before every editing turn and lets you /rollback to any checkpoint.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#auto-checkpoint",

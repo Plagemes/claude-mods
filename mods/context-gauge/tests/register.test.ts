@@ -126,6 +126,7 @@ test('with mods-hub: says hello and starts from the hub\'s last context.pressure
   const hub = fakeHub(on, {}, clock)
   hub.events.push({ topic: 'context.pressure', data: { percent: 85, tokens: 170_000, window: 200_000 }, at: 900_000, source: 'mods-hub' })
   await $.session.start(START)
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['context.pressure'] }])
 
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -142,6 +143,7 @@ test('with mods-hub, an old context.pressure is not trusted', async ($, on) => {
   const hub = fakeHub(on, {}, clock)
   hub.events.push({ topic: 'context.pressure', data: { percent: 85, tokens: 170_000, window: 200_000 }, at: 1_000, source: 'mods-hub' })
   await $.session.start(START)
+  await clock.advance(1_500)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /context/ })).toBeUndefined()
   await ui.unmount()

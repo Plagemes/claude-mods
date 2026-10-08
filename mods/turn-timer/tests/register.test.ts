@@ -95,6 +95,7 @@ test('with mods-hub: says hello and announces a long turn as an info notice with
   const hub = fakeHub(on, {}, clock)
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await $.session.start(START)
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['turn.finished'] }])
 
   hub.events.push({ topic: 'turn.finished', data: { durationMs: 125_000, tools: 14, isAborted: false }, at: 1, source: 'mods-hub' })
@@ -111,6 +112,7 @@ test('with mods-hub but no turn.finished for that turn, the notice has no tool c
   const hub = fakeHub(on, {}, clock)
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await $.session.start(START)
+  await clock.advance(1_500)
   hub.events.push({ topic: 'turn.finished', data: { durationMs: 5000, tools: 2, isAborted: false }, at: 1, source: 'mods-hub' })
   await $.turn.complete(turn(130))
   await clock.advance(300)

@@ -163,6 +163,7 @@ test('with mods-hub: says hello, publishes agent.finished for each check, and an
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await seen.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['agent.finished'], consumes: [] }])
 
   await editingTurn($, seen, 't1', REQUEST, ['src/checkout.ts'])

@@ -152,6 +152,7 @@ test('with mods-hub: every generate is a build.result, and a failed one a warnin
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['build.result'], consumes: [] }])
 
   await editSchema($, '  total Int\n', '  total Int\n  status String @default("new")\n')

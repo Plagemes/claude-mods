@@ -6,6 +6,7 @@ import { fakeHub } from './hub'
 
 import { barCells, cutDiff, parseTracked } from '../hooks/parse'
 
+
 const PLUGIN = 'diff-pane'
 const PANE_PROPS = {
   title: 'Changes',
@@ -177,6 +178,7 @@ const hubbed = async ($: Engine, on: On, repo: Repo) => {
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  await repo.clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   return hub
 }
 
@@ -248,7 +250,7 @@ test('with mods-hub: a commit another mod made (git.commit on the bus) rescans a
   expect(scans()).toBe(before)
 
   repo.tracked.length = 0
-  hub.events.push({ topic: 'git.commit', data: { sha: 'abc', message: 'x', branch: 'main', files: 3 }, at: 1500, source: 'commit-composer' })
+  hub.events.push({ topic: 'git.commit', data: { sha: 'abc', message: 'x', branch: 'main', files: 3 }, at: repo.clock.now() + 1, source: 'commit-composer' })
   await repo.clock.advance(1000)
   await $.turn.complete(TURN)
   expect(scans()).toBe(before + 1)

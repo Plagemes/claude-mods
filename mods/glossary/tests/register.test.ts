@@ -135,6 +135,7 @@ test('with mods-hub: says hello and keeps the fact glossary.terms current as ter
   const hub = fakeHub(on)
   const seen = world(on, { 'GLOSSARY.md': GLOSSARY_MD })
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
 
   const first = hub.facts.get('terms') as { count: number; terms: { term: string; definition: string; source: string }[] }

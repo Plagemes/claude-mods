@@ -3,6 +3,9 @@ import type { On } from 'claude-code'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PANE = {
   plugin: 'scratchpad',
   component: 'Pane',
@@ -23,7 +26,7 @@ const run = (command: 'note' | 'notes', args = '') =>
 /** Stands for the engine: a store open to the test, the project root, the prompt box and panes. */
 const answerEngine = (on: On) => {
   const engine = { root: '/work/alpha', store: new Map<string, unknown>(), filled: [] as { text: string; mode: string }[], opened: [] as unknown[] }
-  mock.clock(on, { now: new Date(2026, 9, 7, 14, 5).getTime() })
+  startClock = mock.clock(on, { now: new Date(2026, 9, 7, 14, 5).getTime() })
   on('session.root', () => ({ value: engine.root }))
   on('store.get', ($, e) => ({ value: engine.store.get(e.key) }))
   on('store.set', ($, e) => {
@@ -116,6 +119,8 @@ test('with mods-hub: the Notes tab loads this project\'s notes at start, /notes 
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   await $.session.start(START)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
   expect(hub.tabs).toEqual([{ id: 'notes', title: 'Notes', order: 280, command: 'notes' }])
 

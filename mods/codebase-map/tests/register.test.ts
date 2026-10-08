@@ -4,6 +4,9 @@ import type { On } from 'claude-code'
 import { buildMap, parseMeta } from '../hooks/map'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/work/shop'
 const FILES = [
   'package.json',
@@ -42,7 +45,7 @@ type World = { writes: Map<string, string>; runs: string[][]; copies: string[] }
 /** Answers every noun the mod calls, standing in for the engine. */
 const world = (on: On, gitFiles: readonly string[] | 'fails'): World => {
   const state: World = { writes: new Map(), runs: [], copies: [] }
-  mock.clock(on, { now: Date.UTC(2026, 9, 7, 9, 30) })
+  startClock = mock.clock(on, { now: Date.UTC(2026, 9, 7, 9, 30) })
   on('session.root', () => ({ value: ROOT }))
   on('process.run', ($, e) => {
     state.runs.push([...e.argv])
@@ -173,12 +176,13 @@ test('with mods-hub: says hello, and shares the fact codebase-map.summary when a
   on('fs.exists', () => ({ value: false }))
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
   expect(hub.facts.size).toBe(0)
 
   await $.command.run(run())
   expect(state.writes.has(`${ROOT}/.claude/codebase-map.md`)).toBe(true)
-  expect(hub.facts.get('summary')).toEqual({ files: 7, dirs: 5, source: 'git', generatedAt: Date.UTC(2026, 9, 7, 9, 30), file: '.claude/codebase-map.md', isTruncated: false })
+  expect(hub.facts.get('summary')).toEqual({ files: 7, dirs: 5, source: 'git', generatedAt: Date.UTC(2026, 9, 7, 9, 30) + 1_500, file: '.claude/codebase-map.md', isTruncated: false })
 })
 
 test('with mods-hub: a map saved by an earlier session is shared at start', async ($, on) => {
@@ -190,6 +194,7 @@ test('with mods-hub: a map saved by an earlier session is shared at start', asyn
   on('fs.exists', () => ({ value: true }))
   on('fs.read', ($, e) => (e.path.endsWith('plugin.json') ? { value: '{"version":"1.0.0"}' } : { value: saved }))
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(hub.facts.get('summary')).toMatchObject({ files: 7, dirs: 5, generatedAt: 123, source: 'git' })
 })
 

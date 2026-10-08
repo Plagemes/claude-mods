@@ -181,6 +181,7 @@ test('with mods-hub: a block is published as risk.blocked and the note goes thro
   const seen = engine(on)
   const hub = fakeHub(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect((await fetch($, 'https://example.com/page')).deny).toContain('url-allowlist')
   expect((await fetch($, 'https://github.com/a/b')).deny).toBeUndefined()

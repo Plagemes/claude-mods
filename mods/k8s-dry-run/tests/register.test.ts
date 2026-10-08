@@ -258,6 +258,7 @@ test('with mods-hub: a held change is published as risk.blocked, and the approve
   const w = world(on, 'prod-eu')
   const hub = fakeHub(on, {}, w.clock)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked', 'deploy.started'], consumes: [] }])
 
   const held = await bash($, 'kubectl apply -n shop -f k8s/')

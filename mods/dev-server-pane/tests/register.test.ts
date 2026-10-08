@@ -295,6 +295,7 @@ test('with mods-hub: /dev opens the Dev server tab, publishes build.result as th
   const hub = fakeHub(on, {}, w.clock)
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
   await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['build.result'], consumes: [] }])
   expect(hub.tabs).toEqual([{ id: 'devserver', title: 'Dev server', order: 300, command: 'dev' }])
 
@@ -337,6 +338,7 @@ test('with mods-hub: a server that never prints an error is reported up once, an
   const w = world(on, NODE_APP)
   const hub = fakeHub(on, {}, w.clock)
   await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   await dev($)
   w.server.write(VITE_BOOT)
   await w.clock.advance(200)

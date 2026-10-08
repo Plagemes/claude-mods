@@ -122,6 +122,7 @@ test('with mods-hub: shows the tier smart-router routed an agent to, and publish
   on('command.register', ($, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['agent.finished'], consumes: ['agent.routed'] }])
 
   const spawn = (description: string) =>

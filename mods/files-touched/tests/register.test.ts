@@ -6,6 +6,9 @@ import { fakeHub } from './hub'
 
 import { groupByDirectory, mentionOf } from '../hooks/files'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PANE = {
   plugin: 'files-touched',
   component: 'Pane',
@@ -19,7 +22,7 @@ const engine = (on: On) => {
   const fills: unknown[] = []
   const toasts: string[] = []
   const opened: string[] = []
-  mock.clock(on, { now: 1_000_000 })
+  startClock = mock.clock(on, { now: 1_000_000 })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/repo' }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -120,17 +123,18 @@ test('groups paths and writes mentions the way the prompt reads them', () => {
 
 const HUB_PANE = { ...PANE, requestId: 'claude-mods', props: { ...PANE.props, title: 'Claude Mods' } } as const
 
-test('with mods-hub: registers its half of the Changes tab, /files opens the tab, and the files are drawn in it on both surfaces', async ($, on) => {
+test('with mods-hub: registers its Files tab, /files opens the tab, and the files are drawn in it on both surfaces', async ($, on) => {
   engine(on)
   const hub = fakeHub(on)
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await touchAll($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
-  expect(hub.tabs).toEqual([{ id: 'changes', title: 'Changes', order: 250, command: 'files' }])
+  expect(hub.tabs).toEqual([{ id: 'files', title: 'Files', order: 251, command: 'files' }])
 
   await $.command.run({ command: 'files', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
-  expect(hub.shown).toEqual(['changes'])
-  hub.tab = 'changes'
+  expect(hub.shown).toEqual(['files'])
+  hub.tab = 'files'
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...HUB_PANE, surface })

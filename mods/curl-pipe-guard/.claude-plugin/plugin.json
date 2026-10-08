@@ -1,6 +1,6 @@
 {
   "name": "curl-pipe-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Blocks piping downloaded scripts straight into a shell.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#curl-pipe-guard",

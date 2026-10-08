@@ -159,6 +159,7 @@ test('with mods-hub: each lint is published as lint.result, and a missing linter
   on('session.start', ($, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
   await $.tool.call(edit('/repo/src/app.ts'))
   expect(hub.published).toEqual([{ topic: 'lint.result', data: { tool: 'eslint', errors: 1, warnings: 1, files: ['src/app.ts'] } }])

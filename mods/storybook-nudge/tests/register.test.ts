@@ -86,6 +86,7 @@ test('with mods-hub: the toast is an info notification, and the band is unchange
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
 
   await write($, `${ROOT}/src/components/Button.tsx`)

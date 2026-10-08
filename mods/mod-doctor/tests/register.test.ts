@@ -200,6 +200,7 @@ test('with mods-hub: says hello, tells when a mod was installed after the check,
   let installedEvent: { value: unknown; version: number } = { value: null, version: 1 }
   on('state.get', { plugin: 'mods-hub', key: 'latest', id: 'mod.installed' }, () => ({ value: installedEvent }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   expect(hub.hellos).toHaveLength(1)
   expect(hub.hellos[0]?.consumes).toEqual(['mod.installed'])
   await w.clock.settle()

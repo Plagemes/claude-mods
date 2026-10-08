@@ -81,11 +81,22 @@ const copyLinks = async ($: EngineInterface, filter: string): Promise<Reply> => 
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'links', description: 'List every URL from this conversation', argumentHint: '[filter]' })
-    await $.command.register({ name: 'links-copy', description: 'Copy every URL from this conversation', argumentHint: '[filter]' })
+    await registerCommand($, { name: 'links', description: 'List every URL from this conversation', argumentHint: '[filter]' })
+    await registerCommand($, { name: 'links-copy', description: 'Copy every URL from this conversation', argumentHint: '[filter]' })
     return next(e)
   })
 
   on('command.run', { command: 'links' }, ($, e) => listLinks($, e.args))
   on('command.run', { command: 'links-copy' }, ($, e) => copyLinks($, e.args))
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

@@ -5,6 +5,9 @@ import type { On, PromptOrigin } from 'claude-code'
 import { applyChanges, applyHubChanges, exportableOptions, looksSecret, parseExport, planHubImport, planImport, portableHubPrefs, stamp } from '../hooks/sync'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const HOME = '/home/ana'
 const SETTINGS = `${HOME}/.claude/settings.json`
 const EXPORT = `${HOME}/claude-mods-settings.json`
@@ -25,7 +28,7 @@ const settingsOf = (extra: Record<string, unknown> = {}) => ({
 
 /** A home folder on a virtual disk (path → text). Settings-sync sees the engine's file system, env and clock. */
 const world = (on: On, files: Map<string, string>, writes: string[] = []) => {
-  mock.clock(on, { now: NOW })
+  startClock = mock.clock(on, { now: NOW })
   mock.env(on, { HOME })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   on('fs.exists', (_$, e) => ({ value: files.has(e.path) }))
@@ -213,7 +216,7 @@ test('the marketplace option picks which plugins count as mods', { options: { ma
 })
 
 test('CLAUDE_CONFIG_DIR moves the settings file', async ($, on) => {
-  mock.clock(on, { now: NOW })
+  startClock = mock.clock(on, { now: NOW })
   mock.env(on, { HOME, CLAUDE_CONFIG_DIR: '/cfg' })
   const files = new Map([['/cfg/settings.json', JSON.stringify(settingsOf())]])
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
@@ -270,6 +273,8 @@ test('with mods-hub: /mods-export also writes the hub\'s portable preferences, w
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: HOME, surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
 
   const shown = await run($, 'mods-export', '')

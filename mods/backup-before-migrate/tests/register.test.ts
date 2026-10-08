@@ -5,6 +5,9 @@ import type { On } from 'claude-code'
 import { inlineDatabaseUrl, leadingDirectory, migrationKind, rotate } from '../hooks/backup'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const NOW = Date.UTC(2026, 9, 7, 15, 4, 5)
 const DIR = '/work/app/.claude/db-backups'
 const PG_ENV = { '/work/app/.env': 'DATABASE_URL="postgresql://dev:s3cret@localhost:5432/app"\n' }
@@ -21,7 +24,7 @@ type World = {
 /** A project folder in memory, a dump tool that writes its file, and an engine whose Bash runs anything. */
 const world = (on: On, files: Record<string, string>, dump: Dump = 'ok'): World => {
   const state: World = { files: new Map(Object.entries(files)), runs: [], migrations: [], toasts: [] }
-  mock.clock(on, { now: NOW })
+  startClock = mock.clock(on, { now: NOW })
   mock.env(on, {})
   on('session.cwd', () => ({ value: '/work/app' }))
   on('fs.read', ($, e) => (state.files.has(e.path) ? { value: state.files.get(e.path) as string } : { deny: 'ENOENT' }))
@@ -210,6 +213,8 @@ test('with mods-hub: a saved backup is published, and a migration without one is
   on('command.register', ($, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.backup-before-migrate.saved'], consumes: [] }])
   await bash($, 'npx prisma migrate dev --name add_users')
   expect(state.toasts).toEqual([])
@@ -218,7 +223,7 @@ test('with mods-hub: a saved backup is published, and a migration without one is
     {
       topic: 'x.backup-before-migrate.saved',
       data: {
-        file: '.claude/db-backups/2026-10-07T15-04-05-app.sql.gz',
+        file: '.claude/db-backups/2026-10-07T15-04-06-app.sql.gz',
         label: 'postgres · app @ localhost:5432',
         kind: 'postgres',
         bytes: 2048,

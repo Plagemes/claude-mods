@@ -233,6 +233,7 @@ const rmGuard: Plugin = {
 test('with mods-hub: a tab, the policy fact, its own blocks published, other guards’ blocks in the score', { plugins: [hub, rmGuard], options: { level: 'strict' } }, async ($, on) => {
   const w = world(on, [])
   await start($, w)
+  await w.clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(w.toasts).toContain('tab guardian')
   expect(w.toasts).toContain('hello guardian')
   expect(w.toasts).toContain('fact guardian.policy')

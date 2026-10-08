@@ -1,6 +1,6 @@
 {
   "name": "venv-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Blocks pip install outside an active virtualenv so system Python stays clean.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#venv-guard",

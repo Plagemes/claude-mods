@@ -72,6 +72,7 @@ test('with mods-hub: says hello and shares the active persona as a fact', async 
   const hub = fakeHub(on)
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
   expect(hub.facts.get('persona')).toEqual({ name: 'teacher', label: 'Teacher' })
 

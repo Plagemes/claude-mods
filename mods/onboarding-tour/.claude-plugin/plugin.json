@@ -1,6 +1,6 @@
 {
   "name": "onboarding-tour",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/tour walks a newcomer through the repository step by step.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#onboarding-tour",

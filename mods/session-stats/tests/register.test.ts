@@ -170,6 +170,7 @@ test('with mods-hub, the hub\'s priced cost fills the Cost tile where the engine
   const hub = fakeHub(on, {}, clock)
   hub.events.push({ topic: 'cost.update', data: { turnUsd: 0.1, sessionUsd: 1.9, model: 'm', tokens: 1, isEstimate: true }, at: 5, source: 'mods-hub' })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   await $.turn.complete({ answer: 'Done.', durationMs: 1000, isAborted: false, turnId: 'main', reason: 'answer' })
   await clock.advance(300)
 
@@ -216,4 +217,16 @@ test('foldEvents counts what the hub\'s events carry and ignores the rest', () =
   expect(describeRun(total.lastRun as never)).toBe('error')
   expect(toolsPerTurn(total)).toBe('2.5 tools per turn')
   expect(toolsPerTurn(EMPTY_HUB)).toBeUndefined()
+})
+
+test('regression: session.start waits on nothing slow; the hub hello and the first figures follow once it returned', async ($, on) => {
+  const { clock, registered } = engine(on)
+  const hub = fakeHub(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(registered).toEqual(['session-stats'])
+  expect(hub.hellos).toEqual([])
+  expect(hub.tabs).toEqual([])
+  await clock.advance(1_500)
+  expect(hub.hellos).toHaveLength(1)
+  expect(hub.tabs.map(tab => tab.id)).toEqual(['stats'])
 })

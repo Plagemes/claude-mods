@@ -3,6 +3,9 @@ import type { On, TurnUsage } from 'claude-code'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 /** Wednesday 7 October 2026, local noon: the week began on Monday the 5th. */
 const NOW = new Date(2026, 9, 7, 12).getTime()
 
@@ -63,7 +66,7 @@ const memoryStore = (on: On, entries: Record<string, unknown>) => {
 const answerEngine = (on: On, entries: Record<string, unknown> = {}) => {
   const toasts: string[] = []
   const store = memoryStore(on, entries)
-  mock.clock(on, { now: NOW })
+  startClock = mock.clock(on, { now: NOW })
   on('session.root', () => ({ value: '/work/alpha' }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -150,6 +153,7 @@ test('session start registers /spend and drops days older than 120', async ($, o
 
   await $.session.start({ cwd: '/work/alpha', surface: 'terminal', isInteractive: true })
 
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(registered).toEqual(['spend'])
   expect([...store.keys()].sort()).toEqual([key(5), 'alertedOn'].sort())
 })
@@ -165,6 +169,8 @@ test('with mods-hub: /spend opens the Cost tab, drawn under the hub strip; the l
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
 
   await $.session.start({ cwd: '/work/alpha', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['budget.threshold'], consumes: [] }])
   expect(hub.tabs).toEqual([{ id: 'cost', title: 'Cost', order: 90, command: 'spend' }])
   expect(hub.facts.get('today')).toEqual({ date: '2026-10-07', usd: 3.5, limit: 5 })

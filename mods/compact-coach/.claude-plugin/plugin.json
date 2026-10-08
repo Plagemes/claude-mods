@@ -1,6 +1,6 @@
 {
   "name": "compact-coach",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Suggests /compact at natural breakpoints, before the context gets tight.",
   "author": {
     "name": "Plagemes",

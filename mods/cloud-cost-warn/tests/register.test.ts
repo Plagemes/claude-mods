@@ -156,6 +156,7 @@ test('with mods-hub: a deny is published as risk.blocked with the estimate', asy
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   const command = 'eksctl create cluster --name demo --node-type m5.xlarge --nodes 3'
   expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('cloud-cost-warn')

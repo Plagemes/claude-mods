@@ -387,7 +387,7 @@ Search, filter by category, then install, update or uninstall from a pane inside
 | [**resume-brief**](mods/resume-brief) | Shows what you were working on last time when a new session starts. | `/resume-brief` |
 | [**lessons-learned**](mods/lessons-learned) | When Claude fixes a mistake, offers to save the lesson to CLAUDE.md. | — |
 | [**codebase-map**](mods/codebase-map) | /map builds a compact map of your repository and gives it to Claude. | `/map` |
-| [**snippet-vault**](mods/snippet-vault) | Save and reuse code snippets across projects with /save-snippet and /snippet. | `/save-snippet` `/snippet` `/snippets` `/delete-snippet` |
+| [**snippet-vault**](mods/snippet-vault) | Save and reuse code snippets across projects with /save-snippet and /snippet. | `/save-snippet` `/snippet` `/vault` `/delete-snippet` |
 | [**link-vault**](mods/link-vault) | Collects every URL from the conversation into one list. | `/links` `/links-copy` |
 | [**recall**](mods/recall) | Gives Claude a recall tool to search your saved notes, decisions and journal. | `/remember` `/recall` |
 | [**project-brain**](mods/project-brain) | A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network. | `/brain` |

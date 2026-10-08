@@ -83,6 +83,7 @@ test('with mods-hub: says hello and publishes each refusal as risk.blocked (seve
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['risk.blocked'], consumes: [] }])
 
   const big = await $.tool.call({ tool: 'Read', file_path: '/repo/data.csv' })

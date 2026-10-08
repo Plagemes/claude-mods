@@ -1,6 +1,6 @@
 {
   "name": "daily-goal",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "/daily-goal sets today's goal, keeps it in view above the prompt and asks at day's end if you got there.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#daily-goal",

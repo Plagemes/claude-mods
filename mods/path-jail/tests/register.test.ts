@@ -204,6 +204,7 @@ test('with mods-hub: each deny is published as risk.blocked, with the path', asy
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect(denial(await $.tool.call({ tool: 'Write', file_path: '/etc/hosts', content: 'x' }))).toContain('outside the allowed folders')
   expect(denial(await $.tool.call({ tool: 'Bash', command: 'cp src/app.ts "$OUT_DIR/app.ts"' }))).toContain('shell expansion')

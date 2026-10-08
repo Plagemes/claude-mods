@@ -194,6 +194,7 @@ test('with mods-hub: says hello; a refusal is published as risk.blocked and sent
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['risk.blocked'], consumes: [] }])
 
   await editMany($, 15)

@@ -1,6 +1,6 @@
 {
   "name": "copy-last",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/copy-last copies Claude's last answer (or its last code block) to the clipboard.",
   "author": {
     "name": "Plagemes",

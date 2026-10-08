@@ -4,6 +4,9 @@ import type { Engine } from 'claude-code/testing'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const FANFARE_ASSET = 'assets/celebrate.wav'
 
 type Outcome = 'pass' | 'fail' | 'pass-with-failures'
@@ -12,7 +15,7 @@ type Outcome = 'pass' | 'fail' | 'pass-with-failures'
 const engine = (on: On, outcomes: Outcome[]) => {
   const toasts: string[] = []
   const clips: unknown[] = []
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   on('tool.call', () => {
     const outcome = outcomes.shift() ?? 'pass'
     if (outcome === 'fail') {
@@ -104,7 +107,7 @@ type Verdict = 'passed' | 'failed' | 'error' | undefined
 
 /** With mods-hub: Bash calls whose output says nothing, and a hub that records the next verdict (if any) just after each. */
 const hubbed = (on: On, mode: Parameters<typeof fakeHub>[1] = {}, outputs: Output[] = []) => {
-  const clock = mock.clock(on, { now: 1_000_000 })
+  const clock = (startClock = mock.clock(on, { now: 1_000_000 }))
   const hub = fakeHub(on, mode)
   const clips: unknown[] = []
   const toasts: string[] = []
@@ -136,6 +139,8 @@ const hubbed = (on: On, mode: Parameters<typeof fakeHub>[1] = {}, outputs: Outpu
 test('with mods-hub: follows the hub\'s test.result, notifies success instead of toasting, and plays the fanfare', async ($, on) => {
   const { hub, clips, toasts, verdicts, run } = hubbed(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['test.result'] }])
 
   verdicts.push('failed', 'passed')

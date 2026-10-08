@@ -1,6 +1,6 @@
 {
   "name": "sbom",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/sbom generates a software bill of materials with every dependency and its license.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#sbom",

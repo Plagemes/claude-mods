@@ -1,6 +1,6 @@
 {
   "name": "permission-log",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Keeps a log of every tool call that was denied, and why.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#permission-log",

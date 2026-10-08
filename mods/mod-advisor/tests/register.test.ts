@@ -5,6 +5,9 @@ import type { FsEntry, On, RenderPropsOf } from 'claude-code'
 import { CATALOG_MODS } from './fixtures'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PLUGIN = 'mod-advisor'
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = Date.UTC(2026, 9, 7, 9, 0, 0)
@@ -43,7 +46,7 @@ type WorldOptions = {
 
 /** Stands for everything beneath the plugin: GitHub, the claude CLI, the project's files, the surface. */
 function world(on: On, options: WorldOptions = {}) {
-  const clock = mock.clock(on, { now: NOW })
+  const clock = (startClock = mock.clock(on, { now: NOW }))
   mock.env(on, { CLAUDE_CODE_EXECPATH: BIN })
   const store = new Map<string, unknown>(Object.entries(options.store ?? {}))
   const files = new Map<string, string>(Object.entries(options.files ?? NEXT_PRISMA).map(([path, text]) => [`${ROOT}/${path}`, text]))
@@ -181,6 +184,14 @@ const mountPane = ($: Engine, surface: (typeof SURFACES)[number] = 'terminal') =
 const mountBand = ($: Engine, surface: (typeof SURFACES)[number] = 'terminal') =>
   $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND_PROPS })
 const projectPrefs = (store: Map<string, unknown>) => (store.get('projects') as Record<string, Record<string, unknown>> | undefined)?.[ROOT]
+
+test('regression: with nothing new that fits, no pane opens by itself at session start', async ($, on) => {
+  const w = world(on, { files: { 'README.md': '# notes' } })
+  await start($)
+  await w.clock.settle()
+  await w.clock.advance(1_500)
+  expect(w.pane.opens).toEqual([])
+})
 
 test('at session start the side pane opens by itself and shows what fits the project and how to use what is installed', async ($, on) => {
   const w = world(on)
@@ -558,6 +569,8 @@ test('with mods-hub: the Advisor is the first tab of the shared panel, opened at
   const w = world(on)
   const hub = fakeHub(on, {}, w.clock)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   await w.clock.settle()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['mod.recommended'], consumes: ['mod.installed', 'test.result', 'ci.result'] }])
   expect(hub.tabs).toEqual([{ id: 'advisor', title: 'Advisor', order: 10, command: 'mods-advisor' }])
@@ -581,15 +594,21 @@ test('with mods-hub: a hot reload does not steal the visible tab again; the tab 
   const w = world(on)
   const hub = fakeHub(on, {}, w.clock)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   await w.clock.settle()
   expect(hub.shown).toEqual(['advisor'])
   // A hot reload runs session.start again in the same session: the person may be on another tab by now.
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   await w.clock.settle()
   expect(hub.shown).toEqual(['advisor'])
   // A new session (the old one ended) opens it again.
   await $.session.end({ reason: 'clear', sessionId: 's', resume: { id: 's' } })
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   await w.clock.settle()
   expect(hub.shown).toEqual(['advisor', 'advisor'])
 })
@@ -598,6 +617,8 @@ test('with mods-hub: failing tests on the bus bring the test mods, published as 
   const w = world(on)
   const hub = fakeHub(on, {}, w.clock)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   await w.clock.settle()
   const lists = w.calls.filter(call => call === 'plugin list --json').length
 

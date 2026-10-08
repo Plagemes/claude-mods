@@ -1,6 +1,6 @@
 {
   "name": "tracker-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Blocks adding analytics and tracking SDKs that haven't been approved.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#tracker-guard",

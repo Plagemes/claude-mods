@@ -10,6 +10,7 @@ test('with mods-hub: says hello and publishes lint.result for the debug statemen
   on('fs.read', () => ({ deny: 'ENOENT' }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
 
   const result = await $.tool.call({

@@ -218,6 +218,7 @@ test('with mods-hub: refusals are published as risk.blocked, with the command or
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect((await bash($, 'npm i posthog-js')).deny).toContain('tracker-guard: blocked')
   expect((await edit($, '/r/index.html', HTML_GA)).deny).toContain('tracker-guard: blocked')

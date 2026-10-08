@@ -173,6 +173,7 @@ test('with mods-hub: says hello and publishes x.benchmark-compare.result for eac
   const hub = fakeHub(on)
   const state = world(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await state.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.benchmark-compare.result'], consumes: [] }])
 
   await bench($, 'baseline')

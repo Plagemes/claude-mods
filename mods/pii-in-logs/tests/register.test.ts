@@ -212,6 +212,7 @@ test('with mods-hub in warn mode: secret.detected and lint.result are published 
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['secret.detected', 'lint.result', 'risk.blocked'], consumes: [] }])
   await edit($, '/repo/src/login.ts', 'console.log("login", email, password)')
   expect(hub.published).toEqual([

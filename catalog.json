@@ -1978,7 +1978,7 @@
       "category": "memory",
       "tier": "simple",
       "description": "Save and reuse code snippets across projects with /save-snippet and /snippet.",
-      "spec": "/save-snippet <name> saves the last fenced code block from assistant output (or $.ui.selection) to $.store; /snippet <name> fills prompt with it; /snippets lists.",
+      "spec": "/save-snippet <name> saves the last fenced code block from assistant output (or $.ui.selection) to $.store; /snippet <name> fills prompt with it; /vault lists.",
       "signals": {
         "intents": [
           "save snippet",

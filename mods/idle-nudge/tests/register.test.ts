@@ -4,6 +4,9 @@ import type { On } from 'claude-code'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const MINUTE = 60_000
 
 type World = {
@@ -14,7 +17,7 @@ type World = {
 }
 
 const answerEngine = (on: On): World => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   let gitCalls = 0
   const world: World = {
     toasts: [],
@@ -113,6 +116,8 @@ test('with mods-hub: no nudge while you are active in another session, and the n
   const world = answerEngine(on)
   const hub = fakeHub(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['session.idle'] }])
 
   // Idle here for 20 minutes, but typing in another session: the hub says you are here.

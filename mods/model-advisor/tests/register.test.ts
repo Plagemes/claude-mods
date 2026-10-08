@@ -152,6 +152,7 @@ test('with mods-hub: suggests the models of smart-router\'s policy, never the on
   on('command.register', ($, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.model-advisor.suggested'], consumes: ['smart-router.policy'] }])
 
   await $.prompt.submit(typed('rename getUser to fetchUser in api.ts'))

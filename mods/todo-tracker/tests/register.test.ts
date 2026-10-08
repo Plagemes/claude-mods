@@ -144,6 +144,7 @@ test('with mods-hub: the turn-end count is an info notification and an x.todo-tr
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.todo-tracker.added'], consumes: [] }])
 
   await turn($, () =>

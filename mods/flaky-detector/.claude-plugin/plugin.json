@@ -1,6 +1,6 @@
 {
   "name": "flaky-detector",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Detects tests that pass and fail at random and keeps a list of the suspects.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#flaky-detector",

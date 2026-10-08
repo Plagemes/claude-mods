@@ -173,10 +173,11 @@ test('regression: requests behind bash -lc, eval and wrappers with options are c
 })
 
 test('with mods-hub: a refusal is published as risk.blocked and the pause note goes through the hub', { options: { maxCalls: 1 } }, async ($, on) => {
-  const { seen } = engine(on)
+  const { seen, clock } = engine(on)
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect((await bash($, 'curl https://api.example.com/1')).deny).toBeUndefined()
   expect((await bash($, 'curl https://api.example.com/2')).deny).toContain('the limit is 1')

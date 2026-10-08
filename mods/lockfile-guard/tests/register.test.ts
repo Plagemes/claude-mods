@@ -76,6 +76,7 @@ test('with mods-hub: each deny is published as risk.blocked', async ($, on) => {
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   await $.tool.call({ tool: 'Write', file_path: '/repo/yarn.lock', content: '{}' })
   await $.tool.call({ tool: 'Bash', command: 'echo x > uv.lock' })

@@ -4,6 +4,9 @@ import type { On } from 'claude-code'
 import { issueUrl, parseArgs, parseDraft } from '../hooks/draft'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/work/shop'
 const FORK_REPLY = [
   'TYPE: bug',
@@ -41,7 +44,7 @@ type Setup = { fork?: 'nothing' | string; gh?: 'missing' | { exitCode: number; s
 
 const world = (on: On, setup: Setup = {}): World => {
   const state: World = { forks: [], writes: new Map(), runs: [], closed: 0 }
-  mock.clock(on, { now: 1_700_000_000_000 })
+  startClock = mock.clock(on, { now: 1_700_000_000_000 })
   mock.env(on, { TMPDIR: '/var/tmp/' })
   on('model.fork', ($, e) => {
     state.forks.push(e.prompt)
@@ -152,6 +155,8 @@ test('with mods-hub: failed CI runs and repeated errors inform the draft, and th
   )
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['issue.drafted'], consumes: ['ci.result', 'error.repeated'] }])
   await $.command.run(issue('bug'))
   expect(state.forks[0]).toContain('- CI workflow "test" failed on fix/totals (https://github.com/acme/shop/actions/runs/7)')

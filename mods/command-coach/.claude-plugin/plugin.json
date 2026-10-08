@@ -1,6 +1,6 @@
 {
   "name": "command-coach",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Suggests Claude Code commands and mods that fit the way you work.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#command-coach",

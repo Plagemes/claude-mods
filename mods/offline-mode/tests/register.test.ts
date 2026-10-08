@@ -228,6 +228,7 @@ test('with mods-hub: the flag is shared as a fact, a block is published as risk.
   const seen = engine(on)
   const hub = fakeHub(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect(hub.facts.get('on')).toBe(false)
   await offline($, 'on')

@@ -709,7 +709,8 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   rt.root = (await $.session.repo().catch(() => null))?.root ?? (await $.session.root().catch(() => ''))
   rt.path = `${rt.root}/${TEAM_FILE}`
   await loadTeam($, rt)
-  await hubHello($, { version: VERSION, publishes: ['x.team-hub.drift'], consumes: [] }, { id: TAB, title: 'Team', order: TAB_ORDER, command: 'team' })
+  // The hub hello waits until session.start has returned (afterStart); the team file is read now, for the first prompt.
+  afterStart($, 'team-hub', () => hubHello($, { version: VERSION, publishes: ['x.team-hub.drift'], consumes: [] }, { id: TAB, title: 'Team', order: TAB_ORDER, command: 'team' }))
   $.clock.after(0, () => void settleUp($, rt))
   if (isInteractive) rt.timers.push($.clock.every(CHECK_MS, () => void check($, rt).catch(error => $.ui.log(`${NAME}: ${messageOf(error)}`, { to: 'debug' }))))
 }
@@ -730,11 +731,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    try {
-      await $.command.register({ name: 'team', description: "The team's shared conventions, recommended mods, budgets and rules (synced through the repo)", argumentHint: '[show | check | install | align | init | add-mod | convention | guard | budget | route | owner]' })
-    } catch (error) {
-      $.ui.log(`${NAME}: could not register /team: ${messageOf(error)}`, { to: 'debug' })
-    }
+    await registerCommand($, { name: 'team', description: "The team's shared conventions, recommended mods, budgets and rules (synced through the repo)", argumentHint: '[show | check | install | align | init | add-mod | convention | guard | budget | route | owner]' })
     try {
       await startUp($, rt, e.isInteractive)
     } catch (error) {
@@ -774,7 +771,18 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: 'team-hub' }, async ($, e) => drawTeam($, e, rt))
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -868,5 +876,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

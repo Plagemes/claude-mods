@@ -1,6 +1,6 @@
 {
   "name": "curl-to-code",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/curl2code turns a curl command into fetch, axios, Python requests or Go code.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#curl-to-code",

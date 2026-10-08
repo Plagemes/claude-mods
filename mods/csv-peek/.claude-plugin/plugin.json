@@ -1,6 +1,6 @@
 {
   "name": "csv-peek",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/peek shows a CSV or JSONL file's columns, sample rows and inferred types without reading the whole file.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#csv-peek",

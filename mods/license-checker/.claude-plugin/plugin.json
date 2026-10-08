@@ -1,6 +1,6 @@
 {
   "name": "license-checker",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Warns when a dependency with a copyleft license (GPL, AGPL) lands in a permissively licensed project.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#license-checker",

@@ -5,6 +5,9 @@ import { fakeHub } from './hub'
 
 import { countSeverities, describeCounts, whyNotReadOnly } from '../hooks/review'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const DIFF = 'diff --git a/src/pay.ts b/src/pay.ts\n@@ -1,2 +1,2 @@\n-const fee = 1\n+const fee = amount * 0.1\n'
 const REPORT = [
   '## Summary',
@@ -41,7 +44,7 @@ type World = { git: string[][]; spawns: { prompt: string; subagentType?: string 
 
 const world = (on: On, options: { clean?: boolean; knownRefs?: string[] } = {}): World => {
   const state: World = { git: [], spawns: [], prompts: [], ran: [] }
-  mock.clock(on, { now: 1_000 })
+  startClock = mock.clock(on, { now: 1_000 })
   on('process.run', ($, e) => {
     const args = e.argv.slice(1)
     state.git.push(args)
@@ -191,6 +194,8 @@ test('with mods-hub: says hello; a finished review is published as agent.finishe
   on('tool.list', () => ({ value: [] }))
   on('ui.log', () => ({ value: undefined }))
   await $.session.start({ cwd: '/work/pay', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['agent.finished'], consumes: [] }])
 
   await $.command.run(review())

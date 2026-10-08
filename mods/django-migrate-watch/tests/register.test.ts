@@ -5,6 +5,9 @@ import type { On } from 'claude-code'
 import { appsSummary, parsePending } from '../hooks/parse'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PLUGIN = 'django-migrate-watch'
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100, scroll: { offset: 0, bodyRows: 12 }, view: {} } as const
 
@@ -32,7 +35,7 @@ type World = {
 }
 
 const world = (on: On, files: readonly string[]): World => {
-  const w: World = { runs: [], statuses: [], submitted: [], logs: [], clock: mock.clock(on), reply: { exitCode: 1, stdout: PENDING } }
+  const w: World = { runs: [], statuses: [], submitted: [], logs: [], clock: (startClock = mock.clock(on)), reply: { exitCode: 1, stdout: PENDING } }
   mock.env(on, {})
   on('session.cwd', () => ({ value: '/proj' }))
   on('fs.exists', ($, e) => ({ value: files.includes(e.path) }))
@@ -156,6 +159,8 @@ test('with mods-hub: says hello, publishes x.django-migrate-watch.missing and wa
   const w = world(on, DJANGO)
 
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.django-migrate-watch.missing'], consumes: [] }])
 
   await edit($, '/proj/shop/models.py')

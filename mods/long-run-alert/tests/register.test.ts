@@ -92,6 +92,7 @@ test('with mods-hub: the alert is a warning notification, not a toast', async ($
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
 
   const call = $.tool.call({ tool: 'Bash', command: 'npm run build' })

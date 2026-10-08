@@ -5,6 +5,7 @@ import type { On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
 import { changedBetween, nextOccurrence, parseClock, parseShiftArgs, snapshotOf } from '../hooks/shift'
 import { fakeHub } from './hub'
 
+
 const ROOT = '/work/shop'
 const BASE = 'abc1234def5678'
 const REPORT = `${ROOT}/.claude/night-shift/2026-10-08.md`
@@ -261,6 +262,7 @@ test('with mods-hub: /night-shift away starts the shift once you leave, publishe
   const seen = world(on)
   const hub = fakeHub(on, {}, seen.clock)
   await start($)
+  await seen.clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['task.started', 'task.finished'], consumes: ['session.away', 'control.stop', 'control.pause'] }])
   await shift($, 'add Write tests for the cart')
   expect(await shift($, 'away')).toContain('The shift starts once you are away')
@@ -307,4 +309,13 @@ test('without mods-hub, /night-shift away says it needs the hub', async ($, on) 
   world(on)
   await start($)
   expect(await shift($, 'away')).toContain('needs mods-hub')
+})
+
+test('regression: session.start does not wait on the hub; the hello follows once it returned', async ($, on) => {
+  const seen = world(on)
+  const hub = fakeHub(on, {}, seen.clock)
+  await start($)
+  expect(hub.hellos).toEqual([])
+  await seen.clock.advance(1_500)
+  expect(hub.hellos).toHaveLength(1)
 })

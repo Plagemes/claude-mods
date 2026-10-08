@@ -111,6 +111,7 @@ test('with mods-hub: says hello and puts the last turn\'s cost (from cost.update
   on('state.get', { plugin: 'mods-hub', key: 'latest', id: 'cost.update' }, () => ({ value: event }))
 
   await $.session.start(START)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['cost.update'] }])
   await $.turn.complete(turn(3000, 200))
 

@@ -233,6 +233,7 @@ test('with mods-hub: publishes the regression, notifies an error that lists the 
   const { seen, clock } = world(on)
   const hub = fakeHub(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.regression-guard.regressed'], consumes: [] }])
 
   await $.tool.call({ tool: 'Bash', command: 'npm test' })

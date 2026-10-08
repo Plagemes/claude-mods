@@ -1,6 +1,6 @@
 {
   "name": "status-check",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/service-status checks whether GitHub, npm, PyPI or the Anthropic API are having an outage before you blame your code.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#status-check",

@@ -1,6 +1,6 @@
 {
   "name": "typecheck-gate",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Type-checks the project at the end of every editing turn so errors never slip by.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#typecheck-gate",

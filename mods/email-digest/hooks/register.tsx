@@ -759,21 +759,27 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   await beat($, rt)
 }
 
+/** Start-up, run once per session: after session.start has returned (afterStart) or at the first /digest. */
+type Boot = { started?: Promise<void>; isInteractive: boolean }
+
+function ensureStarted($: EngineInterface, rt: Runtime, boot: Boot): Promise<void> {
+  boot.started ??= startUp($, rt, boot.isInteractive).catch(error => $.ui.log(`${NAME}: start-up failed: ${messageOf(error)}`, { to: 'debug' }))
+  return boot.started
+}
+
 export const register: Register = (on, options) => {
   const rt = newRuntime(readSettings(options))
+  // Start-up runs once, after session.start has returned or at the first /digest, whichever comes first.
+  const boot: Boot = { isInteractive: false }
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    try {
-      await $.command.register({ name: 'digest', description: 'Preview and send the daily or weekly email summary for clients and managers', argumentHint: '[preview | send | recipients | tone | lang | note | status | setup]' })
-    } catch (error) {
-      $.ui.log(`${NAME}: could not register /digest: ${messageOf(error)}`, { to: 'debug' })
-    }
-    try {
-      await startUp($, rt, e.isInteractive)
-    } catch (error) {
-      $.ui.log(`${NAME}: start-up failed: ${messageOf(error)}`, { to: 'debug' })
-    }
+    await registerCommand($, { name: 'digest', description: 'Preview and send the daily or weekly email summary for clients and managers', argumentHint: '[preview | send | recipients | tone | lang | note | status | setup]' })
+    // Start-up (the hub hello, the cache, the first fetch) waits until session.start has returned (afterStart): with
+    // every mod installed, waiting on the network, the disk or the hub here ran session.start past its 10 s budget.
+    boot.started = undefined
+    boot.isInteractive = e.isInteractive
+    afterStart($, 'email-digest', () => ensureStarted($, rt, boot))
     return started
   })
 
@@ -791,6 +797,7 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'digest' }, async ($, e) => {
     try {
+      await ensureStarted($, rt, boot)
       return { text: await runDigest($, rt, e.args) }
     } catch (error) {
       return { text: `The /digest command failed: ${without(messageOf(error), secretsOf(rt.settings))}` }
@@ -800,7 +807,18 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: 'email-digest' }, async ($, e) => drawDigest($, e, rt))
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -894,5 +912,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

@@ -11,6 +11,7 @@ for m in "${mods[@]}"; do
     echo "✗ $m"; failed+=("$m")
   fi
 done
+node scripts/check-startup.mjs "${mods[@]/#/mods/}" >/dev/null && echo "✓ session.start stays fast" || { echo "✗ session.start waits on slow work (node scripts/check-startup.mjs)"; failed+=(startup); }
 claude plugin validate . >/dev/null 2>&1 && echo "✓ marketplace" || { echo "✗ marketplace"; failed+=(marketplace); }
 echo "${#mods[@]} mods checked, ${#failed[@]} failed ${failed[*]:-}"
 [ ${#failed[@]} -eq 0 ]

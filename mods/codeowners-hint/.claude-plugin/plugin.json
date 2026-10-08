@@ -1,6 +1,6 @@
 {
   "name": "codeowners-hint",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shows who owns a file (from CODEOWNERS) as Claude edits it.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#codeowners-hint",

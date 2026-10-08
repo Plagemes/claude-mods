@@ -1,6 +1,6 @@
 {
   "name": "file-size-watch",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Warns when an edited file grows past a size that hurts readability.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#file-size-watch",

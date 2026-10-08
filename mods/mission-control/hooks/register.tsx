@@ -260,19 +260,23 @@ async function startSession($: EngineInterface, rt: Runtime, surface: string): P
   const project = projectOf(root)
   const model = await $.session.model().catch(() => '')
   rt.beat = { ...blankBeat(), id: rt.me, label: labelOf(project, rt.me), project, root, cwd, model, surface, stateSince: now, startedAt: now, spend: { day: dayKey(now), usd: 0 } }
-  await $.command.register({
+  await registerCommand($, {
     name: 'mission',
     description: 'Opens Mission Control: every Claude session on this machine, what it does, its cost and blockers, with Pause, Stop, Note and Priority.',
     argumentHint: '[status | pause|resume|stop <session> | note <session> <text> | priority <session> high|normal|low | close]',
   })
-  const hasHub = await hubHello($, { version: '1.0.0', publishes: ['x.mission-control.command'], consumes: ['session.*', 'cost.update', 'control.stop', 'control.pause', 'control.resume'] }, { id: TAB, title: 'Mission Control', order: 30, command: 'mission' })
-  rt.controlSeenAt = hasHub ? now : 0
+  // The hub hello waits until session.start has returned (afterStart): ~200 mods waiting on the hub there ran
+  // session.start past its budget.
+  afterStart($, 'mission-control', async () => {
+    const hasHub = await hubHello($, { version: '1.0.0', publishes: ['x.mission-control.command'], consumes: ['session.*', 'cost.update', 'control.stop', 'control.pause', 'control.resume'] }, { id: TAB, title: 'Mission Control', order: 30, command: 'mission' })
+    rt.controlSeenAt = hasHub ? now : 0
+  })
   for (const timer of rt.timers) timer.cancel()
   rt.timers = [$.clock.every(BEAT_MS, () => void tick($, rt)), $.clock.every(INBOX_MS, () => void poll($, rt))]
-  $.clock.after(0, () => void afterStart($, rt))
+  $.clock.after(0, () => void firstBeat($, rt))
 }
 
-async function afterStart($: EngineInterface, rt: Runtime): Promise<void> {
+async function firstBeat($: EngineInterface, rt: Runtime): Promise<void> {
   await refreshBranch($, rt)
   await writeBeat($, rt, true)
 }
@@ -885,7 +889,18 @@ export const register: Register = (on, options) => {
   })
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -979,5 +994,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

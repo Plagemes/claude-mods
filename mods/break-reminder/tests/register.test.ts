@@ -4,11 +4,14 @@ import type { On } from 'claude-code'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const MINUTE = 60_000
 
 // Stands for the engine: a clock that only the test moves, a store in memory, and a toast recorder.
 const engine = (on: On, isInteractive = true) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   mock.store(on)
   const toasts: string[] = []
   on('session.start', () => ({ cwd: '/work' }))
@@ -99,6 +102,8 @@ test('with mods-hub: the reminder is a terminal notice, waits out a focus round,
   const { clock, toasts, start } = engine(on)
   const hub = fakeHub(on, {}, clock)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['session.idle', 'session.away', 'focus.started', 'focus.ended'] }])
 
   await work($, clock, 52)

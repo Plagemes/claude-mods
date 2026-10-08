@@ -901,10 +901,6 @@ async function openPane($: Dollar, rt: Runtime, isAsked: boolean): Promise<boole
 async function startSession($: Dollar, rt: Runtime): Promise<void> {
   rt.isQuiet = (await $.store.get(QUIET_KEY).catch(() => undefined)) === true
   await update($, quietState, () => rt.isQuiet)
-  if (rt.config.autoOpen && rt.isInteractive && !(await read($, autoShownState))) {
-    await update($, autoShownState, () => true)
-    await openPane($, rt, false).catch(() => false)
-  }
   const root = (await $.session.repo().catch(() => null))?.root ?? (await $.session.root())
   rt.prefs = (await readProjects($))[root] ?? {}
   await update($, dismissedState, () => rt.prefs.dismissed ?? [])
@@ -921,6 +917,12 @@ async function startSession($: Dollar, rt: Runtime): Promise<void> {
     return
   }
   const picks = await reevaluate($, rt)
+  // The pane (or the hub's Advisor tab) opens by itself only when something new fits: with every mod installed it
+  // stayed open at each start to say "Nothing more fits", taking the side of the screen unasked.
+  if (rt.config.autoOpen && rt.isInteractive && picks.length > 0 && !rt.isQuiet && !(await read($, autoShownState))) {
+    await update($, autoShownState, () => true)
+    await openPane($, rt, false).catch(() => false)
+  }
   if (rt.isInteractive) {
     await announceFit($, rt, picks, (await read($, fitState))?.stack.slice(0, BAND_NAMES) ?? [])
   }
@@ -1440,19 +1442,21 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     forgetSession(rt)
     rt.isInteractive = e.isInteractive
-    await $.command.register({
+    await registerCommand($, {
       name: 'mods-advisor',
       description: 'Mods that fit this project and what you are doing, with the commands to type',
       argumentHint: ARGUMENT_HINT,
       immediate: true,
     })
-    await greetHub($, rt)
-    const started = await next(e)
-    if (e.isInteractive) {
-      $.clock.after(0, () => void ensureStarted($, rt))
-    }
-
-    return started
+    // After session.start has returned: the hello first, so the first look knows whether the Advisor lives in the
+    // hub's panel, then the first look (the scan and the catalog), all off the start-up chain.
+    $.clock.after(0, () => {
+      void (async () => {
+        await greetHub($, rt)
+        if (e.isInteractive) await ensureStarted($, rt)
+      })().catch(error => $.ui.log(`mod-advisor: start-up failed: ${String(error)}`, { to: 'debug' }))
+    })
+    return next(e)
   })
 
   on('session.end', async ($, e, next) => {
@@ -1614,7 +1618,18 @@ export const register: Register = (on, options) => {
   })
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -1708,5 +1723,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

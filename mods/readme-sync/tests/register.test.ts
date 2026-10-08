@@ -121,6 +121,7 @@ test('with mods-hub: the undocumented changes are published as a lint.result at 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
 
   await $.turn.start({ text: 'add strict mode', turnId: 't1' })

@@ -81,7 +81,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     // /status is built into Claude Code, so this one is /service-status.
-    await $.command.register({
+    await registerCommand($, {
       name: 'service-status',
       description: 'Check whether GitHub, npm, PyPI or the Anthropic API have an outage',
       argumentHint: '[service]',
@@ -108,4 +108,15 @@ export const register: Register = (on, options) => {
     }
     return notes.length === 0 ? ran : { ...ran, context: [...(ran.context ?? []), ...notes] }
   }).catch(($, e, next) => next(e))
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

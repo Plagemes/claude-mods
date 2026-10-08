@@ -50,7 +50,7 @@ export const register: Register = (on, options) => {
   const top = Number.isFinite(asked) && asked >= 1 ? asked : DEFAULT_TOP
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({
+    await registerCommand($, {
       name: 'my-skills',
       description: 'Languages and tools you worked with this week and the last 8 weeks',
     })
@@ -79,4 +79,15 @@ export const register: Register = (on, options) => {
     await flush($)
     return next(e)
   })
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

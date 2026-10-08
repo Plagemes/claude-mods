@@ -1,6 +1,6 @@
 {
   "name": "ci-watch",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "/ci-watch follows your GitHub Actions run and tells you the moment it passes or fails.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#ci-watch",

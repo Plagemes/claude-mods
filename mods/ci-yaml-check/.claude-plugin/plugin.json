@@ -1,6 +1,6 @@
 {
   "name": "ci-yaml-check",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Checks edited GitHub Actions workflows and warns about actions not pinned to a version.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#ci-yaml-check",

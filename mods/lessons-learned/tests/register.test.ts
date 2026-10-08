@@ -193,6 +193,7 @@ test('with mods-hub: a fix seen through test-watch\'s test.result becomes a less
   on('session.start', ($, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await seen.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lesson.learned'], consumes: ['test.result', 'error.repeated'] }])
 
   // test-watch runs the tests on its own after edits: Claude never runs them through Bash.

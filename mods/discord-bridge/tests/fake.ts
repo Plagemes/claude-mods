@@ -138,7 +138,7 @@ const parentOf = (path: string): string => path.slice(0, path.lastIndexOf('/'))
 /** The engine beneath the plugin: files, Discord, the session, the model and the host, all in memory. */
 export function world(on: On, options: { now?: number; files?: Record<string, string> } = {}): World {
   const seen: World = {
-    clock: mock.clock(on, { now: options.now ?? new Date(2026, 9, 7, 12, 0, 0).getTime() }),
+    clock: (startClock = mock.clock(on, { now: options.now ?? new Date(2026, 9, 7, 12, 0, 0).getTime() })),
     files: new Map(Object.entries(options.files ?? {})),
     discord: { messages: [], calls: [], hooks: [], uploads: [], counter: 0, isTokenValid: true, canRead: true },
     submitted: [],
@@ -238,7 +238,15 @@ export const configured = (extra: Record<string, string> = {}): Record<string, s
 
 export const OPTIONS = { botToken: TOKEN, channelId: CHANNEL, ownerId: OWNER, pollSeconds: 3 }
 
-export const start = ($: Engine) => $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+/** The running test's mock clock (each world makes one). */
+let startClock: MockClock | undefined
+
+/** Starts the session and lets the start-up run: it waits until session.start has returned (afterStart). */
+export const start = async ($: Engine) => {
+  const started = await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500)
+  return started
+}
 
 export const discord = async ($: Engine, args: string): Promise<string> =>
   (await $.command.run({ command: 'discord', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } })).text ?? ''

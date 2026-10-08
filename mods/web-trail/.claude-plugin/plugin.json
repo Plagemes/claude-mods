@@ -1,6 +1,6 @@
 {
   "name": "web-trail",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/sources lists every page Claude fetched or searched this session.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#web-trail",

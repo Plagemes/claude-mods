@@ -218,6 +218,7 @@ test('with mods-hub: says hello, and reaching the goal is a success notice throu
   const hub = fakeHub(on, {}, w.clock)
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
 
   await goal($, 'Ship the login fix')

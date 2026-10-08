@@ -4,6 +4,9 @@ import type { On } from 'claude-code'
 import { composeNote, decisionsOf, handoffPrompt, missingSections, sectionsOf, stampOf } from '../hooks/note'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/work/shop'
 const NOW = new Date(2026, 9, 7, 13, 42).getTime()
 const NOTE = [
@@ -42,7 +45,7 @@ type Setup = { sessions?: unknown; fork?: 'nothing'; repo?: boolean; existing?: 
 
 const world = (on: On, setup: Setup = {}): World => {
   const state: World = { forks: [], files: new Map((setup.existing ?? []).map(path => [path, 'old'])), copies: [] }
-  mock.clock(on, { now: NOW })
+  startClock = mock.clock(on, { now: NOW })
   on('process.run', ($, e) => {
     const args = e.argv.slice(1).join(' ')
     const out = (stdout: string) => ({ value: { exitCode: setup.repo === false ? 128 : 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
@@ -149,6 +152,8 @@ test('with mods-hub: says hello and gives the fork the decisions recorded in thi
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['decision.recorded', 'session.ended'] }])
 
   const ran = await $.command.run(handoff())

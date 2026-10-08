@@ -5,6 +5,9 @@ import type { On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
 import { fromStore, moveItem, parseQueueArgs, statusText } from '../hooks/queue'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/work/shop'
 const STORE_KEY = `queue:${ROOT}`
 /** The pause after a turn ends before the next queued prompt goes, plus a little. */
@@ -22,7 +25,7 @@ type World = { clock: MockClock; submitted: string[]; statuses: (string | undefi
 
 /** An engine beneath the plugin: it records what the queue submits and shows; the test drives the turns. */
 function world(on: On, stored: Record<string, unknown> = {}): World {
-  const seen: World = { clock: mock.clock(on, { now: 1_000_000 }), submitted: [], statuses: [], toasts: [], draft: { text: '' } }
+  const seen: World = { clock: (startClock = mock.clock(on, { now: 1_000_000 })), submitted: [], statuses: [], toasts: [], draft: { text: '' } }
   mock.store(on, stored)
   on('session.root', () => ({ value: ROOT }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
@@ -223,6 +226,8 @@ test('with mods-hub: tasks are published, a hub pause holds the queue until its 
   const hub = fakeHub(on, { presence: 'away' }, seen.clock)
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['task.queued', 'task.started', 'task.finished'], consumes: ['session.idle', 'control.stop', 'control.pause', 'control.resume'] }])
   expect(hub.tabs).toEqual([{ id: 'queue', title: 'Queue', order: 220, command: 'queue' }])
 

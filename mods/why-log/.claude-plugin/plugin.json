@@ -1,6 +1,6 @@
 {
   "name": "why-log",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Records why each file was changed; /why shows the reasoning behind any file's edits.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#why-log",

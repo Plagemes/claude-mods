@@ -5,6 +5,7 @@ import type { On } from 'claude-code'
 import { insertEntry, parseCommit, TEMPLATE, unreleasedOf } from '../hooks/changelog'
 import { fakeHub } from './hub'
 
+
 const ROOT = '/work/shop'
 const PATH = `${ROOT}/CHANGELOG.md`
 const NOW = Date.UTC(2026, 9, 7, 12)
@@ -178,10 +179,11 @@ test('with mods-hub: a commit commit-composer published is recorded too, once, a
   on('ui.log', () => ({ value: undefined }))
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await state.clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['git.commit'] }])
 
   // commit-composer committed from its pane with git directly: no Bash call to watch.
-  hub.events.push({ topic: 'git.commit', source: 'commit-composer', at: NOW + 1, data: { sha: 'a1b2c3d4e5f6', message: 'feat(cart): add coupons', branch: 'main', files: 2 } })
+  hub.events.push({ topic: 'git.commit', source: 'commit-composer', at: state.clock.now() + 1, data: { sha: 'a1b2c3d4e5f6', message: 'feat(cart): add coupons', branch: 'main', files: 2 } })
   await state.clock.advance(10_000)
   expect(unreleasedOf(state.files.get(PATH) ?? '')).toBe('### Added\n\n- **cart:** Add coupons\n\n### Fixed\n\n- Handle empty carts')
   expect(hub.notified).toEqual([{ level: 'info', title: 'Added · **cart:** Add coupons', topic: 'git.commit' }])

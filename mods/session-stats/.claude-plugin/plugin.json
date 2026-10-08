@@ -1,6 +1,6 @@
 {
   "name": "session-stats",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "/session-stats shows a dashboard of turns, tools, tokens, cost, duration and files.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#session-stats",

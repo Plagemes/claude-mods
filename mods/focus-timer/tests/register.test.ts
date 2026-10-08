@@ -102,6 +102,7 @@ test('with mods-hub: a focus round silences the other mods, is published, and it
   const hub = fakeHub(on, {}, clock)
 
   await $.session.start(START)
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['focus.started', 'focus.ended'], consumes: ['session.away'] }])
 
   await $.command.run(pomodoro('2'))

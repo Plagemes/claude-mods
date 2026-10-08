@@ -119,6 +119,7 @@ test('with mods-hub: the Timeline tab opens with /timeline and marks where each 
   let feed: unknown[] = []
   on('state.get', { plugin: 'mods-hub', key: 'feed' }, () => ({ value: { value: feed, version: 1 } }))
   await $.session.start(START)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['turn.finished'] }])
   expect(hub.tabs).toEqual([{ id: 'timeline', title: 'Timeline', order: 270, command: 'timeline' }])
 

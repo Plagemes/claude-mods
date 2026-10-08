@@ -4,6 +4,7 @@ import type { On, RenderPropsOf } from 'claude-code'
 
 import { fakeHub } from './hub'
 
+
 const PLUGIN = 'achievements'
 const SURFACES = ['terminal', 'desktop'] as const
 /** Wednesday 7 October 2026, noon, in the local time zone. */
@@ -163,9 +164,10 @@ test('with mods-hub: commit-composer\'s commits, test-watch\'s runs and CI runs 
   const { clock, store, toasts } = world(on)
   const hub = fakeHub(on, {}, clock)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['git.commit', 'test.result', 'ci.result'] }])
 
-  const at = NOON + 1
+  const at = clock.now() + 1
   hub.events.push(
     { topic: 'git.commit', source: 'commit-composer', at, data: { sha: 'abc', message: 'feat: x', branch: 'main', files: 1 } },
     { topic: 'test.result', source: 'test-watch', at, data: { runner: 'vitest', outcome: 'failed', passed: 1, failed: 1 } },

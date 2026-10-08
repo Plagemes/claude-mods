@@ -84,6 +84,7 @@ test('with mods-hub: says hello once, and still chimes on a quiet afternoon', as
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
 
   await finishTurn($, clock, { durationMs: 45_000 })

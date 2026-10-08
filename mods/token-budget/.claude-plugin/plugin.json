@@ -1,6 +1,6 @@
 {
   "name": "token-budget",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Set a token or dollar budget per session; get warned at 80% and stopped at 100%.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#token-budget",

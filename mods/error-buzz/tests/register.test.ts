@@ -3,6 +3,9 @@ import type { On } from 'claude-code'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const BUZZ_ASSET = 'assets/buzz.wav'
 
 type Outcome = { isError?: true; text?: string }
@@ -23,7 +26,7 @@ const engine = (on: On, outcome: Outcome) => {
 }
 
 test('buzzes when a Bash command fails', async ($, on) => {
-  mock.clock(on)
+  startClock = mock.clock(on)
   const clips = engine(on, { isError: true })
 
   await $.tool.call({ tool: 'Bash', command: 'ls /nope' })
@@ -32,7 +35,7 @@ test('buzzes when a Bash command fails', async ($, on) => {
 })
 
 test('stays quiet when the command succeeds', async ($, on) => {
-  mock.clock(on)
+  startClock = mock.clock(on)
   const clips = engine(on, {})
 
   await $.tool.call({ tool: 'Bash', command: 'echo hi' })
@@ -41,7 +44,7 @@ test('stays quiet when the command succeeds', async ($, on) => {
 })
 
 test('buzzes at most once per cooldown', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const clips = engine(on, { isError: true })
 
   await $.tool.call({ tool: 'Bash', command: 'npm test' })
@@ -55,7 +58,7 @@ test('buzzes at most once per cooldown', async ($, on) => {
 })
 
 test('buzzes for a test runner that reports failures but exits 0', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const clips = engine(on, { text: 'Tests: 2 failed, 8 passed, 10 total' })
 
   await $.tool.call({ tool: 'Bash', command: 'npx jest || true' })
@@ -67,7 +70,7 @@ test('buzzes for a test runner that reports failures but exits 0', async ($, on)
 })
 
 test('does not read a clean run as a failure', async ($, on) => {
-  mock.clock(on)
+  startClock = mock.clock(on)
   const clips = engine(on, { text: 'Tests: 0 failed, 10 passed, 10 total' })
 
   await $.tool.call({ tool: 'Bash', command: 'npx jest' })
@@ -76,7 +79,7 @@ test('does not read a clean run as a failure', async ($, on) => {
 })
 
 test('onlyTests ignores failing commands that are not test runs', { options: { onlyTests: true, cooldownSeconds: 10 } }, async ($, on) => {
-  mock.clock(on)
+  startClock = mock.clock(on)
   const clips = engine(on, { isError: true })
 
   await $.tool.call({ tool: 'Bash', command: 'ls /nope' })
@@ -87,7 +90,7 @@ test('onlyTests ignores failing commands that are not test runs', { options: { o
 })
 
 test('regression: onlyTests does not count a command that merely names a runner', { options: { onlyTests: true, cooldownSeconds: 0 } }, async ($, on) => {
-  mock.clock(on)
+  startClock = mock.clock(on)
   const clips = engine(on, { isError: true })
 
   for (const command of ['cat jest.config.js', 'npm i -D vitest', 'git commit -m "add jest"', 'grep -r pytest .']) {
@@ -108,7 +111,7 @@ const SETTLE_MS = 250
  * records `events` for the command that just ran.
  */
 const hubbed = (on: On, text: string, events: { topic: string; data: Record<string, unknown> }[] = []) => {
-  const clock = mock.clock(on, { now: 1_000_000 })
+  const clock = (startClock = mock.clock(on, { now: 1_000_000 }))
   const hub = fakeHub(on)
   const clips: unknown[] = []
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -128,6 +131,8 @@ test('with mods-hub: says hello and buzzes on the hub\'s failed test.result, wit
     { topic: 'test.result', data: { runner: 'jest', outcome: 'failed', passed: 8, failed: 2 } },
   ])
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['test.result', 'error.repeated'] }])
 
   await $.tool.call({ tool: 'Bash', command: 'npm test' })
@@ -170,7 +175,7 @@ test('with mods-hub: a test.result of another run (test-watch, an earlier call) 
 })
 
 test('with mods-hub: a command that keeps failing (error.repeated) buzzes once even inside the cooldown', async ($, on) => {
-  const clock = mock.clock(on, { now: 1_000_000 })
+  const clock = (startClock = mock.clock(on, { now: 1_000_000 }))
   const hub = fakeHub(on)
   const clips: unknown[] = []
   on('tool.call', () => ({ result: { stdout: '', stderr: 'boom', interrupted: false }, isError: true as const, text: 'Exit code 1' }))
@@ -198,7 +203,7 @@ test('with mods-hub: a command that keeps failing (error.repeated) buzzes once e
 })
 
 test('with mods-hub, onlyTests still ignores failing commands that are not test runs', { options: { onlyTests: true } }, async ($, on) => {
-  const clock = mock.clock(on, { now: 1_000_000 })
+  const clock = (startClock = mock.clock(on, { now: 1_000_000 }))
   fakeHub(on)
   const clips: unknown[] = []
   on('tool.call', () => ({ result: { stdout: '', stderr: 'no', interrupted: false }, isError: true as const, text: 'Exit code 2' }))

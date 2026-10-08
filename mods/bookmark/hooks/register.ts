@@ -89,10 +89,10 @@ const deleteBookmark = async ($: EngineInterface, args: string): Promise<Reply> 
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'bookmark', description: "Save Claude's last answer as a bookmark", argumentHint: '[label]' })
-    await $.command.register({ name: 'bookmarks', description: "List this project's bookmarks" })
-    await $.command.register({ name: 'bookmark-insert', description: 'Put a bookmark into the prompt', argumentHint: '<n>' })
-    await $.command.register({ name: 'bookmark-delete', description: 'Delete a bookmark', argumentHint: '<n>' })
+    await registerCommand($, { name: 'bookmark', description: "Save Claude's last answer as a bookmark", argumentHint: '[label]' })
+    await registerCommand($, { name: 'bookmarks', description: "List this project's bookmarks" })
+    await registerCommand($, { name: 'bookmark-insert', description: 'Put a bookmark into the prompt', argumentHint: '<n>' })
+    await registerCommand($, { name: 'bookmark-delete', description: 'Delete a bookmark', argumentHint: '<n>' })
     return next(e)
   })
 
@@ -100,4 +100,15 @@ export const register: Register = on => {
   on('command.run', { command: 'bookmarks' }, $ => listBookmarks($))
   on('command.run', { command: 'bookmark-insert' }, ($, e) => insertBookmark($, e.args))
   on('command.run', { command: 'bookmark-delete' }, ($, e) => deleteBookmark($, e.args))
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

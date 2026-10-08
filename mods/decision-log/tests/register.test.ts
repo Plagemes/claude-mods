@@ -151,6 +151,7 @@ test('with mods-hub: a saved ADR is published as decision.recorded for every ses
   on('session.start', ($, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['decision.recorded'], consumes: [] }])
 
   await decide($, 'Use Postgres for events')

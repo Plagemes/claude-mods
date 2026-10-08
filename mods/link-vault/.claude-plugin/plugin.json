@@ -1,6 +1,6 @@
 {
   "name": "link-vault",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Collects every URL from the conversation into one list.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#link-vault",

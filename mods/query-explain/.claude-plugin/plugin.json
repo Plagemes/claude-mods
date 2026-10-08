@@ -1,6 +1,6 @@
 {
   "name": "query-explain",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/explain-query runs EXPLAIN on your local database and explains the plan in plain words.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#query-explain",

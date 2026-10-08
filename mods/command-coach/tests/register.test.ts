@@ -7,6 +7,9 @@ import { fakeHub } from './hub'
 import { RULES, dueRules, isGitCommit, isInstalled, isLongOutput, isTestPrompt, messageOf } from '../hooks/rules'
 import type { Signals } from '../hooks/rules'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const START = Date.parse('2026-10-07T09:00:00Z')
@@ -25,7 +28,7 @@ type World = {
 
 /** The engine beneath the plugin: clock and store in memory, a context gauge, installed plugins and commands, Bash output. */
 const world = (on: On, stored: Record<string, unknown> = {}): World => {
-  const clock = mock.clock(on, { now: START })
+  const clock = (startClock = mock.clock(on, { now: START }))
   settleClock = async () => {
     await clock.advance(0)
     await clock.settle()
@@ -355,7 +358,7 @@ test('the pattern helpers', () => {
 })
 
 test('regression: a turn ends without waiting for the installed-plugins check', async ($, on) => {
-  const clock = mock.clock(on, { now: START })
+  const clock = (startClock = mock.clock(on, { now: START }))
   mock.store(on, {})
   const toasts: string[] = []
   let release: () => void = () => undefined
@@ -392,6 +395,8 @@ test('with mods-hub: says hello, tips go out as info notices, a recommended mod 
   w.plugins = ['output-trimmer']
   on('mods.installed', () => ({ value: { hello: [], plugins: [{ name: 'quick-commands', marketplace: 'm', version: '1', isEnabled: true }], listedAt: 5 } }))
   await startSession($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['mod.recommended'], consumes: ['error.repeated'] }])
 
   await longOutputs($, w, 3)
@@ -411,6 +416,8 @@ test('with mods-hub: a mod the hub lists as installed is not recommended', async
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   on('mods.installed', () => ({ value: { hello: [], plugins: [{ name: 'output-trimmer', marketplace: 'm', version: '1', isEnabled: true }], listedAt: 5 } }))
   await startSession($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   await longOutputs($, w, 3)
   await endTurn($)
   expect(hub.notified).toEqual([])
@@ -423,6 +430,8 @@ test('with mods-hub: a command that failed over and over (error.repeated) is the
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   on('mods.installed', () => ({ value: { hello: [], plugins: [], listedAt: 5 } }))
   await startSession($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   await endTurn($)
   expect(hub.notified).toEqual([])
 

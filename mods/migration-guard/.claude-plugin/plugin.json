@@ -1,6 +1,6 @@
 {
   "name": "migration-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Prevents editing database migrations that already exist; write a new one instead.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#migration-guard",

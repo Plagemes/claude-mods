@@ -200,6 +200,7 @@ test('with mods-hub: each screenshot is published, and a build that failed after
   on('command.register', ($, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await state.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['screenshot.taken'], consumes: ['build.result'] }])
   await screenshot($)
   expect(hub.published.map(event => event.topic)).toEqual(['screenshot.taken', 'screenshot.taken'])

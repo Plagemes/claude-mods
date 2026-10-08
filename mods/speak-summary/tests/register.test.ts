@@ -124,6 +124,7 @@ test('with mods-hub: says hello, speaks on a quiet afternoon, and routes the can
   const seen = world(on, 'Ran the build.', false)
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
 
   await $.turn.complete(LONG_TURN)

@@ -151,7 +151,7 @@ Above the hub, `next(e)` returns the hub's frame (tab strip) and the owner appen
 | **`notify(level)`** | anything that used to be a toast and might matter away from the terminal | ci-watch, long-run-alert, typecheck-gate, night-shift |
 | **Command output / guard text** | on-demand reports; refusals | bash-history, standup; every guard's deny |
 
-Tab order convention (`order`): 10 Advisor, 20 Router, 30 Mission Control, 40 Autopilot, 50 Workflows, 60 Brain, 70 Guardian, 80 Channels, 90 Cost, 95 Context, 100 Tests, then the rest at 200+ as built, every order unique: 210 Errors (error-feed), 211 Slack, 212 Discord, 213 Issues (issue-pilot), 214 Telegram, 220 Queue (task-queue), 221 Team (team-hub), 240 Calendar, 250 Changes (one tab shared by diff-pane and files-touched), 260 Tasks, 270 Timeline, 280 Notes, 290 Stats, 300 Dev server. Hotkeys `0`–`9` follow the order and belong to the hub's tab strip (the tab buttons on the terminal show their digit, `1: Advisor`): a tab body never binds a digit (use letters).
+Tab order convention (`order`): 10 Advisor, 20 Router, 30 Mission Control, 40 Autopilot, 50 Workflows, 60 Brain, 70 Guardian, 80 Channels, 90 Cost, 95 Context, 100 Tests, then the rest at 200+ as built, every order unique: 210 Errors (error-feed), 211 Slack, 212 Discord, 213 Issues (issue-pilot), 214 Telegram, 220 Queue (task-queue), 221 Team (team-hub), 240 Calendar, 250 Changes (diff-pane), 251 Files (files-touched; a tab id belongs to one mod), 260 Tasks, 270 Timeline, 280 Notes, 290 Stats, 300 Dev server. Hotkeys `0`–`9` follow the order and belong to the hub's tab strip (the tab buttons on the terminal show their digit, `1: Advisor`): a tab body never binds a digit (use letters).
 
 ## 8. Event catalog
 
@@ -264,7 +264,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | `commit-composer` | git.commit | — | — | cmd | — | 3 |
 | `branch-namer` | — | — | — | cmd | — | 5 |
 | `main-branch-warn` | risk.blocked | — | — | guard/notify(warning) | shell | 2 |
-| `diff-pane` | — | git.commit | — | **tab** Changes (order 250, shared with files-touched) | — | 4 |
+| `diff-pane` | — | git.commit | — | **tab** Changes (order 250) | — | 4 |
 | `pr-describer` | pr.opened | git.commit | — | cmd | — | 3 |
 | `conflict-helper` | x.conflict-helper.found | — | — | cmd + notify(warning) | — | 5 |
 | `co-author-stamp` | — | — | — | — | — | 5 |
@@ -320,7 +320,7 @@ Columns: **Publishes** / **Consumes** are bus topics (`x.<mod>.*` are the mod's 
 | Mod | Publishes | Consumes | State | Surface | Libs | W |
 | --- | --- | --- | --- | --- | --- | --- |
 | `tool-timeline` | — | turn.finished | — | **tab** Timeline (order 270) | — | 4 |
-| `files-touched` | — | — | — | **tab** Changes (order 250, shared with diff-pane) | — | 4 |
+| `files-touched` | — | — | — | **tab** Files (order 251) | — | 4 |
 | `session-stats` | — | cost.update, test.result, turn.finished | — | **tab** Stats (order 290) | — | 4 |
 | `subagent-monitor` | agent.finished | agent.routed | — | merged into **tab** Mission Control | — | 3 |
 | `error-feed` | tool.failed | error.repeated | — | **tab** Errors (order 210) | — | 3 |
@@ -572,7 +572,7 @@ All soft (they work without the hub) except the three push bridges, which depend
 | Cost | cost-meter, token-budget, daily-spend, cache-hit-meter, session-stats, token-sparkline, model-advisor, smart-router, context-optimizer | One price table (`shared/prices`). The hub's `cost.update` is the per-turn number everyone shows; smart-router adds subagent cost. token-budget and daily-spend publish `budget.threshold`, which smart-router (bias to cheaper tiers) and autopilot (pause) consume. daily-spend owns the **Cost** tab and the cross-session ledger (reading `sessions.json` and smart-router's `daily.json`); cost-meter keeps the status line. |
 | Tests | test-watch, flaky-detector, slow-test-flag, regression-guard, celebrate, error-buzz, no-skip-tests, test-first, quick-commands, achievements, deploy-checklist, autopilot | One detector (`shared/test-runners`) and one event: consumers stop parsing Bash output themselves and subscribe to `test.result`. test-watch owns the **Tests** tab (flaky and slow lists as its sections). |
 | Notifiers | done-chime, desktop-notify, webhook-notify, permission-ping, error-buzz, long-run-alert, speak-summary, break-reminder, celebrate, soundpack, idle-nudge, quiet-mode | Toasts become `notify(level)`; desktop-notify and webhook-notify become channels (`desktop`, `webhook`); quiet-mode's `/quiet` becomes an alias of hub Silent (`setMode`); sounds are held by the hub at night and when Silent. |
-| Activity views | tool-timeline, files-touched, diff-pane, error-feed, bash-history, web-trail, permission-log, recent-files, session-replay, audit-trail | **Timeline** (tool-timeline), **Changes** (diff-pane + files-touched in one tab), **Errors** (error-feed, consuming `error.repeated`); the rest stay commands. |
+| Activity views | tool-timeline, files-touched, diff-pane, error-feed, bash-history, web-trail, permission-log, recent-files, session-replay, audit-trail | **Timeline** (tool-timeline), **Changes** (diff-pane) and **Files** (files-touched), **Errors** (error-feed, consuming `error.repeated`); the rest stay commands. |
 | Memory | decision-log, lessons-learned, session-journal, resume-brief, recall, glossary, codebase-map, handoff, standup, why-log → **project-brain** | Publish `decision.recorded` / `lesson.learned`; project-brain consumes and owns **Brain**; recall indexes them; resume-brief and handoff read `sessions.json`. |
 | Agents | smart-router, subagent-monitor, subagent-cap, parallel-explore, task-queue, night-shift, second-opinion, self-check, loop-breaker → **autopilot, workflow-studio, mission-control** | smart-router publishes `agent.routed`/`agent.finished` and the fact `smart-router.policy` (subagent-cap and model-advisor read it instead of guessing); subagent-monitor folds into **Mission Control**; task-queue/night-shift publish `task.*`, which autopilot and workflow-studio drive; all of them obey `control.stop` / `control.pause` / `control.resume` (autopilot already does; the others in the next wave). |
 | Git, CI, deploy | commit-composer, pr-describer, ci-watch, changelog-keeper, standup, deploy-checklist, k8s-dry-run, terraform-plan-pane, prod-guard → **issue-pilot, team-hub** | `git.commit`, `git.push`, `pr.opened`, `ci.result`, `deploy.*`; ci-watch's failures feed issue-pilot (draft an issue) and team-hub (post to team channels). |

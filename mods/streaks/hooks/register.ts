@@ -112,7 +112,7 @@ export const register: Register = (on, options) => {
   const display: Display = { clearTimer: undefined, lastDay: undefined }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'streak', description: 'Shows your streak of days with Claude, and the last 30 days as a calendar.' })
+    await registerCommand($, { name: 'streak', description: 'Shows your streak of days with Claude, and the last 30 days as a calendar.' })
     await announce($, display, settings)
     return next(e)
   })
@@ -129,4 +129,15 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'streak' }, async $ => ({ text: await describeStreaks($) }))
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

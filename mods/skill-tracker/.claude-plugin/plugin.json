@@ -1,6 +1,6 @@
 {
   "name": "skill-tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Tracks which languages and tools you've worked with each week.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#skill-tracker",

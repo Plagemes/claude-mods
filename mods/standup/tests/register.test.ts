@@ -4,6 +4,9 @@ import type { On } from 'claude-code'
 import { defaultDays, fallbackSections, formatSections, neighboursOf, parseSections, unseenCommits } from '../hooks/standup'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/work/shop'
 const WEDNESDAY = Date.UTC(2026, 9, 7, 9)
 const MONDAY = Date.UTC(2026, 9, 5, 9)
@@ -33,7 +36,7 @@ type Setup = { sessions?: unknown; now?: number; log?: string; status?: string; 
 
 const world = (on: On, setup: Setup = {}): World => {
   const state: World = { gitCalls: [], prompts: [], copies: [] }
-  mock.clock(on, { now: setup.now ?? WEDNESDAY })
+  startClock = mock.clock(on, { now: setup.now ?? WEDNESDAY })
   on('process.run', ($, e) => {
     const args = e.argv.slice(1)
     state.gitCalls.push(args)
@@ -161,6 +164,8 @@ test('with mods-hub: says hello, adds commits other sessions made on other branc
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['git.commit', 'session.ended'] }])
 
   await $.command.run(run())

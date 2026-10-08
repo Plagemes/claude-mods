@@ -4,6 +4,9 @@ import type { On } from 'claude-code'
 import { chunkMarkdown, search } from '../hooks/search'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/work/app'
 const NOTES: Record<string, string> = {
   'CLAUDE.md': '# Conventions\nUse pnpm for every script. Tests live next to the code.\n',
@@ -38,7 +41,7 @@ const command = (name: string, args: string) => ({
 const project = (on: On, entries: Record<string, unknown> = {}) => {
   const files = new Map(Object.entries(NOTES).map(([path, text]) => [`${ROOT}/${path}`, text]))
   const isDir = (path: string) => [...files.keys()].some(file => file.startsWith(`${path}/`))
-  mock.clock(on, { now: Date.UTC(2026, 9, 7, 12) })
+  startClock = mock.clock(on, { now: Date.UTC(2026, 9, 7, 12) })
   mock.store(on, entries)
   on('session.root', () => ({ value: ROOT }))
   on('fs.stat', ($, e) => {
@@ -186,6 +189,8 @@ test('with mods-hub: decisions and lessons other mods published are searched, th
   on('tool.register', ($, e) => ({ value: { tool: `mcp__recall__${e.name}` } }) as never)
 
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['decision.recorded', 'lesson.learned'] }])
 
   const found = String((await $.tool.call(searchTool('kubernetes manifests'))).result)

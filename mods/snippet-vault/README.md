@@ -15,7 +15,7 @@ A personal snippet library inside Claude Code. `/save-snippet <name>` saves the 
 ## Usage
 - `/save-snippet <name>` saves a snippet (names: letters, digits, `.`, `_`, `-`, up to 40 characters). Saving an existing name updates it.
 - `/snippet <name>` inserts it into the prompt at the cursor. A bare `/snippet`, or an unknown name, lists what you have.
-- `/snippets` lists the vault with language, size and date.
+- `/vault` lists the vault with language, size and date.
 - `/delete-snippet <name>` removes one.
 
 ## Configuration

@@ -1,6 +1,6 @@
 {
   "name": "disk-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Warns when the disk is nearly full before builds, installs and docker pulls.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#disk-guard",

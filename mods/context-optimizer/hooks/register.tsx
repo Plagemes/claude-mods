@@ -659,8 +659,12 @@ export const register: Register = (on, options) => {
   })
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'ctx', description: 'Context fill, what fills it, the tokens context-optimizer saved, and a /compact at the right moment', argumentHint: '[compact]' })
-    await hubHello($, { version: VERSION, publishes: ['context.pressure', 'x.context-optimizer.saved'], consumes: ['context.pressure', 'decision.recorded'] }, TAB)
+    await registerCommand($, { name: 'ctx', description: 'Context fill, what fills it, the tokens context-optimizer saved, and a /compact at the right moment', argumentHint: '[compact]' })
+    // Waits until session.start has returned (afterStart): with every mod installed, waiting on the hub, the disk
+    // or a process here ran session.start past its 10 s budget.
+    afterStart($, 'context-optimizer', async () => {
+      await hubHello($, { version: VERSION, publishes: ['context.pressure', 'x.context-optimizer.saved'], consumes: ['context.pressure', 'decision.recorded'] }, TAB)
+    })
     rt.root = e.cwd
     $.clock.after(0, () => void detectOutputTrimmer($, rt).catch(() => undefined))
     return next(e)
@@ -718,7 +722,18 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawBody($, e, rt))
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -812,5 +827,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

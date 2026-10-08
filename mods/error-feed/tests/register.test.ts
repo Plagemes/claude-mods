@@ -2,6 +2,9 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PLUGIN = 'error-feed'
 const PANE = 'error-feed'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -18,7 +21,7 @@ const paneProps = {
 const NPM_FAILURE = 'Exit code 1\nnpm ERR! Missing script: "tset"\nnpm ERR! Did you mean "test"?'
 
 test('collects failed calls, skips successes and refusals, and counts them in the status line', async ($, on) => {
-  mock.clock(on, { now: 1_700_000_000_000 })
+  startClock = mock.clock(on, { now: 1_700_000_000_000 })
   const statuses: (string | undefined)[] = []
   on('ui.status', ($, e) => {
     statuses.push(e.text)
@@ -56,7 +59,7 @@ test('collects failed calls, skips successes and refusals, and counts them in th
 })
 
 test('"Ask Claude to fix" submits the failure as a prompt, and Clear all empties the feed', async ($, on) => {
-  mock.clock(on)
+  startClock = mock.clock(on)
   const submitted: string[] = []
   const statuses: (string | undefined)[] = []
   on('ui.status', ($, e) => {
@@ -94,7 +97,7 @@ test('"Ask Claude to fix" submits the failure as a prompt, and Clear all empties
 })
 
 test('with mods-hub: failures are published as tool.failed, repeats are flagged, and /errors opens the Errors tab', async ($, on) => {
-  mock.clock(on, { now: 1_700_000_000_000 })
+  startClock = mock.clock(on, { now: 1_700_000_000_000 })
   const hub = fakeHub(on)
   const opened: string[] = []
   on('ui.status', () => ({ value: undefined }))
@@ -111,6 +114,8 @@ test('with mods-hub: failures are published as tool.failed, repeats are flagged,
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['tool.failed'], consumes: ['error.repeated'] }])
   expect(hub.tabs).toEqual([{ id: 'errors', title: 'Errors', order: 210, command: 'errors' }])
 

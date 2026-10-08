@@ -77,6 +77,19 @@ export function fakeHub(on: On, mode: Partial<ModsMode> = {}, clock: { now: () =
   let seq = 0
   const event = (e: (typeof hub.events)[number]) => ({ id: `e${(seq += 1)}`, topic: e.topic, data: e.data as never, source: e.source, at: e.at, session: 's1', scope: 'session' as const })
   on('engine.create', async (_$, e, next) => ({ ...(await next(e)), mods: BOTTOM }))
+  // A mod greets the hub after session.start (`afterStart`, on `$.clock.after`). A test with a mock clock moves it on
+  // itself; without one nothing beneath answers `clock.after`, and this fallback fires the timer at once instead of
+  // never. It hooks the glob `clock.*`, never `clock.after` itself: the test's own `mock.clock` registers that event,
+  // and a second hook on it is refused ("registered twice"); the glob coexists with it in either order, and every
+  // clock event but a refused `clock.after` goes on untouched.
+  on('clock.*', async (_$, e, next) => {
+    if (next.event !== 'clock.after') return next(e)
+    try {
+      return await next(e)
+    } catch {
+      return { value: undefined } as Awaited<ReturnType<typeof next>>
+    }
+  })
   on('mods.publish', (_$, e) => {
     hub.published.push(e)
     return { value: { id: `p${hub.published.length}` } }

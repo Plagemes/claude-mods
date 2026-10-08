@@ -5,6 +5,9 @@ import type { CommandRunInput, On, TurnCompleteInput } from 'claude-code'
 import type { ModsNotice } from '../types/mods-hub'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const SLACK = 'https://hooks.slack.com/services/T000/B000/XXXX'
 const DISCORD = 'https://discord.com/api/webhooks/123/abc'
 const NTFY = 'https://ntfy.sh/my-builds'
@@ -60,7 +63,7 @@ async function runTurn($: Engine, turn: TurnCompleteInput): Promise<void> {
 }
 
 test('posts a Slack message with project, branch, duration, summary and tool counts', { options: { webhookUrl: SLACK } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
 
   await runTurn($, LONG_TURN)
@@ -78,7 +81,7 @@ test('posts a Slack message with project, branch, duration, summary and tool cou
 })
 
 test('stays silent for short or interrupted turns', { options: { webhookUrl: SLACK, minDurationSec: 120 } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
 
   await runTurn($, { ...LONG_TURN, durationMs: 30_000 })
@@ -89,7 +92,7 @@ test('stays silent for short or interrupted turns', { options: { webhookUrl: SLA
 })
 
 test('does nothing until a webhook URL is set', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
   await runTurn($, LONG_TURN)
   await clock.advance(0)
@@ -97,7 +100,7 @@ test('does nothing until a webhook URL is set', async ($, on) => {
 })
 
 test('Discord payload uses an embed and disables mentions', { options: { webhookUrl: DISCORD } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
 
   await runTurn($, { ...LONG_TURN, reason: 'error' })
@@ -110,7 +113,7 @@ test('Discord payload uses an embed and disables mentions', { options: { webhook
 })
 
 test('ntfy topics are published as JSON to the server root', { options: { webhookUrl: NTFY } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
 
   await runTurn($, LONG_TURN)
@@ -131,7 +134,7 @@ test('/notify-test explains a missing URL', async ($, on) => {
 })
 
 test('/notify-test reports what the webhook answered, and failures toast', { options: { webhookUrl: SLACK } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on, 404)
 
   const result = await $.command.run(NOTIFY_TEST)
@@ -150,7 +153,7 @@ const notice = (fields: Partial<ModsNotice>): ModsNotice => ({
 const start = ($: Engine) => $.session.start({ cwd: '/home/me/shop', surface: 'terminal', isInteractive: true })
 
 test('masks secrets in the answer before it leaves the machine', { options: { webhookUrl: SLACK } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
   const token = `ghp_${'a1B2c3D4e5'.repeat(4).slice(0, 36)}`
 
@@ -164,11 +167,13 @@ test('masks secrets in the answer before it leaves the machine', { options: { we
 })
 
 test('with mods-hub: registers the webhook channel for the team and posts what the hub queued for it', { options: { webhookUrl: SLACK } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
   expect(hub.channels).toEqual([{ id: 'webhook', title: 'Webhook', audience: 'team', delivery: 'pull', status: 'connected' }])
 
@@ -199,11 +204,13 @@ test('with mods-hub: registers the webhook channel for the team and posts what t
 })
 
 test('with mods-hub: an ntfy topic is a channel for you alone, and notices keep their priority', { options: { webhookUrl: NTFY } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.channels[0]).toMatchObject({ id: 'webhook', audience: 'me', status: 'connected' })
 
   hub.outbox.push(notice({ level: 'critical', title: 'Budget exceeded', body: 'over by $4' }))
@@ -214,11 +221,13 @@ test('with mods-hub: an ntfy topic is a channel for you alone, and notices keep 
 })
 
 test('with mods-hub: Discord gets a notice embed in the level colour', { options: { webhookUrl: DISCORD } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   hub.outbox.push(notice({ level: 'warning', title: 'Slow tests', body: '3 tests over 1 s', topic: 'test.result' }))
   await clock.advance(5_000)
 
@@ -228,7 +237,7 @@ test('with mods-hub: Discord gets a notice embed in the level colour', { options
 })
 
 test('with mods-hub and no webhook URL: the channel is unconfigured and nothing is collected', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
   const hub = fakeHub(on)
 
@@ -241,11 +250,13 @@ test('with mods-hub and no webhook URL: the channel is unconfigured and nothing 
 })
 
 test('with mods-hub: the channel shows error once the webhook refuses a post, once', { options: { webhookUrl: SLACK } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on, 404)
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   hub.outbox.push(notice({ title: 'one' }), notice({ id: 'n2', title: 'two' }))
   await clock.advance(5_000)
   // The refused notice stays first in line: the one behind it waits for it.
@@ -257,7 +268,7 @@ test('with mods-hub: the channel shows error once the webhook refuses a post, on
 })
 
 test('with mods-hub: a notice whose post failed is posted again on the next collection, once, and the channel recovers', { options: { webhookUrl: SLACK } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const posts: string[] = []
   let isDown = true
   on('session.start', ($, e) => ({ cwd: e.cwd }))
@@ -270,6 +281,8 @@ test('with mods-hub: a notice whose post failed is posted again on the next coll
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   hub.outbox.push(notice({ title: 'Deploy failed' }), notice({ id: 'n2', level: 'success', title: 'All green' }))
   await clock.advance(5_000)
   expect(posts).toEqual([])
@@ -300,7 +313,7 @@ test('/notify-test never prints the webhook URL an error carries', { options: { 
 })
 
 test('without mods-hub: session start registers the command only, and no timer collects anything', { options: { webhookUrl: SLACK } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
 
   await start($)
@@ -310,11 +323,13 @@ test('without mods-hub: session start registers the command only, and no timer c
 })
 
 test('with mods-hub: a generic JSON webhook gets the notice as a plain object', { options: { webhookUrl: 'https://example.com/hooks/claude' } }, async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = world(on)
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   hub.outbox.push(notice({ level: 'info', title: 'FYI', topic: 'ci.result' }))
   await clock.advance(5_000)
 

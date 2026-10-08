@@ -1,6 +1,6 @@
 {
   "name": "pii-in-logs",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Flags log statements that print emails, passwords, tokens or other personal data.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#pii-in-logs",

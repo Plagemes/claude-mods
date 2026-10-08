@@ -1,6 +1,6 @@
 {
   "name": "gitignore-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Warns before node_modules, build output, OS junk or huge files get staged.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#gitignore-guard",

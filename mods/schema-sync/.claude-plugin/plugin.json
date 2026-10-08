@@ -1,6 +1,6 @@
 {
   "name": "schema-sync",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "After Prisma or Drizzle schema edits, regenerates the client and warns when a migration is missing.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#schema-sync",

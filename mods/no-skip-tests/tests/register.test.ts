@@ -134,6 +134,7 @@ test('with mods-hub: a refused edit is published as risk.blocked', async ($, on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   const result = await edit($, '/p/a.test.ts', "it('works', () => {", "it.only('works', () => {")
   expect(result.deny).toContain('no-skip-tests')

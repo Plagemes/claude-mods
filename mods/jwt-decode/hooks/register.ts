@@ -22,7 +22,7 @@ async function decode($: EngineInterface, args: string): Promise<string> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({
+    await registerCommand($, {
       name: 'jwt',
       description: 'Decode a JSON Web Token locally: header, claims, expiry and warnings',
       argumentHint: '<token> (or select one)',
@@ -39,4 +39,15 @@ export const register: Register = on => {
     const content = e.message.content.map(block => (block.type === 'text' && typeof block.text === 'string' ? { ...block, text: redactTokens(block.text) } : block))
     return next({ ...e, message: { ...e.message, content } })
   }).catch((_$, e, next) => next(e))
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

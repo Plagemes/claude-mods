@@ -1,6 +1,6 @@
 {
   "name": "contrast-checker",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Checks that the colors Claude changes in CSS meet WCAG AA contrast.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#contrast-checker",

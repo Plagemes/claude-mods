@@ -1,6 +1,6 @@
 {
   "name": "codebase-map",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "/map builds a compact map of your repository and gives it to Claude.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#codebase-map",

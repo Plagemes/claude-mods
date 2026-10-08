@@ -166,6 +166,7 @@ test('with mods-hub: says hello and shares the fact monorepo-scope.package as th
   const w = world(on, PNPM_REPO)
   const hub = fakeHub(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
   expect(hub.facts.size).toBe(0)
 

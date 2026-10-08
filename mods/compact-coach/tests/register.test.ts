@@ -140,6 +140,7 @@ test('with mods-hub: says hello and sends the suggestion as an info notice, a wa
   const hub = fakeHub(on)
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await $.session.start(START)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['context.pressure'] }])
 
   await turn($, bash($, 'git commit -m x'))

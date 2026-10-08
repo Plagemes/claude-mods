@@ -5,6 +5,9 @@ import type { On } from 'claude-code'
 import { fakeHub } from './hub'
 import { cutDiff, parseAction, parseNumstat, writesFiles } from '../hooks/pair'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const BAND = {
   plugin: 'pair-mode',
   component: 'AbovePrompt',
@@ -22,7 +25,7 @@ type World = {
 
 /** A git repository at /repo whose worktree snapshots are tree-1, tree-2, ...; tool calls that reach the engine are recorded. */
 const world = (on: On, isRepo = true): World => {
-  const state: World = { reached: [], submitted: [], toasts: [], gitEnv: [], clock: mock.clock(on) }
+  const state: World = { reached: [], submitted: [], toasts: [], gitEnv: [], clock: (startClock = mock.clock(on)) }
   let trees = 0
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -99,6 +102,8 @@ test('with mods-hub: says hello, and the guard behaves the same', async ($, on) 
   const { reached } = world(on)
   const hub = fakeHub(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
 
   await pair($, 'on')
@@ -122,17 +127,19 @@ test('the system prompt explains pair mode only while it is on', async ($, on) =
 
 test('/pair check snapshots the worktree in its own index and sends the diff since pair mode started for review', async ($, on) => {
   const state = world(on)
+  const session = mock.session(on)
   await pair($, 'on')
   const checked = await pair($, 'check')
   expect(checked.text).toBe('Sent your changes (1 file, +2 −1) to Claude for review.')
   expect(state.gitEnv.every(path => path === '/repo/.git/pair-mode.index')).toBe(true)
   await state.clock.advance(1)
   expect(state.submitted).toHaveLength(1)
-  // In a session the diff goes in as a note only the model reads; the kit has no conversation
-  // beneath a plugin's own append, so here it rides in the prompt itself, as it would wherever the note is refused.
-  expect(state.submitted[0]?.text).toContain('pair-mode check: the user applied these changes by hand since pair mode started.')
-  expect(state.submitted[0]?.text).toStartWith('Review the changes I typed since pair mode started (1 file, +2 −1; the diff is attached).')
-  expect(state.submitted[0]?.text).toContain('```diff\ndiff --git a/src/a.ts b/src/a.ts')
+  // The diff goes in as a note only the model reads (the kit's session stores the plugin's own append); the prompt
+  // the person sees stays one line.
+  expect(state.submitted[0]?.text).toBe('Review the changes I typed since pair mode started (1 file, +2 −1; the diff is attached).')
+  const notes = JSON.stringify(session.appended())
+  expect(notes).toContain('pair-mode check: the user applied these changes by hand since pair mode started.')
+  expect(notes).toContain('```diff\\ndiff --git a/src/a.ts b/src/a.ts')
 
   // The next check starts from this one: nothing changed since (tree-3 vs tree-2 has no numstat).
   expect((await pair($, 'check')).text).toBe('No changes since the last check.')

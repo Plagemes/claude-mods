@@ -4,6 +4,9 @@ import type { FsEntry, On, RenderPropsOf } from 'claude-code'
 
 import { callsOf, hubStandIn, script } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PLUGIN = 'email-digest'
 const ALL_SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
 const MINUTE = 60_000
@@ -34,7 +37,7 @@ type WorldOptions = { now?: number; git?: string; files?: Record<string, string>
 
 /** Stands for everything beneath the plugin: git, the mail providers, files, the session, the screen. */
 function world(on: On, options: WorldOptions = {}) {
-  const clock = mock.clock(on, { now: options.now ?? NOON_ISH })
+  const clock = (startClock = mock.clock(on, { now: options.now ?? NOON_ISH }))
   mock.env(on, { HOME })
   const files = new Map<string, string>(Object.entries({ [`${ROOT}/.claude/journal/2026-10-07.md`]: JOURNAL, ...(options.files ?? {}) }))
   const net = { requests: [] as { url: string; init: { method?: string; headers?: Record<string, string>; body?: string } | undefined }[], replies: [...(options.replies ?? [])], git: options.git ?? GIT_LOG, gitCalls: [] as { argv: readonly string[]; cwd?: string }[], curl: [] as { argv: readonly string[]; stdin?: string }[], curlResult: options.curl ?? { exitCode: 0, stderr: '' }, outboxWrites: [] as string[] }
@@ -240,6 +243,7 @@ test('weekly preview covers the last seven days; a project outside git still get
 test('schedule: the leader sends once at the send time, never twice, and records it', { options: SCHEDULED }, async ($, on) => {
   const w = world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await beats(w, 2)
   expect(w.net.requests).toHaveLength(0)
   await w.clock.advance(61 * MINUTE)
@@ -298,6 +302,7 @@ test('schedule: with no provider set up the schedule does nothing and does not r
 test('schedule: a session that follows another one never sends', { options: SCHEDULED }, async ($, on) => {
   const w = world(on)
   await start($)
+  await w.clock.advance(1_500) // start-up waits for session.start to return (afterStart)
   // Someone else leads this project: its lease is renewed by hand while time passes.
   const key = [...w.files.keys()].find(path => path.includes('/lease/'))?.split('/').pop() ?? ''
   expect(key).not.toBe('')
@@ -335,6 +340,7 @@ test('without the hub nothing fails: the channel and the events are simply absen
 test('hub: the email channel is registered as a pull channel; its notices, the bus events and the cost end up in the digest', { options: { ...RESEND, includeCost: true, tone: 'technical' }, plugins: [hubStandIn()] }, async ($, on) => {
   const w = world(on)
   await start($)
+  await w.clock.advance(1_500) // start-up waits for session.start to return (afterStart)
   expect((await callsOf($, 'hello', PLUGIN))[0]).toMatchObject({ version: '1.0.0', publishes: [] })
   expect(await callsOf($, 'registerChannel', PLUGIN)).toEqual([expect.objectContaining({ id: 'email', title: 'Email digest', audience: 'me', delivery: 'pull', status: 'connected' })])
   await script($, 'script.notices', [{ id: 'n1', level: 'critical', title: 'Disk almost full', body: '97% used', at: at(7, 16), source: 'x', targets: [], held: true }])
