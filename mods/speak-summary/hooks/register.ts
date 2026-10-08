@@ -11,6 +11,18 @@ const DEFAULT_MIN_SECONDS = 20
 const DEFAULT_MODEL = 'haiku'
 const TEST_PHRASE = 'Speak summary is working.'
 const FALLBACK_PHRASE = 'Claude has finished.'
+const METHOD_KEY = 'speech-method'
+const NONE_RETRY_MS = 24 * 60 * 60 * 1000
+const SPEAK_TIMEOUT_MS = 30_000
+const PROBE_TIMEOUT_MS = 3_000
+const VOICE_ENV = 'SPEAK_SUMMARY_VOICE'
+
+/** Reads the text from stdin (never from the command line), so nothing the model wrote can be interpreted as code. */
+const POWERSHELL_SCRIPT =
+  '[Console]::InputEncoding=[System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Speech; ' +
+  '$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; ' +
+  `if($env:${VOICE_ENV}){try{$s.SelectVoice($env:${VOICE_ENV})}catch{}}; ` +
+  '$s.Speak([Console]::In.ReadToEnd())'
 
 const SUMMARY_SYSTEM =
   'You write one short sentence that will be read aloud by a speech synthesizer. ' +
@@ -19,8 +31,13 @@ const SUMMARY_SYSTEM =
 
 type Settings = { minDurationMs: number; voice: string | undefined; model: string }
 
-/** Per-load flags: one utterance at a time, and one warning when speech is missing. */
-type Speaker = { isSpeaking: boolean; hasWarned: boolean }
+/** Per-load flags: one utterance at a time, and whether speech was found missing (then it stays off for the session). */
+type Speaker = { isSpeaking: boolean; unavailable: string | undefined }
+
+/** How speech is produced: the engine's synthesizer, or a program run with the text on stdin. */
+type Method = 'system' | 'powershell' | 'say' | 'spd-say' | 'espeak'
+const METHODS: readonly Method[] = ['system', 'powershell', 'say', 'spd-say', 'espeak']
+type Cache = { method: Method | 'none'; checkedAt: number }
 
 function readSettings(options: PluginOptions): Settings {
   const seconds = typeof options.minDurationSec === 'number' ? options.minDurationSec : DEFAULT_MIN_SECONDS
@@ -57,14 +74,97 @@ async function isEnabled($: EngineInterface): Promise<boolean> {
   return (await $.store.get(ENABLED_KEY)) !== false
 }
 
-/** Speaks `text`; resolves the failure reason, or undefined once spoken. */
-async function say($: EngineInterface, text: string, voice: string | undefined): Promise<string | undefined> {
-  try {
-    await $.audio.speak(text, { voice })
-    return undefined
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error)
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** The argv of a fallback program; the text itself always travels on stdin. */
+function fallbackArgv(method: Exclude<Method, 'system'>, voice: string | undefined): string[] {
+  switch (method) {
+    case 'powershell':
+      return ['powershell', '-NoProfile', '-NonInteractive', '-Command', POWERSHELL_SCRIPT]
+    case 'say':
+      return voice === undefined ? ['say'] : ['say', '-v', voice]
+    case 'spd-say':
+      return voice === undefined ? ['spd-say', '-w', '-e'] : ['spd-say', '-w', '-e', '-y', voice]
+    case 'espeak':
+      return voice === undefined ? ['espeak', '--stdin'] : ['espeak', '--stdin', '-v', voice]
   }
+}
+
+/** Runs one method; resolves undefined once spoken, else the reason. */
+async function tryMethod($: EngineInterface, method: Method, text: string, voice: string | undefined): Promise<string | undefined> {
+  try {
+    if (method === 'system') {
+      await $.audio.speak(text, { voice })
+      return undefined
+    }
+    const env = method === 'powershell' && voice !== undefined ? { [VOICE_ENV]: voice } : undefined
+    const ran = await $.process.run(fallbackArgv(method, voice), { stdin: text, timeoutMs: SPEAK_TIMEOUT_MS, ...(env && { env }) })
+    return ran.exitCode === 0 ? undefined : `${method} exited ${ran.exitCode}`
+  } catch (error) {
+    return `${method}: ${describe(error)}`
+  }
+}
+
+/** The fallbacks worth trying here: Windows' SAPI, macOS `say`, or Linux's speech dispatcher and espeak. */
+async function fallbackMethods($: EngineInterface): Promise<Method[]> {
+  if ((await $.env.get('OS')) === 'Windows_NT') return ['powershell']
+  try {
+    const uname = await $.process.run(['uname', '-s'], { timeoutMs: PROBE_TIMEOUT_MS })
+    const name = uname.stdout.trim()
+    if (name === 'Darwin') return ['say']
+    if (name === 'Linux') return ['spd-say', 'espeak']
+  } catch {
+    // No uname and not Windows: there is nothing known to try.
+  }
+  return []
+}
+
+async function readCache($: EngineInterface): Promise<Cache | undefined> {
+  const value = await $.store.get(METHOD_KEY)
+  if (typeof value !== 'object' || value === null) return undefined
+  const { method, checkedAt } = value as Partial<Cache>
+  const isKnown = method === 'none' || METHODS.includes(method as Method)
+  return isKnown && typeof checkedAt === 'number' ? { method: method as Cache['method'], checkedAt } : undefined
+}
+
+/**
+ * Speaks `text`; resolves the failure reason, or undefined once spoken. The first call probes (engine synthesizer,
+ * then this platform's fallback) and caches the method that worked in `$.store`; when nothing works it switches
+ * speaking off for the session and writes one quiet log line.
+ */
+async function say($: EngineInterface, text: string, voice: string | undefined, speaker: Speaker): Promise<string | undefined> {
+  if (speaker.unavailable !== undefined) return speaker.unavailable
+
+  const now = await $.clock.now()
+  const cached = await readCache($)
+  if (cached?.method === 'none' && now - cached.checkedAt < NONE_RETRY_MS) return markUnavailable($, speaker, 'cached: no speech method worked earlier')
+  if (cached !== undefined && cached.method !== 'none') {
+    const failure = await tryMethod($, cached.method, text, voice)
+    if (failure === undefined) return undefined
+  }
+
+  const failures: string[] = []
+  for (const method of ['system' as const, ...(await fallbackMethods($))]) {
+    if (method === cached?.method) continue
+    const failure = await tryMethod($, method, text, voice)
+    if (failure === undefined) {
+      await $.store.set(METHOD_KEY, { method, checkedAt: now } satisfies Cache)
+      return undefined
+    }
+    failures.push(failure)
+  }
+
+  await $.store.set(METHOD_KEY, { method: 'none', checkedAt: now } satisfies Cache)
+  return markUnavailable($, speaker, failures.join('; '))
+}
+
+/** Turns speaking off for this session with a single quiet log line (no toast). */
+function markUnavailable($: EngineInterface, speaker: Speaker, reason: string): string {
+  speaker.unavailable = reason
+  $.ui.log(`${MOD}: no way to speak here (${reason}); speaking is off for this session. /${COMMAND} test tries again.`)
+  return reason
 }
 
 async function summarize($: EngineInterface, answer: string, settings: Settings): Promise<string> {
@@ -109,11 +209,8 @@ async function speakTurn($: EngineInterface, answer: string, settings: Settings,
   speaker.isSpeaking = true
   try {
     if (await isHeldByHub($)) return
-    const failure = await say($, await summarize($, answer, settings), settings.voice)
-    if (failure !== undefined && !speaker.hasWarned) {
-      speaker.hasWarned = true
-      await hubNotify($, { level: 'info', audience: 'terminal', title: `🔇 ${MOD}: cannot speak here (${failure}). /${COMMAND} off to silence.` })
-    }
+    if (speaker.unavailable !== undefined) return
+    await say($, await summarize($, answer, settings), settings.voice, speaker)
   } catch {
     // A failed summary never interrupts the session; the next long turn tries again.
   } finally {
@@ -121,27 +218,31 @@ async function speakTurn($: EngineInterface, answer: string, settings: Settings,
   }
 }
 
-async function runCommand($: EngineInterface, args: string, settings: Settings): Promise<string> {
+async function runCommand($: EngineInterface, args: string, settings: Settings, speaker: Speaker): Promise<string> {
   const action = args.trim().toLowerCase()
   if (action === 'on' || action === 'off') {
     await $.store.set(ENABLED_KEY, action === 'on')
     return action === 'on' ? `🔊 ${MOD} is on.` : `🔇 ${MOD} is off.`
   }
   if (action === 'test') {
-    const failure = await say($, TEST_PHRASE, settings.voice)
+    speaker.unavailable = undefined
+    await $.store.delete(METHOD_KEY)
+    const failure = await say($, TEST_PHRASE, settings.voice, speaker)
     return failure === undefined ? `🔊 ${MOD}: spoke a test phrase.` : `🔇 ${MOD}: cannot speak here (${failure}).`
   }
   if (action !== '' && action !== 'status') return `${MOD}: usage /${COMMAND} [on|off|test]`
 
   const state = (await isEnabled($)) ? '🔊 on' : '🔇 off'
   const seconds = settings.minDurationMs / 1000
+  const cached = await readCache($)
+  const method = speaker.unavailable !== undefined ? `unavailable (${speaker.unavailable}), off for this session` : cached?.method === 'none' ? 'none found' : (cached?.method ?? 'not probed yet')
 
-  return `${MOD} is ${state} · speaks after turns of ${seconds}s or more · voice: ${settings.voice ?? 'system default'}`
+  return `${MOD} is ${state} · speaks after turns of ${seconds}s or more · voice: ${settings.voice ?? 'system default'} · speech: ${method}`
 }
 
 export const register: Register = (on, options) => {
   const settings = readSettings(options)
-  const speaker: Speaker = { isSpeaking: false, hasWarned: false }
+  const speaker: Speaker = { isSpeaking: false, unavailable: undefined }
 
   on('session.start', async ($, e, next) => {
     await registerCommand($, {
@@ -154,7 +255,7 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'speak' }, async ($, e) => ({ text: await runCommand($, e.args, settings) }))
+  on('command.run', { command: 'speak' }, async ($, e) => ({ text: await runCommand($, e.args, settings, speaker) }))
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)

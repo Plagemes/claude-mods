@@ -44,6 +44,7 @@ import {
   presenceOf,
   route,
   sanitizePrefs,
+  withoutSource,
 } from './router'
 import { categoryOf, dotSvg, glyphOf, iconSvg, markSvg } from './icons'
 import {
@@ -593,6 +594,9 @@ function showStatus($: EngineInterface, rt: Runtime, now: number): void {
   $.ui.status(text)
 }
 
+/** Whether a value the panel draws is unchanged: then it is not written to state (a write redraws the panel). */
+const isSame = (a: unknown, b: unknown): boolean => a !== undefined && JSON.stringify(a) === JSON.stringify(b)
+
 const MODE_FIELDS: readonly (keyof ModsMode)[] = ['presence', 'isSilent', 'silentUntil', 'isNight', 'isNightOn', 'quietHours', 'idleMinutes', 'awayMinutes', 'interaction', 'canAsk']
 const sameMode = (a: ModsMode, b: ModsMode): boolean => MODE_FIELDS.every(field => a[field] === b[field])
 
@@ -714,7 +718,8 @@ async function dispatch($: EngineInterface, rt: Runtime, input: ModsNotifyInput,
   const targets = [...(decision.toast ? ['toast'] : []), ...decision.channels]
   const notice: ModsNotice = {
     ...input,
-    title: oneLine(input.title, 200),
+    // "speak-summary: cannot speak" from speak-summary: the hub names the source itself (Recent, toasts, channels).
+    title: oneLine(withoutSource(input.title, source), 200) || oneLine(input.title, 200),
     ...(input.body === undefined ? {} : { body: input.body.slice(0, MAX_TEXT) }),
     id,
     source,
@@ -978,7 +983,9 @@ async function listPlugins($: EngineInterface, rt: Runtime): Promise<void> {
         return { name, marketplace, version: typeof row.version === 'string' ? row.version : '', isEnabled: row.enabled !== false }
       })
     const now = await $.clock.now()
-    remember($, rt, 'installed', { ...rt.mem.installed, plugins, listedAt: now })
+    // The same list again only moves the time: kept in memory, not written (a write redraws the panel).
+    if (rt.mem.installed.listedAt !== null && isSame(rt.mem.installed.plugins, plugins)) rt.mem.installed = { ...rt.mem.installed, listedAt: now }
+    else remember($, rt, 'installed', { ...rt.mem.installed, plugins, listedAt: now })
   } catch {
     // No `claude` on PATH, or an older CLI: the Home tab lists the mods that said hello.
   }
@@ -1193,7 +1200,7 @@ function drawTabBar($: EngineInterface, e: RenderInput<'Pane'>, look: Look, tabs
         dimColor={!isActive}
         variant={isActive ? 'primary' : 'secondary'}
         label={labelOf(tab)}
-        onPress={() => showTabFromPanel($, id)}
+        onPress={() => void showTabFromPanel($, id)}
       />
     </Box>
   )
@@ -1209,7 +1216,9 @@ function drawTabBar($: EngineInterface, e: RenderInput<'Pane'>, look: Look, tabs
           key="tab-more"
           options={[{ value: MORE_VALUE, label: `More · ${layout.overflow.length}` }, ...layout.overflow.map(tab => ({ value: tab.id, label: tab.title }))]}
           value={isCurrentHidden ? current.id : MORE_VALUE}
-          onSelect={value => (value === MORE_VALUE ? undefined : showTabFromPanel($, value))}
+          onSelect={value => {
+            if (value !== MORE_VALUE) void showTabFromPanel($, value)
+          }}
         />
       </Box>
     )
@@ -1219,7 +1228,7 @@ function drawTabBar($: EngineInterface, e: RenderInput<'Pane'>, look: Look, tabs
       <Box key="tabs-more" flexDirection="row" flexWrap="wrap" columnGap={2}>
         {[...layout.shown, ...rest].map(overflowButton)}
         {layout.hidden.length === 0 ? null : (
-          <Button key="tab-more" plain dimColor label={view.isMoreOpen ? 'less ▴' : `+${layout.hidden.length} more ▾`} onPress={() => foldMore($, !view.isMoreOpen)} />
+          <Button key="tab-more" plain dimColor label={view.isMoreOpen ? 'less ▴' : `+${layout.hidden.length} more ▾`} onPress={() => void foldMore($, !view.isMoreOpen)} />
         )}
       </Box>
     )
@@ -1230,7 +1239,7 @@ function drawTabBar($: EngineInterface, e: RenderInput<'Pane'>, look: Look, tabs
         plain
         dimColor={!isCurrentHidden}
         label={view.isMoreOpen ? 'Less ▴' : isCurrentHidden ? `${current.title} ▾` : `More · ${layout.overflow.length} ▾`}
-        onPress={() => foldMore($, !view.isMoreOpen)}
+        onPress={() => void foldMore($, !view.isMoreOpen)}
       />
     )
     second = view.isMoreOpen ? (
@@ -1275,7 +1284,9 @@ function segmented<T extends string>(
             label={one.label}
             dimColor={one.value !== input.current}
             variant={one.value === input.current ? 'primary' : 'secondary'}
-            onPress={() => (one.value === input.current ? undefined : input.onPick(one.value))}
+            onPress={() => {
+              if (one.value !== input.current) void input.onPick(one.value)
+            }}
           />
         ))}
         {input.aside === undefined ? null : (
@@ -1314,7 +1325,9 @@ function drawChannel($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime, lo
         label={value === 'on' ? 'On' : 'Off'}
         dimColor={!isCurrent}
         variant={isCurrent ? 'primary' : 'secondary'}
-        onPress={() => (isCurrent ? undefined : toggleChannel($, rt, channel.id))}
+        onPress={() => {
+          if (!isCurrent) void toggleChannel($, rt, channel.id)
+        }}
       />
     )
   }
@@ -1325,7 +1338,7 @@ function drawChannel($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime, lo
           key={`setup-${channel.id}`}
           label={input.isOpen ? 'Hide' : 'Set up'}
           variant={input.isOpen ? 'secondary' : 'primary'}
-          onPress={() => setUpChannel($, channel.id, input.setupTab?.id)}
+          onPress={() => void setUpChannel($, channel.id, input.setupTab?.id)}
         />
       ) : null}
       {switchButton('on')}
@@ -1443,12 +1456,12 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
       {look.line(work.isHalted ? work.text : `● ${work.text}`, width - (work.isHalted ? 12 : 20), { color: work.tone })}
       {work.isHalted && control !== null ? (
         <Box flexShrink={0}>
-          <Button key="resume" label="Resume" variant="primary" onPress={() => resumeFromPanel($, rt, control.scope)} />
+          <Button key="resume" label="Resume" variant="primary" onPress={() => void resumeFromPanel($, rt, control.scope)} />
         </Box>
       ) : (
         <Box flexDirection="row" columnGap={1} flexShrink={0}>
-          <Button key="control-pause" label="Pause" dimColor onPress={() => holdFromPanel($, rt, 'pause')} />
-          <Button key="control-stop" label="Stop" dimColor onPress={() => holdFromPanel($, rt, 'stop')} />
+          <Button key="control-pause" label="Pause" dimColor onPress={() => void holdFromPanel($, rt, 'pause')} />
+          <Button key="control-stop" label="Stop" dimColor onPress={() => void holdFromPanel($, rt, 'stop')} />
         </Box>
       )}
     </Box>
@@ -1480,7 +1493,7 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
       {look.kicker('Routing', 'where each level goes')}
       <Box key="routes" flexDirection="row" flexWrap="wrap" columnGap={1}>
         {LEVELS.map(level => (
-          <Button key={`route-${level}`} label={`${GLYPH[level]} ${level}: ${ROUTE_LABEL[prefs.routes[level]] ?? prefs.routes[level]}`} onPress={() => cycleRoute($, rt, level)} />
+          <Button key={`route-${level}`} label={`${GLYPH[level]} ${level}: ${ROUTE_LABEL[prefs.routes[level]] ?? prefs.routes[level]}`} onPress={() => void cycleRoute($, rt, level)} />
         ))}
       </Box>
     </Box>
@@ -1619,16 +1632,21 @@ function isEmptyTree(tree: RenderElement | undefined): boolean {
   return node.type === 'Box' && (!Array.isArray(node.children) || node.children.length === 0)
 }
 
-// Button handlers: each is the person at the keyboard (activity), then a change written through changePrefs.
+// Button handlers: each returns at once (the handler is `void`), and the work it starts writes the state once: a
+// press that redrew the panel twice (activity, then the change) gave the next click a handle already gone.
 async function setFromPanel($: EngineInterface, rt: Runtime, change: (prefs: ModsPrefs) => ModsPrefs): Promise<void> {
+  // A press is the person at the keyboard: a manual "away" ends, in the same write as the change.
+  rt.lastActivityAt = await $.clock.now()
+  await changePrefs($, rt, prefs => change(prefs.presence === 'away' ? { ...prefs, presence: 'auto' } : prefs))
+  // The shared activity file, for the other sessions; the mode it recomputes is already the one just written.
   await noteActivity($, rt)
-  await changePrefs($, rt, change)
 }
 
 async function setPresenceFromPanel($: EngineInterface, rt: Runtime, presence: 'here' | 'away'): Promise<void> {
   if (presence === 'here') {
-    await noteActivity($, rt)
+    rt.lastActivityAt = await $.clock.now()
     await changePrefs($, rt, prefs => ({ ...prefs, presence: 'auto' }))
+    await noteActivity($, rt)
   } else {
     await changePrefs($, rt, prefs => ({ ...prefs, presence: 'away' }))
   }
@@ -1815,6 +1833,7 @@ export const register: Register = (on, options) => {
     const tab: ModsTab = { id: e.id, title: oneLine(e.title, 24) || e.id, owner, order: e.order ?? 50, ...(e.command === undefined ? {} : { command: e.command }) }
     const taken = rt.mem.tabs.find(one => one.id === e.id && one.owner !== owner)
     if (taken !== undefined) return { deny: `mods-hub: tab "${e.id}" belongs to ${taken.owner}` }
+    if (isSame(rt.mem.tabs.find(one => one.id === e.id), tab)) return { value: { tabs: rt.mem.tabs } }
     const tabs = remember($, rt, 'tabs', [...rt.mem.tabs.filter(one => one.id !== e.id), tab])
     return { value: { tabs } }
   })
@@ -1835,6 +1854,7 @@ export const register: Register = (on, options) => {
       owner,
       ...(e.detail === undefined ? {} : { detail: fit(e.detail, MAX_CHANNEL_DETAIL) }),
     }
+    if (isSame(rt.mem.channels.find(one => one.id === e.id), channel)) return { value: { channels: rt.mem.channels } }
     const channels = remember($, rt, 'channels', [...rt.mem.channels.filter(one => one.id !== e.id), channel])
     return { value: { channels } }
   })
@@ -1842,12 +1862,10 @@ export const register: Register = (on, options) => {
     await ready($, rt)
     const channel = rt.mem.channels.find(one => one.id === e.id)
     if (channel === undefined || channel.owner !== next.origin.plugin) return { deny: `mods-hub: no channel "${e.id}" of yours` }
-    const channels = remember(
-      $,
-      rt,
-      'channels',
-      rt.mem.channels.map(one => (one.id === e.id ? { ...one, status: e.status, ...(e.detail === undefined ? {} : { detail: fit(e.detail, MAX_CHANNEL_DETAIL) }) } : one)),
-    )
+    const updated = { ...channel, status: e.status, ...(e.detail === undefined ? {} : { detail: fit(e.detail, MAX_CHANNEL_DETAIL) }) }
+    // A bridge reporting the same status every few seconds must not redraw the panel (that drops a click in flight).
+    if (isSame(channel, updated)) return { value: { channels: rt.mem.channels } }
+    const channels = remember($, rt, 'channels', rt.mem.channels.map(one => (one.id === e.id ? updated : one)))
     return { value: { channels } }
   })
   on('mods.drain', async ($, e, next) => {
@@ -1869,6 +1887,7 @@ export const register: Register = (on, options) => {
     await ready($, rt)
     const name = next.origin.plugin
     const hello = { name, version: String(e.version), publishes: [...(e.publishes ?? [])], consumes: [...(e.consumes ?? [])] }
+    if (isSame(rt.mem.installed.hello.find(one => one.name === name), hello)) return { value: { installed: rt.mem.installed } }
     const installed = remember($, rt, 'installed', { ...rt.mem.installed, hello: [...rt.mem.installed.hello.filter(one => one.name !== name), hello] })
     return { value: { installed } }
   }).catch(() => ({ value: { installed: rt.mem.installed } }))
@@ -1955,7 +1974,7 @@ export const register: Register = (on, options) => {
     addToInbox($, rt, {
       id: `t-${idTag(rt)}-${rt.seq}`,
       level: 'info',
-      title: oneLine(e.text, 200),
+      title: oneLine(withoutSource(e.text, origin.plugin), 200) || oneLine(e.text, 200),
       source: origin.plugin,
       at: now,
       targets: mode.isSilent ? [] : ['toast'],

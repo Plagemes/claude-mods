@@ -33,10 +33,12 @@ const probe: Plugin = {
           case 'stop': value = await $.mods.stop(call.input); break
           case 'registerTab': value = await $.mods.registerTab(call.input); break
           case 'registerChannel': value = await $.mods.registerChannel(call.input); break
+          case 'channelStatus': value = await $.mods.channelStatus(call.input); break
           case 'hello': value = await $.mods.hello(call.input); break
           case 'share': value = await $.mods.share(call.input); break
           case 'read': value = await $.mods.read(call.input); break
           case 'toast': $.ui.toast('probe says hi'); value = 'ok'; break
+          case 'toastNamed': $.ui.toast('probe: 🔇 probe: cannot speak here'); value = 'ok'; break
         }
         return { result: JSON.stringify({ value }) }
       } catch (error) {
@@ -382,4 +384,69 @@ test('shared files, one writer each: two sessions beating at once both stay in s
   w.files.set(PREFS_FILE, JSON.stringify({ ...JSON.parse(w.files.get(PREFS_FILE) ?? '{}'), isNightOn: false }))
   await hub($, 'route warning always')
   expect(JSON.parse(w.files.get(PREFS_FILE) ?? '{}')).toMatchObject({ isNightOn: false, routes: { warning: 'always' } })
+})
+
+test('a mod that names itself in its text is not named twice: "probe: …" in a notice or toast shows once', { plugins: [probe] }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await mods($, 'notify', { level: 'info', title: '🔇 probe: cannot speak here (no voice)' })
+  expect(w.toasts).toContain('ℹ probe: 🔇 cannot speak here (no voice)')
+  await mods($, 'notify', { level: 'warning', title: 'mods-hub: probe: disk almost full' })
+  expect(w.toasts).toContain('⚠ probe: disk almost full')
+  await mods($, 'toastNamed')
+  await w.clock.settle()
+  // Recent: the badge names the source; the row's text does not again.
+  const ui = await $.ui.mount({ plugin: 'mods-hub', surface: 'desktop', component: 'Pane', requestId: 'claude-mods', props: PANE })
+  const rows = (await ui.findAll({ type: 'Text' })).map(found => found.text).filter(text => /cannot speak here|disk almost full/.test(text))
+  expect(rows).toEqual(['🔇 cannot speak here', 'disk almost full', '🔇 cannot speak here (no voice)'])
+  await ui.unmount()
+})
+
+test('panel buttons flip when pressed after a tick; a bridge repeating its status and a quiet tick write no state', { plugins: [probe] }, async ($, on) => {
+  const w = world(on)
+  const writes: string[] = []
+  on('state.set', ($$, e, next) => {
+    writes.push(`${e.plugin}.${e.key}`)
+    return next(e)
+  })
+  await start($)
+  await w.clock.settle()
+  await mods($, 'registerChannel', { id: 'phone', title: 'WhatsApp', audience: 'me', delivery: 'push', status: 'connected' })
+  await w.clock.settle()
+  const prefs = () => JSON.parse(w.files.get(PREFS_FILE) ?? '{}') as { interaction?: string; isSilent?: boolean; isNightOn?: boolean; presence?: string; channels?: Record<string, { isEnabled: boolean }>; routes?: Record<string, string> }
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'mods-hub', surface, component: 'Pane', requestId: 'claude-mods', props: PANE })
+    writes.length = 0
+    await mods($, 'channelStatus', { id: 'phone', status: 'connected' })
+    await mods($, 'registerChannel', { id: 'phone', title: 'WhatsApp', audience: 'me', delivery: 'push', status: 'connected' })
+    await w.clock.advance(65_000)
+    expect(writes.filter(write => write.startsWith('mods-hub.') && !write.startsWith('mods-hub.feed') && !write.startsWith('mods-hub.latest'))).toEqual([])
+
+    const press = async (key: string) => {
+      await w.clock.advance(30_000)
+      await ui.press({ key })
+    }
+    const interaction = prefs().interaction ?? 'auto'
+    await press(interaction === 'on' ? 'interaction-off' : 'interaction-on')
+    expect(prefs().interaction).toBe(interaction === 'on' ? 'off' : 'on')
+    expect((await ui.find({ key: interaction === 'on' ? 'interaction-off' : 'interaction-on' }))?.props.variant).toBe('primary')
+
+    const silent = prefs().isSilent === true
+    await press(silent ? 'silent-off' : 'silent-on')
+    expect(prefs().isSilent).toBe(!silent)
+    const night = prefs().isNightOn !== false
+    await press(night ? 'night-off' : 'night-on')
+    expect(prefs().isNightOn).toBe(!night)
+    await press('presence-away')
+    expect(prefs().presence).toBe('away')
+    await press('presence-here')
+    expect(prefs().presence).toBe('auto')
+    const isOn = prefs().channels?.phone?.isEnabled !== false
+    await press(isOn ? 'channel-phone-off' : 'channel-phone-on')
+    expect(prefs().channels?.phone?.isEnabled).toBe(!isOn)
+    const route = prefs().routes?.error
+    await press('route-error')
+    expect(prefs().routes?.error).not.toBe(route)
+    await ui.unmount()
+  }
 })

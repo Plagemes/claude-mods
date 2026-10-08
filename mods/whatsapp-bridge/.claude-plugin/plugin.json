@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-bridge",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#whatsapp-bridge",
@@ -39,6 +39,13 @@
       "title": "Create a group per project",
       "description": "Create \"Claude · <project>\" with only you in it on the first update (needs OpenWA's Baileys engine; otherwise link one with /wa link-project).",
       "default": true
+    },
+    "groupScope": {
+      "type": "string",
+      "title": "Group per",
+      "description": "project: one WhatsApp group per project (\"Claude · <project>\"); session: one per Claude Code session (\"Claude · <project> · <label>\").",
+      "options": ["project", "session"],
+      "default": "project"
     },
     "notifyMode": {
       "type": "string",
@@ -131,6 +138,18 @@
       "title": "Member questions per day",
       "description": "For all members together.",
       "default": 40
+    },
+    "qaRate": {
+      "type": "number",
+      "title": "Questions answered per chat per 10 minutes",
+      "description": "Questions from WhatsApp (\"what are you doing?\") are answered at once without a Claude turn; past this rate a chat waits.",
+      "default": 6
+    },
+    "qaDailyUsd": {
+      "type": "number",
+      "title": "Daily budget for answers (USD)",
+      "description": "What answering WhatsApp questions may cost in a day, all sessions together (estimated from tokens). 0 turns answers off.",
+      "default": 0.5
     },
     "shareCodeWithMembers": {
       "type": "boolean",

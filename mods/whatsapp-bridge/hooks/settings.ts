@@ -1,4 +1,5 @@
-import type { WaEventKey, WaPhase, WaPrefs } from '../types'
+import type { WaEventKey, WaGroupScope, WaPhase, WaPrefs } from '../types'
+import { canonicalOwner } from './inbound'
 
 /** The userConfig values, cleaned and clamped. */
 export type Settings = {
@@ -27,6 +28,12 @@ export type Settings = {
   maxMessageChars: number
   maxFileMb: number
   pollSeconds: number
+  /** One WhatsApp group per project (default) or per session. */
+  groupScope: WaGroupScope
+  /** Questions answered per chat in ten minutes. */
+  qaRate: number
+  /** What answering questions may cost in a day, all sessions together (USD, estimated). */
+  qaDailyUsd: number
 }
 
 export const DEFAULT_BASE_URL = 'http://127.0.0.1:2785/api'
@@ -92,7 +99,7 @@ export const readSettings = (options: Readonly<Record<string, unknown>>): Settin
     apiKey: text(options.apiKey),
     ownerNumbers: text(options.ownerNumbers)
       .split(/[,;]+/)
-      .map(digitsOnly)
+      .map(canonicalOwner)
       .filter(n => n.length >= 6),
     extraChats: list(options.allowedChats),
     autoCreateGroup: options.autoCreateGroup !== false,
@@ -119,6 +126,9 @@ export const readSettings = (options: Readonly<Record<string, unknown>>): Settin
     maxMessageChars: clampNumber(options.maxMessageChars, 200, 4000, 1500),
     maxFileMb: clampNumber(options.maxFileMb, 1, 16, 5),
     pollSeconds: clampNumber(options.pollSeconds, 3, 120, 6),
+    groupScope: options.groupScope === 'session' ? 'session' : 'project',
+    qaRate: clampNumber(options.qaRate, 1, 60, 6),
+    qaDailyUsd: clampNumber(options.qaDailyUsd, 0, 50, 0.5),
   }
 }
 

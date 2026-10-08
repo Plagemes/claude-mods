@@ -52,6 +52,10 @@ export type FakeWa = {
   /** Keys minted through POST /auth/api-keys, and the key each call carried. */
   minted: string[]
   keysSeen: string[]
+  /** What `GET /contacts/{id}/phone` resolves an `@lid` to (absent: null, "not learned yet"). */
+  lids: Record<string, string>
+  /** Numbers WhatsApp refuses to add to a group (their privacy settings). */
+  refuseAdd: string[]
 }
 
 /** Docker on the host, for the managed start. */
@@ -77,6 +81,16 @@ export type World = {
   /** The same prompts as the model reads them, the phone note included. */
   prompts: string[]
   toasts: string[]
+  /** What the plugin logged (`$.ui.log`): its debug lines. */
+  logs: string[]
+  /** Every state write, as `<plugin>.<key>` (a write redraws the pane: none may happen when nothing changed). */
+  stateWrites: string[]
+  /** Where the session draws (`$.session.surfaces()`): the terminal, or the desktop app with no terminal. */
+  surfaces: string[]
+  /** What `$.model.complete` answers (the bug draft by default), and the tokens it reports. */
+  completeAnswer: { text: string; outputTokens: number }
+  /** `git status --short` in the project. */
+  gitStatus: string
   /** The tools registered with the engine, in order. */
   tools: string[]
   aborted: string[]
@@ -90,6 +104,8 @@ export type World = {
   docker: FakeDocker
   /** Runs just before a file write lands: another session writing at the same moment. */
   beforeWrite?: (path: string) => void
+  /** Runs just after a file write landed: another session writing right after it. */
+  afterWrite?: (path: string) => void
 }
 
 /** Sends the bot made (send-text, reply, send-image, ...): chat and text. */
@@ -165,9 +181,7 @@ function openwa(seen: World, method: string, url: string, body: Record<string, u
     let rows = [...wa.rows].reverse()
     const chatId = params.get('chatId')
     if (chatId !== undefined) rows = rows.filter(row => row.chatId === chatId)
-    const messageId = params.get('messageId')
-    if (messageId !== undefined) rows = rows.filter(row => row.waMessageId === messageId)
-    if (params.get('direction') === 'incoming') rows = rows.filter(row => row.direction === 'incoming')
+    // OpenWA 0.24.0 (the pinned image) has no `direction` or `messageId` filter here: both are ignored, as there.
     const after = params.get('after')
     if (after !== undefined) {
       const index = rows.findIndex(row => row.id === after)
@@ -191,19 +205,39 @@ function openwa(seen: World, method: string, url: string, body: Record<string, u
   if (/\/messages\/(edit|react)$/.test(route)) return json(200, { success: true })
   if (route === `/sessions/${SESSION}/groups` && method === 'GET') return json(200, wa.groups.map(group => ({ id: group.id, name: group.name, participantsCount: group.participants.length })))
   if (route === `/sessions/${SESSION}/groups` && method === 'POST') {
-    if (!wa.canCreateGroups) return json(501, { message: 'Not supported by the active engine' })
-    const group = { id: GROUP, name: String(body.name), participants: (body.participants as string[]) ?? [] }
+    if (!wa.canCreateGroups) return json(501, { statusCode: 501, message: 'Not supported by the active engine: group creation is Baileys-only.' })
+    const id = wa.groups.some(one => one.id === GROUP) ? `1203630000000000${String(wa.groups.length + 1).padStart(2, '0')}@g.us` : GROUP
+    const group = { id, name: String(body.name), participants: (body.participants as string[]) ?? [] }
     wa.groups.push(group)
-    return json(201, { id: group.id, name: group.name })
+    return json(201, { id: group.id, name: group.name, participantsCount: group.participants.length + 1, isAdmin: true, linkedParentJID: null })
   }
   const groupInfo = /^\/sessions\/[^/]+\/groups\/([^/]+)(\/[a-z-]+)?$/.exec(route)
   if (groupInfo !== null) {
     const group = wa.groups.find(one => one.id === decodeURIComponent(groupInfo[1] ?? ''))
+    if (group === undefined) return json(404, { statusCode: 404, message: 'No such group' })
     if (groupInfo[2] === '/invite-code') return json(200, { inviteCode: 'CODE', inviteLink: 'https://chat.whatsapp.com/CODE' })
-    if (groupInfo[2] === '/description') return json(200, { success: true })
+    if (groupInfo[2] === '/description') return json(200, { success: true, message: 'Group description updated' })
+    if (groupInfo[2] === '/subject' && method === 'PUT') {
+      group.name = String(body.subject)
+      return json(200, { success: true, message: 'Group subject updated' })
+    }
+    if (groupInfo[2] === '/participants' && method === 'POST') {
+      const asked = (body.participants as string[]) ?? []
+      const results = asked.map(id => ({ id, success: !wa.refuseAdd.includes(id.split('@')[0] ?? ''), ...(wa.refuseAdd.includes(id.split('@')[0] ?? '') ? { status: 403, message: 'not-authorized' } : { status: 200 }) }))
+      group.participants.push(...results.filter(one => one.success).map(one => one.id))
+      return json(200, { success: true, message: 'Participants processed', results })
+    }
+    if (groupInfo[2] === '/leave' && method === 'POST') {
+      wa.groups = wa.groups.filter(one => one !== group)
+      return json(200, { success: true, message: 'Left the group' })
+    }
     return json(200, { id: group?.id, name: group?.name, participants: (group?.participants ?? []).map(id => ({ id, number: id.split('@')[0], isAdmin: false, isSuperAdmin: false })) })
   }
-  if (/\/contacts\/[^/]+\/phone$/.test(route)) return json(200, { contactId: '', phone: null })
+  const contact = /\/contacts\/([^/]+)\/phone$/.exec(route)
+  if (contact !== null) {
+    const contactId = decodeURIComponent(contact[1] ?? '')
+    return json(200, { contactId, phone: wa.lids[contactId] ?? null })
+  }
   return json(404, { message: `no route ${method} ${route}` })
 }
 
@@ -258,11 +292,18 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
       qrPng: PNG,
       minted: [],
       keysSeen: [],
+      lids: {},
+      refuseAdd: [],
     },
     docker: { installed: true, daemon: true, hasImage: false, container: '', runError: '', adminKey: 'owa_k1_ADMINKEY_never_stored_0000000000', commands: [], spawned: [] },
     submitted: [],
     prompts: [],
     toasts: [],
+    logs: [],
+    stateWrites: [],
+    surfaces: ['terminal'],
+    completeAnswer: { text: 'TITLE: Login crashes on submit\n\nDescription: the login form crashes.', outputTokens: 1 },
+    gitStatus: ' M src/login.ts\n?? src/secret-notes.md\n',
     tools: [],
     aborted: [],
     forks: [],
@@ -284,6 +325,7 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
     seen.beforeWrite?.(e.path)
     seen.files.set(e.path, e.text)
     mtimes.set(e.path, seen.clock.now())
+    seen.afterWrite?.(e.path)
     return { value: undefined }
   })
   on('fs.exists', ($, e) => ({ value: seen.files.has(e.path) }))
@@ -317,7 +359,7 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
       await seen.clock.sleep(Number(e.argv[1] ?? 1) * 1000)
       return ok('')
     }
-    if (bin === 'git') return ok('feature/login\n')
+    if (bin === 'git') return ok(e.argv[1] === 'status' ? seen.gitStatus : e.argv[1] === 'log' ? 'Add the login form\n' : 'feature/login\n')
     if (bin === 'rsvg-convert' && seen.bins.has(bin)) {
       if (e.argv[1] === '-o') seen.files.set(e.argv[2] ?? '', PNG)
       return ok('rsvg-convert 2.58')
@@ -340,6 +382,11 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
     return { value: { code: 0, signal: null } } as never
   })
   on('session.id', () => ({ value: ME }))
+  on('session.surfaces', () => ({ value: seen.surfaces as never }))
+  on('state.set', ($, e, next) => {
+    seen.stateWrites.push(`${e.plugin}.${e.key}`)
+    return next(e)
+  })
   on('session.root', () => ({ value: options.root ?? ROOT }))
   on('session.repo', () => ({ value: { root: ROOT, remote: null, internal: false, name: 'shop' } }))
   on('session.messages', () => ({ value: [] }))
@@ -372,7 +419,7 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
   })
   on('model.complete', ($, e) => {
     seen.completions.push(typeof e.prompt === 'string' ? e.prompt : '')
-    return { value: { isAnswered: true, text: 'TITLE: Login crashes on submit\n\nDescription: the login form crashes.', usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }
+    return { value: { isAnswered: true, text: seen.completeAnswer.text, usage: { input_tokens: 1, output_tokens: seen.completeAnswer.outputTokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }
   })
   on('classic.PermissionRequest', () => ({}))
   on('ui.toast', ($, e) => {
@@ -380,7 +427,10 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
     return { value: undefined }
   })
   on('ui.status', () => ({ value: undefined }))
-  on('ui.log', () => ({ value: undefined }))
+  on('ui.log', ($, e) => {
+    seen.logs.push(e.text)
+    return { value: undefined }
+  })
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.close', () => ({ value: undefined }))
   return seen
@@ -396,6 +446,17 @@ export const configured = (extra: Record<string, string> = {}): Record<string, s
 
 /** The running test's mock clock (each world makes one). */
 let startClock: MockClock | undefined
+
+/**
+ * Starts a session the way the Claude desktop app does: through the SDK, so `isInteractive` is false and nothing draws
+ * at start; the desktop surface is there (`$.session.surfaces()`).
+ */
+export const startDesktop = async ($: Engine, seen: World) => {
+  seen.surfaces = ['desktop']
+  const started = await $.session.start({ cwd: ROOT, surface: null, isInteractive: false })
+  await startClock?.advance(1_500)
+  return started
+}
 
 /** Starts the session and lets the start-up run: it waits until session.start has returned (afterStart). */
 export const start = async ($: Engine) => {

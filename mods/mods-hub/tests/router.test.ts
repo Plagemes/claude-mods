@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import type { ModsChannel, ModsMode } from '../types'
 import { problemWith, topicMatches } from '../hooks/catalog'
-import { DEFAULT_PREFS, deriveMode, isQuietAt, parseHubArgs, presenceOf, route, sanitizePrefs } from '../hooks/router'
+import { DEFAULT_PREFS, deriveMode, isQuietAt, noticeLine, parseHubArgs, presenceOf, route, sanitizePrefs, withoutSource } from '../hooks/router'
 
 const NOON = 12 * 60
 const phone: ModsChannel = { id: 'phone', title: 'WhatsApp', owner: 'whatsapp-bridge', audience: 'me', delivery: 'push', status: 'connected' }
@@ -81,5 +81,17 @@ describe('catalog and /hub', () => {
     expect(parseHubArgs('stop')).toEqual({ kind: 'control', action: 'stop', scope: 'session' })
     expect(parseHubArgs('resume all')).toEqual({ kind: 'control', action: 'resume', scope: 'all' })
     expect(parseHubArgs('pause now').kind).toBe('error')
+  })
+})
+
+describe('names', () => {
+  test('a source naming itself in its text is named once: glyphs kept, "mods-hub:" and repeats dropped', () => {
+    expect(withoutSource('speak-summary: cannot speak here', 'speak-summary')).toBe('cannot speak here')
+    expect(withoutSource('🔇 speak-summary: cannot speak here', 'speak-summary')).toBe('🔇 cannot speak here')
+    expect(withoutSource('mods-hub: speak-summary: speak-summary: cannot speak', 'speak-summary')).toBe('cannot speak')
+    expect(withoutSource('Speak-Summary : x', 'speak-summary')).toBe('x')
+    expect(withoutSource('speak-summary:', 'speak-summary')).toBe('speak-summary:')
+    expect(withoutSource('ci-watch: CI failed on main', 'speak-summary')).toBe('ci-watch: CI failed on main')
+    expect(noticeLine({ level: 'info', source: 'speak-summary', title: '🔇 speak-summary: cannot speak here …' })).toBe('ℹ speak-summary: 🔇 cannot speak here …')
   })
 })

@@ -1,4 +1,5 @@
 import type { WaGroupLink, WaSessionInfo } from '../types'
+import { parseGroupKey } from './inbound'
 
 /** A session counts as live while its heartbeat is this fresh. */
 export const LIVE_MS = 45_000
@@ -35,9 +36,19 @@ export const extractTag = (text: string): { tag?: { kind: 'label' | 'project'; v
   return { tag: { kind: match[1] === '#' ? 'label' : 'project', value: (match[2] ?? '').toLowerCase() }, rest: (match[3] ?? '').trim() }
 }
 
-/** The project root whose group this chat is, if any. */
+/** The groups.json key (a project root, or `<root>#<label>`) whose group this chat is, if any. */
 export const projectOfChat = (groups: Readonly<Record<string, WaGroupLink>>, chatId: string): string | undefined =>
   Object.entries(groups).find(([, link]) => link.groupId === chatId)?.[0]
+
+/** Whether a session belongs to a group's key: its project, and its label too for a per-session group. */
+export const isSessionOfKey = (session: Pick<WaSessionInfo, 'root' | 'label'>, key: string): boolean => {
+  const { root, label } = parseGroupKey(key)
+  return session.root === root && (label === undefined || session.label === label)
+}
+
+/** The group a session's messages go to: its own per-session group first, else its project's. */
+export const groupOfSession = (groups: Readonly<Record<string, WaGroupLink>>, session: Pick<WaSessionInfo, 'root' | 'label'>): WaGroupLink | undefined =>
+  groups[`${session.root}#${session.label}`] ?? groups[session.root]
 
 /**
  * Picks the session an incoming message is for: a reply goes to the session that sent the quoted message,
@@ -49,7 +60,7 @@ export const route = (input: RouteInput, context: RouteContext): Route => {
   const { tag, rest } = extractTag(input.text)
   const text = tag === undefined ? input.text.trim() : rest
   const groupRoot = projectOfChat(context.groups, input.chatId)
-  const inScope = groupRoot === undefined ? live : live.filter(session => session.root === groupRoot)
+  const inScope = groupRoot === undefined ? live : live.filter(session => isSessionOfKey(session, groupRoot))
 
   if (input.quotedId !== undefined) {
     const sender = context.sentBy.get(input.quotedId)
@@ -64,7 +75,7 @@ export const route = (input: RouteInput, context: RouteContext): Route => {
   }
   if (groupRoot !== undefined) {
     const first = inScope[0]
-    if (first === undefined) return { sessionId: null, text, reason: 'no-project-session', detail: groupRoot }
+    if (first === undefined) return { sessionId: null, text, reason: 'no-project-session', detail: parseGroupKey(groupRoot).root }
     return { sessionId: first.id, text, reason: 'group' }
   }
   const first = live[0]

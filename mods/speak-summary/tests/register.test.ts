@@ -19,11 +19,25 @@ const typed = (args: string): CommandRunInput => ({
   presentation: { isFullscreen: false, columns: 120 },
 })
 
-type World = { spoken: string[]; prompts: string[]; toasts: string[] }
+type Run = { argv: readonly string[]; stdin: string | undefined; env: Record<string, string> | undefined; timeoutMs: number | undefined }
+type World = { spoken: string[]; prompts: string[]; toasts: string[]; logs: string[]; runs: Run[]; speakCalls: number }
+type Host = { os?: 'Windows_NT' | 'Linux' | 'Darwin'; exit?: number; missing?: readonly string[] }
 
 /** Stands in for the engine beneath the plugin: model, speech, toasts, commands. */
-const world = (on: On, reply: string | null, canSpeak = true): World => {
-  const seen: World = { spoken: [], prompts: [], toasts: [] }
+const world = (on: On, reply: string | null, canSpeak = true, host: Host = {}): World => {
+  const seen: World = { spoken: [], prompts: [], toasts: [], logs: [], runs: [], speakCalls: 0 }
+  on('ui.log', (_$, e) => {
+    seen.logs.push(e.text)
+    return { value: undefined }
+  })
+  on('env.get', (_$, e) => ({ value: e.name === 'OS' && host.os === 'Windows_NT' ? 'Windows_NT' : undefined }))
+  on('process.run', (_$, e) => {
+    const [bin = ''] = e.argv
+    if (bin === 'uname') return { value: { exitCode: 0, stdout: `${host.os ?? 'Linux'}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    seen.runs.push({ argv: e.argv, stdin: e.init?.stdin, env: e.init?.env, timeoutMs: e.init?.timeoutMs })
+    if (host.missing?.includes(bin)) throw new Error(`failed to start: ENOENT ${bin}`)
+    return { value: { exitCode: host.exit ?? 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
@@ -42,7 +56,8 @@ const world = (on: On, reply: string | null, canSpeak = true): World => {
     }
   })
   on('audio.speak', ($, e) => {
-    if (!canSpeak) throw new Error('no speech synthesizer')
+    seen.speakCalls += 1
+    if (!canSpeak) throw new Error('$.audio.speak: no speech synthesizer on windows')
     seen.spoken.push(e.text)
     return { value: { via: 'system' } }
   })
@@ -105,23 +120,112 @@ test('/speak off silences it and /speak on brings it back', async ($, on) => {
   expect(status.text).toContain('on')
 })
 
-test('respects the configured threshold and warns once when speech is unavailable', { options: { minDurationSec: 5 } }, async ($, on) => {
+test('respects the configured threshold', { options: { minDurationSec: 5 } }, async ($, on) => {
   const clock = mock.clock(on)
-  const seen = world(on, 'Ran the build.', false)
+  const seen = world(on, 'Ran the build.')
 
+  await $.turn.complete({ ...LONG_TURN, durationMs: 4_000 })
+  await clock.advance(0)
+  expect(seen.spoken).toEqual([])
   await $.turn.complete({ ...LONG_TURN, durationMs: 6_000 })
   await clock.advance(0)
-  await $.turn.complete({ ...LONG_TURN, durationMs: 6_000 })
-  await clock.advance(0)
-
-  expect(seen.toasts).toHaveLength(1)
-  expect(seen.toasts[0]).toContain('cannot speak')
+  expect(seen.spoken).toEqual(['Ran the build.'])
 })
 
-test('with mods-hub: says hello, speaks on a quiet afternoon, and routes the cannot-speak warning through the hub', async ($, on) => {
+test('Windows: falls back to SAPI through powershell with the text on stdin', { options: { voice: 'Microsoft Zira' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  const seen = world(on, 'Ran the build.', false, { os: 'Windows_NT' })
+
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+
+  expect(seen.toasts).toEqual([])
+  expect(seen.runs).toHaveLength(1)
+  const run = seen.runs[0]
+  expect(run?.argv.slice(0, 4)).toEqual(['powershell', '-NoProfile', '-NonInteractive', '-Command'])
+  expect(run?.argv[4]).toContain('System.Speech')
+  expect(run?.argv[4]).toContain('[Console]::In.ReadToEnd()')
+  expect(run?.stdin).toBe('Ran the build.')
+  expect(run?.env).toEqual({ SPEAK_SUMMARY_VOICE: 'Microsoft Zira' })
+  expect(run?.timeoutMs).toBeGreaterThan(0)
+})
+
+test('hostile text (quotes, $(), backticks, newlines) travels only on stdin', async ($, on) => {
+  const clock = mock.clock(on)
+  const hostile = 'He said "hi" and \'bye\'\n$(calc.exe); `whoami` ; Remove-Item *\nnext line'
+  const seen = world(on, hostile, false, { os: 'Windows_NT' })
+
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+
+  expect(seen.runs).toHaveLength(1)
+  const run = seen.runs[0]
+  expect(run?.stdin).toContain('$(calc.exe)')
+  expect(run?.stdin).toContain('"hi"')
+  expect(run?.stdin).not.toContain('\n')
+  const command = (run?.argv ?? []).join(' ')
+  for (const fragment of ['calc.exe', 'whoami', 'Remove-Item', 'hi', 'bye']) expect(command).not.toContain(fragment)
+})
+
+test('unavailable everywhere: one quiet log line, no toast, no repeats, off for the session', async ($, on) => {
+  const clock = mock.clock(on)
+  const seen = world(on, 'Ran the build.', false, { os: 'Windows_NT', exit: 1 })
+
+  for (let i = 0; i < 3; i += 1) {
+    await $.turn.complete(LONG_TURN)
+    await clock.advance(0)
+  }
+
+  expect(seen.toasts).toEqual([])
+  expect(seen.logs).toHaveLength(1)
+  expect(seen.logs[0]).toContain('speaking is off for this session')
+  expect(seen.speakCalls).toBe(1)
+  expect(seen.runs).toHaveLength(1)
+  const status = await $.command.run(typed('status'))
+  expect(status.text).toContain('unavailable')
+})
+
+test('a missing binary counts as unavailable, Linux tries spd-say then espeak', async ($, on) => {
+  const clock = mock.clock(on)
+  const seen = world(on, 'Ran the build.', false, { os: 'Linux', missing: ['spd-say', 'espeak'] })
+
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+
+  expect(seen.runs.map(run => run.argv[0])).toEqual(['spd-say', 'espeak'])
+  expect(seen.logs).toHaveLength(1)
+  expect(seen.toasts).toEqual([])
+})
+
+test('macOS fallback uses say with stdin only when the engine cannot speak', async ($, on) => {
+  const clock = mock.clock(on)
+  const seen = world(on, 'Ran the build.', false, { os: 'Darwin' })
+
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+
+  expect(seen.runs.map(run => [run.argv, run.stdin])).toEqual([[['say'], 'Ran the build.']])
+})
+
+test('the working method is probed once and cached', async ($, on) => {
+  const clock = mock.clock(on)
+  const seen = world(on, 'Ran the build.', false, { os: 'Windows_NT' })
+
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+  await $.turn.complete(LONG_TURN)
+  await clock.advance(0)
+
+  expect(seen.runs).toHaveLength(2)
+  expect(seen.speakCalls).toBe(1)
+  const status = await $.command.run(typed(''))
+  expect(status.text).toContain('speech: powershell')
+})
+
+test('with mods-hub: says hello, speaks on a quiet afternoon, and never notifies when speech is unavailable', async ($, on) => {
   const clock = mock.clock(on)
   const hub = fakeHub(on)
-  const seen = world(on, 'Ran the build.', false)
+  const seen = world(on, 'Ran the build.', false, { os: 'Linux', missing: ['spd-say', 'espeak'] })
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await clock.advance(1_500)
@@ -131,9 +235,8 @@ test('with mods-hub: says hello, speaks on a quiet afternoon, and routes the can
   await clock.advance(0)
 
   expect(seen.toasts).toEqual([])
-  expect(hub.notified).toHaveLength(1)
-  expect(hub.notified[0]).toMatchObject({ level: 'info', audience: 'terminal' })
-  expect(hub.notified[0]?.title).toContain('cannot speak here')
+  expect(hub.notified).toEqual([])
+  expect(seen.logs).toHaveLength(1)
 })
 
 test('with mods-hub in Silent or Night mode: neither a summary call nor speech is started', async ($, on) => {

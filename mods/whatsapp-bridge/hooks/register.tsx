@@ -2,10 +2,15 @@ import { atom, read, update } from 'claude-code'
 import type { ElementConstructor, ElementTable, EngineInterface, InputProps, Register, RenderElement, RenderInput, RenderSurface, Timer } from 'claude-code'
 
 import type {
+  WaAttention,
   WaConnection,
   WaEventKey,
   WaGroupCard,
   WaGroupLink,
+  WaGroupRow,
+  WaGroupScope,
+  WaInbound,
+  WaInboundEvent,
   WaLogEntry,
   WaMemberQa,
   WaPrefs,
@@ -36,7 +41,25 @@ import {
   tagOf,
 } from './format'
 import type { DigestItem } from './format'
-import { bugPrompt, emptyBook, isOwnerPhone, memberPrompt, memberTrigger, parseIssueDraft, phoneOf, takeQuota } from './members'
+import {
+  canonicalOwner,
+  classifyOwnerText,
+  emptyQaBook,
+  estimateUsd,
+  groupKeyFor,
+  groupNameFor,
+  inboundHealth,
+  inboxText,
+  isMemberCommand,
+  maskChat,
+  normalizeJid,
+  parseGroupKey,
+  parseInvitees,
+  qaPrompt,
+  takeQa,
+} from './inbound'
+import type { QaBook, QaContext, Usage } from './inbound'
+import { bugPrompt, emptyBook, isOwnerPhone, memberTrigger, parseIssueDraft, phoneOf, takeQuota } from './members'
 import type { RateBook } from './members'
 import {
   api,
@@ -48,7 +71,9 @@ import {
   mimeOf,
   parseGroups,
   parseJson,
+  memberCountOf,
   parseMessageId,
+  parseParticipantResults,
   parseRows,
   parseSession,
   parseSessions,
@@ -85,7 +110,7 @@ import type { ServerLock } from './launcher'
 import { decodePng, qrBlocks, qrModules, qrSvg } from './qr'
 import { chartSvg, chartText, costChart, routerChart, testsChart } from './reports'
 import type { Chart } from './reports'
-import { LIVE_MS, defaultLabel, isLive, isPathLabel, projectNameOf, projectOfChat, route, slugLabel } from './routing'
+import { LIVE_MS, defaultLabel, groupOfSession, isLive, isPathLabel, isSessionOfKey, projectNameOf, projectOfChat, route, slugLabel } from './routing'
 import {
   EVENT_KEYS,
   EVENT_LABELS,
@@ -154,7 +179,7 @@ const PHONE_NOTE = `\n\n(${PHONE_CONTEXT})`
 const phonePrompt = (text: string): string => `${text}${PHONE_NOTE}`
 const withoutPhoneNote = (text: string): string => (text.endsWith(PHONE_NOTE) ? text.slice(0, -PHONE_NOTE.length) : text)
 
-const EMPTY_CONNECTION: WaConnection = { phase: 'unconfigured', detail: '', raw: '', phone: '', qr: '', qrModules: [], pairingCode: '', mode: 'unknown', checkedAt: 0, isLeader: false }
+const EMPTY_CONNECTION: WaConnection = { phase: 'unconfigured', detail: '', raw: '', phone: '', qr: '', qrModules: [], pairingCode: '', mode: 'unknown', isLeader: false }
 const EMPTY_SETUP: WaSetup = { step: 'idle', note: '', raw: '', docker: '', owner: '', autoStart: false, isManual: false, baseUrl: '' }
 /** While the server boots or waits for the QR scan: check this often (the QR rotates about every 20 s). */
 const SETUP_TICK_MS = 3_000
@@ -166,6 +191,12 @@ const PULL_TIMEOUT_MS = 20 * 60_000
 const TOAST_REPEAT_MS = 60_000
 /** While the server answers, the background check runs this often (the leader's polls notice trouble sooner). */
 const HEALTH_OK_MS = 60_000
+/** groups.json is written by any session: a write that lost a race is applied again, this many times at most. */
+const GROUP_WRITE_TRIES = 3
+/** Inbound events kept per leader for `/wa inbox`. */
+const INBOUND_KEEP = 50
+/** Questions held while interaction is off, at most. */
+const PARKED_QUESTIONS_KEEP = 10
 
 const tabAtom = atom({ plugin: 'whatsapp-bridge', key: 'tab' } as const, 'status' as WaTab)
 const connectionAtom = atom({ plugin: 'whatsapp-bridge', key: 'connection' } as const, EMPTY_CONNECTION)
@@ -177,6 +208,9 @@ const prefsAtom = atom({ plugin: 'whatsapp-bridge', key: 'prefs' } as const, def
 const privacyAtom = atom({ plugin: 'whatsapp-bridge', key: 'privacy' } as const, { allowlist: [], sample: '', redacted: '' } as WaPrivacy)
 const auditAtom = atom({ plugin: 'whatsapp-bridge', key: 'audit' } as const, [] as WaLogEntry[])
 const membersAtom = atom({ plugin: 'whatsapp-bridge', key: 'members' } as const, [] as WaMemberQa[])
+const inboundAtom = atom({ plugin: 'whatsapp-bridge', key: 'inbound' } as const, { lastAt: 0, health: 'none', detail: '' } as WaInbound)
+const attentionAtom = atom({ plugin: 'whatsapp-bridge', key: 'attention' } as const, { canAsk: true, isAway: false, isNight: false, isPaused: false, interaction: 'auto', quietHours: '', label: '', isHub: false } as WaAttention)
+const groupsAtom = atom({ plugin: 'whatsapp-bridge', key: 'groups' } as const, [] as WaGroupRow[])
 
 /**
  * config.json in the shared folder: what /wa setup learned. Never the admin key. `baseUrl`: the user's own OpenWA
@@ -189,7 +223,9 @@ type InboxEntry = {
   seq: number
   key: string
   at: number
-  kind: 'owner' | 'reaction' | 'member' | 'bug'
+  kind: 'owner' | 'reaction' | 'member' | 'bug' | 'question'
+  /** A `question`: who asked it, so the answer follows the right privacy rules. */
+  audience?: 'owner' | 'member'
   chatId: string
   messageId: string
   author: string
@@ -210,7 +246,7 @@ type SessionFile = {
   pending: Pending[]
   digest: Seq<DigestItem>[]
   parked: Seq<DigestItem>[]
-  stats: { costByDay: Record<string, number>; tests: Record<string, { pass: number; fail: number }> }
+  stats: { costByDay: Record<string, number>; tests: Record<string, { pass: number; fail: number }>; qaUsdByDay?: Record<string, number> }
 }
 
 /** leader.json: the poller's own state, written by the leader alone. */
@@ -224,7 +260,21 @@ type LeaderState = {
   lastDigestAt: number
   wasInteractive: boolean
   lidPhones: Record<string, string>
+  /** Answers given per chat (the per-chat rate). */
+  qa: QaBook
+  /** When this leader last finished a poll, and the error it ended with ('' when it went fine). */
+  lastPollAt: number
+  lastPollError: string
+  /** When the last message (from anyone allowed) came in. */
+  lastInboundAt: number
+  /** Questions that came in while interaction was off: answered when it is back on. */
+  parkedQuestions: ParkedQuestion[]
+  /** Chats already told "I'll answer later" in this off period. */
+  toldLater: string[]
 }
+
+/** A question held while interaction is off. */
+type ParkedQuestion = { at: number; chatId: string; messageId: string; text: string; audience: 'owner' | 'member'; author: string; root: string | undefined }
 
 type Converter = readonly string[] | null
 
@@ -238,6 +288,7 @@ type Runtime = {
   project: string
   branch: string
   label: string
+  /** A person at a terminal prompt (`session.start`'s `isInteractive`); false under the desktop app, which hosts sessions through the SDK. */
   isInteractive: boolean
   isStarted: boolean
   /** Whether Claude's tools are registered: they wait until the bridge is set up, so an unconfigured bridge costs the prompt nothing. */
@@ -320,6 +371,19 @@ type Runtime = {
   hubHandled: string[]
   isDraining: boolean
   hubFailures: number
+  /** Connection checks so far (the "linked" toast is for a change seen, not the first look). */
+  connectionChecks: number
+  /** Whether this session runs the background work (polling, inbox, heartbeat): a terminal, or a desktop / IDE / phone host. */
+  isHosted: boolean
+  isBackgroundStarted: boolean
+  isHubGreeted: boolean
+  /** Chats that are the owner's though not `<owner>@c.us` (an `@lid` DM or self-chat), learned by a leader (chats.json). */
+  ownerChats: string[]
+  /** What the person typed in the Groups name field, kept out of state so typing never redraws the pane. */
+  groupNameDraft: string
+  groupInviteDraft: string
+  /** The live sessions as the last refresh found them (the Groups rows' status). */
+  lastSessions: WaSessionInfo[]
 }
 
 type HubMode = NonNullable<Awaited<ReturnType<typeof hubMode>>>
@@ -408,6 +472,14 @@ const newRuntime = (settings: Settings): Runtime => ({
   hubHandled: [],
   isDraining: false,
   hubFailures: 0,
+  connectionChecks: 0,
+  isHosted: false,
+  isBackgroundStarted: false,
+  isHubGreeted: false,
+  ownerChats: [],
+  groupNameDraft: '',
+  groupInviteDraft: '',
+  lastSessions: [],
 })
 
 function emptyFile(): SessionFile {
@@ -432,12 +504,21 @@ const emptyLeader = (): LeaderState => ({
   lastDigestAt: 0,
   wasInteractive: true,
   lidPhones: {},
+  qa: emptyQaBook(),
+  lastPollAt: 0,
+  lastPollError: '',
+  lastInboundAt: 0,
+  parkedQuestions: [],
+  toldLater: [],
 })
 
 const paths = {
   config: (rt: Runtime): string => `${rt.dir}/config.json`,
   prefs: (rt: Runtime): string => `${rt.dir}/prefs.json`,
   groups: (rt: Runtime): string => `${rt.dir}/groups.json`,
+  chats: (rt: Runtime): string => `${rt.dir}/chats.json`,
+  inbound: (rt: Runtime): string => `${rt.dir}/inbound`,
+  inboundFrom: (rt: Runtime, writer: string): string => `${rt.dir}/inbound/${writer}.jsonl`,
   lease: (rt: Runtime): string => `${rt.dir}/lease.json`,
   server: (rt: Runtime): string => `${rt.dir}/server.json`,
   leader: (rt: Runtime): string => `${rt.dir}/leader.json`,
@@ -461,16 +542,42 @@ const isConfigured = (rt: Runtime): boolean => rt.apiKey !== '' && rt.sessionId 
 /** The prefs presence, interaction and quiet hours are judged by: mods-hub's global mode, when it is installed. */
 const attention = (rt: Runtime): WaPrefs => (rt.hub === undefined ? rt.prefs : prefsFromHub(rt.prefs, rt.hub))
 const canInteract = (rt: Runtime, now: number): boolean => interactionAllowed(attention(rt), rt.settings.interactionOffHours, now)
+/**
+ * Whether a question from the phone may be answered now. Answering is not Claude starting a conversation, so it is held
+ * only by an explicit "not now": Silent, Night, or interaction set off (with the bridge alone, its off-hours count as
+ * night). mods-hub's "auto" asks only while you are away, but it still answers what you ask.
+ */
+const mayReply = (rt: Runtime, now: number): boolean =>
+  rt.hub === undefined ? canInteract(rt, now) : !(rt.hub.isSilent || rt.hub.isNight || rt.hub.interaction === 'off')
 const interactionText = (rt: Runtime, now: number): string =>
   rt.hub === undefined ? interactionLabel(rt.prefs, rt.settings.interactionOffHours, now) : hubModeLabel(rt.hub)
 const ownerChat = (rt: Runtime): string => directChat(rt.owners[0] ?? '')
-const projectGroup = (rt: Runtime): WaGroupLink | undefined => rt.groups[rt.root]
+/** This session's group: its own per-session group, else its project's. */
+const projectGroup = (rt: Runtime): WaGroupLink | undefined => groupOfSession(rt.groups, rt)
+/** The groups.json key a group created or linked from this session gets, by the group scope setting. */
+const ownGroupKey = (rt: Runtime): string => groupKeyFor(rt.root, rt.label, rt.settings.groupScope)
 
 /** The chats the mod may ever read or write: the owners' direct chats, linked project groups and extra chats. */
 const allowlist = (rt: Runtime): string[] => [
-  ...new Set([...rt.owners.map(directChat), ...Object.values(rt.groups).map(link => link.groupId), ...rt.settings.extraChats]),
+  ...new Set([...rt.owners.map(directChat), ...rt.ownerChats, ...Object.values(rt.groups).map(link => link.groupId), ...rt.settings.extraChats.map(normalizeJid)]),
 ]
-const isAllowed = (rt: Runtime, chatId: string): boolean => chatId !== '' && allowlist(rt).includes(chatId)
+const isAllowed = (rt: Runtime, chatId: string): boolean => chatId !== '' && allowlist(rt).includes(normalizeJid(chatId))
+
+// ── State the pane draws ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Writes a value the pane draws only when it changed (call as `putIf(await read($, a), change, fn => update($, a, fn))`:
+ * the state calls name their atom where `claude plugin validate` can read it). Every write redraws the pane, and a redraw renews the handles
+ * of its buttons: a desktop click carries the handle of the drawing it was made on, so a click landing after a redraw
+ * nobody needed was dropped ("nothing ran"). Timers (the heartbeat, the setup ticks, the inbox) therefore never write
+ * what they found unchanged.
+ */
+async function putIf<T>(current: T, change: (value: T) => T, write: (change: (value: T) => T) => Promise<T>): Promise<T> {
+  const next = change(current)
+  if (JSON.stringify(next) === JSON.stringify(current)) return current
+  // Written through `update` (read again under its version), so a write racing this one is never lost.
+  return write(change)
+}
 
 // ── Files ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -567,6 +674,7 @@ async function saveSelf($: EngineInterface, rt: Runtime): Promise<void> {
     startedAt: rt.startedAt,
     turns: rt.turns,
     ended: rt.file.info.ended,
+    summary: rt.file.info.summary ?? '',
   }
   rt.file.sentTimes = rt.file.sentTimes.filter(at => now - at < 60 * 60_000)
   rt.file.pending = rt.file.pending.filter(item => item.expiresAt > now)
@@ -689,16 +797,20 @@ async function loadShared($: EngineInterface, rt: Runtime): Promise<void> {
   rt.apiKey = rt.settings.apiKey || envKey.trim() || (typeof rt.config.apiKey === 'string' ? rt.config.apiKey : '')
   rt.baseUrl = (typeof rt.config.baseUrl === 'string' && rt.config.baseUrl !== '' ? rt.config.baseUrl : rt.settings.baseUrl).replace(/\/+$/, '')
   rt.sessionId = typeof rt.config.sessionId === 'string' ? rt.config.sessionId : ''
-  const stored = Array.isArray(rt.config.ownerNumbers) ? rt.config.ownerNumbers.map(String).map(digitsOnly) : []
+  const stored = Array.isArray(rt.config.ownerNumbers) ? rt.config.ownerNumbers.map(String).map(canonicalOwner) : []
   rt.owners = [...new Set([...rt.settings.ownerNumbers, ...stored])].filter(n => n.length >= 6)
   rt.prefs = mergePrefs(await readJsonFile($, paths.prefs(rt)), rt.settings)
   const groups = await readJsonFile($, paths.groups(rt))
-  rt.groups = isRecord(groups)
-    ? Object.fromEntries(Object.entries(groups).filter(([, link]) => isRecord(link) && typeof link.groupId === 'string')) as Record<string, WaGroupLink>
-    : {}
-  await update($, prefsAtom, () => rt.prefs)
-  await update($, setupAtom, setup => ({ ...setup, autoStart: rt.config.autoStart === true, baseUrl: rt.baseUrl }))
+  rt.groups = groupsOf(groups)
+  const chats = await readJsonFile($, paths.chats(rt))
+  rt.ownerChats = isRecord(chats) && Array.isArray(chats.owner) ? chats.owner.filter((one): one is string => typeof one === 'string') : []
+  await putIf(await read($, prefsAtom), () => rt.prefs, fn => update($, prefsAtom, fn))
+  await putIf(await read($, setupAtom), setup => ({ ...setup, autoStart: rt.config.autoStart === true, baseUrl: rt.baseUrl }), fn => update($, setupAtom, fn))
 }
+
+/** groups.json made whole: entries with a group id (the `_rev` counter and anything malformed left out). */
+const groupsOf = (value: unknown): Record<string, WaGroupLink> =>
+  isRecord(value) ? (Object.fromEntries(Object.entries(value).filter(([key, link]) => !key.startsWith('_') && isRecord(link) && typeof link.groupId === 'string')) as Record<string, WaGroupLink>) : {}
 
 async function saveConfig($: EngineInterface, rt: Runtime, change: Partial<SharedConfig>): Promise<void> {
   // From the file, not this session's copy: a key or owner another session saved meanwhile is kept.
@@ -711,14 +823,25 @@ async function saveConfig($: EngineInterface, rt: Runtime, change: Partial<Share
 async function savePrefs($: EngineInterface, rt: Runtime, change: (prefs: WaPrefs) => WaPrefs): Promise<WaPrefs> {
   rt.prefs = change(mergePrefs(await readJsonFile($, paths.prefs(rt)), rt.settings))
   await writeJsonFile($, paths.prefs(rt), rt.prefs)
-  await update($, prefsAtom, () => rt.prefs)
+  await putIf(await read($, prefsAtom), () => rt.prefs, fn => update($, prefsAtom, fn))
+  await refreshAttention($, rt)
   return rt.prefs
 }
 
+/**
+ * Changes groups.json safely though any session may write it: read, change, write with the next `_rev`, read back;
+ * when another session's write landed in between (its `_rev` or its content won), the change is applied again on top.
+ */
 async function saveGroups($: EngineInterface, rt: Runtime, change: (groups: Record<string, WaGroupLink>) => Record<string, WaGroupLink>): Promise<void> {
-  const stored = await readJsonFile($, paths.groups(rt))
-  rt.groups = change(isRecord(stored) ? (stored as Record<string, WaGroupLink>) : {})
-  await writeJsonFile($, paths.groups(rt), rt.groups)
+  for (let attempt = 0; attempt < GROUP_WRITE_TRIES; attempt += 1) {
+    const stored = await readJsonFile($, paths.groups(rt))
+    const rev = isRecord(stored) && typeof stored._rev === 'number' ? stored._rev : 0
+    const next = change(groupsOf(stored))
+    await writeJsonFile($, paths.groups(rt), { _rev: rev + 1, ...next })
+    const back = await readJsonFile($, paths.groups(rt))
+    rt.groups = groupsOf(back)
+    if (isRecord(back) && back._rev === rev + 1 && JSON.stringify(rt.groups) === JSON.stringify(next)) break
+  }
   await refreshGroupCard($, rt, '')
 }
 
@@ -727,9 +850,11 @@ async function checkConnection($: EngineInterface, rt: Runtime): Promise<WaConne
   await offerTools($, rt)
   const now = await $.clock.now()
   const previous = await read($, connectionAtom)
-  const base: WaConnection = { ...EMPTY_CONNECTION, checkedAt: now, isLeader: rt.isLeader, mode: rt.mode }
+  const base: WaConnection = { ...EMPTY_CONNECTION, isLeader: rt.isLeader, mode: rt.mode }
+  const wasChecked = rt.connectionChecks > 0
+  rt.connectionChecks += 1
   const set = async (connection: WaConnection): Promise<WaConnection> => {
-    await update($, connectionAtom, () => connection)
+    await putIf(await read($, connectionAtom), () => connection, fn => update($, connectionAtom, fn))
     return connection
   }
   const health = await waCall($, rt, api.health())
@@ -784,7 +909,7 @@ async function checkConnection($: EngineInterface, rt: Runtime): Promise<WaConne
           : phase === 'starting'
             ? 'The WhatsApp session is starting…'
             : 'The WhatsApp session reported an error.'
-  if (phase === 'ready' && previous.phase !== 'ready' && previous.checkedAt > 0) toastOnce($, rt, now, `WhatsApp linked as +${session.phone}.`)
+  if (phase === 'ready' && previous.phase !== 'ready' && wasChecked) toastOnce($, rt, now, `WhatsApp linked as +${session.phone}.`)
   const raw = phase === 'error' || phase === 'starting' ? (session.lastError !== '' ? session.lastError : session.status) : ''
   return set({ ...base, phase, detail, raw, phone: session.phone, qr, qrModules: modules, pairingCode: phase === 'qr' ? previous.pairingCode : '', mode: rt.mode })
 }
@@ -807,9 +932,7 @@ function toastOnce($: EngineInterface, rt: Runtime, now: number, text: string): 
 type Ran = { exitCode: number; stdout: string; stderr: string } | { error: string }
 
 async function setSetup($: EngineInterface, change: Partial<WaSetup>): Promise<WaSetup> {
-  let next = EMPTY_SETUP
-  await update($, setupAtom, setup => (next = { ...setup, ...change }))
-  return next
+  return putIf(await read($, setupAtom), setup => ({ ...setup, ...change }), fn => update($, setupAtom, fn))
 }
 
 /** A host command that never throws: a missing binary or a timeout comes back as `{ error }`. */
@@ -1072,45 +1195,137 @@ function inBackground($: EngineInterface, rt: Runtime, work: () => Promise<strin
   })
 }
 
-// ── Project groups ───────────────────────────────────────────────────────────────────────────────
+// ── Groups ───────────────────────────────────────────────────────────────────────────────────────
 
 async function refreshGroupCard($: EngineInterface, rt: Runtime, note: string): Promise<void> {
   const link = projectGroup(rt) ?? null
-  await update($, groupAtom, card => ({ link, note: note || (link === null ? card.note : ''), choices: link === null ? card.choices : [] }))
+  await putIf(await read($, groupAtom), card => ({ link, note: note || (link === null ? card.note : ''), choices: link === null ? card.choices : [] }), fn => update($, groupAtom, fn))
+  await putIf(await read($, groupsAtom), () => groupRows(rt, rt.lastSessions), fn => update($, groupsAtom, fn))
 }
 
-/** Creates "Claude · <project>" with only the owner in it (Baileys engines), and links it to this project. */
-async function createProjectGroup($: EngineInterface, rt: Runtime): Promise<string> {
+/** The Groups section's rows: every managed group, where it routes, how many members, whether a session runs for it. */
+function groupRows(rt: Runtime, sessions: readonly WaSessionInfo[]): WaGroupRow[] {
+  const own = projectGroup(rt)
+  return Object.entries(rt.groups)
+    .map(([key, link]): WaGroupRow => {
+      const { root, label } = parseGroupKey(key)
+      const isThis = own !== undefined && own.groupId === link.groupId && isSessionOfKey(rt, key)
+      const status = isThis ? 'this' : sessions.some(session => !session.ended && isSessionOfKey(session, key)) ? 'live' : 'idle'
+      return { key, groupId: link.groupId, name: link.name, routesTo: `${projectNameOf(root)}${label !== undefined ? ` · #${label}` : ''}`, members: link.members, status, inviteLink: link.inviteLink }
+    })
+    .sort((a, b) => (a.status === 'this' ? -1 : b.status === 'this' ? 1 : a.name.localeCompare(b.name)))
+}
+
+/** The name a new group of this session gets: "Claude · <project>", per session "Claude · <project> · <label>". */
+const defaultGroupName = (rt: Runtime): string => groupNameFor(rt.project, rt.label, rt.settings.groupScope)
+
+/**
+ * Creates a WhatsApp group for this project (or session, by the group scope) with the owner in it, links it, and posts
+ * a welcome that mentions "help". Group creation is Baileys-only in OpenWA (501 on whatsapp-web.js): then the answer
+ * says so and offers the manual way (create it on the phone with the bot in it, then link it here).
+ */
+async function createGroup($: EngineInterface, rt: Runtime, requested: string): Promise<string> {
   if (!isConfigured(rt)) return 'Set up the connection first: /wa setup'
-  if (rt.mode === 'self') return 'Your own number is linked: create the group on your phone, then /wa link-project.'
-  const name = `Claude · ${rt.project}`.slice(0, 100)
-  const created = await waCall($, rt, api.createGroup(rt.sessionId, name, rt.owners.map(directChat)))
+  const name = (requested.trim() || defaultGroupName(rt)).slice(0, 100)
+  // With the owner's own number linked the owner is the creator: nobody else needs adding.
+  const participants = rt.mode === 'self' ? [] : rt.owners.map(directChat)
+  const created = await waCall($, rt, api.createGroup(rt.sessionId, name, participants))
   const groupId = isRecord(created.json) && typeof created.json.id === 'string' ? created.json.id : ''
   if (!created.ok || groupId === '') {
-    const why = created.status === 501
-      ? 'this OpenWA engine cannot create groups (whatsapp-web.js)'
+    const isUnsupported = created.status === 501
+    const why = isUnsupported
+      ? 'this OpenWA engine (whatsapp-web.js) cannot create groups'
       : created.status === 403
         ? 'the key is chat-scoped or WhatsApp refused it'
         : failure(created)
-    return `Could not create the group: ${why}. Create "${name}" on your phone with the bot number in it, then /wa link-project to pick it.`
+    const manual = `Create "${name}" on your phone${rt.mode === 'self' ? '' : ` with the bot number${rt.botPhone !== '' ? ` (+${rt.botPhone})` : ''} in it`}, then pick it under "Link an existing group" (/wa link-project).`
+    const listed = await waCall($, rt, api.groups(rt.sessionId))
+    await putIf(await read($, groupAtom), card => ({ ...card, note: `${isUnsupported ? 'Group creation is not supported by this engine.' : 'Could not create the group.'} ${manual}`, choices: parseGroups(listed.json).map(({ id, name: title }) => ({ id, name: title })) }), fn => update($, groupAtom, fn))
+    return `Could not create the group: ${why}. ${manual}`
   }
-  await linkGroup($, rt, groupId, name)
+  await linkGroup($, rt, groupId, name, ownGroupKey(rt))
   void waCall($, rt, api.groupDescription(rt.sessionId, groupId, `Claude Code updates for ${rt.project}. Owner: send "help". Members: start with "?" to ask about progress, "bug:" to report a bug.`))
   await waSendText($, rt, {
     chatId: groupId,
     kind: 'welcome',
-    text: `🤖 This group gets Claude Code updates for *${rt.project}*.\nOwner: send *help* for commands. Members you add can ask about progress (start with *?*) or report a bug (*bug:* …).`,
+    text: `🤖 This group gets Claude Code updates for *${rt.project}*${rt.settings.groupScope === 'session' ? ` (session #${rt.label})` : ''}.\nSend *help* for what you can do from here. Ask anything ("what are you doing?"); members start with *?*, or report a bug with *bug:* …`,
   })
-  return `Created the WhatsApp group "${name}" and linked it to ${rt.project}.`
+  return `Created the WhatsApp group "${name}" and linked it to ${rt.settings.groupScope === 'session' ? `#${rt.label} (${rt.project})` : rt.project}.`
 }
 
-async function linkGroup($: EngineInterface, rt: Runtime, groupId: string, name: string): Promise<void> {
+async function linkGroup($: EngineInterface, rt: Runtime, groupId: string, name: string, key: string): Promise<void> {
   const now = await $.clock.now()
   const info = await waCall($, rt, api.groupInfo(rt.sessionId, groupId))
-  const members = isRecord(info.json) && Array.isArray(info.json.participants) ? info.json.participants.length : 0
+  const members = memberCountOf(info.json)
   const invite = await waCall($, rt, api.inviteCode(rt.sessionId, groupId))
   const inviteLink = isRecord(invite.json) && typeof invite.json.inviteLink === 'string' ? invite.json.inviteLink : ''
-  await saveGroups($, rt, groups => ({ ...groups, [rt.root]: { groupId, name, inviteLink, members, createdAt: now } }))
+  const scope: WaGroupScope = parseGroupKey(key).label !== undefined ? 'session' : 'project'
+  // One group, one key: linking it here moves it from wherever it was linked before.
+  await saveGroups($, rt, groups => ({
+    ...Object.fromEntries(Object.entries(groups).filter(([other, link]) => other !== key && link.groupId !== groupId)),
+    [key]: { groupId, name, inviteLink, members, createdAt: now, scope },
+  }))
+}
+
+/** The managed group a pane row or `/wa group … <n>` names: by key, group id, or 1-based position in the list. */
+const pickGroup = (rt: Runtime, ref: string): { key: string; link: WaGroupLink } | undefined => {
+  const rows = groupRows(rt, rt.lastSessions)
+  const index = Number(ref)
+  const row = ref === '' ? rows.find(one => one.status === 'this') : Number.isInteger(index) && index >= 1 ? rows[index - 1] : rows.find(one => one.key === ref || one.groupId === ref)
+  const link = row === undefined ? undefined : rt.groups[row.key]
+  return row === undefined || link === undefined ? undefined : { key: row.key, link }
+}
+
+async function renameGroup($: EngineInterface, rt: Runtime, ref: string, name: string): Promise<string> {
+  const picked = pickGroup(rt, ref)
+  if (picked === undefined) return 'No such group: /wa groups lists them.'
+  const subject = name.trim().slice(0, 100)
+  if (subject === '') return 'Usage: /wa group rename <new name>'
+  const renamed = await waCall($, rt, api.groupSubject(rt.sessionId, picked.link.groupId, subject))
+  if (!renamed.ok) return `WhatsApp did not rename it: ${failure(renamed)}`
+  await saveGroups($, rt, groups => ({ ...groups, [picked.key]: { ...picked.link, name: subject } }))
+  return `Renamed to "${subject}".`
+}
+
+/** Points a managed group at this session (per session) or this project, by the group scope. */
+async function relinkGroup($: EngineInterface, rt: Runtime, ref: string): Promise<string> {
+  const picked = pickGroup(rt, ref)
+  if (picked === undefined) return 'No such group: /wa groups lists them.'
+  const key = ownGroupKey(rt)
+  await saveGroups($, rt, groups => ({
+    ...Object.fromEntries(Object.entries(groups).filter(([other]) => other !== picked.key && other !== key)),
+    [key]: { ...picked.link, scope: rt.settings.groupScope },
+  }))
+  return `"${picked.link.name}" now routes to ${rt.settings.groupScope === 'session' ? `#${rt.label} (${rt.project})` : rt.project}.`
+}
+
+/** Adds numbers to a managed group (the owner's pane or /wa only); those WhatsApp refuses (privacy) get the invite link. */
+async function inviteToGroup($: EngineInterface, rt: Runtime, ref: string, numbers: string): Promise<string> {
+  const picked = pickGroup(rt, ref)
+  if (picked === undefined) return 'No such group: /wa groups lists them.'
+  const phones = parseInvitees(numbers)
+  if (phones.length === 0) return 'Usage: /wa group invite +39333…, +44…  (numbers with country code)'
+  const added = await waCall($, rt, api.addParticipants(rt.sessionId, picked.link.groupId, phones.map(directChat)))
+  const results = parseParticipantResults(added.json)
+  const refused = added.ok ? results.filter(one => !one.isAdded).map(one => one.id.split('@')[0] ?? one.id) : phones
+  const invite = picked.link.inviteLink !== '' ? ` Send them the invite link: ${picked.link.inviteLink}` : ''
+  const info = await waCall($, rt, api.groupInfo(rt.sessionId, picked.link.groupId))
+  if (info.ok) await saveGroups($, rt, groups => ({ ...groups, [picked.key]: { ...picked.link, members: memberCountOf(info.json) || picked.link.members } }))
+  if (!added.ok) return `Could not add them (${failure(added)}).${invite}`
+  if (refused.length > 0) return `Added ${phones.length - refused.length} of ${phones.length}; WhatsApp refused ${refused.map(n => `+${n}`).join(', ')} (their privacy settings).${invite}`
+  return `Added ${plural(phones.length, 'member')} to "${picked.link.name}".`
+}
+
+/** Unlinks a managed group (its updates go to the owner's chat again); with `leave`, the bot also leaves it. */
+async function unlinkGroup($: EngineInterface, rt: Runtime, ref: string, leave: boolean): Promise<string> {
+  const picked = pickGroup(rt, ref)
+  if (picked === undefined) return 'No such group: /wa groups lists them.'
+  if (leave) {
+    const left = await waCall($, rt, api.leaveGroup(rt.sessionId, picked.link.groupId))
+    if (!left.ok) return `Could not leave "${picked.link.name}": ${failure(left)}`
+  }
+  await saveGroups($, rt, groups => Object.fromEntries(Object.entries(groups).filter(([key]) => key !== picked.key)))
+  return leave ? `Left and unlinked "${picked.link.name}".` : `Unlinked "${picked.link.name}": its updates go to your direct chat (the group itself stays).`
 }
 
 /** `/wa link-project [n|group id]`: create the group, or list the bot's groups, or link the one picked. */
@@ -1118,27 +1333,41 @@ async function linkProject($: EngineInterface, rt: Runtime, arg: string): Promis
   if (!isConfigured(rt)) return 'Set up the connection first: /wa setup'
   const listed = await waCall($, rt, api.groups(rt.sessionId))
   const groups = parseGroups(listed.json)
-  if (arg === '' && rt.settings.autoCreateGroup && rt.mode !== 'self') {
-    const created = await createProjectGroup($, rt)
+  if (arg === '#list') {
+    await putIf(await read($, groupAtom), card => ({ ...card, note: groups.length === 0 ? groupListText(groups) : 'Pick the group to link:', choices: groups.map(({ id, name }) => ({ id, name })) }), fn => update($, groupAtom, fn))
+    return groups.length === 0 ? groupListText(groups) : ''
+  }
+  if (arg === '' && rt.settings.autoCreateGroup) {
+    const created = await createGroup($, rt, '')
     if (projectGroup(rt) !== undefined) return created
-    await update($, groupAtom, card => ({ ...card, note: created, choices: groups.map(({ id, name }) => ({ id, name })) }))
+    await putIf(await read($, groupAtom), card => ({ ...card, note: created, choices: groups.map(({ id, name }) => ({ id, name })) }), fn => update($, groupAtom, fn))
     return `${created}\n${groupListText(groups)}`
   }
   if (arg === '') {
-    await update($, groupAtom, card => ({ ...card, choices: groups.map(({ id, name }) => ({ id, name })) }))
+    await putIf(await read($, groupAtom), card => ({ ...card, choices: groups.map(({ id, name }) => ({ id, name })) }), fn => update($, groupAtom, fn))
     return groupListText(groups)
   }
   const index = Number(arg)
   const picked = Number.isInteger(index) && index >= 1 ? groups[index - 1] : groups.find(group => group.id === arg || group.name.toLowerCase() === arg.toLowerCase())
   if (picked === undefined) return `No such group. ${groupListText(groups)}`
-  await linkGroup($, rt, picked.id, picked.name)
-  return `Linked "${picked.name}" to ${rt.project}. Updates for this project now go there.`
+  await linkGroup($, rt, picked.id, picked.name, ownGroupKey(rt))
+  return `Linked "${picked.name}" to ${rt.project}. Updates for this ${rt.settings.groupScope} now go there.`
 }
 
 const groupListText = (groups: readonly { id: string; name: string; participantsCount: number }[]): string =>
   groups.length === 0
     ? 'The bot number is in no group yet: create one on your phone with the bot in it, then /wa link-project again.'
-    : `Groups the bot is in — /wa link-project <n>:\n${groups.map((group, index) => `${index + 1}. ${group.name} (${plural(group.participantsCount, 'member')})`).join('\n')}`
+    : `Groups the bot is in — /wa link-project <n>:\n${groups.map((group, index) => `${index + 1}. ${group.name}${group.participantsCount > 0 ? ` (${plural(group.participantsCount, 'member')})` : ''}`).join('\n')}`
+
+/** `/wa groups`: the managed groups, numbered for `/wa group … <n>`. */
+const managedGroupsText = (rt: Runtime): string => {
+  const rows = groupRows(rt, rt.lastSessions)
+  if (rows.length === 0) return `No managed group yet. Create one: /wa group create [name] (default "${defaultGroupName(rt)}").`
+  return [
+    'Managed groups — /wa group rename|link|invite|unlink|leave <n>:',
+    ...rows.map((row, index) => `${index + 1}. ${row.name} → ${row.routesTo} · ${plural(row.members, 'member')} · ${row.status === 'this' ? 'this session' : row.status === 'live' ? 'live' : 'no session running'}`),
+  ].join('\n')
+}
 
 /** Where this project's messages go: its group (created on first use when allowed), else the owner's chat. */
 async function projectChat($: EngineInterface, rt: Runtime): Promise<string> {
@@ -1146,7 +1375,7 @@ async function projectChat($: EngineInterface, rt: Runtime): Promise<string> {
   if (linked !== undefined) return linked.groupId
   if (rt.settings.autoCreateGroup && !rt.triedGroup && rt.mode === 'bot' && isConfigured(rt)) {
     rt.triedGroup = true
-    const outcome = await createProjectGroup($, rt)
+    const outcome = await createGroup($, rt, '')
     const created = projectGroup(rt)
     if (created !== undefined) return created.groupId
     await refreshGroupCard($, rt, outcome)
@@ -1235,7 +1464,7 @@ async function dropPending($: EngineInterface, rt: Runtime, id: string): Promise
 
 /** Renews, takes or follows the lease. A taken lease is trusted only once read back on the next beat. */
 async function tickLease($: EngineInterface, rt: Runtime): Promise<void> {
-  if (!rt.isInteractive || !isConfigured(rt)) return
+  if (!rt.isHosted || !isConfigured(rt)) return
   const now = await $.clock.now()
   const lease = parseLease(await readJsonFile($, paths.lease(rt)))
   const action = leaseAction(lease, rt.me, now)
@@ -1255,7 +1484,7 @@ async function tickLease($: EngineInterface, rt: Runtime): Promise<void> {
     rt.leaseVerified = action === 'renew'
     if (rt.leaseVerified) await startPolling($, rt)
   }
-  await update($, connectionAtom, connection => ({ ...connection, isLeader: rt.isLeader }))
+  await putIf(await read($, connectionAtom), connection => ({ ...connection, isLeader: rt.isLeader }), fn => update($, connectionAtom, fn))
 }
 
 async function stepDown($: EngineInterface, rt: Runtime): Promise<void> {
@@ -1263,7 +1492,7 @@ async function stepDown($: EngineInterface, rt: Runtime): Promise<void> {
   rt.leaseVerified = false
   rt.pollTimer?.cancel()
   rt.pollTimer = undefined
-  await update($, connectionAtom, connection => ({ ...connection, isLeader: false }))
+  await putIf(await read($, connectionAtom), connection => ({ ...connection, isLeader: false }), fn => update($, connectionAtom, fn))
 }
 
 async function startPolling($: EngineInterface, rt: Runtime): Promise<void> {
@@ -1289,6 +1518,10 @@ async function pollRound($: EngineInterface, rt: Runtime): Promise<void> {
   if (isLeaseTaken(parseLease(await readJsonFile($, paths.lease(rt))), rt.me, now)) return stepDown($, rt)
   let busy = false
   if (now >= rt.backoffUntil) {
+    // Who wrote an outgoing row depends on the linked number: never judge rows before that is known.
+    if (rt.mode === 'unknown') await checkConnection($, rt)
+    // Silent, Night and Interaction as they are now (another session or the phone may have changed them).
+    await refreshHub($, rt)
     const files = await readSessionFiles($, rt, SESSION_FILE_FRESH_MS)
     busy = await pollMessages($, rt, files)
     rt.polls += 1
@@ -1298,6 +1531,7 @@ async function pollRound($: EngineInterface, rt: Runtime): Promise<void> {
     busy = busy || anyAway || anyOpen || now - rt.lastInboundAt < 5 * 60_000
     await leaderSchedules($, rt, files)
     if (rt.leader !== undefined) await writeJsonFile($, paths.leader(rt), rt.leader)
+    await showInbound($, rt, rt.leader)
   }
   if (!rt.isLeader) return
   const targets = rt.scoped ? allowlist(rt).length : 1
@@ -1305,9 +1539,27 @@ async function pollRound($: EngineInterface, rt: Runtime): Promise<void> {
   schedulePoll($, rt, wait)
 }
 
+/** The poll interval the pane's health judges by: the slow one (nobody away, nothing open). */
+const quietPollMs = (rt: Runtime): number => pollInterval({ baseSeconds: rt.settings.pollSeconds, targets: rt.scoped ? allowlist(rt).length : 1, isBusy: false })
+
+/** The pane's inbound line, from the leader's state (this session's, or the leader's file another session wrote). */
+async function showInbound($: EngineInterface, rt: Runtime, leader: Partial<LeaderState> | undefined): Promise<void> {
+  const health = inboundHealth({
+    now: await $.clock.now(),
+    isConfigured: isConfigured(rt),
+    lastPollAt: typeof leader?.lastPollAt === 'number' ? leader.lastPollAt : 0,
+    lastPollError: typeof leader?.lastPollError === 'string' ? leader.lastPollError : '',
+    pollEveryMs: quietPollMs(rt),
+  })
+  const lastAt = typeof leader?.lastInboundAt === 'number' ? leader.lastInboundAt : 0
+  await putIf(await read($, inboundAtom), () => ({ lastAt, ...health }), fn => update($, inboundAtom, fn))
+}
+
 /**
- * Reads what is new since the cursor of each target (one global listing, or one per allowlisted chat with
- * a chat-scoped key), oldest first, and handles each row once. Rows of other chats are dropped unread.
+ * Reads what is new since the cursor of each target (one global listing, or one per allowlisted chat with a
+ * chat-scoped key), oldest first, and handles each row once. Both directions are read: with the owner's own number
+ * linked, what they type on the phone (self-chat, project groups) is stored as outgoing (fromMe). OpenWA 0.24 has no
+ * `direction` filter anyway (see api.messages).
  */
 async function pollMessages($: EngineInterface, rt: Runtime, files: SessionFile[]): Promise<boolean> {
   const leader = rt.leader ?? emptyLeader()
@@ -1317,16 +1569,17 @@ async function pollMessages($: EngineInterface, rt: Runtime, files: SessionFile[
   for (const chatId of targets) {
     const key = chatId ?? '*'
     const cursor = leader.cursors[key]
-    const direction = rt.mode === 'self' ? undefined : ('incoming' as const)
     const fresh: WaRow[] = []
     let after: string | undefined
     for (let page = 0; page < MAX_PAGES; page += 1) {
-      const result = await waCall($, rt, api.messages(rt.sessionId, { limit: PAGE_LIMIT, ...(chatId !== undefined ? { chatId } : {}), ...(after !== undefined ? { after } : {}), ...(direction !== undefined ? { direction } : {}) }))
+      const result = await waCall($, rt, api.messages(rt.sessionId, { limit: PAGE_LIMIT, ...(chatId !== undefined ? { chatId } : {}), ...(after !== undefined ? { after } : {}) }))
       if (!result.ok) {
+        leader.lastPollError = failure(result)
         if (result.status !== 429) {
           rt.backoffMs = backoff(rt.backoffMs, undefined)
           rt.backoffUntil = (await $.clock.now()) + rt.backoffMs
         }
+        leader.lastPollAt = await $.clock.now()
         return handled > 0
       }
       rt.backoffMs = 0
@@ -1351,30 +1604,67 @@ async function pollMessages($: EngineInterface, rt: Runtime, files: SessionFile[
       if (await handleRow($, rt, files, row)) handled += 1
     }
   }
+  leader.lastPollAt = await $.clock.now()
+  leader.lastPollError = ''
   if (handled > 0) rt.lastInboundAt = await $.clock.now()
   return handled > 0
 }
 
-/** Who wrote a row: the owner, a member, or the bot itself (its own sends are skipped). */
+/** Whether a row is one the bridge sent itself: its invisible mark, or an id a session recorded at send time. */
+const isBotEcho = (rt: Runtime, files: readonly SessionFile[], row: WaRow): boolean =>
+  row.body.endsWith(BOT_MARK) || rt.file.sentIds.includes(row.waMessageId) || files.some(file => file.sentIds.includes(row.waMessageId))
+
+/**
+ * Who wrote a row. Outgoing (fromMe) rows are the bot's own sends (skipped, by mark or id) or, with the owner's own
+ * number linked, the owner typing on the phone. Incoming rows are the owner when the sender's number is theirs: a
+ * group's `author`, a DM's `from`; an `@lid` sender is resolved through OpenWA (both engines report privacy ids).
+ */
 async function senderOf($: EngineInterface, rt: Runtime, files: SessionFile[], row: WaRow): Promise<'owner' | 'member' | 'bot'> {
   if (row.direction === 'outgoing') {
-    const isOurs = row.body.endsWith(BOT_MARK) || files.some(file => file.sentIds.includes(row.waMessageId)) || rt.file.sentIds.includes(row.waMessageId)
-    return isOurs || rt.mode !== 'self' ? 'bot' : 'owner'
+    if (isBotEcho(rt, files, row)) return 'bot'
+    return rt.mode === 'self' ? 'owner' : 'bot'
   }
-  const id = row.author ?? row.from
-  let phone = phoneOf(id)
-  if (phone === '' && id.endsWith('@lid')) phone = await resolveLid($, rt, id)
+  const phone = await phoneOfSender($, rt, row.author ?? row.from)
   return isOwnerPhone(phone, rt.owners) ? 'owner' : 'member'
+}
+
+/** The phone digits behind a WhatsApp id, an `@lid` resolved through OpenWA (cached); '' when unknown. */
+async function phoneOfSender($: EngineInterface, rt: Runtime, waId: string): Promise<string> {
+  const id = normalizeJid(waId)
+  const phone = phoneOf(id)
+  return phone !== '' || !id.endsWith('@lid') ? phone : resolveLid($, rt, id)
 }
 
 async function resolveLid($: EngineInterface, rt: Runtime, lid: string): Promise<string> {
   const leader = rt.leader ?? emptyLeader()
   const cached = leader.lidPhones[lid]
-  if (cached !== undefined) return cached
+  if (cached !== undefined && cached !== '') return cached
   const result = await waCall($, rt, api.contactPhone(rt.sessionId, lid))
   const phone = isRecord(result.json) && typeof result.json.phone === 'string' ? result.json.phone.replace(/\D/g, '') : ''
-  if (result.ok) leader.lidPhones[lid] = phone
+  // A null answer is "not learned yet" (OpenWA's words): asked again next time, never cached as nobody.
+  if (result.ok && phone !== '') leader.lidPhones[lid] = phone
   return phone
+}
+
+/**
+ * Whether the leader may read a chat: an allowlisted one, or a direct chat that is the owner's under another id (a
+ * DM or the self-chat keyed by an `@lid`, as WhatsApp's privacy ids now do). Such a chat is remembered in chats.json
+ * (every session's allowlist reads it), so replies and later messages reach it.
+ */
+async function isReadable($: EngineInterface, rt: Runtime, row: WaRow): Promise<boolean> {
+  const chatId = normalizeJid(row.chatId)
+  if (isAllowed(rt, chatId)) return true
+  if (isGroupChat(chatId) || !chatId.endsWith('@lid')) return false
+  // With the owner's own number linked, "Message yourself" is the chat whose id is the sender's own: no lookup needed.
+  const isSelfChat = rt.mode === 'self' && row.direction === 'outgoing' && normalizeJid(row.from) === chatId
+  const phone = isSelfChat ? '' : await resolveLid($, rt, chatId)
+  const isOwners = isSelfChat || isOwnerPhone(phone, rt.owners) || (rt.mode === 'self' && phone !== '' && phone === rt.botPhone)
+  if (!isOwners) return false
+  const stored = await readJsonFile($, paths.chats(rt))
+  const known = isRecord(stored) && Array.isArray(stored.owner) ? stored.owner.filter((one): one is string => typeof one === 'string') : []
+  rt.ownerChats = [...new Set([...known, ...rt.ownerChats, chatId])]
+  await writeJsonFile($, paths.chats(rt), { owner: rt.ownerChats })
+  return true
 }
 
 const sentIndex = (files: readonly SessionFile[]): Map<string, string> => {
@@ -1383,24 +1673,54 @@ const sentIndex = (files: readonly SessionFile[]): Map<string, string> => {
   return index
 }
 
+/** Notes one inbound row for `/wa inbox` (the leader's own file): never the text of a chat it may not read. */
+async function noteInbound($: EngineInterface, rt: Runtime, row: WaRow, who: WaInboundEvent['who'], verdict: WaInboundEvent['verdict'], reason: string, isRead: boolean): Promise<void> {
+  const event: WaInboundEvent = {
+    at: await $.clock.now(),
+    chat: maskChat(row.chatId, isRead),
+    who,
+    text: isRead ? oneLine(takePin(row.body.replace(BOT_MARK, ''), rt.settings.pin).text, 60) : '(not read)',
+    verdict,
+    reason,
+  }
+  const path = paths.inboundFrom(rt, rt.me || 'unknown')
+  const lines = (await readLines($, path)).slice(-(INBOUND_KEEP - 1))
+  await writeLines($, path, [...lines, event])
+}
+
 /** Handles one new row: allowlist first (anything else is dropped unread), then owner or member. */
 async function handleRow($: EngineInterface, rt: Runtime, files: SessionFile[], row: WaRow): Promise<boolean> {
-  if (!isAllowed(rt, row.chatId)) return false
+  if (!(await isReadable($, rt, row))) {
+    // The bot's own sends to a chat it may not read cannot happen (sends are allowlisted): skip them silently.
+    if (!(row.direction === 'outgoing' && isBotEcho(rt, files, row))) await noteInbound($, rt, row, 'unknown', 'dropped', 'chat not allowlisted (read nothing)', false)
+    return false
+  }
   const who = await senderOf($, rt, files, row)
-  if (who === 'bot') return false
+  if (who === 'bot') {
+    // The bot's own echoes are not logged: they would fill /wa inbox with what the bridge itself said.
+    if (!isBotEcho(rt, files, row)) await noteInbound($, rt, row, 'bot', 'dropped', 'sent by the linked bot number', true)
+    return false
+  }
   const now = await $.clock.now()
+  if (rt.leader !== undefined) rt.leader.lastInboundAt = now
   const sessions = files.map(file => file.info)
   const sentBy = sentIndex(files)
   const text = row.body
   if (who === 'member') {
-    if (!isGroupChat(row.chatId)) return false
+    if (!isGroupChat(row.chatId)) {
+      await noteInbound($, rt, row, 'member', 'dropped', 'not the owner, in a direct chat', true)
+      return false
+    }
     return handleMemberRow($, rt, files, row, now)
   }
   const parsed = parseCommand(text, rt.settings.pin)
   const isTagged = /^\s*[#@][\p{L}\p{N}_.-]/u.test(text)
   // A tag picks a session for status and prompts; every other command is about all sessions anyway.
   const isGlobal = !(isTagged && parsed.command.kind === 'status')
-  if (isGlobal && (await handleGlobalCommand($, rt, files, row, parsed.command, parsed.needsPin && !parsed.hasPin))) return true
+  if (isGlobal && (await handleGlobalCommand($, rt, files, row, parsed.command, parsed.needsPin && !parsed.hasPin))) {
+    await noteInbound($, rt, row, 'owner', 'accepted', `command: ${parsed.command.kind}`, true)
+    return true
+  }
   const kind = parsed.command.kind
   const mayAnswer = !isTagged && row.quotedId === undefined && (kind === 'prompt' || kind === 'approve' || kind === 'reject')
   // An unquoted "2" or "sì" answers the newest open question in this chat, whichever session asked it.
@@ -1410,14 +1730,24 @@ async function handleRow($: EngineInterface, rt: Runtime, files: SessionFile[], 
         .filter(({ id }) => sessions.some(session => session.id === id && isLive(session, now)))
         .sort((a, b) => b.item.createdAt - a.item.createdAt)[0]
     : undefined
+  // A reply to one of the bot's questions or alerts goes to the session that asked it.
+  const isReplyToPending = row.quotedId !== undefined && files.some(file => file.pending.some(item => item.messageId === row.quotedId))
   const routed = waiting !== undefined
     ? { sessionId: waiting.id, text, reason: 'reply' as const }
     : route({ chatId: row.chatId, text, now, ...(row.quotedId !== undefined ? { quotedId: row.quotedId } : {}) }, { sessions, sentBy, groups: rt.groups })
+  // A question is answered at once, by the leader or the session it is about: no Claude turn, no confirmation.
+  const asked = routed.text
+  if (waiting === undefined && !isReplyToPending && kind === 'prompt' && row.media === undefined && row.type === 'text' && classifyOwnerText(asked) === 'question') {
+    await noteInbound($, rt, row, 'owner', 'accepted', 'question: answered from WhatsApp', true)
+    await answerQuestion($, rt, files, { row, text: asked, audience: 'owner', author: row.author ?? row.from, targetId: routed.sessionId })
+    return true
+  }
   const target = routed.sessionId === null ? undefined : sessions.find(session => session.id === routed.sessionId)
   // In the owner's direct chat, a project that has its own group is steered from that group.
-  if (target !== undefined && !isGroupChat(row.chatId) && routed.reason !== 'reply' && rt.groups[target.root] !== undefined) {
-    const group = rt.groups[target.root]?.name ?? 'its group'
-    await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'reply', text: `🤖 ${target.project} is steered from its group "${group}": send it there.` })
+  const targetGroup = target === undefined ? undefined : groupOfSession(rt.groups, target)
+  if (target !== undefined && targetGroup !== undefined && !isGroupChat(row.chatId) && routed.reason !== 'reply') {
+    await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'reply', text: `🤖 ${target.project} is steered from its group "${targetGroup.name}": send it there.` })
+    await noteInbound($, rt, row, 'owner', 'accepted', `pointed to the group "${targetGroup.name}"`, true)
     return true
   }
   if (routed.sessionId === null) {
@@ -1428,6 +1758,7 @@ async function handleRow($: EngineInterface, rt: Runtime, files: SessionFile[], 
           ? `No Claude Code session is running for ${projectNameOf(routed.detail)} right now.`
           : 'No Claude Code session is running right now.'
     await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'reply', text: `🤖 ${why}` })
+    await noteInbound($, rt, row, 'owner', 'accepted', `no session to run it (${routed.reason})`, true)
     return true
   }
   await deliver($, rt, routed.sessionId, {
@@ -1441,10 +1772,14 @@ async function handleRow($: EngineInterface, rt: Runtime, files: SessionFile[], 
     ...(row.quotedId !== undefined ? { quotedId: row.quotedId } : {}),
     ...(row.media !== undefined && row.type !== 'text' ? { media: { type: row.type, mimetype: row.media.mimetype, ...(row.media.filename !== undefined ? { filename: row.media.filename } : {}) } } : {}),
   })
+  await noteInbound($, rt, row, 'owner', 'accepted', `${waiting !== undefined || isReplyToPending ? 'answer' : 'request'} → #${sessions.find(one => one.id === routed.sessionId)?.label ?? '?'}`, true)
   return true
 }
 
-/** A group member's message: only when meant for Claude (mention, reply, trigger word, bug report), within the limits. */
+/**
+ * A group member's message: only when meant for Claude (mention, reply, trigger word, bug report), within the limits.
+ * Members ask; they never command: a command or a work request gets a one-line refusal and nothing runs.
+ */
 async function handleMemberRow($: EngineInterface, rt: Runtime, files: SessionFile[], row: WaRow, now: number): Promise<boolean> {
   const sentBy = sentIndex(files)
   const trigger = memberTrigger(row.body, {
@@ -1452,37 +1787,52 @@ async function handleMemberRow($: EngineInterface, rt: Runtime, files: SessionFi
     botPhone: rt.botPhone,
     isReplyToBot: row.quotedId !== undefined && sentBy.has(row.quotedId),
   })
-  if (!trigger.isTriggered) return false
+  if (!trigger.isTriggered) {
+    await noteInbound($, rt, row, 'member', 'dropped', 'chatter (no "?", mention or reply to the bot)', true)
+    return false
+  }
   const event: WaEventKey = trigger.isBug ? 'bugReports' : 'memberQuestions'
-  if (!rt.prefs.events[event]) return false
+  if (!rt.prefs.events[event]) {
+    await noteInbound($, rt, row, 'member', 'dropped', `${EVENT_LABELS[event]} is switched off`, true)
+    return false
+  }
   // A bug draft asks the owner for a 👍: an interaction, so only while interaction is on.
-  if (trigger.isBug && !canInteract(rt, now)) return false
+  if (trigger.isBug && !canInteract(rt, now)) {
+    await noteInbound($, rt, row, 'member', 'dropped', 'bug report while interaction is off', true)
+    return false
+  }
   const leader = rt.leader ?? emptyLeader()
   const member = row.author ?? row.from
+  if (!trigger.isBug && isMemberCommand(trigger.text, parseCommand(trigger.text).command.kind !== 'prompt')) {
+    await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'member', audience: 'member', text: '🔒 Only the owner can ask Claude to do things. You can ask questions about the work (start with *?*).' })
+    await appendMemberLog($, rt, { at: now, member: memberName(row), question: trigger.text, answer: '', outcome: 'limited' })
+    await noteInbound($, rt, row, 'member', 'dropped', 'a command from a member (refused)', true)
+    return true
+  }
   const quota = takeQuota(leader.book, member, now, dayKey(now), { perTenMinutes: rt.settings.memberRate, dailyCap: rt.settings.memberDailyCap })
   leader.book = quota.book
   if (!quota.isAllowed) {
     await appendMemberLog($, rt, { at: now, member: memberName(row), question: trigger.text, answer: '', outcome: 'limited' })
+    await noteInbound($, rt, row, 'member', 'dropped', quota.why ?? 'member limit', true)
     return false
   }
-  const root = projectOfChat(rt.groups, row.chatId)
+  const key = projectOfChat(rt.groups, row.chatId)
   const target = files
     .map(file => file.info)
-    .filter(session => session.root === root && isLive(session, now))
+    .filter(session => key !== undefined && isSessionOfKey(session, key) && isLive(session, now))
     .sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]
-  if (target === undefined) {
-    await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'member', audience: 'member', text: '🤖 Claude is not running for this project right now; the owner will see your message.' })
+  if (trigger.isBug) {
+    if (target === undefined) {
+      await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'member', audience: 'member', text: '🤖 Claude is not running for this project right now; the owner will see your message.' })
+      await noteInbound($, rt, row, 'member', 'accepted', 'bug report, no session running', true)
+      return true
+    }
+    await deliver($, rt, target.id, { key: `row:${row.id}`, at: now, kind: 'bug', chatId: row.chatId, messageId: row.waMessageId, author: memberName(row), text: trigger.text })
+    await noteInbound($, rt, row, 'member', 'accepted', `bug report → #${target.label}`, true)
     return true
   }
-  await deliver($, rt, target.id, {
-    key: `row:${row.id}`,
-    at: now,
-    kind: trigger.isBug ? 'bug' : 'member',
-    chatId: row.chatId,
-    messageId: row.waMessageId,
-    author: memberName(row),
-    text: trigger.text,
-  })
+  await noteInbound($, rt, row, 'member', 'accepted', 'question: answered from WhatsApp', true)
+  await answerQuestion($, rt, files, { row, text: trigger.text, audience: 'member', author: memberName(row), targetId: target?.id ?? null })
   return true
 }
 
@@ -1490,6 +1840,132 @@ const memberName = (row: WaRow): string => {
   const id = row.author ?? row.from
   const phone = phoneOf(id)
   return phone !== '' ? `+${phone.slice(0, -4).replace(/\d/g, '•')}${phone.slice(-4)}` : 'a member'
+}
+
+// ── Questions over WhatsApp: answered at once, no Claude turn ────────────────────────────────────
+
+type Question = { row: WaRow; text: string; audience: 'owner' | 'member'; author: string; targetId: string | null }
+
+/** What answering cost today across every session (each session's file keeps its own). */
+const qaSpentToday = (files: readonly SessionFile[], rt: Runtime, now: number): number =>
+  files.reduce((sum, file) => sum + ((file.info.id === rt.me ? rt.file : file).stats.qaUsdByDay?.[dayKey(now)] ?? 0), 0)
+
+/**
+ * A question from the owner or a member: held while interaction is off (one "I'll answer later" per chat), refused
+ * past the per-chat rate or the day's cost cap, else answered: by the session it is about when that is another live
+ * session (from its own transcript), by the leader otherwise (its transcript when it is that session and idle, else
+ * the facts it keeps). Nothing runs; members get the member rules.
+ */
+async function answerQuestion($: EngineInterface, rt: Runtime, files: SessionFile[], question: Question): Promise<void> {
+  const leader = rt.leader ?? emptyLeader()
+  const now = await $.clock.now()
+  const { row } = question
+  const root = question.targetId !== null ? files.find(file => file.info.id === question.targetId)?.info.root : projectRootOfChat(rt, row.chatId)
+  if (!mayReply(rt, now)) {
+    leader.parkedQuestions = [...leader.parkedQuestions, { at: now, chatId: row.chatId, messageId: row.waMessageId, text: question.text, audience: question.audience, author: question.author, root }].slice(-PARKED_QUESTIONS_KEEP)
+    if (!leader.toldLater.includes(row.chatId)) {
+      leader.toldLater = [...leader.toldLater, row.chatId]
+      await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'later', audience: question.audience, text: "🌙 Claude isn't answering right now (silent or night mode). I'll answer when interaction is back on." })
+    }
+    return
+  }
+  const quota = takeQa(leader.qa, row.chatId, now, { perTenMinutes: rt.settings.qaRate, dailyUsd: rt.settings.qaDailyUsd, spentToday: qaSpentToday(files, rt, now) })
+  leader.qa = quota.book
+  if (!quota.isAllowed) {
+    if (question.audience === 'owner') await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'reply', text: `⏳ Not answered: ${quota.why ?? 'limit reached'}.` })
+    else await appendMemberLog($, rt, { at: now, member: question.author, question: question.text, answer: '', outcome: 'limited' })
+    return
+  }
+  const target = question.targetId === null ? undefined : files.find(file => file.info.id === question.targetId)?.info
+  if (target !== undefined && target.id !== rt.me && isLive(target, now)) {
+    await deliver($, rt, target.id, { key: `row:${row.id}`, at: now, kind: 'question', audience: question.audience, chatId: row.chatId, messageId: row.waMessageId, author: question.author, text: question.text })
+    return
+  }
+  await appendLog($, rt, { dir: 'in', chatId: row.chatId, kind: 'question', text: question.text, messageId: row.waMessageId, who: question.audience })
+  const info = target ?? newestSessionOf(files, root)
+  await replyToQuestion($, rt, { chatId: row.chatId, messageId: row.waMessageId, text: question.text, audience: question.audience, author: question.author }, info, now)
+}
+
+/** The project root a chat stands for: its group's, or (the owner's chat) this session's. */
+const projectRootOfChat = (rt: Runtime, chatId: string): string | undefined => {
+  const key = projectOfChat(rt.groups, chatId)
+  return key === undefined ? undefined : parseGroupKey(key).root
+}
+
+/** The most recently active session of a project (or of any project), live or not: what a question is about. */
+const newestSessionOf = (files: readonly SessionFile[], root: string | undefined): WaSessionInfo | undefined =>
+  files
+    .map(file => file.info)
+    .filter(info => root === undefined || info.root === root)
+    .sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]
+
+/**
+ * Answers one question here: a fork of this session's transcript when the question is about this session and no
+ * turn runs, else one short completion from the facts (status, last answer, git, the hub's recent events). Records
+ * the estimated cost for the daily cap, and the member log for a member.
+ */
+async function replyToQuestion(
+  $: EngineInterface,
+  rt: Runtime,
+  question: { chatId: string; messageId: string; text: string; audience: 'owner' | 'member'; author: string },
+  info: WaSessionInfo | undefined,
+  now: number,
+): Promise<void> {
+  const context = await questionContext($, rt, info, question.audience, now)
+  const prompt = qaPrompt(question.text, context, question.audience, rt.settings.shareCodeWithMembers)
+  let answer = ''
+  let usage: Usage | undefined
+  if (info?.id === rt.me && rt.state === 'idle') {
+    const forked = await $.model.fork({ prompt }).catch(() => undefined)
+    if (forked?.isAnswered === true) {
+      answer = forked.text
+      usage = forked.usage
+    }
+  }
+  if (answer === '') {
+    const done = await $.model.complete({ model: 'haiku', prompt, maxTokens: 300, timeoutMs: 30_000 }).catch(() => undefined)
+    if (done?.isAnswered === true) {
+      answer = done.text
+      usage = done.usage
+    }
+  }
+  if (usage !== undefined) {
+    const day = dayKey(now)
+    const byDay = rt.file.stats.qaUsdByDay ?? {}
+    rt.file.stats.qaUsdByDay = { [day]: (byDay[day] ?? 0) + estimateUsd(usage) }
+    await saveSelf($, rt)
+  }
+  const isMember = question.audience === 'member'
+  const text = answer === '' ? '🤖 I could not answer right now.' : `🤖 ${clean(answer, { audience: question.audience, maxChars: isMember ? 700 : 900, root: rt.root, shareCode: rt.settings.shareCodeWithMembers }).text}`
+  await waSendText($, rt, { chatId: question.chatId, quotedId: question.messageId, kind: isMember ? 'member' : 'answer', audience: question.audience, text })
+  if (isMember) await appendMemberLog($, rt, { at: now, member: question.author, question: question.text, answer: text, outcome: answer === '' ? 'failed' : 'answered' })
+}
+
+/** The facts a question is answered from. Git and the hub are asked with short timeouts; any of them may be missing. */
+async function questionContext($: EngineInterface, rt: Runtime, info: WaSessionInfo | undefined, audience: 'owner' | 'member', now: number): Promise<QaContext> {
+  const root = info?.root ?? rt.root
+  const isThis = info === undefined || info.id === rt.me
+  const git = async (argv: string[]): Promise<string> => {
+    const ran = root === '' ? undefined : await $.process.run(['git', ...argv], { cwd: root, timeoutMs: 5_000 }).catch(() => undefined)
+    return ran?.exitCode === 0 ? ran.stdout.trim() : ''
+  }
+  const status = await git(['status', '--short'])
+  const events: string[] = []
+  if (rt.hub !== undefined) {
+    const recent = await $.mods.recent({ limit: 12 }).catch(() => [] as ModsEvent[])
+    for (const event of recent) if (!event.topic.startsWith('channel.')) events.push(`${event.topic} from ${event.source}${typeof (event.data as { outcome?: unknown } | null)?.outcome === 'string' ? ` (${String((event.data as { outcome: string }).outcome)})` : ''}`)
+  }
+  return {
+    project: info?.project ?? rt.project,
+    label: info?.label ?? rt.label,
+    branch: info?.branch ?? rt.branch,
+    state: info === undefined || (!isThis && !isLive(info, now)) ? (isThis ? rt.state : 'offline') : isThis ? rt.state : info.state,
+    task: info?.task ?? rt.task,
+    summary: audience === 'owner' ? (info?.summary ?? '') : clean(info?.summary ?? '', { audience: 'member', maxChars: 300, root, shareCode: false }).text,
+    changes: status === '' ? [] : status.split('\n').map(line => line.trim()).filter(line => line !== ''),
+    lastCommit: await git(['log', '-1', '--format=%s']),
+    events,
+  }
 }
 
 /** One inbox line and the leader that wrote it ('' for the older single inbox file). */
@@ -1532,18 +2008,19 @@ async function deliver($: EngineInterface, rt: Runtime, sessionId: string, entry
 async function pollReactions($: EngineInterface, rt: Runtime, files: SessionFile[]): Promise<void> {
   const leader = rt.leader ?? emptyLeader()
   const now = await $.clock.now()
+  // One read per chat with something open: OpenWA 0.24 cannot fetch one message by id (no `messageId` filter).
+  const pages = new Map<string, WaRow[]>()
   for (const file of files) {
     for (const item of file.pending.filter(one => one.expiresAt > now && one.messageId !== '').slice(-6)) {
       if (!isAllowed(rt, item.chatId)) continue
-      const result = await waCall($, rt, api.messages(rt.sessionId, { chatId: item.chatId, messageId: item.messageId, limit: 1 }))
-      const row = parseRows(result.json)[0]
+      if (!pages.has(item.chatId)) pages.set(item.chatId, parseRows((await waCall($, rt, api.messages(rt.sessionId, { chatId: item.chatId, limit: PAGE_LIMIT }))).json))
+      const row = pages.get(item.chatId)?.find(one => one.waMessageId === item.messageId)
       if (row === undefined) continue
       for (const [reactor, emoji] of Object.entries(row.reactions)) {
         const key = `reaction:${item.messageId}:${reactor}:${emoji}`
         if (leader.seen.includes(key)) continue
         leader.seen = remember(leader.seen, [key])
-        let phone = phoneOf(reactor)
-        if (phone === '' && reactor.endsWith('@lid')) phone = await resolveLid($, rt, reactor)
+        const phone = await phoneOfSender($, rt, reactor)
         const isOwner = isOwnerPhone(phone, rt.owners) || (rt.mode === 'self' && phone === rt.botPhone)
         if (!isOwner || reactionMeaning(emoji) === undefined) continue
         await deliver($, rt, file.info.id, { key, at: now, kind: 'reaction', chatId: item.chatId, messageId: item.messageId, author: reactor, text: '', emoji, targetId: item.messageId })
@@ -1566,7 +2043,7 @@ async function handleGlobalCommand(
 ): Promise<boolean> {
   const now = await $.clock.now()
   const groupRoot = projectOfChat(rt.groups, row.chatId)
-  const live = files.map(file => file.info).filter(session => isLive(session, now) && (groupRoot === undefined || session.root === groupRoot))
+  const live = files.map(file => file.info).filter(session => isLive(session, now) && (groupRoot === undefined || isSessionOfKey(session, groupRoot)))
   const reply = (text: string): Promise<string> => waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'command', text })
   switch (command.kind) {
     case 'help':
@@ -1645,6 +2122,7 @@ async function leaderSchedules($: EngineInterface, rt: Runtime, files: SessionFi
   const interactive = canInteract(rt, now)
   if (interactive && !leader.wasInteractive) await deliverParked($, rt, files, ownerChat(rt))
   leader.wasInteractive = interactive
+  if (leader.parkedQuestions.length > 0 && mayReply(rt, now)) await answerParkedQuestions($, rt, files)
   const activeSince = (since: number): SessionFile[] => files.filter(file => file.info.lastActiveAt > since || file.info.lastSeen > since)
   if (rt.prefs.events.briefing && crossed(parseClock(rt.settings.briefingTime), previous, now) && activeSince(now - 24 * 60 * 60_000).length > 0) {
     const text = briefingText('morning', activeSince(now - 24 * 60 * 60_000).map(file => file.info), now)
@@ -1658,6 +2136,18 @@ async function leaderSchedules($: EngineInterface, rt: Runtime, files: SessionFi
   if (now - leader.lastDigestAt >= rt.settings.digestMinutes * 60_000) {
     if (leader.lastDigestAt === 0) leader.lastDigestAt = now
     else await sendDigest($, rt, files, 'periodic', ownerChat(rt))
+  }
+}
+
+/** Interaction is back on: the questions that came in meanwhile are answered now, and chats may be told "later" again. */
+async function answerParkedQuestions($: EngineInterface, rt: Runtime, files: SessionFile[]): Promise<void> {
+  const leader = rt.leader ?? emptyLeader()
+  const parked = leader.parkedQuestions
+  leader.parkedQuestions = []
+  leader.toldLater = []
+  const now = await $.clock.now()
+  for (const one of parked) {
+    await replyToQuestion($, rt, { chatId: one.chatId, messageId: one.messageId, text: one.text, audience: one.audience, author: one.author }, newestSessionOf(files, one.root), now)
   }
 }
 
@@ -1723,7 +2213,7 @@ async function consumeInbox($: EngineInterface, rt: Runtime): Promise<void> {
 }
 
 async function handleEntry($: EngineInterface, rt: Runtime, entry: InboxEntry): Promise<void> {
-  const who = entry.kind === 'member' || entry.kind === 'bug' ? 'member' : 'owner'
+  const who = entry.kind === 'member' || entry.kind === 'bug' || entry.audience === 'member' ? 'member' : 'owner'
   // The PIN that unlocks "/compact 1234" is a secret: never in the log, the panel or the hub's bus.
   const shown = who === 'owner' ? takePin(entry.text, rt.settings.pin).text : entry.text
   await appendLog($, rt, { dir: 'in', chatId: entry.chatId, kind: entry.kind, text: entry.emoji ?? shown, messageId: entry.messageId, who })
@@ -1732,12 +2222,25 @@ async function handleEntry($: EngineInterface, rt: Runtime, entry: InboxEntry): 
     case 'reaction':
       return handleReaction($, rt, entry)
     case 'member':
-      return answerMember($, rt, entry)
+    case 'question':
+      // From a timer of its own: the inbox is also read while `ask` waits inside a tool call, and a model call
+      // must not run on that hook's budget.
+      answerLater($, rt, { chatId: entry.chatId, messageId: entry.messageId, text: entry.text, audience: entry.kind === 'member' ? 'member' : who, author: entry.author })
+      return
     case 'bug':
       return draftBug($, rt, entry)
     case 'owner':
       return handleOwner($, rt, entry)
   }
+}
+
+function answerLater($: EngineInterface, rt: Runtime, question: { chatId: string; messageId: string; text: string; audience: 'owner' | 'member'; author: string }): void {
+  $.clock.after(0, () => {
+    void $.clock
+      .now()
+      .then(now => replyToQuestion($, rt, question, rt.file.info, now))
+      .catch(error => $.ui.log(`${NAME}: could not answer a WhatsApp question: ${messageOf(error)}`, { to: 'debug' }))
+  })
 }
 
 const replyTo = (entry: InboxEntry, text: string): SendInput => ({ chatId: entry.chatId, quotedId: entry.messageId, kind: 'reply', text })
@@ -1775,7 +2278,7 @@ async function handleOwner($: EngineInterface, rt: Runtime, entry: InboxEntry): 
       return queueTask($, rt, entry, command.task)
     case 'slash':
       rt.phoneQueue.push({ text: `/${command.command}${command.args !== '' ? ` ${command.args}` : ''}`, chatId: entry.chatId, messageId: entry.messageId })
-      await drainPhoneQueue($, rt)
+      scheduleDrain($, rt)
       return
     case 'retry': {
       const last = rt.lastPrompt
@@ -1797,8 +2300,8 @@ async function handleOwner($: EngineInterface, rt: Runtime, entry: InboxEntry): 
   let text = command.text
   if (entry.media !== undefined) text = await receiveMedia($, rt, entry)
   if (text.trim() === '') return
-  if (!canInteract(rt, now)) {
-    await waSendText($, rt, replyTo(entry, '🌙 Interaction is off right now. Send *interact on* first, then your request again.'))
+  if (!mayReply(rt, now)) {
+    await waSendText($, rt, replyTo(entry, '🌙 Interaction is off right now (silent or night). Send *interact on* first, then your request again.'))
     return
   }
   if (rt.prefs.events.confirmPrompts && entry.media === undefined) {
@@ -1820,7 +2323,7 @@ async function resolvePending($: EngineInterface, rt: Runtime, pending: Pending,
       if (rt.waiting.has(pending.id)) rt.answers.set(pending.id, answer)
       else rt.lateAnswers.push(`The user answered your earlier WhatsApp question «${oneLine(pending.question, 160)}»: ${answer.text}`)
       await waSendText($, rt, replyTo(entry, `✅ Got it: «${oneLine(answer.text, 80)}» → #${rt.label}`))
-      await drainPhoneQueue($, rt)
+      scheduleDrain($, rt)
       return
     case 'permission':
       rt.answers.set(pending.id, answer)
@@ -1877,7 +2380,15 @@ async function submitPhonePrompt($: EngineInterface, rt: Runtime, item: { text: 
     await waSendText($, rt, { chatId: item.chatId, quotedId: item.messageId, kind: 'reply', text: `⏳ Queued for #${rt.label}: Claude is busy and will start it next.` })
     return
   }
-  await drainPhoneQueue($, rt)
+  scheduleDrain($, rt)
+}
+
+/**
+ * Submits the next phone prompt from a timer of its own, never inside the hook or command that queued it: a prompt
+ * submitted from within a hook (a tool call waiting on `ask`, a command) would run inside that hook's budget.
+ */
+function scheduleDrain($: EngineInterface, rt: Runtime): void {
+  $.clock.after(0, () => void drainPhoneQueue($, rt).catch(error => $.ui.log(`${NAME}: ${messageOf(error)}`, { to: 'debug' })))
 }
 
 async function drainPhoneQueue($: EngineInterface, rt: Runtime): Promise<void> {
@@ -1908,7 +2419,7 @@ async function drainPhoneQueue($: EngineInterface, rt: Runtime): Promise<void> {
       rt.phoneTurn = undefined
       await waSendText($, rt, { chatId: item.chatId, quotedId: item.messageId, kind: 'reply', text: `❌ Not run: ${oneLine(submitted.drop, 200)}` })
     } else {
-      void waCall($, rt, api.react(rt.sessionId, item.chatId, item.messageId, '👀'))
+      await waSendText($, rt, { chatId: item.chatId, quotedId: item.messageId, kind: 'reply', text: `⚙️ Working on it (#${rt.label}). I'll post the result here when it is done.` })
     }
   } catch (error) {
     rt.phoneTurn = undefined
@@ -1923,7 +2434,7 @@ async function queueTask($: EngineInterface, rt: Runtime, entry: InboxEntry, tas
   const commands = await $.command.list().catch(() => [])
   if (commands.some(command => command.name === 'queue')) {
     rt.phoneQueue.push({ text: `/queue ${task}`, chatId: entry.chatId, messageId: entry.messageId })
-    await drainPhoneQueue($, rt)
+    scheduleDrain($, rt)
     return
   }
   const path = paths.queue(rt)
@@ -1936,8 +2447,9 @@ async function queueTask($: EngineInterface, rt: Runtime, entry: InboxEntry, tas
 async function receiveMedia($: EngineInterface, rt: Runtime, entry: InboxEntry): Promise<string> {
   const media = entry.media
   if (media === undefined) return entry.text
-  const result = await waCall($, rt, api.messages(rt.sessionId, { chatId: entry.chatId, messageId: entry.messageId, limit: 1, inlineMedia: true }))
-  const data = parseRows(result.json)[0]?.media?.data ?? ''
+  // The chat's newest rows with their media, the one by id among them (OpenWA 0.24 has no `messageId` filter).
+  const result = await waCall($, rt, api.messages(rt.sessionId, { chatId: entry.chatId, limit: 20, inlineMedia: true }))
+  const data = parseRows(result.json).find(row => row.waMessageId === entry.messageId)?.media?.data ?? ''
   const caption = entry.text.trim()
   if (data === '') return `${caption}\n\n(The user sent a ${media.type} from WhatsApp, but it could not be downloaded: it may be too large.)`.trim()
   const stamp = `${dayKey(await $.clock.now())}-${entry.messageId.replace(/[^A-Za-z0-9]/g, '').slice(-10)}`
@@ -1988,25 +2500,6 @@ async function transcribe($: EngineInterface, rt: Runtime, file: string): Promis
   const txt = `${file.replace(/\.[^./]+$/, '')}.txt`
   const text = await $.fs.read(txt).catch(() => '')
   return typeof text === 'string' ? text.trim() : ''
-}
-
-/** A member's question: a tool-less fork over this session's transcript, cleaned for members. */
-async function answerMember($: EngineInterface, rt: Runtime, entry: InboxEntry): Promise<void> {
-  const now = await $.clock.now()
-  const forked = await $.model.fork({ prompt: memberPrompt(entry.text, entry.author, rt.settings.shareCodeWithMembers) })
-  let answer = forked.isAnswered ? forked.text : ''
-  if (answer === '' && !forked.isAnswered && forked.reason === 'nothing-to-fork') {
-    const done = await $.model.complete({
-      model: 'haiku',
-      prompt: `${memberPrompt(entry.text, entry.author, rt.settings.shareCodeWithMembers)}\nContext: project ${rt.project}, branch ${rt.branch}, current state ${rt.state}${rt.task !== '' ? `, working on: ${rt.task}` : ''}.`,
-      maxTokens: 400,
-      timeoutMs: 30_000,
-    })
-    answer = done.isAnswered ? done.text : ''
-  }
-  const text = answer === '' ? '🤖 I could not answer right now.' : `🤖 ${clean(answer, { audience: 'member', maxChars: 700, root: rt.root, shareCode: rt.settings.shareCodeWithMembers }).text}`
-  await waSendText($, rt, { chatId: entry.chatId, quotedId: entry.messageId, kind: 'member', audience: 'member', text })
-  await appendMemberLog($, rt, { at: now, member: entry.author, question: entry.text, answer: text, outcome: answer === '' ? 'failed' : 'answered' })
 }
 
 /** A member's bug report: a drafted issue posted to the group; only the owner's 👍 files it with gh. */
@@ -2373,6 +2866,7 @@ async function onTurnComplete($: EngineInterface, rt: Runtime, e: { reason: stri
   const now = await $.clock.now()
   rt.state = 'idle'
   rt.turnId = undefined
+  if (e.answer.trim() !== '') rt.file.info.summary = clean(oneLine(e.answer, 600), { audience: 'owner', maxChars: 600, root: rt.root }).text
   const phone = rt.phoneTurn
   rt.phoneTurn = undefined
   if (phone !== undefined) {
@@ -2541,21 +3035,28 @@ async function onSessionEnd($: EngineInterface, rt: Runtime): Promise<void> {
 
 /** The hub's global mode, re-read (another session or the phone may have changed it); unchanged without the hub. */
 async function refreshHub($: EngineInterface, rt: Runtime): Promise<void> {
-  if (rt.hub !== undefined) rt.hub = (await hubMode($)) ?? rt.hub
+  const mode = await hubMode($)
+  // A hub installed (or loaded) after this session started is greeted once it answers.
+  if (mode !== undefined && rt.hub === undefined && rt.isBackgroundStarted && !rt.isHubGreeted) await greetHub($, rt)
+  rt.hub = mode
 }
 
-type AttentionChange = { presence: 'away' | 'here' | 'auto' } | { interaction: 'on' | 'off' | 'auto' } | { night: true }
+type AttentionChange = { presence: 'away' | 'here' | 'auto' } | { interaction: 'on' | 'off' | 'auto' } | { night: boolean }
 
 /**
  * With mods-hub installed, presence, interaction and night are the hub's (every session, every channel): a change
  * from /wa, the panel or the phone goes there. Undefined without the hub, and the bridge changes its own prefs.
  */
 async function changeOnHub($: EngineInterface, rt: Runtime, change: AttentionChange, reason: 'manual' | 'channel'): Promise<HubMode | undefined> {
+  // Asked live, not from this session's copy: the pane draws the hub's mode when the hub answers, so a change made
+  // here must go to the hub then too (a stale copy sent it to the bridge's own prefs, and the button never moved).
+  rt.hub = await hubMode($)
   if (rt.hub === undefined) return undefined
   try {
     if ('presence' in change) rt.hub = await $.mods.setPresence({ presence: change.presence, reason })
     else if ('interaction' in change) rt.hub = await $.mods.setMode({ interaction: change.interaction })
-    else rt.hub = await $.mods.setMode({ isNightOn: true })
+    else rt.hub = await $.mods.setMode({ isNightOn: change.night })
+    await refreshAttention($, rt)
     return rt.hub
   } catch {
     return undefined
@@ -2575,7 +3076,8 @@ async function ownVersion($: EngineInterface): Promise<string> {
 /** With mods-hub installed: hello, the Channels tab, the `whatsapp` channel, and a pull of its notifications every few seconds. */
 async function greetHub($: EngineInterface, rt: Runtime): Promise<void> {
   rt.hub = await hubMode($)
-  if (rt.hub === undefined) return
+  if (rt.hub === undefined || rt.isHubGreeted) return
+  rt.isHubGreeted = true
   rt.hubSeenAt = await $.clock.now()
   await hubHello(
     $,
@@ -2708,7 +3210,20 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   rt.isStarted = true
   await refreshPane($, rt)
   if (isConfigured(rt)) void checkConnection($, rt).then(connection => (isSettling(EMPTY_SETUP, connection) ? ensureSetupTicks($, rt) : undefined)).catch(() => undefined)
-  if (!isInteractive) return
+  // The desktop app (and an IDE or phone host) runs its sessions through the SDK: `isInteractive` is false there, yet a
+  // person uses it all day. Such a session draws on a surface; a plain `claude -p` run draws on none and stays quiet.
+  const surfaces = await $.session.surfaces().catch(() => [] as readonly RenderSurface[])
+  if (isInteractive || surfaces.length > 0) await startBackground($, rt)
+}
+
+/**
+ * The background work of a session someone uses: the heartbeat, the inbox, screenshots, the hub, and the lease (so
+ * one such session polls WhatsApp for all). Once per load: from start-up, or when a surface attaches later.
+ */
+async function startBackground($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.isBackgroundStarted || !rt.isStarted) return
+  rt.isBackgroundStarted = true
+  rt.isHosted = true
   // "Start automatically" is the user's own opt-in; without it nothing starts unless they press Start.
   if (rt.config.autoStart === true) inBackground($, rt, async () => (await autoStart($, rt), ''))
   await greetHub($, rt)
@@ -2736,13 +3251,16 @@ async function heartbeat($: EngineInterface, rt: Runtime): Promise<void> {
     rt.file.parked = rt.file.parked.filter(item => item.seq > parkedSeq)
   }
   await saveSelf($, rt)
+  await refreshGroupCard($, rt, '')
   await tickLease($, rt)
   await watchServer($, rt)
   await refreshHub($, rt)
   await syncChannel($, rt)
   await readBus($, rt)
+  if (!rt.isLeader) await showInbound($, rt, isRecord(leader) ? (leader as Partial<LeaderState>) : undefined)
+  await refreshAttention($, rt)
   if (rt.isPaneOpen || (rt.hub !== undefined && (await hubTabIs($, TAB.id)))) await refreshPane($, rt)
-  if (rt.state === 'idle') await drainPhoneQueue($, rt)
+  if (rt.state === 'idle' && (rt.phoneQueue.length > 0 || rt.lateAnswers.length > 0)) scheduleDrain($, rt)
 }
 
 /**
@@ -2760,22 +3278,55 @@ async function watchServer($: EngineInterface, rt: Runtime): Promise<void> {
   if (isSettling(await read($, setupAtom), connection)) ensureSetupTicks($, rt)
 }
 
-/** Fills the pane's atoms from the shared files. */
+/**
+ * Fills the pane's atoms from the shared files, writing only what changed (see `put`): what a session file changes on
+ * every heartbeat (when it was last seen, its cost) is left out of what the pane draws.
+ */
 async function refreshPane($: EngineInterface, rt: Runtime): Promise<void> {
   const now = await $.clock.now()
   const files = await readSessionFiles($, rt, LIVE_MS * 2)
-  await update($, sessionsAtom, () => files.map(file => file.info).filter(info => isLive(info, now)).sort((a, b) => b.lastActiveAt - a.lastActiveAt))
+  const live = files.map(file => file.info).filter(info => isLive(info, now)).sort((a, b) => b.lastActiveAt - a.lastActiveAt)
+  rt.lastSessions = live
+  await putIf(await read($, sessionsAtom), () => live.map(info => ({ ...info, lastSeen: 0, lastActiveAt: 0, costUsd: 0, turns: 0, summary: '' })), fn => update($, sessionsAtom, fn))
   const logs: WaLogEntry[] = []
   for (const file of files) logs.push(...((await readLines($, paths.log(rt, file.info.id))).filter(isRecord) as unknown as WaLogEntry[]))
   logs.sort((a, b) => a.at - b.at)
-  await update($, conversationAtom, () => logs.filter(entry => entry.dir === 'in' || entry.dir === 'out').slice(-30))
+  await putIf(await read($, conversationAtom), () => logs.filter(entry => entry.dir === 'in' || entry.dir === 'out').slice(-30), fn => update($, conversationAtom, fn))
   const own = (await readLines($, paths.log(rt, rt.me))).filter(isRecord).slice(-40) as unknown as WaLogEntry[]
-  await update($, auditAtom, () => own)
+  await putIf(await read($, auditAtom), () => own, fn => update($, auditAtom, fn))
   const members = (await readMemberLogs($, rt)) as unknown as WaMemberQa[]
-  await update($, membersAtom, () => members.slice(-20))
-  await update($, privacyAtom, privacy => ({ ...privacy, allowlist: allowlist(rt) }))
+  await putIf(await read($, membersAtom), () => members.slice(-20), fn => update($, membersAtom, fn))
+  await putIf(await read($, privacyAtom), privacy => ({ ...privacy, allowlist: allowlist(rt) }), fn => update($, privacyAtom, fn))
   await refreshGroupCard($, rt, '')
 }
+
+/**
+ * The quick actions' one source of truth: mods-hub's mode when the hub answers, else the bridge's own prefs. Called
+ * on the heartbeat and right after every change, so a press shows at once and a tick redraws only a real change.
+ */
+async function refreshAttention($: EngineInterface, rt: Runtime): Promise<WaAttention> {
+  const now = await $.clock.now()
+  const hub = await hubMode($)
+  rt.hub = hub
+  const prefs = rt.prefs
+  const next: WaAttention =
+    hub === undefined
+      ? {
+          canAsk: interactionAllowed(prefs, rt.settings.interactionOffHours, now),
+          isAway: prefs.presence === 'away',
+          isNight: prefs.interaction === 'night' && now < prefs.nightUntil,
+          isPaused: prefs.paused,
+          interaction: prefs.interaction,
+          quietHours: prefs.quietHours,
+          label: interactionLabel(prefs, rt.settings.interactionOffHours, now),
+          isHub: false,
+        }
+      : { canAsk: hub.canAsk, isAway: hub.presence === 'away', isNight: hub.isNight, isPaused: prefs.paused, interaction: hub.interaction, quietHours: hub.quietHours, label: hubModeLabel(hub), isHub: true }
+  return putIf(await read($, attentionAtom), () => next, fn => update($, attentionAtom, fn))
+}
+
+/** Whether the Interaction switch reads ON: allowed now, or set to on (mods-hub's night may hold it until morning). */
+const isInteractionOn = (attention: WaAttention, interaction: string): boolean => attention.canAsk || interaction === 'on'
 
 // ── /wa ──────────────────────────────────────────────────────────────────────────────────────────
 
@@ -2785,7 +3336,9 @@ const WA_USAGE = [
   '/wa start · /wa stop — run OpenWA in Docker on this machine (or stop it) · /wa qr — print the linking QR',
   '/wa url <http://host:port/api> — use your own OpenWA · /wa autostart on | off',
   '/wa owner <+number> · /wa session <name|id> · /wa key <key> · /wa pair <+number>',
-  '/wa link-project [n] · /wa unlink-project — this project’s WhatsApp group',
+  '/wa groups · /wa group create [name] · /wa group rename|link|invite|unlink|leave <n> … — WhatsApp groups',
+  '/wa link-project [n] · /wa unlink-project — link an existing group to this project',
+  '/wa inbox — the last inbound messages and what happened to each',
   '/wa away | here | auto · /wa pause | resume',
   '/wa interact on | off | auto · /wa night · /wa silent',
   '/wa label <name> · /wa test · /wa digest · /wa report · /wa status',
@@ -2891,13 +3444,20 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
     }
     case 'help':
       return WA_USAGE
+    case 'inbox':
+      return inboxText(await readInboundEvents($, rt), clockTime)
+    case 'groups':
+      return managedGroupsText(rt)
+    case 'group':
+      return runGroup($, rt, arg)
     case 'status':
       return `${(await read($, connectionAtom)).detail}\nInteraction: ${interactionText(rt, now)} · presence ${rt.hub?.presence ?? rt.prefs.presence} · ${rt.prefs.paused ? 'paused' : 'notifying'} · ${rt.isLeader ? 'this session polls' : 'another session polls'}`
     case 'owner': {
-      const number = digitsOnly(arg)
+      const number = canonicalOwner(arg)
       if (number.length < 6) return 'Usage: /wa owner +39333…  (your own WhatsApp number, with country code)'
       await saveConfig($, rt, { ownerNumbers: [...new Set([...(rt.config.ownerNumbers ?? []), number])] })
-      return `Owner set: +${number}. Only this number can command Claude from WhatsApp.`
+      const warning = number.startsWith('0') ? ' It starts with 0: add your country code instead (+39…, +44…), or messages to you cannot be sent.' : ''
+      return `Owner set: +${number}. Only this number can command Claude from WhatsApp.${warning}`
     }
     case 'session': {
       const listed = await waCall($, rt, api.sessions())
@@ -2921,8 +3481,7 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
       return linkProject($, rt, arg)
     case 'unlink-project':
       if (projectGroup(rt) === undefined) return 'This project has no linked group.'
-      await saveGroups($, rt, groups => Object.fromEntries(Object.entries(groups).filter(([root]) => root !== rt.root)))
-      return 'Unlinked. Updates for this project go to your direct chat (the group itself is left as it is).'
+      return unlinkGroup($, rt, '', false)
     case 'away':
     case 'here':
     case 'auto': {
@@ -2956,6 +3515,11 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
       await savePrefs($, rt, prefs => ({ ...prefs, interaction: 'off' }))
       return 'Silent mode: Claude will not ask you anything on WhatsApp; questions are parked until /wa interact on.'
     case 'night': {
+      if (arg === 'off') {
+        if ((await changeOnHub($, rt, { night: false }, 'manual')) !== undefined) return 'Night mode off in mods-hub.'
+        await savePrefs($, rt, prefs => ({ ...prefs, interaction: 'auto', nightUntil: 0 }))
+        return `Night mode off. Interaction: ${interactionLabel(rt.prefs, rt.settings.interactionOffHours, now)}.`
+      }
       const onHub = await changeOnHub($, rt, { night: true }, 'manual')
       if (onHub !== undefined) return `Night mode on in mods-hub (quiet hours ${onHub.quietHours}): no questions then, only critical messages; the rest waits for the morning digest.`
       const until = windowEnd(rt.settings.interactionOffHours, now)
@@ -2984,6 +3548,41 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
     }
     default:
       return WA_USAGE
+  }
+}
+
+/** The inbound events every leader noted (one file each), newest last, the last five. */
+async function readInboundEvents($: EngineInterface, rt: Runtime): Promise<WaInboundEvent[]> {
+  const events: WaInboundEvent[] = []
+  for (const file of await $.fs.list(paths.inbound(rt)).catch(() => [])) {
+    if (file.kind === 'file' && file.name.endsWith('.jsonl')) events.push(...((await readLines($, `${paths.inbound(rt)}/${file.name}`)).filter(isRecord) as unknown as WaInboundEvent[]))
+  }
+  return events.sort((a, b) => a.at - b.at).slice(-5)
+}
+
+/** `/wa group <verb> …`: create, rename, link (here), invite, unlink, leave; `<n>` from /wa groups, this session's group by default. */
+async function runGroup($: EngineInterface, rt: Runtime, args: string): Promise<string> {
+  const [verb = '', ...rest] = args.trim().split(/\s+/)
+  const tail = rest.join(' ').trim()
+  const numbered = /^(\d+)\s*(.*)$/.exec(tail)
+  const ref = numbered?.[1] ?? ''
+  const more = numbered !== null ? (numbered[2] ?? '').trim() : tail
+  switch (verb.toLowerCase()) {
+    case 'create':
+      return createGroup($, rt, tail)
+    case 'rename':
+      return renameGroup($, rt, ref, more)
+    case 'link':
+    case 'relink':
+      return relinkGroup($, rt, ref)
+    case 'invite':
+      return inviteToGroup($, rt, ref, more)
+    case 'unlink':
+      return unlinkGroup($, rt, ref, false)
+    case 'leave':
+      return unlinkGroup($, rt, ref, true)
+    default:
+      return `${managedGroupsText(rt)}\n\nUsage: /wa group create [name] · rename [n] <name> · link [n] · invite [n] <+numbers> · unlink [n] · leave [n]`
   }
 }
 
@@ -3029,10 +3628,22 @@ const PHASE_LOOK: Record<WaConnection['phase'], { glyph: string; color: string; 
 /** A whole PNG (signature, then the IHDR chunk): anything else would make the surface refuse the pane. */
 const isPng = (base64: string): boolean => base64.startsWith('iVBORw0KGgoAAAANSUhEUg') && base64.length > 60
 
+const INBOUND_LOOK: Record<WaInbound['health'], { glyph: string; color: string }> = {
+  ok: { glyph: '●', color: 'success' },
+  idle: { glyph: '○', color: 'warning' },
+  error: { glyph: '⚠', color: 'error' },
+  none: { glyph: '○', color: 'inactive' },
+}
+const GROUP_LOOK: Record<WaGroupRow['status'], { glyph: string; color: string; text: string }> = {
+  this: { glyph: '●', color: 'success', text: 'this session' },
+  live: { glyph: '●', color: 'suggestion', text: 'live' },
+  idle: { glyph: '○', color: 'inactive', text: 'no session' },
+}
+
 const DIR_GLYPH: Record<WaLogEntry['dir'], string> = { in: '↘', out: '↗', held: '⏸', drop: '✕', note: '·' }
 
 async function setTab($: EngineInterface, tab: WaTab): Promise<void> {
-  await update($, tabAtom, () => tab)
+  await putIf(await read($, tabAtom), () => tab, fn => update($, tabAtom, fn))
 }
 
 async function paneAction($: EngineInterface, rt: Runtime, action: () => Promise<string>): Promise<void> {
@@ -3073,8 +3684,9 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
   const tab = await read($, tabAtom)
   const now = await $.clock.now()
   const row = (text: string, max = width): string => oneLine(text, max)
-  // With mods-hub installed, presence, interaction and night are its global mode (read reactively).
-  const hub = (await $.state.get({ plugin: 'mods-hub', key: 'mode' })).value
+  // Presence, interaction and night: mods-hub's mode when it is installed, else the bridge's prefs, as ONE value the
+  // handlers below also write (refreshAttention), so what a button shows is what its press changes.
+  const attention = await read($, attentionAtom)
 
   const tabBar = (
     <Box key="tabs" flexDirection="row" flexWrap="wrap" gap={1}>
@@ -3089,17 +3701,17 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
     const connection = await read($, connectionAtom)
     const setup = await read($, setupAtom)
     const look = PHASE_LOOK[connection.phase]
-    const group = await read($, groupAtom)
     const sessions = await read($, sessionsAtom)
     const prefs = await read($, prefsAtom)
-    const isInteractive = hub === undefined ? interactionAllowed(prefs, rt.settings.interactionOffHours, now) : hub.canAsk
-    const isMarkedAway = hub === undefined ? prefs.presence === 'away' : hub.presence === 'away'
+    const inbound = await read($, inboundAtom)
+    const isOn = isInteractionOn(attention, attention.interaction)
     // Group, sessions, test and digest need a linked, set-up bridge: hidden until then so nothing looks broken.
     const isReady = connection.phase === 'ready' && isConfigured(rt)
     const title = connection.phase === 'unreachable' && connection.detail !== '' ? connection.detail : look.label
-    const modeText = [connection.mode === 'self' ? 'Own number: allowlisted chats only' : connection.mode === 'bot' ? 'Dedicated bot number' : '', hub !== undefined ? `mods-hub: ${hub.presence}` : '', connection.isLeader ? 'this session polls' : '']
+    const modeText = [connection.mode === 'self' ? 'Own number: allowlisted chats only' : connection.mode === 'bot' ? 'Dedicated bot number' : '', attention.isHub ? 'mods-hub mode' : '', connection.isLeader ? 'this session polls' : '']
       .filter(part => part !== '')
       .join(' · ')
+    const health = INBOUND_LOOK[inbound.health]
     body = (
       <Box flexDirection="column" gap={1}>
         <Box key="connection" flexDirection="column">
@@ -3108,10 +3720,16 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
             {connection.phone !== '' ? ` · +${connection.phone}` : ''}
           </Text>
           {connection.detail !== '' && connection.detail !== title && <Text dimColor wrap="wrap">{connection.detail}</Text>}
-          {modeText !== '' && <Text dimColor wrap="truncate-end">{modeText}</Text>}
+          {modeText !== '' && <Text dimColor wrap="truncate-end">{row(modeText)}</Text>}
           {connection.raw !== '' && (
             <Box key="raw">
               <Text dimColor wrap="truncate-end">{row(connection.raw)}</Text>
+            </Box>
+          )}
+          {isConfigured(rt) && (
+            <Box key="inbound" flexDirection="row" gap={1}>
+              <Text color={health.color}>{health.glyph}</Text>
+              <Text wrap="truncate-end">{row(`Last message received ${inbound.lastAt > 0 ? clockTime(inbound.lastAt) : '—'} · ${inbound.detail}`, width - 2)}</Text>
             </Box>
           )}
           {connection.phase === 'qr' && drawQr(elements, e.surface, connection, width, rt.baseUrl)}
@@ -3138,28 +3756,7 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
           )}
         </Box>
         {!isReady && drawSetup($, rt, elements, setup, connection, width, Input)}
-        {isReady && (
-          <Box key="group" flexDirection="column">
-            <Text bold>Project group</Text>
-            {group.link !== null ? (
-              <Box flexDirection="column">
-                <Text wrap="truncate-end">
-                  {group.link.name} · {plural(group.link.members, 'member')}
-                </Text>
-                {group.link.inviteLink !== '' && <Link href={group.link.inviteLink} label="Open in WhatsApp" />}
-                <Button key="unlink" label="Unlink" plain onPress={() => void paneAction($, rt, () => runWa($, rt, 'unlink-project'))} />
-              </Box>
-            ) : (
-              <Box flexDirection="column">
-                <Text dimColor wrap="wrap">{group.note !== '' ? group.note : 'No group yet: updates go to your direct chat.'}</Text>
-                <Button key="link" label={rt.settings.autoCreateGroup ? 'Create group' : 'Link group'} onPress={() => void paneAction($, rt, () => linkProject($, rt, ''))} />
-                {group.choices.map((choice, index) => (
-                  <Button key={`choice:${choice.id}`} label={`${index + 1}. ${row(choice.name, width - 6)}`} plain onPress={() => void paneAction($, rt, () => linkProject($, rt, choice.id))} />
-                ))}
-              </Box>
-            )}
-          </Box>
-        )}
+        {isReady && drawGroups($, rt, elements, await read($, groupsAtom), await read($, groupAtom), width, Input)}
         {isReady && (
           <Box key="sessions" flexDirection="column">
             <Text bold>Sessions ({sessions.length})</Text>
@@ -3175,10 +3772,10 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
         <Box key="actions" flexDirection="row" gap={1} flexWrap="wrap">
           {isReady && <Button key="test" label="Send test" hotkey="t" onPress={() => void paneAction($, rt, () => runWa($, rt, 'test'))} />}
           {isReady && <Button key="digest" label="Digest now" onPress={() => void paneAction($, rt, () => runWa($, rt, 'digest'))} />}
-          <Button key="presence" label={isMarkedAway ? 'I am here' : 'I am away'} hotkey="a" onPress={() => void paneAction($, rt, () => runWa($, rt, isMarkedAway ? 'here' : 'away'))} />
+          <Button key="presence" label={attention.isAway ? 'I am here' : 'I am away'} hotkey="a" onPress={() => void paneAction($, rt, () => runWa($, rt, attention.isAway ? 'here' : 'away'))} />
           <Button key="pause" label={prefs.paused ? 'Resume all' : 'Pause all'} onPress={() => void paneAction($, rt, () => runWa($, rt, prefs.paused ? 'resume' : 'pause'))} />
-          <Button key="interaction" label={isInteractive ? 'Interaction: ON' : 'Interaction: OFF'} variant={isInteractive ? 'primary' : 'secondary'} hotkey="i" onPress={() => void paneAction($, rt, () => runWa($, rt, `interact ${isInteractive ? 'off' : 'on'}`))} />
-          <Button key="night" label="Night mode" hotkey="n" onPress={() => void paneAction($, rt, () => runWa($, rt, 'night'))} />
+          <Button key="interaction" label={`Interaction: ${isOn ? 'ON' : 'OFF'}${isOn && !attention.canAsk ? ' (night)' : ''}`} variant={isOn ? 'primary' : 'secondary'} hotkey="i" onPress={() => void paneAction($, rt, () => toggleInteraction($, rt))} />
+          <Button key="night" label={attention.isNight ? 'Night mode: ON' : 'Night mode'} variant={attention.isNight ? 'primary' : 'secondary'} hotkey="n" onPress={() => void paneAction($, rt, () => runWa($, rt, attention.isNight ? 'night off' : 'night'))} />
         </Box>
       </Box>
     )
@@ -3223,23 +3820,23 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
     body = (
       <Box flexDirection="column" gap={1}>
         <Box key="interaction" flexDirection="column">
-          <Text bold wrap="wrap">Interaction: {hub === undefined ? interactionLabel(prefs, rt.settings.interactionOffHours, now) : hubModeLabel(hub)}</Text>
-          {hub !== undefined && <Text dimColor wrap="wrap">Presence, interaction and night follow mods-hub, for every session and channel (/hub).</Text>}
+          <Text bold wrap="wrap">Interaction: {attention.label}</Text>
+          {attention.isHub && <Text dimColor wrap="wrap">Presence, interaction and night follow mods-hub, for every session and channel (/hub).</Text>}
           <Box flexDirection="row" gap={1} flexWrap="wrap">
             {(['on', 'off', 'auto'] as const).map(mode => (
               <Button
                 key={`interact:${mode}`}
-                label={mode === 'off' ? 'Silent' : mode === 'on' ? 'On' : hub === undefined ? `Auto (off ${rt.settings.interactionOffHours})` : 'Auto (while away)'}
-                variant={(hub?.interaction ?? prefs.interaction) === mode ? 'primary' : 'secondary'}
+                label={mode === 'off' ? 'Silent' : mode === 'on' ? 'On' : attention.isHub ? 'Auto (while away)' : `Auto (off ${rt.settings.interactionOffHours})`}
+                variant={attention.interaction === mode ? 'primary' : 'secondary'}
                 onPress={() => void paneAction($, rt, () => runWa($, rt, `interact ${mode}`))}
               />
             ))}
-            <Button key="interact:night" label="Night" variant={(hub === undefined ? prefs.interaction === 'night' : hub.isNight) ? 'primary' : 'secondary'} onPress={() => void paneAction($, rt, () => runWa($, rt, 'night'))} />
+            <Button key="interact:night" label="Night" variant={attention.isNight ? 'primary' : 'secondary'} onPress={() => void paneAction($, rt, () => runWa($, rt, 'night'))} />
           </Box>
         </Box>
         <Box key="timing" flexDirection="column">
-          {hub !== undefined ? (
-            <Text dimColor wrap="wrap">Quiet hours {hub.quietHours} and the away time are mods-hub's (/hub night, the hub's settings).</Text>
+          {attention.isHub ? (
+            <Text dimColor wrap="wrap">Quiet hours {attention.quietHours} and the away time are mods-hub's (/hub night, the hub's settings).</Text>
           ) : Select !== undefined ? (
             <Box flexDirection="column">
               <Select key="quiet" label="Quiet hours " value={prefs.quietHours} options={['22-7', '23-8', '0-7', 'off'].map(value => ({ value, label: value }))} onSelect={value => void savePrefs($, rt, current => ({ ...current, quietHours: value }))} />
@@ -3309,6 +3906,82 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
       {isTab ? null : (
         <Box key="footer" flexDirection="row" gap={1}>
           <Button key="close" label="Close" role="dismiss" onPress={() => void closePane($, rt)} />
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+/** The Interaction switch: off when it reads ON, on otherwise, judged from the same value the switch draws. */
+async function toggleInteraction($: EngineInterface, rt: Runtime): Promise<string> {
+  const attention = await refreshAttention($, rt)
+  return runWa($, rt, `interact ${isInteractionOn(attention, attention.interaction) ? 'off' : 'on'}`)
+}
+
+/**
+ * The Groups section: every managed group (name, where it routes, members, whether a session runs for it) with Link
+ * here / Unlink / Leave; rename and invite for this session's group; or, when it has none, the name to create one
+ * under (editable; typing is kept out of state) and the primary Create button, plus the groups the bot is in to link.
+ */
+function drawGroups(
+  $: EngineInterface,
+  rt: Runtime,
+  elements: ElementTable,
+  rows: readonly WaGroupRow[],
+  card: WaGroupCard,
+  width: number,
+  Input: ElementConstructor<InputProps> | undefined,
+): RenderElement {
+  const { Box, Text, Button, Link } = elements
+  const own = rows.find(one => one.status === 'this')
+  const scope = rt.settings.groupScope
+  const target = scope === 'session' ? 'this session' : 'this project'
+  return (
+    <Box key="groups" flexDirection="column">
+      <Text bold>Groups ({rows.length})</Text>
+      {rows.length === 0 && <Text dimColor wrap="wrap">No group yet: updates go to your direct chat.</Text>}
+      {rows.map((one, index) => (
+        <Box key={`grp:${one.groupId}`} flexDirection="column">
+          <Box flexDirection="row" gap={1}>
+            <Text color={GROUP_LOOK[one.status].color}>{GROUP_LOOK[one.status].glyph}</Text>
+            <Text wrap="truncate-end">{oneLine(`${index + 1}. ${one.name} → ${one.routesTo} · ${plural(one.members, 'member')} · ${GROUP_LOOK[one.status].text}`, width - 2)}</Text>
+          </Box>
+          <Box flexDirection="row" gap={1} flexWrap="wrap">
+            {one.status !== 'this' && <Button key={`grp-link:${one.groupId}`} plain label={`Link to ${target}`} onPress={() => void paneAction($, rt, () => relinkGroup($, rt, one.key))} />}
+            <Button key={`grp-unlink:${one.groupId}`} plain label="Unlink" onPress={() => void paneAction($, rt, () => unlinkGroup($, rt, one.key, false))} />
+            <Button key={`grp-leave:${one.groupId}`} plain label="Leave" onPress={() => void paneAction($, rt, () => unlinkGroup($, rt, one.key, true))} />
+            {one.inviteLink !== '' && <Link href={one.inviteLink} label="Invite link" />}
+          </Box>
+        </Box>
+      ))}
+      {own !== undefined && Input !== undefined && (
+        <Box key="grp-manage" flexDirection="column">
+          <Input key="grp-rename" label="Rename " value={own.name} submitLabel="rename" onSubmit={value => void paneAction($, rt, () => renameGroup($, rt, own.key, value))} />
+          <Input key="grp-invite" label="Invite " placeholder="+39333…, +44…" submitLabel="add" onSubmit={value => void paneAction($, rt, () => inviteToGroup($, rt, own.key, value))} />
+        </Box>
+      )}
+      {own === undefined && (
+        <Box key="grp-create" flexDirection="column">
+          {Input !== undefined && (
+            <Input
+              key="grp-name"
+              label="Name "
+              value={defaultGroupName(rt)}
+              submitLabel="create"
+              onInput={value => {
+                rt.groupNameDraft = value
+              }}
+              onSubmit={value => void paneAction($, rt, () => createGroup($, rt, value))}
+            />
+          )}
+          <Box flexDirection="row" gap={1} flexWrap="wrap">
+            <Button key="grp-create-btn" label={`Create group for ${target}`} variant="primary" onPress={() => void paneAction($, rt, () => createGroup($, rt, rt.groupNameDraft))} />
+            <Button key="grp-list" plain label="Link an existing group" onPress={() => void paneAction($, rt, () => linkProject($, rt, '#list'))} />
+          </Box>
+          {card.note !== '' && <Text dimColor wrap="wrap">{card.note}</Text>}
+          {card.choices.map((choice, index) => (
+            <Button key={`choice:${choice.id}`} label={`${index + 1}. ${oneLine(choice.name, width - 6)}`} plain onPress={() => void paneAction($, rt, () => linkProject($, rt, choice.id))} />
+          ))}
         </Box>
       )}
     </Box>
@@ -3476,6 +4149,13 @@ export const register: Register = (on, options) => {
     const started = await next(e)
     await startSession($, rt, e.isInteractive)
     return started
+  })
+
+  // A desktop, IDE or phone client attaching to a session started without one: it is used, so it does the work.
+  on('session.attach', async ($, e, next) => {
+    const attached = await next(e)
+    if (rt.isStarted) $.clock.after(0, () => void startBackground($, rt).catch(error => $.ui.log(`${NAME}: ${messageOf(error)}`, { to: 'debug' })))
+    return attached
   })
 
   on('session.end', async ($, e, next) => {

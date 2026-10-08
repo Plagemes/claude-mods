@@ -48,12 +48,15 @@ export const api = {
   start: (id: string): Request => ({ method: 'POST', path: `/sessions/${enc(id)}/start` }),
   qr: (id: string): Request => ({ method: 'GET', path: `/sessions/${enc(id)}/qr` }),
   pairingCode: (id: string, phone: string): Request => ({ method: 'POST', path: `/sessions/${enc(id)}/pairing-code`, body: { phoneNumber: phone } }),
-  messages: (id: string, query: { chatId?: string; after?: string; messageId?: string; direction?: 'incoming'; limit: number; inlineMedia?: boolean }): Request => {
+  /**
+   * `GET /sessions/{id}/messages`, newest first. OpenWA 0.24.0 (the pinned image) reads only `chatId`, `from`, `limit`,
+   * `offset`, `after` and `inlineMedia` here (src/modules/message/message.controller.ts at tag v0.24.0): `direction`
+   * and `messageId` came later and are silently ignored by 0.24, so the mod never relies on them.
+   */
+  messages: (id: string, query: { chatId?: string; after?: string; limit: number; inlineMedia?: boolean }): Request => {
     const params: [string, string][] = [['limit', String(query.limit)], ['inlineMedia', query.inlineMedia === true ? 'true' : 'false']]
     if (query.chatId !== undefined) params.push(['chatId', query.chatId])
     if (query.after !== undefined) params.push(['after', query.after])
-    if (query.messageId !== undefined) params.push(['messageId', query.messageId])
-    if (query.direction !== undefined) params.push(['direction', query.direction])
     return { method: 'GET', path: `/sessions/${enc(id)}/messages?${params.map(([k, v]) => `${k}=${enc(v)}`).join('&')}` }
   },
   sendText: (id: string, chatId: string, text: string): Request => ({ method: 'POST', path: `/sessions/${enc(id)}/messages/send-text`, body: { chatId, text } }),
@@ -79,6 +82,16 @@ export const api = {
     path: `/sessions/${enc(id)}/groups/${enc(groupId)}/description`,
     body: { description },
   }),
+  /** `PUT …/groups/{groupId}/subject` `{ subject }` (≤ 100 characters). */
+  groupSubject: (id: string, groupId: string, subject: string): Request => ({ method: 'PUT', path: `/sessions/${enc(id)}/groups/${enc(groupId)}/subject`, body: { subject } }),
+  /** `POST …/groups/{groupId}/participants` `{ participants }`: 200 with a per-participant `results` list. */
+  addParticipants: (id: string, groupId: string, participants: string[]): Request => ({
+    method: 'POST',
+    path: `/sessions/${enc(id)}/groups/${enc(groupId)}/participants`,
+    body: { participants },
+  }),
+  /** `POST …/groups/{groupId}/leave`. */
+  leaveGroup: (id: string, groupId: string): Request => ({ method: 'POST', path: `/sessions/${enc(id)}/groups/${enc(groupId)}/leave` }),
   inviteCode: (id: string, groupId: string): Request => ({ method: 'GET', path: `/sessions/${enc(id)}/groups/${enc(groupId)}/invite-code` }),
   contactPhone: (id: string, contactId: string): Request => ({ method: 'GET', path: `/sessions/${enc(id)}/contacts/${enc(contactId)}/phone` }),
 }
@@ -207,3 +220,13 @@ export const extensionOf = (mimetype: string, filename: string | undefined): str
   const sub = (mimetype.split('/')[1] ?? 'bin').split(';')[0] ?? 'bin'
   return ({ jpeg: 'jpg', 'ogg': 'ogg', mpeg: 'mp3', 'x-m4a': 'm4a', plain: 'txt' } as Record<string, string>)[sub] ?? (sub.replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'bin')
 }
+
+/** The per-participant outcome of an add (`ParticipantsOperationResponseDto.results`). */
+export const parseParticipantResults = (value: unknown): { id: string; isAdded: boolean; message: string }[] =>
+  (Array.isArray(record(value).results) ? (record(value).results as unknown[]) : [])
+    .map(record)
+    .map(one => ({ id: str(one.id), isAdded: one.success === true, message: str(one.message) }))
+    .filter(one => one.id !== '')
+
+/** A group's member count from `GET …/groups/{groupId}` (`participants`). */
+export const memberCountOf = (value: unknown): number => (Array.isArray(record(value).participants) ? (record(value).participants as unknown[]).length : 0)

@@ -65,7 +65,6 @@ export type WaConnection = {
   pairingCode: string
   /** `bot`: a dedicated number; `self`: the owner's own number is linked. */
   mode: 'bot' | 'self' | 'unknown'
-  checkedAt: number
   isLeader: boolean
 }
 
@@ -84,6 +83,8 @@ export type WaSessionInfo = {
   startedAt: number
   turns: number
   ended: boolean
+  /** The last main-loop turn's answer, one line (what WhatsApp questions are answered from). */
+  summary?: string
 }
 
 /** One line of a session's log (log/<id>.jsonl): what came in, went out, was held or dropped. */
@@ -98,13 +99,31 @@ export type WaLogEntry = {
   who?: 'owner' | 'member' | 'bot'
 }
 
-/** A project's WhatsApp group (groups.json, keyed by project root). */
+/** Whether a WhatsApp group stands for a whole project or for one session of it. */
+export type WaGroupScope = 'project' | 'session'
+
+/** A managed WhatsApp group (groups.json, keyed by project root, or `<root>#<label>` for a per-session group). */
 export type WaGroupLink = {
   groupId: string
   name: string
   inviteLink: string
   members: number
   createdAt: number
+  /** Absent in files older versions wrote: a project group. */
+  scope?: WaGroupScope
+}
+
+/** One row of the pane's Groups section. */
+export type WaGroupRow = {
+  key: string
+  groupId: string
+  name: string
+  /** `shop` or `shop · #login`. */
+  routesTo: string
+  members: number
+  /** `this` routes this session; `live` another live session; `idle` no session runs for it. */
+  status: 'this' | 'live' | 'idle'
+  inviteLink: string
 }
 
 /** What the pane shows about this project's group, or why there is none. */
@@ -152,6 +171,39 @@ export type WaSetup = {
 
 export type WaTab = 'status' | 'chat' | 'settings' | 'privacy' | 'log'
 
+/** How the receive path is doing: `ok` a leader polls, `idle` none does, `error` its last poll failed, `none` not set up. */
+export type WaInboundHealth = 'ok' | 'idle' | 'error' | 'none'
+
+/** The pane's inbound line. */
+export type WaInbound = { lastAt: number; health: WaInboundHealth; detail: string }
+
+/** One inbound message as `/wa inbox` lists it: who, where, what, and what the leader did with it. */
+export type WaInboundEvent = {
+  at: number
+  chat: string
+  who: 'owner' | 'member' | 'bot' | 'unknown'
+  /** One line; '(not read)' for a chat outside the allowlist. */
+  text: string
+  verdict: 'accepted' | 'dropped'
+  reason: string
+}
+
+/**
+ * What the pane's quick actions show, from ONE source: mods-hub's mode when the hub is installed, else the bridge's
+ * own prefs. The buttons read only this, and their handlers write it at once.
+ */
+export type WaAttention = {
+  canAsk: boolean
+  isAway: boolean
+  isNight: boolean
+  isPaused: boolean
+  /** The interaction setting (`auto`, `on`, `off`, the bridge's `night`), not whether it allows asking now. */
+  interaction: string
+  quietHours: string
+  label: string
+  isHub: boolean
+}
+
 /** The privacy card: the allowlist in force and a redaction preview. */
 export type WaPrivacy = { allowlist: string[]; sample: string; redacted: string }
 
@@ -168,6 +220,9 @@ declare module 'claude-code' {
       privacy: WaPrivacy
       audit: WaLogEntry[]
       members: WaMemberQa[]
+      inbound: WaInbound
+      attention: WaAttention
+      groups: WaGroupRow[]
     }
   }
 }

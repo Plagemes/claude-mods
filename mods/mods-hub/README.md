@@ -1,7 +1,7 @@
 # mods-hub
 > The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.
 
-**Category:** Core · **Version:** 1.1.1
+**Category:** Core · **Version:** 1.1.2
 
 ## What it does
 Adds `$.mods` to every mod: an event bus with typed standard events (`test.result`, `ci.result`, `cost.update`, `deploy.failed`, …), a blackboard of shared facts, and a notification router that knows whether you are here, idle or away, Silent, or inside your Night hours, and sends each notification to the terminal, your phone or your team's channel accordingly. It also opens one **Claude Mods** panel whose tabs other mods fill (Advisor, Router, Mission Control, Channels, …), with a Home tab for the global mode, channels, routing and the last notifications.
@@ -43,7 +43,9 @@ Channels  ● desktop connected
 Tabs      3: home, router, errors
 Mods      5 mods · 5 on the bus
 ```
-**The status line** stays empty on a quiet afternoon. It shows only what differs: `▪ silent 15m · night · away · paused`. The hub's toasts read `✗ ci-watch: CI failed — acme/shop`.
+**The status line** stays empty on a quiet afternoon. It shows only what differs: `▪ silent 15m · night · away · paused`. The hub's toasts read `✗ ci-watch: CI failed — acme/shop`. A mod that names itself in its own text (`🔇 speak-summary: cannot speak here`) is named once: the hub drops the repeated name (and a `mods-hub:` prefix), keeping the glyph, in toasts, Recent and what goes to your channels.
+
+**Buttons always take.** A desktop click carries the handle of the drawing it was made on, and every redraw renews the handles, so a click that lands after a redraw is dropped. The panel therefore redraws only when something it shows changed: a channel repeating its status, a mod saying hello again, the same plugin list or a quiet tick write nothing. Each button returns at once and its change is written in one go (pressing a Mode button while marked away ends the away in the same write).
 
 ## Configuration
 | Key | Type | Default | Description |
