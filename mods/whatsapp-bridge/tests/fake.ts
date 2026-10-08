@@ -45,6 +45,27 @@ export type FakeWa = {
   next: number
   /** The next this many sends fail with a 500 (the engine restarting). */
   failSends: number
+  /** Nothing listens on the port: every call is refused (ECONNREFUSED). */
+  isDown: boolean
+  /** The QR PNG (base64) the session serves while waiting for a scan. */
+  qrPng: string
+  /** Keys minted through POST /auth/api-keys, and the key each call carried. */
+  minted: string[]
+  keysSeen: string[]
+}
+
+/** Docker on the host, for the managed start. */
+export type FakeDocker = {
+  installed: boolean
+  daemon: boolean
+  hasImage: boolean
+  container: '' | 'running' | 'exited'
+  /** What `docker run` prints on stderr when it fails ('' = it works). */
+  runError: string
+  adminKey: string
+  /** Every docker command, and the spawned children (pulls). */
+  commands: string[][]
+  spawned: string[][]
 }
 
 export type World = {
@@ -66,6 +87,7 @@ export type World = {
   gh: { exitCode: number; stdout: string }
   /** Host tools that exist (beyond sleep, git and gh): rsvg-convert, openssl. */
   bins: Set<string>
+  docker: FakeDocker
   /** Runs just before a file write lands: another session writing at the same moment. */
   beforeWrite?: (path: string) => void
 }
@@ -124,13 +146,19 @@ function openwa(seen: World, method: string, url: string, body: Record<string, u
   const path = url.replace(/^http:\/\/127\.0\.0\.1:2785\/api/, '')
   wa.calls.push({ method, path, body })
   const [route = '', query = ''] = path.split('?')
+  if (route === '/sessions' && method === 'POST') return json(201, { id: SESSION, name: String(body.name), status: 'created', phone: null })
+  if (route === '/auth/api-keys' && method === 'POST') {
+    const key = `owa_k1_minted${wa.minted.length}000000000000000000`
+    wa.minted.push(key)
+    return json(201, { id: 'k1', name: body.name, role: body.role, allowedSessions: body.allowedSessions, apiKey: key })
+  }
   const params = new Map(query.split('&').filter(Boolean).map(pair => pair.split('=').map(decodeURIComponent) as [string, string]))
   const session = { id: SESSION, name: 'claude', status: wa.status, phone: wa.status === 'ready' ? wa.phone : null, pushName: 'Bot', lastError: null }
   if (route === '/health') return json(200, { status: 'ok' })
   if (route === '/auth/validate') return json(200, { valid: true, role: wa.role, scoped: false })
   if (route === '/sessions') return json(200, [session])
   if (route === `/sessions/${SESSION}`) return json(200, session)
-  if (route === `/sessions/${SESSION}/qr`) return wa.status === 'qr_ready' ? json(200, { qrCode: `data:image/png;base64,${PNG}`, status: 'qr_ready' }) : json(400, { message: 'already authenticated' })
+  if (route === `/sessions/${SESSION}/qr`) return wa.status === 'qr_ready' ? json(200, { qrCode: `data:image/png;base64,${wa.qrPng}`, status: 'qr_ready' }) : json(400, { message: 'already authenticated' })
   if (route === `/sessions/${SESSION}/pairing-code`) return json(201, { pairingCode: 'ABCD1234', status: 'qr_ready' })
   if (route === `/sessions/${SESSION}/start`) return json(200, session)
   if (route === `/sessions/${SESSION}/messages`) {
@@ -181,12 +209,57 @@ function openwa(seen: World, method: string, url: string, body: Record<string, u
 
 const parentOf = (path: string): string => path.slice(0, path.lastIndexOf('/'))
 
+/** The docker CLI: version, image inspect, inspect, rm, run (starts the fake OpenWA), exec (the admin key), stop. */
+function docker(seen: World, argv: readonly string[]) {
+  const d = seen.docker
+  d.commands.push([...argv])
+  const out = (exitCode: number, stdout: string, stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
+  if (!d.installed) return { deny: 'failed to start: ENOENT' }
+  if (!d.daemon) return out(1, '', 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?')
+  const [, verb = '', sub = ''] = argv
+  if (verb === 'version') return out(0, '27.3.1\n')
+  if (verb === 'image' && sub === 'inspect') return d.hasImage ? out(0, 'sha256:abc\n') : out(1, '', 'Error: No such image')
+  if (verb === 'inspect') return d.container === '' ? out(1, '', 'Error: No such object') : out(0, `${d.container}\n`)
+  if (verb === 'rm') {
+    d.container = ''
+    return out(0, 'claude-openwa\n')
+  }
+  if (verb === 'run') {
+    if (d.runError !== '') return out(125, '', d.runError)
+    d.container = 'running'
+    return out(0, 'f00dcafe\n')
+  }
+  if (verb === 'exec') return d.container === 'running' ? out(0, `${d.adminKey}\n`) : out(1, '', 'not running')
+  if (verb === 'stop') {
+    d.container = ''
+    seen.wa.isDown = true
+    return out(0, 'claude-openwa\n')
+  }
+  if (verb === 'logs') return out(0, 'booting…\n')
+  return out(1, '', `unknown docker ${verb}`)
+}
+
 /** The engine beneath the plugin: files, OpenWA, the session, the model and the host, all in memory. */
-export function world(on: On, options: { now?: number; status?: FakeWa['status']; canCreateGroups?: boolean; files?: Record<string, string> } = {}): World {
+export function world(on: On, options: { now?: number; status?: FakeWa['status']; canCreateGroups?: boolean; files?: Record<string, string>; isDown?: boolean; root?: string } = {}): World {
   const seen: World = {
     clock: (startClock = mock.clock(on, { now: options.now ?? new Date(2026, 9, 7, 12, 0, 0).getTime() })),
     files: new Map(Object.entries(options.files ?? {})),
-    wa: { status: options.status ?? 'ready', phone: BOT, role: 'operator', canCreateGroups: options.canCreateGroups ?? true, rows: [], groups: [], calls: [], next: 0, failSends: 0 },
+    wa: {
+      status: options.status ?? 'ready',
+      phone: BOT,
+      role: 'operator',
+      canCreateGroups: options.canCreateGroups ?? true,
+      rows: [],
+      groups: [],
+      calls: [],
+      next: 0,
+      failSends: 0,
+      isDown: options.isDown ?? false,
+      qrPng: PNG,
+      minted: [],
+      keysSeen: [],
+    },
+    docker: { installed: true, daemon: true, hasImage: false, container: '', runError: '', adminKey: 'owa_k1_ADMINKEY_never_stored_0000000000', commands: [], spawned: [] },
     submitted: [],
     prompts: [],
     toasts: [],
@@ -228,6 +301,11 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
     return { value: { kind: isDir ? ('dir' as const) : ('file' as const), size: text?.length ?? 0, mtimeMs: mtimes.get(e.path) ?? 0, isLink: false, realPath: e.path } }
   })
   on('http.fetch', ($, e) => {
+    if (seen.wa.isDown) {
+      seen.wa.calls.push({ method: e.init?.method ?? 'GET', path: e.url, body: {} })
+      return { deny: `connect ECONNREFUSED 127.0.0.1:2785 (${e.url})` }
+    }
+    seen.wa.keysSeen.push(e.init?.headers?.['X-API-Key'] ?? '')
     const body = typeof e.init?.body === 'string' ? (JSON.parse(e.init.body) as Record<string, unknown>) : {}
     return openwa(seen, e.init?.method ?? 'GET', e.url, body)
   })
@@ -249,11 +327,20 @@ export function world(on: On, options: { now?: number; status?: FakeWa['status']
       seen.files.set(out, `decoded:${seen.files.get(e.argv[e.argv.indexOf('-in') + 1] ?? '') ?? ''}`)
       return ok('')
     }
+    if (bin === 'docker') return docker(seen, e.argv)
     if (bin === 'gh') return { value: { exitCode: seen.gh.exitCode, stdout: seen.gh.stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     return { deny: 'failed to start: ENOENT' }
   })
+  on('process.spawn', async function* ($, e) {
+    seen.docker.spawned.push([...e.argv])
+    yield { stream: 'stdout' as const, text: '0.24: Pulling from rmyndharis/openwa\nabc123: Pull complete\n' }
+    seen.docker.hasImage = true
+    yield { stream: 'stdout' as const, text: 'Status: Downloaded newer image for ghcr.io/rmyndharis/openwa:0.24\n' }
+    // A test hook stands for the engine: like every noun it answers { value }.
+    return { value: { code: 0, signal: null } } as never
+  })
   on('session.id', () => ({ value: ME }))
-  on('session.root', () => ({ value: ROOT }))
+  on('session.root', () => ({ value: options.root ?? ROOT }))
   on('session.repo', () => ({ value: { root: ROOT, remote: null, internal: false, name: 'shop' } }))
   on('session.messages', () => ({ value: [] }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 0, window: 200_000, percent: 0 }, rateLimits: [], cost: { usd: 1.25 } } as never }))

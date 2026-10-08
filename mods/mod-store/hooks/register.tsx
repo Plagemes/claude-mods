@@ -127,7 +127,8 @@ const LIST_TIMEOUT_MS = 30_000
 const CHANGE_TIMEOUT_MS = 180_000
 const ANNOUNCE_TOAST_MS = 8_000
 const ANNOUNCE_NAMES = 3
-const NOTICE_NAMES = 3
+/** Names a notice lists before `and N more`: it lands in a toast and in the hub's one-line Recent rows. */
+const NOTICE_NAMES = 2
 const LISTING_LIMIT = 25
 const README_LIMIT = 20
 const WIDE_COLUMNS = 72
@@ -605,19 +606,19 @@ async function updateMods($: Dollar, catalog: StoreCatalog, bin: string, names: 
   await refreshInstalled($, catalog.marketplace)
   const updated: string[] = []
   const current: string[] = []
+  let versions = ''
   for (const { name, outcome } of results.filter(result => result.outcome.isOk)) {
     if (outcome.updateOutcome === 'up_to_date') {
       current.push(name)
     } else {
-      const versions = outcome.oldVersion !== undefined && outcome.newVersion !== undefined
-        ? ` ${outcome.oldVersion} → ${outcome.newVersion}`
-        : ''
-      updated.push(`${name}${versions}`)
+      updated.push(name)
+      versions = outcome.oldVersion !== undefined && outcome.newVersion !== undefined ? ` ${outcome.oldVersion} → ${outcome.newVersion}` : ''
     }
   }
   const failed = failuresOf(results)
+  // One update names its versions; several are counted, with the first names: the notice stays one short line.
   const text = [
-    updated.length > 0 ? `Updated ${listed(updated)}.` : '',
+    updated.length === 1 ? `Updated ${updated[0]}${versions}.` : updated.length > 1 ? `Updated ${plural(updated.length, 'mod')} (${listed(updated)}).` : '',
     current.length > 0 ? `${listed(current)}: already at the version the marketplace offers.` : '',
     failed.text,
     left > 0 ? `Stopped with ${plural(left, 'mod')} left.` : '',

@@ -321,7 +321,7 @@ test('/mods install-all answers at once, opens the store on its progress bar and
     expect(await progressText(ui)).toBe('Installing rm-rf-guard · 2/4')
     await w.clock.advance(3_000)
     expect(await progressText(ui)).toBeUndefined()
-    const done = '✓ Installed 4 mods (mod-store, rm-rf-guard, branch-namer and 1 more). Run /reload-plugins to activate them.'
+    const done = '✓ Installed 4 mods (mod-store, rm-rf-guard and 2 more). Run /reload-plugins to activate them.'
     expect(w.toasts).toContain(done)
     expect(await ui.find({ type: 'Text', text: done })).toBeDefined()
     expect(w.calls).toContain('plugin marketplace add plagemes/claude-mods --json')
@@ -413,7 +413,7 @@ test('/mods update-all answers at once and updates every outdated mod after refr
   await w.clock.settle()
   expect(await progressText(ui)).toBe('Updating secret-shield · 1/2')
   await w.clock.advance(2_000)
-  expect(w.toasts).toContain('✓ Updated secret-shield 1.0.0 → 1.2.0, cost-meter 1.0.0 → 1.1.0. Run /reload-plugins to apply.')
+  expect(w.toasts).toContain('✓ Updated 2 mods (secret-shield, cost-meter). Run /reload-plugins to apply.')
   const marketplaceUpdate = w.calls.indexOf('plugin marketplace update claude-mods --json')
   expect(marketplaceUpdate).toBeGreaterThan(-1)
   expect(w.calls.indexOf('plugin update secret-shield@claude-mods --scope user --json')).toBeGreaterThan(marketplaceUpdate)
@@ -422,6 +422,20 @@ test('/mods update-all answers at once and updates every outdated mod after refr
   await mods($, 'update-all')
   await w.clock.settle()
   expect(w.toasts.at(-1)).toBe('• Every installed mod is up to date.')
+})
+
+test('/mods update-all with three updates: the notice counts them and names the first two, one short line', async ($, on) => {
+  const w = world(on, {
+    installed: {
+      'secret-shield': { version: '1.0.0', scope: 'user', enabled: true },
+      'cost-meter': { version: '1.0.0', scope: 'user', enabled: true },
+      'git-status-line': { version: '1.0.0', scope: 'user', enabled: true },
+    },
+  })
+  await mods($, 'refresh')
+  await mods($, 'update-all')
+  await w.clock.settle()
+  expect(w.toasts.at(-1)).toMatch(/^✓ Updated 3 mods \([a-z-]+, [a-z-]+ and 1 more\)\. Run \/reload-plugins to apply\.$/)
 })
 
 test('/mods install <mod> runs in the background too, and still says at once when there is no such mod', async ($, on) => {

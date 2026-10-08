@@ -21,7 +21,8 @@ export type WaRow = {
 
 export type WaSessionRecord = { id: string; name: string; status: string; phone: string; pushName: string; lastError: string }
 
-export type Request = { method: 'GET' | 'POST' | 'PUT'; path: string; body?: Record<string, unknown>; isPublic?: boolean }
+/** One OpenWA call. `key` sends that key instead of the stored one (the setup's one-time admin key). */
+export type Request = { method: 'GET' | 'POST' | 'PUT'; path: string; body?: Record<string, unknown>; isPublic?: boolean; key?: string }
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '')
 const record = (value: unknown): Record<string, unknown> => (typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {})
@@ -34,6 +35,15 @@ export const api = {
   health: (): Request => ({ method: 'GET', path: '/health', isPublic: true }),
   validate: (): Request => ({ method: 'POST', path: '/auth/validate' }),
   sessions: (): Request => ({ method: 'GET', path: '/sessions' }),
+  /** The setup's calls, made once with the admin key: find or create the session, mint the scoped operator key. */
+  sessionsNamed: (name: string, key: string): Request => ({ method: 'GET', path: `/sessions?name=${enc(name)}`, key }),
+  createSession: (name: string, key: string): Request => ({ method: 'POST', path: '/sessions', body: { name }, key }),
+  createKey: (sessionId: string, name: string, key: string): Request => ({
+    method: 'POST',
+    path: '/auth/api-keys',
+    body: { name, role: 'operator', allowedSessions: [sessionId] },
+    key,
+  }),
   session: (id: string): Request => ({ method: 'GET', path: `/sessions/${enc(id)}` }),
   start: (id: string): Request => ({ method: 'POST', path: `/sessions/${enc(id)}/start` }),
   qr: (id: string): Request => ({ method: 'GET', path: `/sessions/${enc(id)}/qr` }),

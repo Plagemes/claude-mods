@@ -20,6 +20,7 @@ import type {
   ModsNotifyResult,
   ModsPrefs,
   ModsPresence,
+  ModsPanelView,
   ModsPresenceReason,
   ModsPublishInput,
   ModsStopInput,
@@ -45,7 +46,23 @@ import {
   sanitizePrefs,
 } from './router'
 import { categoryOf, dotSvg, glyphOf, iconSvg, markSvg } from './icons'
-import { CHANNEL_DOT, type Tone, badge, controlLine, feedRow, headerCounts, modCounts, modePill, plural, statusReport, statusText } from './look'
+import {
+  CHANNEL_DOT,
+  CHANNEL_STATUS,
+  type Tone,
+  badge,
+  controlLine,
+  feedRow,
+  fit,
+  headerCounts,
+  modCounts,
+  modePill,
+  needsSetup,
+  plural,
+  statusReport,
+  statusText,
+  tabLayout,
+} from './look'
 import { costOf } from './shared/prices'
 import { redactText } from './shared/secrets'
 import { isTestCommand, summarizeRun } from './shared/test-runners'
@@ -111,6 +128,8 @@ const installedAtom = atom({ plugin: 'mods-hub', key: 'installed' } as const, EM
 /** Pull channels' notices, by channel id; in state so a hot reload loses none. */
 const outboxAtom = atom({ plugin: 'mods-hub', key: 'outbox' } as const, {} as Record<string, ModsNotice[]>)
 const controlAtom = atom({ plugin: 'mods-hub', key: 'control' } as const, null as ModsControl | null)
+const CLOSED_VIEW: ModsPanelView = { isMoreOpen: false, openChannel: null }
+const viewAtom = atom({ plugin: 'mods-hub', key: 'view' } as const, CLOSED_VIEW)
 /** Families: the member id is the topic (latest) or the fact's key (facts). */
 const LATEST = { plugin: 'mods-hub', key: 'latest' } as const
 const FACTS = { plugin: 'mods-hub', key: 'facts' } as const
@@ -274,6 +293,8 @@ const minuteOfDay = (now: number): number => {
   return date.getHours() * 60 + date.getMinutes()
 }
 
+/** A channel's hint is kept to this many characters, cut with an ellipsis; Home shows two lines of it, Set up all. */
+const MAX_CHANNEL_DETAIL = 240
 const oneLine = (text: string, max = MAX_TEXT): string => text.replace(/\s+/g, ' ').trim().slice(0, max)
 
 const asJson = (value: unknown): ModsJson => JSON.parse(JSON.stringify(value ?? null)) as ModsJson
@@ -1037,32 +1058,54 @@ async function runHub($: EngineInterface, rt: Runtime, args: string): Promise<st
 // ── The panel ───────────────────────────────────────────────────────────────────────────────────────
 //
 // One frame for every tab (docs/DESIGN.md, as mod-store draws it): the Slot mark with "Claude Mods · Hub", the counts
-// and the mode as a pill; then the tab bar (the owner's category glyph in the terminal, its icon elsewhere, `0`–`9`);
-// then the tab. Home is cards: the mode as segmented controls, the automatic-work strip, the channels with health
-// dots, routing, the mods, and the activity feed. Every row is one line (truncated, never wrapped), so a redraw with
-// new data never moves what is below it; a tab's own body (from `next`) is never put under a sized Box.
+// and the mode as a pill; then the tab bar (the owner's category glyph in the terminal, its icon elsewhere): Home and
+// the first nine tabs pinned with their digits `0`–`9`, the rest behind More (a menu on the desktop, a dim second row
+// on the terminal, a fold on the phone); then the tab. Home is cards: the mode as segmented controls, the
+// automatic-work strip, the channels with health dots, routing, the mods, and the activity feed.
+//
+// Nothing may run past the pane's edge on any surface: every row that can grow is a Box with `minWidth={0}` and
+// `overflow="hidden"` around a Text with `wrap="truncate-end"`, and the text is also cut to the cells the row has
+// (`fit`), so a remote renderer that lays out with its own font still ellipsizes instead of clipping. A row is one
+// line, so a redraw with new data never moves what is below it; the exceptions wrap on purpose, bounded: a channel's
+// setup hint (two lines at most), its open help and the two empty-state sentences. A tab's own body (from `next`) is
+// never put under a sized Box.
 
 const ROUTE_LABEL: Record<string, string> = { terminal: 'terminal', away: 'when away', always: 'always', off: 'off' }
-/** The width of the label column of the mode rows and of the feed's mod badge. */
-const LABEL_COLUMNS = 13
+/** The label column every Home row shares: the mode rows' labels, the channels' dot and name. */
+const LABEL_COLUMNS = 15
 const BADGE_COLUMNS = 16
-/** Tabs past the ninth get no digit (the contract is `0`–`9`); the bar still shows them. */
-const HOTKEY_TABS = 9
+/** Below this the panel is narrow: shorter badges, no feed destination, no header counts. */
+const NARROW_COLUMNS = 64
+/** The cells a channel row's controls take on the right: `[ Set up ]`, `[ On ]`, `[ Off ]` and their gaps. */
+const CHANNEL_CONTROLS = 26
+/** The same without Set up: `[ On ] [ Off ]`. */
+const CHANNEL_SWITCH = 15
+/** The Select option that stands for "nothing picked" in the desktop's More menu. */
+const MORE_VALUE = '·more'
+
+type Look = ReturnType<typeof kit>
 
 /** The pieces every section draws with, made once per drawing for its surface. */
 function kit($: EngineInterface, e: RenderInput<'Pane'>) {
   const { Box, Text } = $.ui.resolve(e)
   const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
   const isTerminal = e.surface === 'terminal'
+  const columns = Math.max(20, e.props.bodyColumns || 80)
   const icon = (category: string, size = 14): RenderElement =>
     Svg === undefined ? <Text color="claude">{glyphOf(category)}</Text> : <Svg source={iconSvg(category, size)} alt={category} width={size} height={size} />
   const kicker = (text: string, aside?: string): RenderElement => (
-    <Box flexDirection="row" columnGap={1}>
+    <Box flexDirection="row" columnGap={1} minWidth={0} overflow="hidden">
       <Text color="claude">▪</Text>
       <Text bold dimColor>
         {text.toUpperCase()}
       </Text>
-      {aside === undefined ? null : <Text dimColor>{aside}</Text>}
+      {aside === undefined ? null : (
+        <Box flexShrink={1} minWidth={0} overflow="hidden">
+          <Text dimColor wrap="truncate-end">
+            {fit(aside, columns - text.length - 3)}
+          </Text>
+        </Box>
+      )}
     </Box>
   )
   const pill = (text: string, tone: Tone): RenderElement =>
@@ -1077,11 +1120,19 @@ function kit($: EngineInterface, e: RenderInput<'Pane'>) {
     const look = CHANNEL_DOT[status]
     return Svg === undefined ? <Text color={look.tone}>{look.glyph}</Text> : <Svg source={dotSvg(look.hex, look.isHollow)} alt={status} width={8} height={8} />
   }
-  return { isTerminal, Svg, icon, kicker, pill, dot }
+  /** One line that takes what is left of its row and ellipsizes: cut to `cells`, truncated by the surface too. */
+  const line = (text: string, cells: number, style: { color?: Tone; dimColor?: boolean; bold?: boolean } = {}): RenderElement => (
+    <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
+      <Text {...style} wrap="truncate-end">
+        {fit(text, cells)}
+      </Text>
+    </Box>
+  )
+  return { isTerminal, isNarrow: columns < NARROW_COLUMNS, columns, Svg, icon, kicker, pill, dot, line }
 }
 
 /** The frame's header: mark and name, then the counts and the mode pill (the counts give way first when narrow). */
-function drawHeader($: EngineInterface, e: RenderInput<'Pane'>, look: ReturnType<typeof kit>, mem: { mode: ModsMode; installed: ModsInstalled; tabs: ModsTab[]; channels: ModsChannel[] }, now: number): RenderElement {
+function drawHeader($: EngineInterface, e: RenderInput<'Pane'>, look: Look, mem: { mode: ModsMode; installed: ModsInstalled; tabs: ModsTab[]; channels: ModsChannel[] }, now: number): RenderElement {
   const { Box, Text } = $.ui.resolve(e)
   const mark =
     look.Svg === undefined ? (
@@ -1092,11 +1143,12 @@ function drawHeader($: EngineInterface, e: RenderInput<'Pane'>, look: ReturnType
     ) : (
       <look.Svg source={markSvg(18)} alt="Claude Mods" width={18} height={18} />
     )
-  const width = e.props.bodyColumns || 80
   const pill = modePill(mem.mode, now)
+  // `▪▪▪ Claude Mods · Hub` is 21 cells, the pill its text and its frame; the counts get the rest.
+  const countsRoom = look.columns - 21 - pill.text.length - (look.isTerminal ? 4 : 8)
   return (
-    <Box key="header" flexDirection="row" justifyContent="space-between" columnGap={2}>
-      <Box flexDirection="row" columnGap={1} flexShrink={0}>
+    <Box key="header" flexDirection="row" justifyContent="space-between" alignItems="center" columnGap={2}>
+      <Box flexDirection="row" columnGap={1} flexShrink={0} alignItems="center">
         {mark}
         <Text>
           <Text bold>Claude </Text>
@@ -1106,62 +1158,117 @@ function drawHeader($: EngineInterface, e: RenderInput<'Pane'>, look: ReturnType
           <Text dimColor> · Hub</Text>
         </Text>
       </Box>
-      <Box flexDirection="row" columnGap={2} flexShrink={1} justifyContent="flex-end">
-        {width >= 64 ? (
-          <Text dimColor wrap="truncate-end">
-            {headerCounts(mem.installed, mem.tabs, mem.channels)}
-          </Text>
-        ) : null}
+      <Box flexDirection="row" columnGap={2} flexShrink={1} minWidth={0} justifyContent="flex-end" alignItems="center">
+        {look.isNarrow || countsRoom < 12 ? null : (
+          <Box flexShrink={1} minWidth={0} overflow="hidden">
+            <Text dimColor wrap="truncate-end">
+              {fit(headerCounts(mem.installed, mem.tabs, mem.channels), countsRoom)}
+            </Text>
+          </Box>
+        )}
         {look.pill(pill.text, pill.tone)}
       </Box>
     </Box>
   )
 }
 
-/** The tab bar: Home and every registered tab in order, the shown one drawn as the primary; a hairline under it. */
-function drawTabBar($: EngineInterface, e: RenderInput<'Pane'>, look: ReturnType<typeof kit>, tabs: readonly ModsTab[], current: ModsTab | undefined): RenderElement {
+/**
+ * The tab bar. Row one: Home and the first nine tabs, each with its digit (the contract's `0`–`9`), wrapping only
+ * when the pane is too narrow for them. The rest: a More menu on the desktop and in the editor; on the terminal a
+ * dim second row of what fits (the shown tab always among them) and `+N more ▾` that unfolds the others; on the
+ * phone, which draws no menu, a `More ▾` fold. A hairline under it on the terminal.
+ */
+function drawTabBar($: EngineInterface, e: RenderInput<'Pane'>, look: Look, tabs: readonly ModsTab[], current: ModsTab | undefined, view: ModsPanelView): RenderElement {
   const { Box, Button, Text } = $.ui.resolve(e)
-  const width = Math.max(10, e.props.bodyColumns || 80)
-  const tabButton = (key: string, id: string, title: string, category: string, hotkey: string | undefined, isActive: boolean): RenderElement => (
-    <Box key={`slot-${key}`} flexDirection="row" columnGap={look.isTerminal ? 0 : 1} flexShrink={0}>
-      {look.isTerminal ? null : look.icon(category)}
+  const Select = e.surface === 'desktop' || e.surface === 'vscode' ? $.ui.resolve(e).Select : undefined
+  const labelOf = (tab: { title: string; owner: string }): string => (look.isTerminal ? `${glyphOf(categoryOf(tab.owner))} ${tab.title}` : tab.title)
+  const layout = tabLayout(tabs, { currentId: current?.id, columns: look.columns - 2, isRow: look.isTerminal, labelOf })
+  const tabButton = (key: string, id: string, tab: { title: string; owner: string }, hotkey: string | undefined, isActive: boolean): RenderElement => (
+    <Box key={`slot-${key}`} flexDirection="row" columnGap={look.isTerminal ? 0 : 1} flexShrink={0} alignItems="center">
+      {look.isTerminal ? null : look.icon(categoryOf(tab.owner))}
       <Button
         key={key}
         plain
         {...(hotkey === undefined ? {} : { hotkey })}
         dimColor={!isActive}
         variant={isActive ? 'primary' : 'secondary'}
-        label={look.isTerminal ? `${glyphOf(category)} ${title}` : title}
-        onPress={() => $.state.set({ plugin: 'mods-hub', key: 'tab' }, id)}
+        label={labelOf(tab)}
+        onPress={() => showTabFromPanel($, id)}
       />
     </Box>
   )
+  const overflowButton = (tab: ModsTab): RenderElement => tabButton(`tab-${tab.id}`, tab.id, tab, undefined, tab.id === current?.id)
+  const isCurrentHidden = current !== undefined && layout.overflow.includes(current)
+
+  let more: RenderElement | null = null
+  let second: RenderElement | null = null
+  if (layout.overflow.length > 0 && Select !== undefined) {
+    more = (
+      <Box key="slot-tab-more" flexShrink={0}>
+        <Select
+          key="tab-more"
+          options={[{ value: MORE_VALUE, label: `More · ${layout.overflow.length}` }, ...layout.overflow.map(tab => ({ value: tab.id, label: tab.title }))]}
+          value={isCurrentHidden ? current.id : MORE_VALUE}
+          onSelect={value => (value === MORE_VALUE ? undefined : showTabFromPanel($, value))}
+        />
+      </Box>
+    )
+  } else if (layout.overflow.length > 0 && look.isTerminal) {
+    const rest = view.isMoreOpen ? layout.hidden : []
+    second = (
+      <Box key="tabs-more" flexDirection="row" flexWrap="wrap" columnGap={2}>
+        {[...layout.shown, ...rest].map(overflowButton)}
+        {layout.hidden.length === 0 ? null : (
+          <Button key="tab-more" plain dimColor label={view.isMoreOpen ? 'less ▴' : `+${layout.hidden.length} more ▾`} onPress={() => foldMore($, !view.isMoreOpen)} />
+        )}
+      </Box>
+    )
+  } else if (layout.overflow.length > 0) {
+    more = (
+      <Button
+        key="tab-more"
+        plain
+        dimColor={!isCurrentHidden}
+        label={view.isMoreOpen ? 'Less ▴' : isCurrentHidden ? `${current.title} ▾` : `More · ${layout.overflow.length} ▾`}
+        onPress={() => foldMore($, !view.isMoreOpen)}
+      />
+    )
+    second = view.isMoreOpen ? (
+      <Box key="tabs-more" flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={1}>
+        {layout.overflow.map(overflowButton)}
+      </Box>
+    ) : null
+  }
   return (
     <Box key="tab-bar" flexDirection="column">
-      <Box key="tabs" flexDirection="row" flexWrap="wrap" columnGap={2}>
-        {tabButton('tab-home', HOME, 'Home', 'core', '0', current === undefined)}
-        {tabs.map((tab, index) => tabButton(`tab-${tab.id}`, tab.id, tab.title, categoryOf(tab.owner), index < HOTKEY_TABS ? String(index + 1) : undefined, tab.id === current?.id))}
+      <Box key="tabs" flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center">
+        {tabButton('tab-home', HOME, { title: 'Home', owner: 'mods-hub' }, '0', current === undefined)}
+        {layout.pinned.map((tab, index) => tabButton(`tab-${tab.id}`, tab.id, tab, String(index + 1), tab.id === current?.id))}
+        {more}
       </Box>
-      {look.isTerminal ? <Text dimColor>{'─'.repeat(Math.min(width, 160))}</Text> : null}
+      {second}
+      {look.isTerminal ? <Text dimColor>{'─'.repeat(Math.min(look.columns, 160))}</Text> : null}
     </Box>
   )
 }
 
-/** One segmented control: a fixed label column, then one button per value, the current one the primary. */
+/** One segmented control: the label column, then one button per value, the current one the primary. */
 function segmented<T extends string>(
   $: EngineInterface,
   e: RenderInput<'Pane'>,
+  look: Look,
   input: { key: string; label: string; aside?: string; values: readonly { value: T; label: string }[]; current: T; onPick: (value: T) => Promise<unknown> },
 ): RenderElement {
   const { Box, Button, Text } = $.ui.resolve(e)
+  const buttons = input.values.reduce((sum, one) => sum + one.label.length + 5, 0)
   return (
-    <Box key={`seg-${input.key}`} flexDirection="row" columnGap={1}>
-      <Box width={LABEL_COLUMNS} flexShrink={0}>
+    <Box key={`seg-${input.key}`} flexDirection="row" columnGap={1} alignItems="center">
+      <Box width={LABEL_COLUMNS} flexShrink={0} overflow="hidden">
         <Text dimColor wrap="truncate-end">
-          {input.label}
+          {fit(input.label, LABEL_COLUMNS)}
         </Text>
       </Box>
-      <Box flexDirection="row" columnGap={1} flexWrap="wrap">
+      <Box flexDirection="row" columnGap={1} flexWrap="wrap" flexShrink={1} minWidth={0} alignItems="center">
         {input.values.map(one => (
           <Button
             key={`${input.key}-${one.value}`}
@@ -1171,35 +1278,121 @@ function segmented<T extends string>(
             onPress={() => (one.value === input.current ? undefined : input.onPick(one.value))}
           />
         ))}
-        {input.aside === undefined ? null : <Text dimColor>{input.aside}</Text>}
+        {input.aside === undefined ? null : (
+          <Box flexShrink={1} minWidth={0} overflow="hidden">
+            <Text dimColor wrap="truncate-end">
+              {fit(input.aside, look.columns - LABEL_COLUMNS - buttons - 2)}
+            </Text>
+          </Box>
+        )}
       </Box>
     </Box>
   )
 }
 
-async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime, look: ReturnType<typeof kit>): Promise<RenderElement> {
+/**
+ * One channel: the dot and the name in the label column, its state in two words, then Set up (when it is not set
+ * up or failing) and an On/Off switch drawn like the mode's segments. Under it, in the same column as the state, the
+ * owner's hint, dim, wrapped to two lines at most; Set up opens the owner's tab in this panel, or, when the owner
+ * has none, unfolds the whole hint with where its options live.
+ */
+function drawChannel($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime, look: Look, channel: ModsChannel, input: { isOn: boolean; isOpen: boolean; setupTab: ModsTab | undefined }): RenderElement {
   const { Box, Button, Text } = $.ui.resolve(e)
-  const [mode, prefs, channels, inbox, installed, control, now] = await Promise.all([
+  const state = CHANNEL_STATUS[channel.status]
+  const isSetup = needsSetup(channel.status)
+  const hasHint = channel.detail !== undefined && channel.detail !== '' && channel.status !== 'connected'
+  const room = look.columns - LABEL_COLUMNS - 1
+  // Too narrow for the state and the controls side by side (a phone): the controls go on a row of their own.
+  const controlsWidth = isSetup ? CHANNEL_CONTROLS : CHANNEL_SWITCH
+  const isStacked = room - controlsWidth < 12
+  const stateText = `${state.text}${channel.audience === 'team' ? ' · team' : ''}${!hasHint && channel.detail !== undefined && channel.detail !== '' ? ` · ${channel.detail}` : ''}`
+  const switchButton = (value: 'on' | 'off'): RenderElement => {
+    const isCurrent = (value === 'on') === input.isOn
+    return (
+      <Button
+        key={`channel-${channel.id}-${value}`}
+        label={value === 'on' ? 'On' : 'Off'}
+        dimColor={!isCurrent}
+        variant={isCurrent ? 'primary' : 'secondary'}
+        onPress={() => (isCurrent ? undefined : toggleChannel($, rt, channel.id))}
+      />
+    )
+  }
+  const controls = (
+    <Box flexDirection="row" columnGap={1} flexShrink={0} alignItems="center">
+      {isSetup ? (
+        <Button
+          key={`setup-${channel.id}`}
+          label={input.isOpen ? 'Hide' : 'Set up'}
+          variant={input.isOpen ? 'secondary' : 'primary'}
+          onPress={() => setUpChannel($, channel.id, input.setupTab?.id)}
+        />
+      ) : null}
+      {switchButton('on')}
+      {switchButton('off')}
+    </Box>
+  )
+  return (
+    <Box key={`channel-${channel.id}`} flexDirection="column">
+      <Box key={`channel-row-${channel.id}`} flexDirection="row" columnGap={1} alignItems="center">
+        <Box width={LABEL_COLUMNS} flexShrink={0} flexDirection="row" columnGap={1} alignItems="center" overflow="hidden">
+          <Box key={`dot-${channel.id}`} width={1} flexShrink={0} alignItems="center">
+            {look.dot(channel.status)}
+          </Box>
+          <Box flexShrink={1} minWidth={0} overflow="hidden">
+            <Text wrap="truncate-end" dimColor={!input.isOn}>
+              {fit(channel.title, LABEL_COLUMNS - 2)}
+            </Text>
+          </Box>
+        </Box>
+        {look.line(stateText, isStacked ? room : room - controlsWidth, { color: state.tone })}
+        {isStacked ? null : controls}
+      </Box>
+      {isStacked ? (
+        <Box key={`controls-${channel.id}`} flexDirection="row" paddingLeft={LABEL_COLUMNS + 1}>
+          {controls}
+        </Box>
+      ) : null}
+      {hasHint ? (
+        <Box key={`hint-${channel.id}`} flexDirection="column" paddingLeft={LABEL_COLUMNS + 1} minWidth={0}>
+          <Text dimColor wrap="wrap">
+            {input.isOpen ? (channel.detail ?? '').replace(/\s+/g, ' ') : fit(channel.detail ?? '', 2 * room - 12)}
+          </Text>
+          {input.isOpen ? (
+            <Text dimColor wrap="wrap">
+              {`Its options: /plugin, then ${channel.owner}.`}
+            </Text>
+          ) : null}
+        </Box>
+      ) : null}
+    </Box>
+  )
+}
+
+async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime, look: Look): Promise<RenderElement> {
+  const { Box, Button, Text } = $.ui.resolve(e)
+  const [mode, prefs, channels, tabs, inbox, installed, control, view, now] = await Promise.all([
     read($, modeAtom),
     read($, prefsAtom),
     read($, channelsAtom),
+    read($, tabsAtom),
     read($, inboxAtom),
     read($, installedAtom),
     read($, controlAtom),
+    read($, viewAtom),
     $.clock.now(),
   ])
   const work = controlLine(control)
   const counts = modCounts(installed)
-  const width = e.props.bodyColumns || 80
-  const isNarrow = width < 64
+  const width = look.columns
   // The feed fills what is left of the pane; never fewer than three rows.
-  const room = Math.max(3, (e.props.scroll.bodyRows || 24) - 22 - channels.length)
-  const badgeColumns = isNarrow ? 10 : BADGE_COLUMNS
+  const room = Math.max(3, (e.props.scroll.bodyRows || 24) - 22 - channels.length * 2)
+  const badgeColumns = look.isNarrow ? 10 : BADGE_COLUMNS
 
   const modeCard = (
     <Box key="card-mode" flexDirection="column">
       {look.kicker('Mode', describeMode(mode, now))}
-      {segmented($, e, {
+      {segmented($, e, look, {
         key: 'presence',
         label: 'Presence',
         values: [
@@ -1209,7 +1402,7 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
         current: mode.presence === 'away' ? 'away' : 'here',
         onPick: value => setPresenceFromPanel($, rt, value),
       })}
-      {segmented($, e, {
+      {segmented($, e, look, {
         key: 'interaction',
         label: 'Interaction',
         values: [
@@ -1220,7 +1413,7 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
         current: prefs.interaction,
         onPick: value => setFromPanel($, rt, current => ({ ...current, interaction: value })),
       })}
-      {segmented($, e, {
+      {segmented($, e, look, {
         key: 'silent',
         label: 'Silent',
         values: [
@@ -1230,7 +1423,7 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
         current: mode.isSilent ? 'on' : 'off',
         onPick: value => setFromPanel($, rt, current => ({ ...current, isSilent: value === 'on', silentUntil: null })),
       })}
-      {segmented($, e, {
+      {segmented($, e, look, {
         key: 'night',
         label: 'Night',
         aside: prefs.quietHours,
@@ -1246,14 +1439,12 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
 
   // The control strip: one line, the same height whether the work runs or is held.
   const controlStrip = (
-    <Box key="control" flexDirection="row" columnGap={1}>
-      <Box flexGrow={1} flexShrink={1}>
-        <Text color={work.tone} wrap="truncate-end">
-          {work.isHalted ? work.text : `● ${work.text}`}
-        </Text>
-      </Box>
+    <Box key="control" flexDirection="row" columnGap={1} alignItems="center">
+      {look.line(work.isHalted ? work.text : `● ${work.text}`, width - (work.isHalted ? 12 : 20), { color: work.tone })}
       {work.isHalted && control !== null ? (
-        <Button key="resume" label="Resume" variant="primary" onPress={() => resumeFromPanel($, rt, control.scope)} />
+        <Box flexShrink={0}>
+          <Button key="resume" label="Resume" variant="primary" onPress={() => resumeFromPanel($, rt, control.scope)} />
+        </Box>
       ) : (
         <Box flexDirection="row" columnGap={1} flexShrink={0}>
           <Button key="control-pause" label="Pause" dimColor onPress={() => holdFromPanel($, rt, 'pause')} />
@@ -1267,33 +1458,19 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
     <Box key="card-channels" flexDirection="column">
       {look.kicker('Channels', channels.length === 0 ? undefined : `${channels.filter(channel => channel.status === 'connected').length}/${channels.length} connected`)}
       {channels.length === 0 ? (
-        <Text dimColor wrap="truncate-end">
+        <Text dimColor wrap="wrap">
           No channels yet: whatsapp-bridge, telegram-bridge, slack-bridge or desktop-notify reach you away from the terminal.
         </Text>
       ) : (
-        channels.map(channel => {
-          const setting = prefs.channels[channel.id]
-          const isOn = setting?.isEnabled !== false
-          return (
-            <Box key={`channel-${channel.id}`} flexDirection="row" columnGap={1}>
-              <Box key={`dot-${channel.id}`} width={2} flexShrink={0} alignItems="center">
-                {look.dot(channel.status)}
-              </Box>
-              <Box width={isNarrow ? 10 : 14} flexShrink={0}>
-                <Text wrap="truncate-end" dimColor={!isOn}>
-                  {channel.title}
-                </Text>
-              </Box>
-              <Box flexGrow={1} flexShrink={1}>
-                <Text dimColor wrap="truncate-end">
-                  {channel.status}
-                  {channel.detail === undefined ? '' : ` · ${channel.detail}`} · {channel.audience === 'team' ? 'team' : 'you'}
-                </Text>
-              </Box>
-              <Button key={`toggle-${channel.id}`} plain dimColor={!isOn} label={isOn ? '[on]' : '[off]'} onPress={() => toggleChannel($, rt, channel.id)} />
-            </Box>
-          )
-        })
+        <Box key="channel-rows" flexDirection="column" rowGap={look.isTerminal ? 0 : 1}>
+          {channels.map(channel =>
+            drawChannel($, e, rt, look, channel, {
+              isOn: prefs.channels[channel.id]?.isEnabled !== false,
+              isOpen: view.openChannel === channel.id,
+              setupTab: tabs.find(tab => tab.owner === channel.owner),
+            }),
+          )}
+        </Box>
       )}
     </Box>
   )
@@ -1312,48 +1489,49 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
   const modsCard = (
     <Box key="card-mods" flexDirection="column">
       {look.kicker('Mods')}
-      <Text dimColor wrap="truncate-end">
-        {installed.listedAt === null && counts.onBus === 0
-          ? 'Listing the installed mods…'
-          : `${plural(counts.installed, 'Claude Mod')} installed${counts.isListed ? ` · ${counts.enabled} enabled` : ''} · ${counts.onBus} on the bus`}
-      </Text>
+      <Box flexDirection="row" minWidth={0}>
+        {look.line(
+          installed.listedAt === null && counts.onBus === 0
+            ? 'Listing the installed mods…'
+            : `${plural(counts.installed, 'Claude Mod')} installed${counts.isListed ? ` · ${counts.enabled} enabled` : ''} · ${counts.onBus} on the bus`,
+          width,
+          { dimColor: true },
+        )}
+      </Box>
     </Box>
   )
 
   const feed = inbox.slice(-room).reverse()
+  // when (3) · glyph (1) · badge, then the text; the destination (at most 22) on wide panes.
+  const textRoom = width - 3 - 1 - badgeColumns - 3
   const feedCard = (
     <Box key="card-recent" flexDirection="column">
       {look.kicker('Recent', inbox.length === 0 ? undefined : `${inbox.length} kept`)}
       {feed.length === 0 ? (
-        <Text dimColor wrap="truncate-end">
+        <Text dimColor wrap="wrap">
           Nothing yet. Notifications and other mods' toasts land here.
         </Text>
       ) : (
         feed.map(notice => {
           const row = feedRow(notice, now)
+          const where = row.where === '' || look.isNarrow ? '' : fit(row.where, 22)
           return (
-            <Box key={`n-${notice.id}`} flexDirection="row" columnGap={1}>
+            <Box key={`n-${notice.id}`} flexDirection="row" columnGap={1} minWidth={0}>
               <Box width={3} flexShrink={0}>
                 <Text dimColor>{row.when}</Text>
               </Box>
               <Box width={1} flexShrink={0}>
                 <Text color={row.tone}>{row.glyph}</Text>
               </Box>
-              <Box width={badgeColumns} flexShrink={0}>
+              <Box width={badgeColumns} flexShrink={0} overflow="hidden">
                 <Text color="claude" dimColor wrap="truncate-end">
                   {badge(row.source, badgeColumns)}
                 </Text>
               </Box>
-              <Box flexGrow={1} flexShrink={1}>
-                <Text wrap="truncate-end" dimColor={notice.targets.length === 0}>
-                  {row.text}
-                </Text>
-              </Box>
-              {row.where === '' || isNarrow ? null : (
+              {look.line(row.text, textRoom - (where === '' ? 0 : where.length + 1), { dimColor: notice.targets.length === 0 })}
+              {where === '' ? null : (
                 <Box flexShrink={0}>
-                  <Text dimColor wrap="truncate-end">
-                    {row.where}
-                  </Text>
+                  <Text dimColor>{where}</Text>
                 </Box>
               )}
             </Box>
@@ -1364,7 +1542,7 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
   )
 
   return (
-    <Box key="home" flexDirection="column" rowGap={1}>
+    <Box key="home" flexDirection="column" rowGap={1} minWidth={0}>
       {modeCard}
       {controlStrip}
       {channelsCard}
@@ -1378,18 +1556,26 @@ async function drawHome($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime,
 async function drawPane($: EngineInterface, e: RenderInput<'Pane'>, next: (e: RenderInput<'Pane'>) => Promise<RenderElement>, rt: Runtime): Promise<RenderElement> {
   const { Box, Text } = $.ui.resolve(e)
   const look = kit($, e)
-  const [active, registered, mode, installed, channels, now] = await Promise.all([read($, tabAtom), read($, tabsAtom), read($, modeAtom), read($, installedAtom), read($, channelsAtom), $.clock.now()])
+  const [active, registered, mode, installed, channels, view, now] = await Promise.all([
+    read($, tabAtom),
+    read($, tabsAtom),
+    read($, modeAtom),
+    read($, installedAtom),
+    read($, channelsAtom),
+    read($, viewAtom),
+    $.clock.now(),
+  ])
   const tabs = [...registered].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
   const current = tabs.find(tab => tab.id === active)
   const frame = (
-    <Box key="frame" flexDirection="column">
+    <Box key="frame" flexDirection="column" rowGap={look.isTerminal ? 0 : 1}>
       {drawHeader($, e, look, { mode, installed, tabs, channels }, now)}
-      {drawTabBar($, e, look, tabs, current)}
+      {drawTabBar($, e, look, tabs, current, view)}
     </Box>
   )
   if (current === undefined) {
     return (
-      <Box flexDirection="column" rowGap={1}>
+      <Box flexDirection="column" rowGap={1} minWidth={0}>
         {frame}
         {await drawHome($, e, rt, look)}
       </Box>
@@ -1405,14 +1591,14 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>, next: (e: Re
   }
   if (isEmptyTree(body)) body = undefined
   return (
-    <Box flexDirection="column" rowGap={1}>
+    <Box flexDirection="column" rowGap={1} minWidth={0}>
       {frame}
-      <Box key="tab-title" flexDirection="row" columnGap={1}>
+      <Box key="tab-title" flexDirection="row" columnGap={1} alignItems="center" minWidth={0}>
         {look.icon(categoryOf(current.owner))}
-        <Text bold>{current.title}</Text>
-        <Text dimColor wrap="truncate-end">
-          {`by ${current.owner}${current.command === undefined ? '' : ` · full view: /${current.command}`}`}
-        </Text>
+        <Box flexShrink={0}>
+          <Text bold>{current.title}</Text>
+        </Box>
+        {look.line(`by ${current.owner}${current.command === undefined ? '' : ` · full view: /${current.command}`}`, look.columns - current.title.length - 4, { dimColor: true })}
       </Box>
       <Box key="tab-body" flexDirection="column">
         {body ?? (
@@ -1461,6 +1647,25 @@ async function holdFromPanel($: EngineInterface, rt: Runtime, action: 'pause' | 
 async function cycleRoute($: EngineInterface, rt: Runtime, level: ModsLevel): Promise<void> {
   await noteActivity($, rt)
   await changePrefs($, rt, prefs => ({ ...prefs, routes: { ...prefs.routes, [level]: cycle(ROUTES, prefs.routes[level]) } }))
+}
+
+/** A tab press: show that tab, and fold the More row and any open channel help away. */
+async function showTabFromPanel($: EngineInterface, id: string): Promise<void> {
+  await $.state.set({ plugin: 'mods-hub', key: 'view' }, CLOSED_VIEW)
+  await $.state.set({ plugin: 'mods-hub', key: 'tab' }, id)
+}
+
+async function foldMore($: EngineInterface, isOpen: boolean): Promise<void> {
+  await update($, viewAtom, view => ({ ...view, isMoreOpen: isOpen }))
+}
+
+/** Set up: the channel owner's own tab when it has one, else the channel's whole hint unfolds (pressed again, folds). */
+async function setUpChannel($: EngineInterface, id: string, tabId: string | undefined): Promise<void> {
+  if (tabId !== undefined) {
+    await showTabFromPanel($, tabId)
+    return
+  }
+  await update($, viewAtom, view => ({ ...view, openChannel: view.openChannel === id ? null : id }))
 }
 
 async function toggleChannel($: EngineInterface, rt: Runtime, id: string): Promise<void> {
@@ -1624,7 +1829,12 @@ export const register: Register = (on, options) => {
     const owner = next.origin.plugin
     const taken = rt.mem.channels.find(one => one.id === e.id && one.owner !== owner)
     if (taken !== undefined) return { deny: `mods-hub: channel "${e.id}" belongs to ${taken.owner}` }
-    const channel: ModsChannel = { ...e, title: oneLine(e.title, 32) || e.id, owner }
+    const channel: ModsChannel = {
+      ...e,
+      title: oneLine(e.title, 32) || e.id,
+      owner,
+      ...(e.detail === undefined ? {} : { detail: fit(e.detail, MAX_CHANNEL_DETAIL) }),
+    }
     const channels = remember($, rt, 'channels', [...rt.mem.channels.filter(one => one.id !== e.id), channel])
     return { value: { channels } }
   })
@@ -1636,7 +1846,7 @@ export const register: Register = (on, options) => {
       $,
       rt,
       'channels',
-      rt.mem.channels.map(one => (one.id === e.id ? { ...one, status: e.status, ...(e.detail === undefined ? {} : { detail: oneLine(e.detail, 80) }) } : one)),
+      rt.mem.channels.map(one => (one.id === e.id ? { ...one, status: e.status, ...(e.detail === undefined ? {} : { detail: fit(e.detail, MAX_CHANNEL_DETAIL) }) } : one)),
     )
     return { value: { channels } }
   })

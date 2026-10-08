@@ -53,10 +53,15 @@ export type WaPhase =
 /** The OpenWA link as this session last saw it. */
 export type WaConnection = {
   phase: WaPhase
+  /** One friendly line about the phase ("OpenWA isn't running"). */
   detail: string
+  /** The raw error behind it, for a dim, truncated line; '' when there is none. */
+  raw: string
   phone: string
   /** The linking QR as base64 PNG, while the session waits to be linked. */
   qr: string
+  /** The same QR as module rows (`1` dark), decoded from the PNG for an SVG or block drawing; [] when not decodable. */
+  qrModules: string[]
   pairingCode: string
   /** `bot`: a dedicated number; `self`: the owner's own number is linked. */
   mode: 'bot' | 'self' | 'unknown'
@@ -118,6 +123,33 @@ export type WaMemberQa = {
   outcome: 'answered' | 'limited' | 'failed' | 'bug-draft' | 'bug-filed'
 }
 
+/**
+ * Where the guided setup stands. `checking` docker; `no-docker` / `docker-off` the prerequisite is missing;
+ * `ready` to start; `pulling` the image, `booting` the server, `provisioning` its WhatsApp session and scoped key;
+ * `running` the server answers (linking then follows the connection); `elsewhere` another session is starting it;
+ * `failed` the last attempt failed (see `note`).
+ */
+export type WaSetupStep = 'idle' | 'checking' | 'no-docker' | 'docker-off' | 'ready' | 'pulling' | 'booting' | 'provisioning' | 'running' | 'elsewhere' | 'failed'
+
+/** The guided setup in the Status tab. */
+export type WaSetup = {
+  step: WaSetupStep
+  /** One short line for the step. */
+  note: string
+  /** Raw output behind it (docker's error, the last pull line), dim and truncated. */
+  raw: string
+  /** Docker's server version once checked; '' unknown. */
+  docker: string
+  /** Who runs the server: this session started it, another did, or the user runs it ('external'); '' unknown. */
+  owner: 'this' | 'other' | 'external' | ''
+  /** Start the managed server by itself when a session starts and nothing answers (the user's opt-in). */
+  autoStart: boolean
+  /** The "I run it myself" form (URL and key) is open. */
+  isManual: boolean
+  /** The OpenWA API in use. */
+  baseUrl: string
+}
+
 export type WaTab = 'status' | 'chat' | 'settings' | 'privacy' | 'log'
 
 /** The privacy card: the allowlist in force and a redaction preview. */
@@ -128,6 +160,7 @@ declare module 'claude-code' {
     'whatsapp-bridge': {
       tab: WaTab
       connection: WaConnection
+      setup: WaSetup
       group: WaGroupCard
       sessions: WaSessionInfo[]
       conversation: WaLogEntry[]

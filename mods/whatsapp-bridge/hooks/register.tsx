@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, RenderInput, Timer } from 'claude-code'
+import type { ElementConstructor, ElementTable, EngineInterface, InputProps, Register, RenderElement, RenderInput, RenderSurface, Timer } from 'claude-code'
 
 import type {
   WaConnection,
@@ -12,6 +12,7 @@ import type {
   WaPriority,
   WaPrivacy,
   WaSessionInfo,
+  WaSetup,
   WaTab,
 } from '../types'
 import type { ModsEvent, ModsNotice } from '../types/mods-hub'
@@ -58,9 +59,33 @@ import { LEASE_RENEW_MS, MAX_PAGES, PAGE_LIMIT, backoff, isLeaseTaken, leaseActi
 import type { Cursor, Lease } from './poller'
 import { crossed, crossedBudgets, dayKey, decide, isAway } from './policy'
 import { clean, oneLine } from './privacy'
+import {
+  CONTAINER,
+  IMAGE,
+  SESSION_NAME,
+  adminKeyArgv,
+  dashboardOf,
+  dockerCheckOf,
+  endpointOf,
+  healthDelay,
+  lockState,
+  normalizeBaseUrl,
+  parseLock,
+  pullArgv,
+  pullProgressOf,
+  removeArgv,
+  runArgv,
+  runFailureOf,
+  stateArgv,
+  stopArgv,
+  unreachableText,
+  versionArgv,
+} from './launcher'
+import type { ServerLock } from './launcher'
+import { decodePng, qrBlocks, qrModules, qrSvg } from './qr'
 import { chartSvg, chartText, costChart, routerChart, testsChart } from './reports'
 import type { Chart } from './reports'
-import { LIVE_MS, defaultLabel, isLive, projectOfChat, route } from './routing'
+import { LIVE_MS, defaultLabel, isLive, isPathLabel, projectNameOf, projectOfChat, route, slugLabel } from './routing'
 import {
   EVENT_KEYS,
   EVENT_LABELS,
@@ -129,10 +154,22 @@ const PHONE_NOTE = `\n\n(${PHONE_CONTEXT})`
 const phonePrompt = (text: string): string => `${text}${PHONE_NOTE}`
 const withoutPhoneNote = (text: string): string => (text.endsWith(PHONE_NOTE) ? text.slice(0, -PHONE_NOTE.length) : text)
 
-const EMPTY_CONNECTION: WaConnection = { phase: 'unconfigured', detail: '', phone: '', qr: '', pairingCode: '', mode: 'unknown', checkedAt: 0, isLeader: false }
+const EMPTY_CONNECTION: WaConnection = { phase: 'unconfigured', detail: '', raw: '', phone: '', qr: '', qrModules: [], pairingCode: '', mode: 'unknown', checkedAt: 0, isLeader: false }
+const EMPTY_SETUP: WaSetup = { step: 'idle', note: '', raw: '', docker: '', owner: '', autoStart: false, isManual: false, baseUrl: '' }
+/** While the server boots or waits for the QR scan: check this often (the QR rotates about every 20 s). */
+const SETUP_TICK_MS = 3_000
+/** How long a freshly started server may take to answer its health check. */
+const BOOT_WAIT_MS = 120_000
+/** `docker pull` of a ~1 GB image on a slow line. */
+const PULL_TIMEOUT_MS = 20 * 60_000
+/** The same toast is not shown again within this long. */
+const TOAST_REPEAT_MS = 60_000
+/** While the server answers, the background check runs this often (the leader's polls notice trouble sooner). */
+const HEALTH_OK_MS = 60_000
 
 const tabAtom = atom({ plugin: 'whatsapp-bridge', key: 'tab' } as const, 'status' as WaTab)
 const connectionAtom = atom({ plugin: 'whatsapp-bridge', key: 'connection' } as const, EMPTY_CONNECTION)
+const setupAtom = atom({ plugin: 'whatsapp-bridge', key: 'setup' } as const, EMPTY_SETUP)
 const groupAtom = atom({ plugin: 'whatsapp-bridge', key: 'group' } as const, { link: null, note: '', choices: [] } as WaGroupCard)
 const sessionsAtom = atom({ plugin: 'whatsapp-bridge', key: 'sessions' } as const, [] as WaSessionInfo[])
 const conversationAtom = atom({ plugin: 'whatsapp-bridge', key: 'conversation' } as const, [] as WaLogEntry[])
@@ -141,8 +178,11 @@ const privacyAtom = atom({ plugin: 'whatsapp-bridge', key: 'privacy' } as const,
 const auditAtom = atom({ plugin: 'whatsapp-bridge', key: 'audit' } as const, [] as WaLogEntry[])
 const membersAtom = atom({ plugin: 'whatsapp-bridge', key: 'members' } as const, [] as WaMemberQa[])
 
-/** config.json in the shared folder: what /wa setup learned. Never the admin key. */
-type SharedConfig = { apiKey?: string; sessionId?: string; ownerNumbers?: string[] }
+/**
+ * config.json in the shared folder: what /wa setup learned. Never the admin key. `baseUrl`: the user's own OpenWA
+ * ("I run it myself"); `managed`: the server is the mod's Docker container; `autoStart`: start it unasked.
+ */
+type SharedConfig = { apiKey?: string; sessionId?: string; ownerNumbers?: string[]; baseUrl?: string; managed?: boolean; autoStart?: boolean }
 
 /** One entry the leader dropped in a session's inbox. */
 type InboxEntry = {
@@ -203,6 +243,20 @@ type Runtime = {
   /** Whether Claude's tools are registered: they wait until the bridge is set up, so an unconfigured bridge costs the prompt nothing. */
   areToolsOffered: boolean
   config: SharedConfig
+  /** The OpenWA API in use: config.json's (set from the pane) over the option. */
+  baseUrl: string
+  /** Health checks in a row that found no server, and when the next one is due (backoff up to 60 s). */
+  healthFailures: number
+  nextCheckAt: number
+  /** The last toast and when, so the same words are not repeated. */
+  lastToast: { text: string; at: number }
+  /** Fast checks while the server boots or the QR waits for a scan. */
+  setupTimer: Timer | undefined
+  /** A start this session runs (pull, run, provision): one at a time. */
+  isStartingServer: boolean
+  /** One setup tick at a time, and when the server this session started began booting. */
+  isTicking: boolean
+  bootStartedAt: number
   apiKey: string
   sessionId: string
   owners: string[]
@@ -289,6 +343,14 @@ const newRuntime = (settings: Settings): Runtime => ({
   isStarted: false,
   areToolsOffered: false,
   config: {},
+  baseUrl: settings.baseUrl,
+  healthFailures: 0,
+  nextCheckAt: 0,
+  lastToast: { text: '', at: 0 },
+  setupTimer: undefined,
+  isStartingServer: false,
+  isTicking: false,
+  bootStartedAt: 0,
   apiKey: '',
   sessionId: '',
   owners: settings.ownerNumbers,
@@ -377,6 +439,7 @@ const paths = {
   prefs: (rt: Runtime): string => `${rt.dir}/prefs.json`,
   groups: (rt: Runtime): string => `${rt.dir}/groups.json`,
   lease: (rt: Runtime): string => `${rt.dir}/lease.json`,
+  server: (rt: Runtime): string => `${rt.dir}/server.json`,
   leader: (rt: Runtime): string => `${rt.dir}/leader.json`,
   sessions: (rt: Runtime): string => `${rt.dir}/sessions`,
   session: (rt: Runtime, id: string): string => `${rt.dir}/sessions/${id}.json`,
@@ -525,11 +588,11 @@ async function appendLog($: EngineInterface, rt: Runtime, entry: Omit<WaLogEntry
 /** One OpenWA call. Never throws: a transport failure is status 0. A 429 starts the shared backoff. */
 async function waCall($: EngineInterface, rt: Runtime, request: Request, idempotencyKey?: string): Promise<CallResult> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (request.isPublic !== true) headers['X-API-Key'] = rt.apiKey
+  if (request.isPublic !== true) headers['X-API-Key'] = request.key ?? rt.apiKey
   if (request.body !== undefined) headers['Content-Type'] = 'application/json'
   if (idempotencyKey !== undefined) headers['Idempotency-Key'] = idempotencyKey
   try {
-    const response = await $.http.fetch(`${rt.settings.baseUrl}${request.path}`, {
+    const response = await $.http.fetch(`${rt.baseUrl}${request.path}`, {
       method: request.method,
       headers,
       ...(request.body !== undefined ? { body: JSON.stringify(request.body) } : {}),
@@ -545,7 +608,7 @@ async function waCall($: EngineInterface, rt: Runtime, request: Request, idempot
   }
 }
 
-const failure = (result: CallResult): string => (result.status === 0 ? `OpenWA unreachable (${oneLine(result.text, 80)})` : errorText(result.status, result.text))
+const failure = (result: CallResult): string => (result.status === 0 ? `${unreachableText(result.text)} (${oneLine(result.text, 80)})` : errorText(result.status, result.text))
 
 type SendInput = {
   chatId: string
@@ -595,7 +658,7 @@ async function recordSent($: EngineInterface, rt: Runtime, messageId: string): P
 async function waSendFile($: EngineInterface, rt: Runtime, input: { chatId: string; path: string; base64: string; caption: string; kind: string }): Promise<string> {
   if (!isConfigured(rt) || !isAllowed(rt, input.chatId)) return ''
   const { mimetype, kind } = mimeOf(input.path)
-  const filename = input.path.split('/').at(-1) ?? 'file'
+  const filename = input.path.split(/[\\/]/).at(-1) ?? 'file'
   const caption = clean(input.caption, { audience: 'owner', maxChars: 1000, root: rt.root }).text + BOT_MARK
   rt.sendCount += 1
   const result = await waCall(
@@ -624,6 +687,7 @@ async function loadShared($: EngineInterface, rt: Runtime): Promise<void> {
   rt.config = isRecord(config) ? (config as SharedConfig) : {}
   const envKey = (await $.env.get('OPENWA_API_KEY').catch(() => undefined)) ?? ''
   rt.apiKey = rt.settings.apiKey || envKey.trim() || (typeof rt.config.apiKey === 'string' ? rt.config.apiKey : '')
+  rt.baseUrl = (typeof rt.config.baseUrl === 'string' && rt.config.baseUrl !== '' ? rt.config.baseUrl : rt.settings.baseUrl).replace(/\/+$/, '')
   rt.sessionId = typeof rt.config.sessionId === 'string' ? rt.config.sessionId : ''
   const stored = Array.isArray(rt.config.ownerNumbers) ? rt.config.ownerNumbers.map(String).map(digitsOnly) : []
   rt.owners = [...new Set([...rt.settings.ownerNumbers, ...stored])].filter(n => n.length >= 6)
@@ -633,6 +697,7 @@ async function loadShared($: EngineInterface, rt: Runtime): Promise<void> {
     ? Object.fromEntries(Object.entries(groups).filter(([, link]) => isRecord(link) && typeof link.groupId === 'string')) as Record<string, WaGroupLink>
     : {}
   await update($, prefsAtom, () => rt.prefs)
+  await update($, setupAtom, setup => ({ ...setup, autoStart: rt.config.autoStart === true, baseUrl: rt.baseUrl }))
 }
 
 async function saveConfig($: EngineInterface, rt: Runtime, change: Partial<SharedConfig>): Promise<void> {
@@ -661,16 +726,26 @@ async function saveGroups($: EngineInterface, rt: Runtime, change: (groups: Reco
 async function checkConnection($: EngineInterface, rt: Runtime): Promise<WaConnection> {
   await offerTools($, rt)
   const now = await $.clock.now()
+  const previous = await read($, connectionAtom)
   const base: WaConnection = { ...EMPTY_CONNECTION, checkedAt: now, isLeader: rt.isLeader, mode: rt.mode }
   const set = async (connection: WaConnection): Promise<WaConnection> => {
     await update($, connectionAtom, () => connection)
     return connection
   }
   const health = await waCall($, rt, api.health())
-  if (!health.ok) return set({ ...base, phase: 'unreachable', detail: failure(health) })
-  if (rt.apiKey === '') return set({ ...base, phase: 'no-key', detail: 'No API key yet: /wa setup' })
+  if (!health.ok) {
+    // Backoff: 5 s, 10 s, 20 s ... at most 60 s between checks while nothing answers; one toast when it goes away.
+    rt.healthFailures += 1
+    rt.nextCheckAt = now + healthDelay(rt.healthFailures)
+    if (previous.phase === 'ready') toastOnce($, rt, now, 'WhatsApp: OpenWA stopped answering. Open /wa to start it again.')
+    const raw = health.status === 0 ? health.text : errorText(health.status, health.text)
+    return set({ ...base, phase: 'unreachable', detail: health.status === 0 ? unreachableText(raw) : 'OpenWA answered with an error', raw })
+  }
+  rt.healthFailures = 0
+  rt.nextCheckAt = now + HEALTH_OK_MS
+  if (rt.apiKey === '') return set({ ...base, phase: 'no-key', detail: 'OpenWA is running; the mod has no key for it yet.' })
   const valid = await waCall($, rt, api.validate())
-  if (!valid.ok) return set({ ...base, phase: 'no-key', detail: `The key was refused (${failure(valid)})` })
+  if (!valid.ok) return set({ ...base, phase: 'no-key', detail: 'OpenWA refused the stored key.', raw: failure(valid) })
   const role = isRecord(valid.json) ? String(valid.json.role ?? '') : ''
   rt.scoped = isRecord(valid.json) && valid.json.scoped === true
   if (role === 'admin') {
@@ -688,7 +763,7 @@ async function checkConnection($: EngineInterface, rt: Runtime): Promise<WaConne
   }
   const got = await waCall($, rt, api.session(rt.sessionId))
   const session = parseSession(got.json)
-  if (session === null) return set({ ...base, phase: 'error', detail: failure(got) })
+  if (session === null) return set({ ...base, phase: 'error', detail: 'OpenWA did not return the WhatsApp session.', raw: failure(got) })
   rt.botPhone = session.phone
   rt.mode = session.phone === '' ? 'unknown' : rt.owners.includes(session.phone) ? 'self' : 'bot'
   const phase = phaseOf(session.status)
@@ -697,7 +772,8 @@ async function checkConnection($: EngineInterface, rt: Runtime): Promise<WaConne
     const code = await waCall($, rt, api.qr(rt.sessionId))
     qr = isRecord(code.json) && typeof code.json.qrCode === 'string' ? dataUrlBase64(code.json.qrCode) : ''
   }
-  const previous = await read($, connectionAtom)
+  // Decoded once per new QR, not per drawing.
+  const modules = qr === '' ? [] : qr === previous.qr ? previous.qrModules : qrModulesOf(qr)
   const detail =
     phase === 'ready'
       ? `Linked as +${session.phone}${session.pushName !== '' ? ` (${session.pushName})` : ''}`
@@ -705,10 +781,295 @@ async function checkConnection($: EngineInterface, rt: Runtime): Promise<WaConne
         ? 'Scan the QR with WhatsApp › Linked devices, or pair with a code'
         : phase === 'disconnected'
           ? 'Disconnected: press Reconnect'
-          : session.lastError !== ''
-            ? session.lastError
-            : session.status
-  return set({ ...base, phase, detail, phone: session.phone, qr, pairingCode: phase === 'qr' ? previous.pairingCode : '', mode: rt.mode })
+          : phase === 'starting'
+            ? 'The WhatsApp session is starting…'
+            : 'The WhatsApp session reported an error.'
+  if (phase === 'ready' && previous.phase !== 'ready' && previous.checkedAt > 0) toastOnce($, rt, now, `WhatsApp linked as +${session.phone}.`)
+  const raw = phase === 'error' || phase === 'starting' ? (session.lastError !== '' ? session.lastError : session.status) : ''
+  return set({ ...base, phase, detail, raw, phone: session.phone, qr, qrModules: modules, pairingCode: phase === 'qr' ? previous.pairingCode : '', mode: rt.mode })
+}
+
+/** The QR's module rows from OpenWA's PNG; [] when it does not decode (the pane falls back to the image or a link). */
+const qrModulesOf = (base64: string): string[] => {
+  const picture = decodePng(base64)
+  return picture === null ? [] : qrModules(picture)
+}
+
+/** A toast, unless the same words were shown less than a minute ago. */
+function toastOnce($: EngineInterface, rt: Runtime, now: number, text: string): void {
+  if (rt.lastToast.text === text && now - rt.lastToast.at < TOAST_REPEAT_MS) return
+  rt.lastToast = { text, at: now }
+  $.ui.toast(text)
+}
+
+// ── Starting OpenWA: the guided setup ───────────────────────────────────────────────────────────
+
+type Ran = { exitCode: number; stdout: string; stderr: string } | { error: string }
+
+async function setSetup($: EngineInterface, change: Partial<WaSetup>): Promise<WaSetup> {
+  let next = EMPTY_SETUP
+  await update($, setupAtom, setup => (next = { ...setup, ...change }))
+  return next
+}
+
+/** A host command that never throws: a missing binary or a timeout comes back as `{ error }`. */
+async function runHost($: EngineInterface, argv: readonly string[], timeoutMs: number): Promise<Ran> {
+  try {
+    const ran = await $.process.run(argv, { timeoutMs })
+    return { exitCode: ran.exitCode, stdout: ran.stdout, stderr: ran.stderr }
+  } catch (error) {
+    return { error: messageOf(error) }
+  }
+}
+
+const ranOk = (ran: Ran): ran is { exitCode: number; stdout: string; stderr: string } => !('error' in ran) && ran.exitCode === 0
+const ranText = (ran: Ran): string => ('error' in ran ? ran.error : `${ran.stderr}\n${ran.stdout}`.trim())
+
+async function readLock($: EngineInterface, rt: Runtime): Promise<ServerLock | null> {
+  return parseLock(await readJsonFile($, paths.server(rt)))
+}
+
+/** Takes or renews server.json for this session; true once it is read back as this session's (two may race). */
+async function holdLock($: EngineInterface, rt: Runtime, phase: ServerLock['phase']): Promise<boolean> {
+  const now = await $.clock.now()
+  const lock = await readLock($, rt)
+  if (lockState(lock, rt.me, now) === 'held') return false
+  await writeJsonFile($, paths.server(rt), { owner: rt.me, phase, heartbeatAt: now, startedAt: lock?.owner === rt.me ? lock.startedAt : now } satisfies ServerLock)
+  return (await readLock($, rt))?.owner === rt.me
+}
+
+/** Lets another session take over (on session end, a stop or a failed start); only while it still names this one. */
+async function releaseLock($: EngineInterface, rt: Runtime): Promise<void> {
+  if ((await readLock($, rt))?.owner === rt.me) await writeJsonFile($, paths.server(rt), { owner: '', phase: 'running', heartbeatAt: 0, startedAt: 0 })
+}
+
+async function failSetup($: EngineInterface, rt: Runtime, note: string, raw: string): Promise<string> {
+  await releaseLock($, rt)
+  await setSetup($, { step: 'failed', note, raw: oneLine(raw, 300) })
+  return note
+}
+
+/** Step 1: Docker, the one prerequisite (OpenWA ships as an image only). */
+async function checkDocker($: EngineInterface): Promise<WaSetup> {
+  await setSetup($, { step: 'checking', note: 'Checking Docker…', raw: '' })
+  const check = dockerCheckOf(await runHost($, versionArgv(), 15_000))
+  const step = check.state === 'ok' ? 'ready' : check.state === 'missing' ? 'no-docker' : check.state === 'stopped' ? 'docker-off' : 'failed'
+  return setSetup($, { step, note: check.state === 'ok' ? `Docker ${check.version} is ready.` : check.note, docker: check.version })
+}
+
+/**
+ * Step 2, on the user's press (or with "Start automatically" on): runs OpenWA in Docker, unless a server already
+ * answers or another session is starting one (server.json). Returns once the container runs; the setup's ticks then
+ * wait for its health, provision it and show the QR.
+ */
+async function startServer($: EngineInterface, rt: Runtime): Promise<string> {
+  if (rt.isStartingServer) return 'OpenWA is already starting.'
+  const { port, isLocal } = endpointOf(rt.baseUrl)
+  if (!isLocal) return `The mod starts OpenWA on this machine only, and ${rt.baseUrl} is another host: start it there.`
+  rt.isStartingServer = true
+  try {
+    if ((await waCall($, rt, api.health())).ok) {
+      await setSetup($, { step: 'running', note: 'OpenWA is already running: using it.', raw: '', owner: rt.config.managed === true ? 'other' : 'external' })
+      return continueSetup($, rt)
+    }
+    if (!(await holdLock($, rt, 'starting'))) {
+      await setSetup($, { step: 'elsewhere', owner: 'other', note: 'Another Claude Code session is starting OpenWA; this one will use it.', raw: '' })
+      ensureSetupTicks($, rt)
+      return 'Another session is starting OpenWA.'
+    }
+    const docker = await checkDocker($)
+    if (docker.step !== 'ready') {
+      await releaseLock($, rt)
+      return docker.note
+    }
+    if (!ranOk(await runHost($, ['docker', 'image', 'inspect', '--format', '{{.Id}}', IMAGE], 15_000))) {
+      await holdLock($, rt, 'pulling')
+      await setSetup($, { step: 'pulling', note: 'Downloading OpenWA (about 1 GB, once)…', raw: '' })
+      const pulled = await pullImage($, rt)
+      if (!pulled.ok) return failSetup($, rt, runFailureOf(pulled.text, port), pulled.text)
+    }
+    await holdLock($, rt, 'starting')
+    const existing = await runHost($, stateArgv(), 15_000)
+    const isRunning = ranOk(existing) && existing.stdout.trim() === 'running'
+    // A stopped container of ours (a crash, a reboot) keeps the name: replace it. Its data lives in the volume.
+    if (ranOk(existing) && !isRunning) await runHost($, removeArgv(), 30_000)
+    await setSetup($, { step: 'booting', note: 'Starting OpenWA…', raw: '', owner: 'this' })
+    if (!isRunning) {
+      const engine = rt.settings.autoCreateGroup ? 'baileys' : 'whatsapp-web.js'
+      const ran = await runHost($, runArgv(port, engine), 120_000)
+      if (!ranOk(ran)) return failSetup($, rt, runFailureOf(ranText(ran), port), ranText(ran))
+    }
+    await saveConfig($, rt, { managed: true })
+    rt.bootStartedAt = await $.clock.now()
+    rt.healthFailures = 0
+    ensureSetupTicks($, rt)
+    return 'Starting OpenWA…'
+  } finally {
+    rt.isStartingServer = false
+  }
+}
+
+/** `docker pull` in the background (a spawned child, streamed): the last line it printed is the progress row. */
+async function pullImage($: EngineInterface, rt: Runtime): Promise<{ ok: boolean; text: string }> {
+  let tail = ''
+  let shownAt = 0
+  const startedAt = await $.clock.now()
+  try {
+    const pull = $.process.spawn({ argv: pullArgv() })
+    for await (const chunk of pull) {
+      tail = `${tail}${chunk.text}`.slice(-4_000)
+      const now = await $.clock.now()
+      if (now - shownAt >= 1_000) {
+        shownAt = now
+        await setSetup($, { raw: oneLine(pullProgressOf(tail), 120) })
+        await holdLock($, rt, 'pulling')
+      }
+      if (now - startedAt > PULL_TIMEOUT_MS) return { ok: false, text: 'the download took too long' }
+    }
+    const ended = await pull.result
+    return { ok: ended.code === 0, text: tail }
+  } catch (error) {
+    return { ok: false, text: `${messageOf(error)}\n${tail}` }
+  }
+}
+
+/** Stops the managed container (the user's press); the WhatsApp link stays in its volume for the next start. */
+async function stopServer($: EngineInterface, rt: Runtime): Promise<string> {
+  const stopped = await runHost($, stopArgv(), 60_000)
+  await releaseLock($, rt)
+  await setSetup($, { step: 'idle', note: '', raw: ranOk(stopped) ? '' : oneLine(ranText(stopped), 200) })
+  await checkConnection($, rt)
+  return ranOk(stopped) ? 'OpenWA stopped. Start it again from /wa.' : `Could not stop OpenWA: ${oneLine(ranText(stopped), 120)}`
+}
+
+/**
+ * Step 3, once the server answers: what is still missing on a server the mod runs. Mints the scoped key with the
+ * admin key it reads from the container (held for these calls only, never stored), then starts the WhatsApp session.
+ */
+async function continueSetup($: EngineInterface, rt: Runtime): Promise<string> {
+  const connection = await checkConnection($, rt)
+  if (rt.config.managed === true && (connection.phase === 'no-key' || connection.phase === 'no-session' || connection.phase === 'admin-key')) return provision($, rt)
+  if (connection.phase === 'disconnected' || (connection.phase === 'error' && rt.sessionId !== '')) {
+    await waCall($, rt, api.start(rt.sessionId))
+    await checkConnection($, rt)
+  }
+  ensureSetupTicks($, rt)
+  const now = await read($, connectionAtom)
+  if (now.phase === 'no-key' || now.phase === 'no-session') {
+    return 'OpenWA is running but the mod has no key for it: use "I run it myself" to paste a scoped key (/wa setup shows how).'
+  }
+  return now.phase === 'ready' ? now.detail : 'OpenWA is running: link your phone with the QR in /wa.'
+}
+
+async function provision($: EngineInterface, rt: Runtime): Promise<string> {
+  await setSetup($, { step: 'provisioning', note: 'Creating the WhatsApp session and a scoped key…', raw: '' })
+  const admin = await runHost($, adminKeyArgv(), 20_000)
+  const adminKey = ranOk(admin) ? admin.stdout.trim() : ''
+  if (adminKey === '') return failSetup($, rt, `Could not read OpenWA's admin key from the ${CONTAINER} container.`, ranText(admin))
+  const listed = await waCall($, rt, api.sessionsNamed(SESSION_NAME, adminKey))
+  let session = parseSessions(listed.json).find(one => one.name === SESSION_NAME) ?? null
+  if (session === null) {
+    const created = await waCall($, rt, api.createSession(SESSION_NAME, adminKey))
+    session = parseSession(created.json)
+    if (session === null) return failSetup($, rt, 'OpenWA did not create the WhatsApp session.', failure(created))
+  }
+  const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
+  const minted = await waCall($, rt, api.createKey(session.id, `claude-code ${day}`, adminKey))
+  const key = isRecord(minted.json) && typeof minted.json.apiKey === 'string' ? minted.json.apiKey : ''
+  if (key === '') return failSetup($, rt, 'OpenWA did not mint the scoped key.', failure(minted))
+  await saveConfig($, rt, { apiKey: key, sessionId: session.id, managed: true })
+  const started = await waCall($, rt, api.start(session.id))
+  // 400: already started (the server's auto-start beat us to it).
+  if (!started.ok && started.status !== 400) await setSetup($, { raw: oneLine(failure(started), 200) })
+  await setSetup($, { step: 'running', note: 'OpenWA is running.', owner: (await readLock($, rt))?.owner === rt.me ? 'this' : 'other' })
+  await checkConnection($, rt)
+  ensureSetupTicks($, rt)
+  return 'OpenWA is set up: scan the QR in /wa to link WhatsApp.'
+}
+
+/** Whether the fast ticks have something to watch: a server booting, or a link waiting for its scan. */
+const isSettling = (setup: WaSetup, connection: WaConnection): boolean =>
+  setup.step === 'booting' || setup.step === 'elsewhere' || connection.phase === 'qr' || connection.phase === 'starting'
+
+function ensureSetupTicks($: EngineInterface, rt: Runtime): void {
+  if (rt.setupTimer !== undefined) return
+  rt.setupTimer = $.clock.every(SETUP_TICK_MS, () => void setupTick($, rt).catch(error => $.ui.log(`${NAME}: setup: ${messageOf(error)}`, { to: 'debug' })))
+}
+
+function stopSetupTicks(rt: Runtime): void {
+  rt.setupTimer?.cancel()
+  rt.setupTimer = undefined
+}
+
+/** Every 3 s while settling: the booting server's health, then provisioning; the QR (it rotates) until linked. */
+async function setupTick($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.isTicking) return
+  rt.isTicking = true
+  try {
+    const setup = await read($, setupAtom)
+    const now = await $.clock.now()
+    if (setup.step === 'booting' || setup.step === 'elsewhere') {
+      const lock = await readLock($, rt)
+      if (lock?.owner === rt.me) await holdLock($, rt, 'starting')
+      if ((await waCall($, rt, api.health())).ok) {
+        if (lock?.owner === rt.me) await holdLock($, rt, 'running')
+        await setSetup($, { step: 'running', note: 'OpenWA is running.', raw: '' })
+        // The session that started it provisions; another waits for the key it saves (config.json).
+        if (setup.step === 'booting') await continueSetup($, rt)
+        else {
+          await loadShared($, rt)
+          await checkConnection($, rt)
+        }
+        return
+      }
+      if (setup.step === 'booting' && now - rt.bootStartedAt > BOOT_WAIT_MS) {
+        const logs = await runHost($, ['docker', 'logs', '--tail', '5', CONTAINER], 15_000)
+        stopSetupTicks(rt)
+        await failSetup($, rt, 'OpenWA did not answer within 2 minutes.', ranText(logs))
+        return
+      }
+      if (setup.step === 'elsewhere' && lockState(lock, rt.me, now) === 'free') {
+        stopSetupTicks(rt)
+        await setSetup($, { step: 'ready', note: 'The other session stopped starting OpenWA: start it here.', owner: '' })
+      }
+      return
+    }
+    const connection = await checkConnection($, rt)
+    if (setup.step === 'running' && connection.phase === 'no-key' && rt.config.managed === true) await loadShared($, rt)
+    if (!isSettling(await read($, setupAtom), connection)) stopSetupTicks(rt)
+  } finally {
+    rt.isTicking = false
+  }
+}
+
+/** With "Start automatically" on: at session start, a managed server that does not answer is started (once). */
+async function autoStart($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.config.autoStart !== true || !endpointOf(rt.baseUrl).isLocal) return
+  if ((await waCall($, rt, api.health())).ok) return
+  if (lockState(await readLock($, rt), rt.me, await $.clock.now()) === 'held') return
+  await startServer($, rt)
+}
+
+/** The "I run it myself" URL: saved for every session, then checked. */
+async function saveBaseUrl($: EngineInterface, rt: Runtime, input: string): Promise<string> {
+  const url = normalizeBaseUrl(input)
+  if (url === '') return 'That is not a URL: try http://127.0.0.1:2785/api'
+  await saveConfig($, rt, { baseUrl: url, managed: false })
+  rt.healthFailures = 0
+  const connection = await checkConnection($, rt)
+  await setSetup($, { owner: 'external' })
+  return connection.phase === 'unreachable' ? `Saved ${url}, but nothing answers there yet (${connection.detail}).` : `Saved ${url}: ${connection.detail}`
+}
+
+/** Runs a setup step after the press or command returned, so a long pull never holds a hook. */
+function inBackground($: EngineInterface, rt: Runtime, work: () => Promise<string>): void {
+  $.clock.after(0, () => {
+    void work()
+      .then(async outcome => {
+        if (outcome !== '') toastOnce($, rt, await $.clock.now(), oneLine(outcome, 160))
+      })
+      .catch(error => $.ui.log(`${NAME}: setup: ${messageOf(error)}`, { to: 'debug' }))
+  })
 }
 
 // ── Project groups ───────────────────────────────────────────────────────────────────────────────
@@ -1064,7 +1425,7 @@ async function handleRow($: EngineInterface, rt: Runtime, files: SessionFile[], 
       routed.reason === 'unknown-tag'
         ? `No live session is tagged ${routed.detail}. Send *sessions* to list them.`
         : routed.reason === 'no-project-session'
-          ? `No Claude Code session is running for ${routed.detail.split('/').at(-1) ?? 'this project'} right now.`
+          ? `No Claude Code session is running for ${projectNameOf(routed.detail)} right now.`
           : 'No Claude Code session is running right now.'
     await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'reply', text: `🤖 ${why}` })
     return true
@@ -1869,7 +2230,7 @@ async function toolSendFile($: EngineInterface, rt: Runtime, input: Record<strin
   if (typeof bytes !== 'object' || bytes === null || !('base64' in bytes)) return 'Not sent: the file could not be read.'
   const caption = typeof input.caption === 'string' ? input.caption : ''
   const messageId = await waSendFile($, rt, { chatId: await projectChat($, rt), path: real, base64: bytes.base64, caption, kind: 'file' })
-  return messageId === '' ? 'Not sent: OpenWA refused it (see /wa, Log).' : `Sent ${real.split('/').at(-1) ?? 'the file'} to the user's WhatsApp.`
+  return messageId === '' ? 'Not sent: OpenWA refused it (see /wa, Log).' : `Sent ${real.split(/[\\/]/).at(-1) ?? 'the file'} to the user's WhatsApp.`
 }
 
 /**
@@ -2170,6 +2531,9 @@ async function onSessionEnd($: EngineInterface, rt: Runtime): Promise<void> {
     await toDigest($, rt, `🏁 session ended: ${rt.turns} prompts, ${plural(edits.size, 'file')} edited, $${rt.costUsd.toFixed(2)}${last !== undefined ? ` — ${oneLine(last.text, 160)}` : ''}`)
   }
   await saveSelf($, rt)
+  // The managed server keeps running for the other sessions; this one only stops vouching for it.
+  await releaseLock($, rt)
+  stopSetupTicks(rt)
   for (const timer of rt.timers) timer.cancel()
 }
 
@@ -2319,7 +2683,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   rt.me = await $.session.id()
   rt.root = await $.session.root().catch(() => '')
   rt.realRoot = (await $.fs.stat(rt.root, { resolve: true }).catch(() => undefined))?.realPath ?? rt.root
-  rt.project = rt.root.split('/').filter(Boolean).at(-1) ?? 'project'
+  rt.project = projectNameOf(rt.root)
   const repo = await $.session.repo().catch(() => null)
   const branch = repo !== null ? await $.process.run(['git', 'branch', '--show-current'], { cwd: repo.root, timeoutMs: 5_000 }).catch(() => undefined) : undefined
   rt.branch = branch?.exitCode === 0 ? branch.stdout.trim() : ''
@@ -2330,8 +2694,10 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   await offerTools($, rt)
   const others = (await readSessionFiles($, rt, LIVE_MS)).filter(file => file.info.id !== rt.me && isLive(file.info, rt.startedAt))
   const kept = asSessionFile(await readJsonFile($, paths.session(rt, rt.me)))
-  rt.label = kept?.info.label || defaultLabel(rt.project, rt.branch, others.map(file => file.info.label))
-  if (kept !== null) rt.file = { ...kept, info: { ...kept.info, ended: false } }
+  // A label older versions derived from a whole Windows path ("c-users-alexg-onedrive--") is derived again.
+  const keptLabel = kept !== null && !isPathLabel(kept.info.label, rt.root) ? kept.info.label : ''
+  rt.label = keptLabel || defaultLabel(rt.project, rt.branch, others.map(file => file.info.label))
+  if (kept !== null) rt.file = { ...kept, info: { ...kept.info, label: rt.label, ended: false } }
   const done = await readJsonFile($, paths.done(rt, rt.me))
   if (isRecord(done)) {
     rt.doneSeq = typeof done.seq === 'number' ? done.seq : 0
@@ -2341,8 +2707,10 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   await saveSelf($, rt)
   rt.isStarted = true
   await refreshPane($, rt)
-  if (isConfigured(rt)) void checkConnection($, rt).catch(() => undefined)
+  if (isConfigured(rt)) void checkConnection($, rt).then(connection => (isSettling(EMPTY_SETUP, connection) ? ensureSetupTicks($, rt) : undefined)).catch(() => undefined)
   if (!isInteractive) return
+  // "Start automatically" is the user's own opt-in; without it nothing starts unless they press Start.
+  if (rt.config.autoStart === true) inBackground($, rt, async () => (await autoStart($, rt), ''))
   await greetHub($, rt)
   rt.timers.push($.clock.every(HEARTBEAT_MS, () => void heartbeat($, rt).catch(error => $.ui.log(`${NAME}: ${messageOf(error)}`, { to: 'debug' }))))
   rt.timers.push($.clock.every(INBOX_MS, () => void consumeInbox($, rt).catch(() => undefined)))
@@ -2369,11 +2737,27 @@ async function heartbeat($: EngineInterface, rt: Runtime): Promise<void> {
   }
   await saveSelf($, rt)
   await tickLease($, rt)
+  await watchServer($, rt)
   await refreshHub($, rt)
   await syncChannel($, rt)
   await readBus($, rt)
   if (rt.isPaneOpen || (rt.hub !== undefined && (await hubTabIs($, TAB.id)))) await refreshPane($, rt)
   if (rt.state === 'idle') await drainPhoneQueue($, rt)
+}
+
+/**
+ * The background health check, on the heartbeat: while the pane shows or the bridge is set up, at most every 60 s
+ * when OpenWA answers and backing off (5 s doubling to 60 s) while it does not. Never while the setup's ticks run.
+ * The session that started the managed server keeps its lock fresh, so no other session starts a second one.
+ */
+async function watchServer($: EngineInterface, rt: Runtime): Promise<void> {
+  const lock = await readLock($, rt)
+  if (lock?.owner === rt.me && !rt.isStartingServer) await holdLock($, rt, lock.phase)
+  if (rt.setupTimer !== undefined || rt.isStartingServer) return
+  const isWatched = rt.isPaneOpen || isConfigured(rt) || (rt.hub !== undefined && (await hubTabIs($, TAB.id)))
+  if (!isWatched || (await $.clock.now()) < rt.nextCheckAt) return
+  const connection = await checkConnection($, rt)
+  if (isSettling(await read($, setupAtom), connection)) ensureSetupTicks($, rt)
 }
 
 /** Fills the pane's atoms from the shared files. */
@@ -2398,6 +2782,8 @@ async function refreshPane($: EngineInterface, rt: Runtime): Promise<void> {
 const WA_USAGE = [
   '/wa — open the WhatsApp panel',
   '/wa setup — check OpenWA and walk through what is missing',
+  '/wa start · /wa stop — run OpenWA in Docker on this machine (or stop it) · /wa qr — print the linking QR',
+  '/wa url <http://host:port/api> — use your own OpenWA · /wa autostart on | off',
   '/wa owner <+number> · /wa session <name|id> · /wa key <key> · /wa pair <+number>',
   '/wa link-project [n] · /wa unlink-project — this project’s WhatsApp group',
   '/wa away | here | auto · /wa pause | resume',
@@ -2408,26 +2794,43 @@ const WA_USAGE = [
 /** The Channels tab of the hub's panel when the hub is installed, the bridge's own pane otherwise. */
 async function openPane($: EngineInterface, rt: Runtime): Promise<void> {
   await refreshPane($, rt)
+  // A first look when the pane opens (the backoff still holds while nothing answers).
+  if ((await $.clock.now()) >= rt.nextCheckAt && rt.setupTimer === undefined) {
+    const connection = await checkConnection($, rt)
+    if (isSettling(await read($, setupAtom), connection)) ensureSetupTicks($, rt)
+  }
   if (rt.hub !== undefined && (await hubShowTab($, TAB.id))) return
   rt.isPaneOpen = true
   await $.ui.open({ id: PANE, title: 'WhatsApp', columns: PANE_COLUMNS })
 }
 
 /** `/wa setup`: health, key, session, link, owner — and the exact next step for whatever is missing. */
-async function setup($: EngineInterface, rt: Runtime): Promise<string> {
+async function runSetup($: EngineInterface, rt: Runtime): Promise<string> {
   await loadShared($, rt)
   const connection = await checkConnection($, rt)
   const lines: string[] = []
   switch (connection.phase) {
     case 'unreachable':
-      return dockerSteps(rt.settings.baseUrl)
+      return endpointOf(rt.baseUrl).isLocal
+        ? [
+            `${connection.detail} at ${rt.baseUrl}.`,
+            'Easiest: open /wa and press "Start OpenWA" (or run /wa start). The mod runs OpenWA in Docker on 127.0.0.1,',
+            'creates its WhatsApp session and a scoped key, and shows the QR to link your phone. It needs Docker Desktop.',
+            '',
+            'Running OpenWA yourself instead:',
+            dockerSteps(rt.baseUrl),
+          ].join('\n')
+        : `${connection.detail} at ${rt.baseUrl}: start it on that host (or /wa url to change it).\n${connection.raw}`
     case 'no-key':
     case 'admin-key':
-      return `${connection.detail}\n\n${keySteps(rt.sessionId)}`
     case 'no-session':
-      return `${connection.detail}\n\n${keySteps('')}`
+      if (rt.config.managed === true && connection.phase !== 'admin-key') {
+        inBackground($, rt, () => provision($, rt))
+        return 'OpenWA is running: creating its WhatsApp session and a scoped key now. Open /wa for the QR.'
+      }
+      return `${connection.detail}\n\n${keySteps(connection.phase === 'no-session' ? '' : rt.sessionId)}`
     case 'qr':
-      lines.push('WhatsApp is waiting to be linked: open /wa (the QR shows on terminals with image support, or open the OpenWA dashboard at http://127.0.0.1:2785/), or link with a code: /wa pair <your bot number>.')
+      lines.push('WhatsApp is waiting to be linked: open /wa for the QR (or /wa qr prints it here), or link with a code: /wa pair <your bot number>.')
       break
     case 'starting':
       lines.push('The WhatsApp session is starting; run /wa setup again in a few seconds.')
@@ -2467,7 +2870,25 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
       return `WhatsApp: ${connection.phase}${connection.detail !== '' ? ` — ${connection.detail}` : ''}${isConfigured(rt) ? '' : '\nNot set up yet: /wa setup'}`
     }
     case 'setup':
-      return setup($, rt)
+      return runSetup($, rt)
+    case 'start':
+      inBackground($, rt, () => startServer($, rt))
+      return `Starting OpenWA in Docker on ${rt.baseUrl} (the first time downloads about 1 GB). Watch /wa for the QR.`
+    case 'stop':
+      return stopServer($, rt)
+    case 'qr': {
+      const connection = await checkConnection($, rt)
+      if (connection.phase !== 'qr') return connection.phase === 'ready' ? `Already linked: ${connection.detail}` : `No QR now: ${connection.detail}`
+      if (connection.qrModules.length === 0) return `The QR could not be drawn here: open ${dashboardOf(rt.baseUrl)} to scan it.`
+      return ['Scan with WhatsApp › Linked devices › Link a device (it changes every ~20 s: /wa qr again if it expired):', '', ...qrBlocks(connection.qrModules, { quiet: 2, ink: 'light' })].join('\n')
+    }
+    case 'url':
+      return arg === '' ? `OpenWA URL: ${rt.baseUrl}. Usage: /wa url http://127.0.0.1:2785/api` : saveBaseUrl($, rt, arg)
+    case 'autostart': {
+      if (arg !== 'on' && arg !== 'off') return `Start automatically is ${rt.config.autoStart === true ? 'on' : 'off'}. Usage: /wa autostart on | off`
+      await saveConfig($, rt, { autoStart: arg === 'on' })
+      return arg === 'on' ? 'OpenWA will be started in Docker when a session starts and nothing answers.' : 'OpenWA starts only when you press Start.'
+    }
     case 'help':
       return WA_USAGE
     case 'status':
@@ -2542,7 +2963,7 @@ async function runWa($: EngineInterface, rt: Runtime, args: string): Promise<str
       return `Night mode until ${clockTime(until)}: no questions, only the updates you enabled.`
     }
     case 'label': {
-      const label = arg.toLowerCase().replace(/[^\p{L}\p{N}_.-]+/gu, '-').slice(0, 24)
+      const label = slugLabel(arg.replace(/^#/, ''))
       if (label === '') return `This session is #${rt.label}. Usage: /wa label <name>`
       rt.label = label
       await saveSelf($, rt)
@@ -2617,18 +3038,22 @@ async function setTab($: EngineInterface, tab: WaTab): Promise<void> {
 async function paneAction($: EngineInterface, rt: Runtime, action: () => Promise<string>): Promise<void> {
   try {
     const outcome = await action()
-    if (outcome !== '') $.ui.toast(oneLine(outcome, 160))
+    if (outcome !== '') toastOnce($, rt, await $.clock.now(), oneLine(outcome, 160))
   } catch (error) {
-    $.ui.toast(`Failed: ${oneLine(messageOf(error), 120)}`)
+    toastOnce($, rt, await $.clock.now(), `Failed: ${oneLine(messageOf(error), 120)}`)
   }
   await refreshPane($, rt)
 }
 
 async function reconnect($: EngineInterface, rt: Runtime): Promise<string> {
-  if (rt.sessionId === '') return setup($, rt)
+  rt.healthFailures = 0
+  const connection = await checkConnection($, rt)
+  // Nothing to reconnect to: the setup card says why and offers Start.
+  if (connection.phase === 'unreachable') return ''
+  if (rt.sessionId === '') return 'No WhatsApp session yet: finish the setup in this panel.'
   const started = await waCall($, rt, api.start(rt.sessionId))
-  await checkConnection($, rt)
-  return started.ok ? 'Starting the WhatsApp session…' : `Could not start: ${failure(started)}`
+  ensureSetupTicks($, rt)
+  return started.ok || started.status === 400 ? 'Starting the WhatsApp session…' : `Could not start: ${failure(started)}`
 }
 
 async function previewRedaction($: EngineInterface, rt: Runtime, sample: string): Promise<void> {
@@ -2640,11 +3065,10 @@ async function previewRedaction($: EngineInterface, rt: Runtime, sample: string)
 async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>, isTab = false): Promise<RenderElement> {
   const elements = $.ui.resolve(e)
   const { Box, Text, Button, Link } = elements
-  // Fields exist on every surface but mobile; pictures on the terminal alone (Elements in the types).
+  // Fields exist on every surface but mobile (Elements in the types).
   const hasFields = e.surface !== 'mobile'
   const Input = hasFields && 'Input' in elements ? elements.Input : undefined
   const Select = hasFields && 'Select' in elements ? elements.Select : undefined
-  const Image = e.surface === 'terminal' && 'Image' in elements ? elements.Image : undefined
   const width = Math.max(24, e.props.bodyColumns)
   const tab = await read($, tabAtom)
   const now = await $.clock.now()
@@ -2663,76 +3087,94 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
   let body: RenderElement
   if (tab === 'status') {
     const connection = await read($, connectionAtom)
+    const setup = await read($, setupAtom)
     const look = PHASE_LOOK[connection.phase]
     const group = await read($, groupAtom)
     const sessions = await read($, sessionsAtom)
     const prefs = await read($, prefsAtom)
     const isInteractive = hub === undefined ? interactionAllowed(prefs, rt.settings.interactionOffHours, now) : hub.canAsk
     const isMarkedAway = hub === undefined ? prefs.presence === 'away' : hub.presence === 'away'
+    // Group, sessions, test and digest need a linked, set-up bridge: hidden until then so nothing looks broken.
+    const isReady = connection.phase === 'ready' && isConfigured(rt)
+    const title = connection.phase === 'unreachable' && connection.detail !== '' ? connection.detail : look.label
+    const modeText = [connection.mode === 'self' ? 'Own number: allowlisted chats only' : connection.mode === 'bot' ? 'Dedicated bot number' : '', hub !== undefined ? `mods-hub: ${hub.presence}` : '', connection.isLeader ? 'this session polls' : '']
+      .filter(part => part !== '')
+      .join(' · ')
     body = (
       <Box flexDirection="column" gap={1}>
         <Box key="connection" flexDirection="column">
-          <Text bold>
-            <Text color={look.color}>{look.glyph}</Text> {look.label}
+          <Text bold wrap="truncate-end">
+            <Text color={look.color}>{look.glyph}</Text> {title}
             {connection.phone !== '' ? ` · +${connection.phone}` : ''}
           </Text>
-          {connection.detail !== '' && <Text dimColor wrap="wrap">{connection.detail}</Text>}
-          <Text dimColor>
-            {connection.mode === 'self' ? 'Own number: allowlisted chats only' : connection.mode === 'bot' ? 'Dedicated bot number' : 'Mode unknown'}
-            {connection.isLeader ? ' · this session polls' : ''}
-          </Text>
-          {connection.phase === 'qr' && isPng(connection.qr) && Image !== undefined && (
-            <Image key="qr" source={{ png: connection.qr }} columns={Math.min(32, width)} rows={16} alt="QR code: open the OpenWA dashboard or use a pairing code" />
-          )}
-          {connection.phase === 'qr' && (Image === undefined || !isPng(connection.qr)) && (
-            <Box key="qr-fallback" flexDirection="column">
-              <Text wrap="wrap">Scan the QR in the OpenWA dashboard:</Text>
-              <Link href="http://127.0.0.1:2785/" label="Open OpenWA dashboard" />
+          {connection.detail !== '' && connection.detail !== title && <Text dimColor wrap="wrap">{connection.detail}</Text>}
+          {modeText !== '' && <Text dimColor wrap="truncate-end">{modeText}</Text>}
+          {connection.raw !== '' && (
+            <Box key="raw">
+              <Text dimColor wrap="truncate-end">{row(connection.raw)}</Text>
             </Box>
           )}
-          {connection.pairingCode !== '' && <Text bold>Pairing code: {connection.pairingCode}</Text>}
+          {connection.phase === 'qr' && drawQr(elements, e.surface, connection, width, rt.baseUrl)}
+          {connection.pairingCode !== '' && <Text bold wrap="wrap">Pairing code: {connection.pairingCode}</Text>}
           {connection.phase === 'qr' && Input !== undefined && (
             <Input key="pair" label="Pair " placeholder="+number to link" submitLabel="code" onSubmit={value => void paneAction($, rt, () => runWa($, rt, `pair ${value}`))} />
           )}
           <Box flexDirection="row" gap={1} flexWrap="wrap">
-            <Button key="reconnect" label="Reconnect" hotkey="r" onPress={() => void paneAction($, rt, () => reconnect($, rt))} />
-            <Button key="refresh" label="Refresh" onPress={() => void paneAction($, rt, async () => (await checkConnection($, rt), ''))} />
-            {!isConfigured(rt) && <Button key="setup" label="Setup" variant="primary" onPress={() => void paneAction($, rt, () => setup($, rt))} />}
+            {connection.phase !== 'unreachable' && connection.phase !== 'unconfigured' && (
+              <Button key="reconnect" label="Reconnect" hotkey="r" onPress={() => void paneAction($, rt, () => reconnect($, rt))} />
+            )}
+            <Button key="refresh" label={connection.phase === 'unreachable' ? 'Check again' : 'Refresh'} onPress={() => void paneAction($, rt, () => recheck($, rt))} />
+            {rt.config.managed === true && connection.phase !== 'unreachable' && connection.phase !== 'unconfigured' && (
+              <Button key="stop-openwa" label="Stop OpenWA" plain onPress={() => void paneAction($, rt, () => stopServer($, rt))} />
+            )}
           </Box>
-        </Box>
-        <Box key="group" flexDirection="column">
-          <Text bold>Project group</Text>
-          {group.link !== null ? (
-            <Box flexDirection="column">
-              <Text wrap="truncate-end">
-                {group.link.name} · {plural(group.link.members, 'member')}
-              </Text>
-              {group.link.inviteLink !== '' && <Link href={group.link.inviteLink} label="Open in WhatsApp" />}
-              <Button key="unlink" label="Unlink" plain onPress={() => void paneAction($, rt, () => runWa($, rt, 'unlink-project'))} />
-            </Box>
-          ) : (
-            <Box flexDirection="column">
-              <Text dimColor wrap="wrap">{group.note !== '' ? group.note : 'No group yet: updates go to your direct chat.'}</Text>
-              <Button key="link" label={rt.settings.autoCreateGroup ? 'Create group' : 'Link group'} onPress={() => void paneAction($, rt, () => linkProject($, rt, ''))} />
-              {group.choices.map((choice, index) => (
-                <Button key={`choice:${choice.id}`} label={`${index + 1}. ${row(choice.name, width - 6)}`} plain onPress={() => void paneAction($, rt, () => linkProject($, rt, choice.id))} />
-              ))}
-            </Box>
+          {endpointOf(rt.baseUrl).isLocal && (
+            <Button
+              key="autostart"
+              plain
+              label={`${setup.autoStart ? '☑' : '☐'} Start OpenWA automatically`}
+              onPress={() => void paneAction($, rt, () => runWa($, rt, `autostart ${setup.autoStart ? 'off' : 'on'}`))}
+            />
           )}
         </Box>
-        <Box key="sessions" flexDirection="column">
-          <Text bold>Sessions ({sessions.length})</Text>
-          {sessions.map(session => (
-            <Box key={`session:${session.id}`} flexDirection="row" gap={1}>
-              <Text color={session.state === 'working' ? 'warning' : 'success'}>{session.state === 'working' ? '⚙' : '●'}</Text>
-              <Text wrap="truncate-end">{row(`#${session.label} ${session.project}${session.id === rt.me ? ' (this)' : ''}${session.state === 'working' ? ` · ${session.task}` : ''}`, width - 3)}</Text>
-            </Box>
-          ))}
-          {Input !== undefined && <Input key="label" label="Label " placeholder={`#${rt.label}`} submitLabel="rename" onSubmit={value => void paneAction($, rt, () => runWa($, rt, `label ${value}`))} />}
-        </Box>
+        {!isReady && drawSetup($, rt, elements, setup, connection, width, Input)}
+        {isReady && (
+          <Box key="group" flexDirection="column">
+            <Text bold>Project group</Text>
+            {group.link !== null ? (
+              <Box flexDirection="column">
+                <Text wrap="truncate-end">
+                  {group.link.name} · {plural(group.link.members, 'member')}
+                </Text>
+                {group.link.inviteLink !== '' && <Link href={group.link.inviteLink} label="Open in WhatsApp" />}
+                <Button key="unlink" label="Unlink" plain onPress={() => void paneAction($, rt, () => runWa($, rt, 'unlink-project'))} />
+              </Box>
+            ) : (
+              <Box flexDirection="column">
+                <Text dimColor wrap="wrap">{group.note !== '' ? group.note : 'No group yet: updates go to your direct chat.'}</Text>
+                <Button key="link" label={rt.settings.autoCreateGroup ? 'Create group' : 'Link group'} onPress={() => void paneAction($, rt, () => linkProject($, rt, ''))} />
+                {group.choices.map((choice, index) => (
+                  <Button key={`choice:${choice.id}`} label={`${index + 1}. ${row(choice.name, width - 6)}`} plain onPress={() => void paneAction($, rt, () => linkProject($, rt, choice.id))} />
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
+        {isReady && (
+          <Box key="sessions" flexDirection="column">
+            <Text bold>Sessions ({sessions.length})</Text>
+            {sessions.map(session => (
+              <Box key={`session:${session.id}`} flexDirection="row" gap={1}>
+                <Text color={session.state === 'working' ? 'warning' : 'success'}>{session.state === 'working' ? '⚙' : '●'}</Text>
+                <Text wrap="truncate-end">{row(`#${session.label} ${session.project}${session.id === rt.me ? ' (this)' : ''}${session.state === 'working' ? ` · ${session.task}` : ''}`, width - 3)}</Text>
+              </Box>
+            ))}
+            {Input !== undefined && <Input key="label" label="Label " placeholder={`#${rt.label}`} submitLabel="rename" onSubmit={value => void paneAction($, rt, () => runWa($, rt, `label ${value}`))} />}
+          </Box>
+        )}
         <Box key="actions" flexDirection="row" gap={1} flexWrap="wrap">
-          <Button key="test" label="Send test" hotkey="t" onPress={() => void paneAction($, rt, () => runWa($, rt, 'test'))} />
-          <Button key="digest" label="Digest now" onPress={() => void paneAction($, rt, () => runWa($, rt, 'digest'))} />
+          {isReady && <Button key="test" label="Send test" hotkey="t" onPress={() => void paneAction($, rt, () => runWa($, rt, 'test'))} />}
+          {isReady && <Button key="digest" label="Digest now" onPress={() => void paneAction($, rt, () => runWa($, rt, 'digest'))} />}
           <Button key="presence" label={isMarkedAway ? 'I am here' : 'I am away'} hotkey="a" onPress={() => void paneAction($, rt, () => runWa($, rt, isMarkedAway ? 'here' : 'away'))} />
           <Button key="pause" label={prefs.paused ? 'Resume all' : 'Pause all'} onPress={() => void paneAction($, rt, () => runWa($, rt, prefs.paused ? 'resume' : 'pause'))} />
           <Button key="interaction" label={isInteractive ? 'Interaction: ON' : 'Interaction: OFF'} variant={isInteractive ? 'primary' : 'secondary'} hotkey="i" onPress={() => void paneAction($, rt, () => runWa($, rt, `interact ${isInteractive ? 'off' : 'on'}`))} />
@@ -2781,7 +3223,7 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
     body = (
       <Box flexDirection="column" gap={1}>
         <Box key="interaction" flexDirection="column">
-          <Text bold>Interaction: {hub === undefined ? interactionLabel(prefs, rt.settings.interactionOffHours, now) : hubModeLabel(hub)}</Text>
+          <Text bold wrap="wrap">Interaction: {hub === undefined ? interactionLabel(prefs, rt.settings.interactionOffHours, now) : hubModeLabel(hub)}</Text>
           {hub !== undefined && <Text dimColor wrap="wrap">Presence, interaction and night follow mods-hub, for every session and channel (/hub).</Text>}
           <Box flexDirection="row" gap={1} flexWrap="wrap">
             {(['on', 'off', 'auto'] as const).map(mode => (
@@ -2804,7 +3246,7 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
               <Select key="awayMinutes" label="Away after " value={String(prefs.awayMinutes)} options={[5, 10, 15, 30, 60].map(n => ({ value: String(n), label: `${n} min` }))} onSelect={value => void savePrefs($, rt, current => ({ ...current, awayMinutes: Number(value) }))} />
             </Box>
           ) : (
-            <Text dimColor>Quiet hours {prefs.quietHours} · away after {prefs.awayMinutes} min</Text>
+            <Text dimColor wrap="wrap">Quiet hours {prefs.quietHours} · away after {prefs.awayMinutes} min</Text>
           )}
           <Text dimColor wrap="wrap">Priorities: critical now · normal when away · info in the digest (every {rt.settings.digestMinutes} min) · max {rt.settings.maxPerHour}/hour</Text>
         </Box>
@@ -2822,8 +3264,8 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
     body = (
       <Box flexDirection="column" gap={1}>
         <Box key="allowlist" flexDirection="column">
-          <Text bold>Allowlist — the only chats read or written</Text>
-          {privacy.allowlist.length === 0 && <Text dimColor>Empty: set your number with /wa owner.</Text>}
+          <Text bold wrap="wrap">Allowlist — the only chats read or written</Text>
+          {privacy.allowlist.length === 0 && <Text dimColor wrap="wrap">Empty: set your number with /wa owner.</Text>}
           {privacy.allowlist.map(chat => (
             <Text key={`allow:${chat}`} wrap="truncate-end">
               {row(`${isGroupChat(chat) ? '👥' : '👤'} ${Object.values(rt.groups).find(link => link.groupId === chat)?.name ?? chat}`, width)}
@@ -2869,6 +3311,135 @@ async function drawPane($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>,
           <Button key="close" label="Close" role="dismiss" onPress={() => void closePane($, rt)} />
         </Box>
       )}
+    </Box>
+  )
+}
+
+async function recheck($: EngineInterface, rt: Runtime): Promise<string> {
+  rt.healthFailures = 0
+  const connection = await checkConnection($, rt)
+  if (isSettling(await read($, setupAtom), connection)) ensureSetupTicks($, rt)
+  return ''
+}
+
+const STEP_GLYPH = { done: { glyph: '✓', color: 'success' }, busy: { glyph: '◌', color: 'warning' }, todo: { glyph: '○', color: 'inactive' }, bad: { glyph: '✗', color: 'error' } } as const
+
+/**
+ * The guided setup, while the bridge is not linked and set up: the server (start it, or point at your own), the
+ * link (the QR above), your number. Nothing starts without a press, or the "Start automatically" opt-in.
+ */
+function drawSetup(
+  $: EngineInterface,
+  rt: Runtime,
+  elements: ElementTable,
+  setup: WaSetup,
+  connection: WaConnection,
+  width: number,
+  Input: ElementConstructor<InputProps> | undefined,
+): RenderElement {
+  const { Box, Text, Button, Link } = elements
+  const endpoint = endpointOf(rt.baseUrl)
+  const isUp = connection.phase !== 'unreachable' && connection.phase !== 'unconfigured'
+  const isBusy = ['checking', 'pulling', 'booting', 'provisioning', 'elsewhere'].includes(setup.step)
+  const needsKey = isUp && (connection.phase === 'no-key' || connection.phase === 'no-session' || connection.phase === 'admin-key')
+  const where = `${endpoint.host}:${endpoint.port}`
+  const server: [keyof typeof STEP_GLYPH, string] = isBusy
+    ? ['busy', setup.note]
+    : isUp
+      ? ['done', `OpenWA running at ${where}${setup.owner === 'this' ? ' (started here)' : setup.owner === 'other' ? ' (another session)' : ''}`]
+      : setup.step === 'failed' || setup.step === 'no-docker' || setup.step === 'docker-off'
+        ? ['bad', setup.note]
+        : ['todo', `Start OpenWA (nothing answers at ${where})`]
+  const link: [keyof typeof STEP_GLYPH, string] =
+    connection.phase === 'ready' ? ['done', `WhatsApp linked as +${connection.phone}`] : connection.phase === 'qr' ? ['busy', 'Scan the QR above with your phone'] : ['todo', 'Link WhatsApp (a QR appears here)']
+  const owner: [keyof typeof STEP_GLYPH, string] =
+    rt.owners.length > 0 ? ['done', `Your number: ${rt.owners.map(n => `+${n}`).join(', ')}`] : ['todo', 'Your own number: the only one that can command Claude']
+  const step = (key: string, n: number, [state, text]: [keyof typeof STEP_GLYPH, string]): RenderElement => (
+    <Box key={key} flexDirection="row" gap={1}>
+      <Text color={STEP_GLYPH[state].color}>{STEP_GLYPH[state].glyph}</Text>
+      <Text wrap="wrap" dimColor={state === 'todo'}>
+        {`${n}. ${oneLine(text, 200)}`}
+      </Text>
+    </Box>
+  )
+  const showForm = setup.isManual || (needsKey && rt.config.managed !== true)
+  return (
+    <Box key="setup" flexDirection="column">
+      <Text bold>Setup</Text>
+      {step('step:server', 1, server)}
+      {setup.raw !== '' && (
+        <Box key="setup-raw">
+          <Text dimColor wrap="truncate-end">{oneLine(setup.raw, width)}</Text>
+        </Box>
+      )}
+      {step('step:link', 2, link)}
+      {step('step:owner', 3, owner)}
+      {rt.owners.length === 0 && Input !== undefined && (
+        <Input key="owner" label="Me " placeholder="+39… your WhatsApp number" submitLabel="save" onSubmit={value => void paneAction($, rt, () => runWa($, rt, `owner ${value}`))} />
+      )}
+      <Box flexDirection="row" gap={1} flexWrap="wrap">
+        {!isUp && !isBusy && endpoint.isLocal && (
+          <Button key="start-openwa" label="Start OpenWA" variant="primary" hotkey="o" onPress={() => inBackground($, rt, () => startServer($, rt))} />
+        )}
+        {needsKey && rt.config.managed === true && (
+          <Button key="provision" label="Finish setup" variant="primary" onPress={() => inBackground($, rt, () => provision($, rt))} />
+        )}
+        {!isBusy && <Button key="manual" label={setup.isManual ? 'Hide' : 'I run it myself → set URL'} plain onPress={() => void setSetup($, { isManual: !setup.isManual })} />}
+        {setup.step === 'no-docker' && <Link href="https://docs.docker.com/get-started/get-docker/" label="Get Docker Desktop" />}
+      </Box>
+      {showForm && (
+        <Box key="manual-form" flexDirection="column">
+          <Text dimColor wrap="wrap">Your own OpenWA: its URL, and a scoped operator key (/wa setup prints how to mint one).</Text>
+          {Input !== undefined && <Input key="base-url" label="URL " placeholder={rt.baseUrl} submitLabel="save" onSubmit={value => void paneAction($, rt, () => saveBaseUrl($, rt, value))} />}
+          {Input !== undefined && <Input key="setup-key" label="Key " placeholder="owa_k1_… (scoped operator key)" submitLabel="save" onSubmit={value => void paneAction($, rt, () => saveKey($, rt, value.trim()))} />}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+/**
+ * The linking QR: an SVG where the surface draws one (desktop, the editor, mobile), half-block characters on a
+ * terminal pane wide enough, the PNG itself on other terminals (kitty, Ghostty), else the dashboard link.
+ */
+function drawQr(elements: ElementTable, surface: RenderSurface, connection: WaConnection, width: number, baseUrl: string): RenderElement {
+  const { Box, Text, Link } = elements
+  const modules = connection.qrModules
+  const hint = <Text dimColor wrap="wrap">WhatsApp › Linked devices › Link a device. The code changes every ~20 s.</Text>
+  if (modules.length > 0 && 'Svg' in elements) {
+    const { Svg } = elements
+    return (
+      <Box key="qr" flexDirection="column">
+        <Svg source={qrSvg(modules)} alt="WhatsApp linking QR code" width={240} height={240} />
+        {hint}
+      </Box>
+    )
+  }
+  if (modules.length > 0 && modules.length + 4 <= width) {
+    return (
+      <Box key="qr" flexDirection="column">
+        {qrBlocks(modules, { quiet: 2, ink: 'dark' }).map((line, index) => (
+          <Text key={`qr:${index}`} color="#000000" backgroundColor="#ffffff" wrap="truncate-end">
+            {line}
+          </Text>
+        ))}
+        {hint}
+      </Box>
+    )
+  }
+  if (surface === 'terminal' && 'Image' in elements && isPng(connection.qr)) {
+    const { Image } = elements
+    return (
+      <Box key="qr" flexDirection="column">
+        <Image key="qr-image" source={{ png: connection.qr }} columns={Math.min(32, width)} rows={16} alt="QR code: run /wa qr to print it in the conversation" />
+        <Text dimColor wrap="wrap">No picture? /wa qr prints the QR in the conversation.</Text>
+      </Box>
+    )
+  }
+  return (
+    <Box key="qr-fallback" flexDirection="column">
+      <Text wrap="wrap">Run /wa qr to print the QR in the conversation, or scan it in the OpenWA dashboard:</Text>
+      <Link href={dashboardOf(baseUrl)} label={`Open ${dashboardOf(baseUrl)}`} />
     </Box>
   )
 }
