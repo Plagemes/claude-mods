@@ -32,9 +32,8 @@ Severity is one of [critical] (data loss, security hole, crash on a main path), 
 Which tests cover the change, and which to add (one line each).`
 
 export const REVIEWER_DESCRIPTION =
-  'Independent, read-only code review of a git diff: correctness, security, tests and readability, ' +
-  'with findings labelled [critical], [major], [minor] or [nit]. Use it when the user asks for a review ' +
-  'of their changes, or before committing a substantial change. Say which diff to review (e.g. "git diff main...HEAD").'
+  'Independent, read-only review of a git diff for correctness, security, tests and readability; findings are labelled ' +
+  '[critical], [major], [minor] or [nit]. Use it when the user asks for a review. Say which diff to review (e.g. "git diff main...HEAD").'
 
 const READ_ONLY_GIT = /^\s*git\s+(?:--no-pager\s+)?(diff|log|show|status|blame|merge-base|rev-parse|ls-files|grep|shortlog|describe|cat-file)(\s|$)/
 const SHELL_SYNTAX = /[;&|`$<>(){}\n\\]/

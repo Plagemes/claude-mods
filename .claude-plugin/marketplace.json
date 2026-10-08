@@ -13,7 +13,7 @@
       "name": "mod-store",
       "source": "./mods/mod-store",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
-      "version": "1.3.1",
+      "version": "1.4.0",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1668,7 +1668,7 @@
       "name": "recall",
       "source": "./mods/recall",
       "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -1740,7 +1740,7 @@
       "name": "review-agent",
       "source": "./mods/review-agent",
       "description": "Adds a dedicated code-reviewer subagent and a /review command.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2824,7 +2824,7 @@
       "name": "parallel-explore",
       "source": "./mods/parallel-explore",
       "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -2951,7 +2951,7 @@
       "name": "agent-presets",
       "source": "./mods/agent-presets",
       "description": "Ready-made subagents for focused jobs: debugger, test writer, doc writer and migrator.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3707,7 +3707,7 @@
       "name": "smart-router",
       "source": "./mods/smart-router",
       "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3726,7 +3726,7 @@
       "name": "whatsapp-bridge",
       "source": "./mods/whatsapp-bridge",
       "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3763,7 +3763,7 @@
       "name": "project-brain",
       "source": "./mods/project-brain",
       "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3873,7 +3873,7 @@
       "name": "telegram-bridge",
       "source": "./mods/telegram-bridge",
       "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3891,7 +3891,7 @@
       "name": "slack-bridge",
       "source": "./mods/slack-bridge",
       "description": "Posts progress and reports to Slack and takes questions and commands from a channel, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"
@@ -3910,7 +3910,7 @@
       "name": "discord-bridge",
       "source": "./mods/discord-bridge",
       "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Plagemes",
         "url": "https://github.com/plagemes"

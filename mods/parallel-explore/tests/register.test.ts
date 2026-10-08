@@ -310,6 +310,7 @@ test('/explore sends three Explore agents, shows progress, merges their reports 
   await clock.settle()
   expect(state.asked[0]?.model).toBe('haiku')
   expect(state.spawns.map(spawn => spawn.subagentType)).toEqual(['Explore', 'Explore', 'Explore'])
+  expect(state.registered).toEqual([]) // the scout is registered only when the built-in agent can't start
   expect(state.spawns[1]?.description).toBe('Explore: Callers & tests')
   expect(state.spawns[1]?.prompt).toContain('Your angle: Callers & tests. Find who triggers a refresh')
   expect(state.spawns[1]?.prompt).toContain(`The question: ${QUESTION}`)
@@ -384,9 +385,10 @@ test('explorers are read-only; other agents and the main loop are untouched; the
 test('without the built-in Explore agent the read-only scout steps in', async ($, on) => {
   const { state, clock } = world(on, { exploreMissing: true })
   await start($)
-  expect(state.registered).toEqual([{ name: 'scout', tools: ['Read', 'Bash'] }])
+  expect(state.registered).toEqual([])
   await $.command.run(explore(QUESTION))
   await clock.settle()
+  expect(state.registered).toEqual([{ name: 'scout', tools: ['Read', 'Bash'] }])
   expect(state.spawns.filter(spawn => spawn.subagentType === 'Explore')).toHaveLength(3)
   expect(state.spawns.filter(spawn => spawn.subagentType === 'parallel-explore:scout')).toHaveLength(3)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })

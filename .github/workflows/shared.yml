@@ -2,9 +2,9 @@
 name: shared
 on:
   push:
-    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', '.github/workflows/shared.yml']
+    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', 'scripts/check-prompt-budget.mjs', '.github/workflows/shared.yml']
   pull_request:
-    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', '.github/workflows/shared.yml']
+    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', 'scripts/check-prompt-budget.mjs', '.github/workflows/shared.yml']
 jobs:
   shared:
     runs-on: ubuntu-latest
@@ -22,3 +22,5 @@ jobs:
         run: node scripts/lint-dollar.mjs
       - name: No two mods claim the same command, tab, pane or folder
         run: node scripts/check-collisions.mjs
+      - name: Tool and agent descriptions stay within the prompt budget
+        run: node scripts/check-prompt-budget.mjs

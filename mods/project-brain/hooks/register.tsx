@@ -90,28 +90,25 @@ const KNOWLEDGE_DIRS: readonly (readonly [KnowledgeFile, string])[] = [
 ]
 
 const RECALL_DESCRIPTION =
-  "Recall this project's long-term memory: decisions, conventions, lessons from past fixes, terms and owners, " +
-  'learnt across sessions. Recall spreads from your query through associated files, symbols and errors, so it also ' +
-  'finds memories that share no words with the query. Use it before deciding something that may already have been ' +
-  'decided, when a failure looks familiar, or when the user refers to earlier work. Query with a few distinctive words ' +
-  'or file names.'
+  "Search this project's long-term memory: decisions, conventions, lessons, terms, owners. It follows links between files, " +
+  'symbols and errors, so it also finds memories sharing no words with the query. Use it before deciding something that ' +
+  'may be decided already, or when a failure looks familiar.'
 const RECALL_SCHEMA = {
   type: 'object',
   properties: {
-    query: { type: 'string', description: 'A few distinctive words or file names, e.g. "orders database migration".' },
-    limit: { type: 'integer', minimum: 1, maximum: MAX_TOOL_LIMIT, description: `How many memories to return (default ${DEFAULT_TOOL_LIMIT}).` },
+    query: { type: 'string', description: 'A few distinctive words or file names.' },
+    limit: { type: 'integer', minimum: 1, maximum: MAX_TOOL_LIMIT, description: `Memories to return (default ${DEFAULT_TOOL_LIMIT}).` },
   },
   required: ['query'],
 }
 const REMEMBER_DESCRIPTION =
-  "Save one durable fact to this project's long-term memory so future sessions recall it: a decision and its reason, " +
-  'a convention, a lesson from a fix, a term, an owner, an open task. One self-contained sentence; name the files ' +
-  'involved. Do not save secrets or anything only true for this turn.'
+  "Save one durable fact to this project's long-term memory: a decision and its reason, a convention, a lesson, a term or an " +
+  'owner. One self-contained sentence naming the files. No secrets.'
 const REMEMBER_SCHEMA = {
   type: 'object',
   properties: {
-    text: { type: 'string', description: 'One self-contained sentence, e.g. "Orders use Postgres (src/db.ts) because we need transactions."' },
-    kind: { type: 'string', enum: [...KNOWLEDGE_KINDS_LIST], description: 'What it is (default note).' },
+    text: { type: 'string', description: 'One self-contained sentence.' },
+    kind: { type: 'string', enum: [...KNOWLEDGE_KINDS_LIST], description: 'Default note.' },
   },
   required: ['text'],
 }
@@ -165,6 +162,8 @@ type Runtime = {
   busSince: number
   isSleeping: boolean
   injected: number
+  /** Whether brain_recall is registered: it waits until the brain holds a memory worth searching. */
+  isRecallOffered: boolean
 }
 
 const newRuntime = (settings: Settings): Runtime => ({
@@ -189,6 +188,7 @@ const newRuntime = (settings: Settings): Runtime => ({
   busSince: 0,
   isSleeping: false,
   injected: 0,
+  isRecallOffered: false,
 })
 
 const clampNumber = (value: unknown, low: number, high: number, fallback: number): number => {
@@ -430,6 +430,7 @@ async function importAll($: EngineInterface, rt: Runtime, isForced = false): Pro
   if (count > 0) {
     await changed($, rt)
     await shareFacts($, rt)
+    await offerRecall($, rt)
   }
   return count
 }
@@ -604,6 +605,19 @@ async function afterTurn($: EngineInterface, rt: Runtime, state: TurnState, last
   await pullBus($, rt)
 }
 
+/** Registers brain_recall once the brain holds a memory; an empty brain has nothing to search, so the tool stays out of the prompt. */
+async function offerRecall($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.isRecallOffered) return
+  try {
+    const { brain } = await ensureBrain($, rt)
+    if (brain.stats().knowledge === 0) return
+    await $.tool.register({ name: 'brain_recall', description: RECALL_DESCRIPTION, inputSchema: RECALL_SCHEMA })
+    rt.isRecallOffered = true
+  } catch (error) {
+    $.ui.log(`${NAME}: registration failed: ${errorText(error)}`, { to: 'debug' })
+  }
+}
+
 // ── Tools for Claude ────────────────────────────────────────────────────────────────────────────────
 
 async function toolRecall($: EngineInterface, rt: Runtime, query: string, limit: number): Promise<string> {
@@ -627,6 +641,7 @@ async function remember($: EngineInterface, rt: Runtime, text: string, kind: Nod
   if (node === undefined) return undefined
   rt.session.turnNodes.set(node.id, 0.9)
   await changed($, rt)
+  await offerRecall($, rt)
   return node
 }
 
@@ -855,7 +870,7 @@ async function drawBrain($: EngineInterface, e: RenderInput<'Pane'>, rt: Runtime
 async function startSession($: EngineInterface, rt: Runtime): Promise<void> {
   await ensureBrain($, rt)
   const steps = [
-    () => $.tool.register({ name: 'brain_recall', description: RECALL_DESCRIPTION, inputSchema: RECALL_SCHEMA }),
+    () => offerRecall($, rt),
     () => $.tool.register({ name: 'brain_remember', description: REMEMBER_DESCRIPTION, inputSchema: REMEMBER_SCHEMA }),
     () =>
       registerCommand($, {

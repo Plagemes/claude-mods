@@ -130,13 +130,209 @@
       "count": 10
     }
   ],
+  "packs": [
+    {
+      "id": "essentials",
+      "title": "Essentials",
+      "tagline": "The best general mods: guards, git, cost and flow. Start here.",
+      "mods": [
+        "mod-store",
+        "mods-hub",
+        "mod-advisor",
+        "guardian",
+        "secret-shield",
+        "env-guard",
+        "rm-rf-guard",
+        "force-push-guard",
+        "git-status-line",
+        "auto-checkpoint",
+        "main-branch-warn",
+        "commit-composer",
+        "cost-meter",
+        "context-gauge",
+        "smart-router",
+        "stack-detector",
+        "todo-pane",
+        "prompt-history",
+        "resume-brief",
+        "done-chime",
+        "permission-ping",
+        "loop-breaker"
+      ]
+    },
+    {
+      "id": "web",
+      "title": "Web & Frontend",
+      "tagline": "React, Next.js, accessibility, bundles and formatting.",
+      "mods": [
+        "react-doctor",
+        "next-guard",
+        "a11y-guard",
+        "screenshot-check",
+        "bundle-size-watch",
+        "css-token-guard",
+        "lighthouse-run",
+        "heavy-asset-warn",
+        "storybook-nudge",
+        "contrast-checker",
+        "dark-mode-check",
+        "component-catalog",
+        "dev-server-pane",
+        "node-version-check",
+        "i18n-guard",
+        "auto-format",
+        "lint-on-save",
+        "typecheck-gate",
+        "no-any"
+      ]
+    },
+    {
+      "id": "backend",
+      "title": "Backend & DB",
+      "tagline": "Safer queries, migrations, schemas and APIs.",
+      "mods": [
+        "sql-safety",
+        "query-explain",
+        "seed-guard",
+        "schema-pane",
+        "n-plus-one-hint",
+        "migration-namer",
+        "migration-guard",
+        "query-result-cap",
+        "backup-before-migrate",
+        "schema-sync",
+        "openapi-sync",
+        "mock-server",
+        "http-client",
+        "jwt-decode",
+        "graphql-context",
+        "rate-limit-guard",
+        "env-example-sync",
+        "venv-guard",
+        "django-migrate-watch",
+        "go-mod-tidy",
+        "docker-lint",
+        "log-tail"
+      ]
+    },
+    {
+      "id": "git",
+      "title": "Git & Review",
+      "tagline": "Commits, branches, PRs and reviews without friction.",
+      "mods": [
+        "git-status-line",
+        "auto-checkpoint",
+        "commit-composer",
+        "branch-namer",
+        "main-branch-warn",
+        "diff-pane",
+        "pr-describer",
+        "conflict-helper",
+        "co-author-stamp",
+        "gitignore-guard",
+        "force-push-guard",
+        "review-agent",
+        "explain-diff",
+        "changelog-keeper",
+        "codeowners-hint",
+        "ci-watch",
+        "second-opinion"
+      ]
+    },
+    {
+      "id": "security",
+      "title": "Security & Guard",
+      "tagline": "Every guard: secrets, deletes, prod, paths, dependencies and data.",
+      "mods": [
+        "guardian",
+        "secret-shield",
+        "env-guard",
+        "rm-rf-guard",
+        "force-push-guard",
+        "prod-guard",
+        "redactor",
+        "path-jail",
+        "curl-pipe-guard",
+        "dependency-sentinel",
+        "lockfile-guard",
+        "url-allowlist",
+        "no-upload",
+        "pii-in-logs",
+        "crypto-guard",
+        "vuln-scan",
+        "scope-lock",
+        "audit-trail"
+      ]
+    },
+    {
+      "id": "team",
+      "title": "Team & Comms",
+      "tagline": "Bridges to your chat apps, the team hub, standups and handoffs.",
+      "mods": [
+        "team-hub",
+        "slack-bridge",
+        "telegram-bridge",
+        "discord-bridge",
+        "whatsapp-bridge",
+        "email-digest",
+        "calendar-sync",
+        "standup",
+        "handoff",
+        "issue-drafter",
+        "webhook-notify",
+        "desktop-notify",
+        "session-sync"
+      ]
+    },
+    {
+      "id": "automation",
+      "title": "Automation",
+      "tagline": "Autopilot, workflows, routing and issue-to-PR runs.",
+      "mods": [
+        "autopilot",
+        "workflow-studio",
+        "smart-router",
+        "issue-pilot",
+        "task-queue",
+        "night-shift",
+        "mission-control",
+        "parallel-explore",
+        "agent-presets",
+        "subagent-monitor",
+        "self-check"
+      ]
+    },
+    {
+      "id": "insights",
+      "title": "Insights & Cost",
+      "tagline": "What every turn costs, where the context goes, how you work.",
+      "mods": [
+        "cost-meter",
+        "token-budget",
+        "context-gauge",
+        "cache-hit-meter",
+        "turn-timer",
+        "daily-spend",
+        "model-advisor",
+        "compact-coach",
+        "context-optimizer",
+        "session-stats",
+        "token-sparkline",
+        "activity-heatmap",
+        "tool-timeline",
+        "skill-tracker",
+        "output-trimmer",
+        "big-read-guard"
+      ]
+    }
+  ],
   "mods": [
     {
       "name": "mod-store",
       "category": "core",
       "tier": "complex",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
-      "version": "1.3.1",
+      "version": "1.4.0",
       "keywords": [
         "claude-mods",
         "core",
@@ -146,7 +342,18 @@
       "commands": [
         "/mods"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "mod store",
+          "install mod",
+          "browse mods",
+          "update all mods",
+          "uninstall mod",
+          "claude mods"
+        ],
+        "always": true
+      }
     },
     {
       "name": "mods-hub",
@@ -164,7 +371,10 @@
       "commands": [
         "/hub"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "always": true
+      }
     },
     {
       "name": "secret-shield",
@@ -179,7 +389,18 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "api key",
+          "hardcoded secret",
+          "credentials",
+          "private key",
+          "leaked key",
+          "access token"
+        ],
+        "always": true
+      }
     },
     {
       "name": "env-guard",
@@ -194,7 +415,24 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".env",
+          ".env.*",
+          "*.pem",
+          ".npmrc"
+        ],
+        "intents": [
+          "env file",
+          "ssh key",
+          "credentials file",
+          "protect secrets",
+          "keep secrets out",
+          "file env"
+        ],
+        "always": true
+      }
     },
     {
       "name": "rm-rf-guard",
@@ -209,7 +447,18 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "rm -rf",
+          "destructive command",
+          "delete directory",
+          "wipe disk",
+          "chmod 777",
+          "git reset --hard"
+        ],
+        "always": true
+      }
     },
     {
       "name": "force-push-guard",
@@ -224,7 +473,17 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "force push",
+          "force-push",
+          "push --force",
+          "force with lease",
+          "rewrite history",
+          "protected branch"
+        ]
+      }
     },
     {
       "name": "prod-guard",
@@ -239,7 +498,26 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "*.tf",
+          "**/*.tf",
+          "k8s/**",
+          "kubernetes/**",
+          "**/Chart.yaml",
+          "Pulumi.yaml",
+          "terragrunt.hcl"
+        ],
+        "intents": [
+          "production",
+          "terraform apply",
+          "kubectl on prod",
+          "drop database in prod",
+          "deploy to prod",
+          "production database"
+        ]
+      }
     },
     {
       "name": "redactor",
@@ -255,7 +533,17 @@
         "secrets"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "redact secrets",
+          "mask sensitive data",
+          "hide secrets from claude",
+          "mask emails",
+          "credit card numbers",
+          "dati sensibili"
+        ]
+      }
     },
     {
       "name": "path-jail",
@@ -272,7 +560,17 @@
       "commands": [
         "/jail"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "write outside project",
+          "outside the project",
+          "path traversal",
+          "sandbox writes",
+          "restrict writes",
+          "stay in project folder"
+        ]
+      }
     },
     {
       "name": "curl-pipe-guard",
@@ -287,7 +585,17 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "curl | sh",
+          "curl pipe bash",
+          "pipe to shell",
+          "install script",
+          "remote script",
+          "wget | bash"
+        ]
+      }
     },
     {
       "name": "dependency-sentinel",
@@ -303,7 +611,26 @@
         "pip"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "package.json",
+          "requirements.txt",
+          "pyproject.toml",
+          "Cargo.toml",
+          "go.mod",
+          "Gemfile",
+          "composer.json"
+        ],
+        "intents": [
+          "typosquatting",
+          "malicious package",
+          "supply chain",
+          "hallucinated package",
+          "suspicious dependency",
+          "new dependency"
+        ]
+      }
     },
     {
       "name": "lockfile-guard",
@@ -318,7 +645,29 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "package-lock.json",
+          "pnpm-lock.yaml",
+          "yarn.lock",
+          "bun.lockb",
+          "Cargo.lock",
+          "poetry.lock",
+          "uv.lock",
+          "Gemfile.lock",
+          "composer.lock",
+          "go.sum"
+        ],
+        "intents": [
+          "lockfile",
+          "lock file",
+          "package-lock",
+          "yarn.lock",
+          "pnpm-lock",
+          "regenerate lockfile"
+        ]
+      }
     },
     {
       "name": "git-status-line",
@@ -333,7 +682,18 @@
         "branch"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "git status",
+          "current branch",
+          "which branch am i on",
+          "ahead behind",
+          "dirty files",
+          "uncommitted changes"
+        ],
+        "always": true
+      }
     },
     {
       "name": "auto-checkpoint",
@@ -351,7 +711,18 @@
         "/checkpoints",
         "/rollback"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "checkpoint",
+          "rollback",
+          "undo changes",
+          "revert last turn",
+          "restore previous state",
+          "snapshot"
+        ],
+        "always": true
+      }
     },
     {
       "name": "commit-composer",
@@ -368,7 +739,26 @@
       "commands": [
         "/commit"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "commitlint.config.*",
+          ".commitlintrc*"
+        ],
+        "deps": [
+          "@commitlint/cli",
+          "@commitlint/config-conventional",
+          "commitlint"
+        ],
+        "intents": [
+          "commit message",
+          "conventional commit",
+          "conventional commits",
+          "write a commit",
+          "commit changes",
+          "staged diff"
+        ]
+      }
     },
     {
       "name": "branch-namer",
@@ -385,7 +775,17 @@
       "commands": [
         "/git-branch"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "new branch",
+          "create branch",
+          "branch name",
+          "name a branch",
+          "git switch -c",
+          "feature branch"
+        ]
+      }
     },
     {
       "name": "main-branch-warn",
@@ -400,7 +800,17 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "editing on main",
+          "work on main",
+          "protect main",
+          "main branch",
+          "master branch",
+          "commit to main"
+        ]
+      }
     },
     {
       "name": "diff-pane",
@@ -417,7 +827,17 @@
       "commands": [
         "/changes"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "changed files",
+          "live diff",
+          "git diff",
+          "diff stat",
+          "lines added",
+          "uncommitted diff"
+        ]
+      }
     },
     {
       "name": "pr-describer",
@@ -434,7 +854,22 @@
       "commands": [
         "/pr-desc"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".github/pull_request_template.md",
+          ".github/PULL_REQUEST_TEMPLATE.md",
+          ".github/PULL_REQUEST_TEMPLATE/*"
+        ],
+        "intents": [
+          "pull request",
+          "pr description",
+          "pr title",
+          "open a pr",
+          "describe pr",
+          "write pr"
+        ]
+      }
     },
     {
       "name": "conflict-helper",
@@ -451,7 +886,17 @@
       "commands": [
         "/conflicts"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "merge conflict",
+          "resolve conflicts",
+          "conflict markers",
+          "rebase conflict",
+          "cherry-pick conflict",
+          "conflitto di merge"
+        ]
+      }
     },
     {
       "name": "co-author-stamp",
@@ -466,7 +911,17 @@
         "attribution"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "co-authored-by",
+          "co-author",
+          "coauthor trailer",
+          "pair programming credit",
+          "commit trailer",
+          "coautore nel commit"
+        ]
+      }
     },
     {
       "name": "gitignore-guard",
@@ -481,7 +936,20 @@
         "guard"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".gitignore"
+        ],
+        "intents": [
+          "gitignore",
+          "git add -a",
+          "staged node_modules",
+          "untracked files",
+          "ignore build output",
+          "large files in git"
+        ]
+      }
     },
     {
       "name": "cost-meter",
@@ -498,7 +966,18 @@
       "commands": [
         "/cost-reset"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "session cost",
+          "how much spent",
+          "token cost",
+          "api cost",
+          "cost estimate",
+          "price of this session"
+        ],
+        "always": true
+      }
     },
     {
       "name": "token-budget",
@@ -516,7 +995,17 @@
       "commands": [
         "/budget"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "token budget",
+          "budget limit",
+          "spending limit",
+          "dollar budget",
+          "stop at budget",
+          "limit spend"
+        ]
+      }
     },
     {
       "name": "context-gauge",
@@ -534,7 +1023,18 @@
       "commands": [
         "/context-gauge"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "context window",
+          "context usage",
+          "context full",
+          "how full is the context",
+          "context limit",
+          "context left"
+        ],
+        "always": true
+      }
     },
     {
       "name": "cache-hit-meter",
@@ -550,7 +1050,17 @@
         "status"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "prompt cache",
+          "cache hit",
+          "cache hit rate",
+          "cached tokens",
+          "cache miss",
+          "prompt caching"
+        ]
+      }
     },
     {
       "name": "turn-timer",
@@ -566,7 +1076,17 @@
         "toast"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "turn duration",
+          "time per turn",
+          "slow turn",
+          "long running turn",
+          "response time",
+          "durata del turno"
+        ]
+      }
     },
     {
       "name": "big-read-guard",
@@ -582,7 +1102,17 @@
         "tokens"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "huge file",
+          "large file",
+          "big file",
+          "minified bundle",
+          "read a slice",
+          "offset and limit"
+        ]
+      }
     },
     {
       "name": "output-trimmer",
@@ -597,7 +1127,17 @@
         "bash"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "long output",
+          "huge output",
+          "command output",
+          "flooding context",
+          "truncate output",
+          "noisy logs"
+        ]
+      }
     },
     {
       "name": "daily-spend",
@@ -614,7 +1154,17 @@
       "commands": [
         "/spend"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "daily spend",
+          "weekly spend",
+          "spend report",
+          "usage report",
+          "cost per day",
+          "how much this week"
+        ]
+      }
     },
     {
       "name": "model-advisor",
@@ -631,7 +1181,17 @@
       "commands": [
         "/model-advisor"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "which model",
+          "cheaper model",
+          "switch model",
+          "model choice",
+          "quale modello",
+          "modello più economico"
+        ]
+      }
     },
     {
       "name": "compact-coach",
@@ -647,7 +1207,17 @@
         "toast"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "/compact",
+          "compact context",
+          "context getting full",
+          "compaction",
+          "context too long",
+          "clear context"
+        ]
+      }
     },
     {
       "name": "quote-selection",
@@ -666,7 +1236,17 @@
         "/quote",
         "/quote-code"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "quote selection",
+          "quote this",
+          "paste selection",
+          "markdown quote",
+          "blockquote",
+          "quote text"
+        ]
+      }
     },
     {
       "name": "prompt-snippets",
@@ -686,7 +1266,17 @@
         "/snippet-add",
         "/snippet-remove"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "prompt snippets",
+          "prompt shortcut",
+          "shortcode",
+          "prompt template",
+          "reusable prompt",
+          "expand shortcut"
+        ]
+      }
     },
     {
       "name": "todo-pane",
@@ -703,7 +1293,17 @@
       "commands": [
         "/todos"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "task list",
+          "todo list",
+          "task progress",
+          "todowrite",
+          "what is claude doing",
+          "show the plan"
+        ]
+      }
     },
     {
       "name": "focus-timer",
@@ -720,7 +1320,17 @@
       "commands": [
         "/pomodoro"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "pomodoro",
+          "focus timer",
+          "focus session",
+          "break timer",
+          "deep work",
+          "timer pomodoro"
+        ]
+      }
     },
     {
       "name": "scratchpad",
@@ -738,7 +1348,16 @@
         "/notes",
         "/note"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "scratchpad",
+          "take notes",
+          "jot down",
+          "project notes",
+          "note del progetto"
+        ]
+      }
     },
     {
       "name": "recent-files",
@@ -756,7 +1375,17 @@
       "commands": [
         "/recent"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "recent files",
+          "last edited",
+          "recently opened",
+          "list recent",
+          "newest first",
+          "file recenti"
+        ]
+      }
     },
     {
       "name": "copy-last",
@@ -775,7 +1404,17 @@
         "/copy-last",
         "/copy-code"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "copy answer",
+          "copy last answer",
+          "copy code block",
+          "clipboard",
+          "copy to clipboard",
+          "copia la risposta"
+        ]
+      }
     },
     {
       "name": "prompt-history",
@@ -792,7 +1431,17 @@
       "commands": [
         "/history"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "prompt history",
+          "previous prompts",
+          "search past prompts",
+          "reuse prompt",
+          "old prompt",
+          "cronologia dei prompt"
+        ]
+      }
     },
     {
       "name": "quick-commands",
@@ -813,7 +1462,17 @@
         "/b",
         "/tc"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "quick command",
+          "test shortcut",
+          "lint shortcut",
+          "build shortcut",
+          "run lint and tests",
+          "short alias"
+        ]
+      }
     },
     {
       "name": "idle-nudge",
@@ -829,7 +1488,17 @@
         "toast"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "uncommitted work",
+          "forgot to commit",
+          "step away",
+          "reminder to commit",
+          "modifiche non committate",
+          "promemoria commit"
+        ]
+      }
     },
     {
       "name": "auto-format",
@@ -844,7 +1513,34 @@
         "prettier"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".prettierrc",
+          ".prettierrc.*",
+          "prettier.config.*",
+          "biome.json",
+          "biome.jsonc",
+          "ruff.toml",
+          ".clang-format",
+          ".php-cs-fixer.php",
+          ".editorconfig"
+        ],
+        "deps": [
+          "prettier",
+          "@biomejs/biome",
+          "black",
+          "ruff"
+        ],
+        "intents": [
+          "auto format",
+          "formatter",
+          "prettier",
+          "format on save",
+          "formattazione",
+          "formattare"
+        ]
+      }
     },
     {
       "name": "lint-on-save",
@@ -859,7 +1555,26 @@
         "eslint"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".eslintrc*",
+          "eslint.config.*",
+          "ruff.toml",
+          ".golangci.yml",
+          ".golangci.yaml"
+        ],
+        "deps": [
+          "eslint",
+          "ruff"
+        ],
+        "intents": [
+          "lint errors",
+          "shellcheck",
+          "errori di lint",
+          "analisi statica"
+        ]
+      }
     },
     {
       "name": "test-watch",
@@ -876,7 +1591,28 @@
       "commands": [
         "/tests-last"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "vitest.config.*",
+          "jest.config.*",
+          "pytest.ini",
+          "conftest.py"
+        ],
+        "deps": [
+          "vitest",
+          "jest",
+          "pytest"
+        ],
+        "intents": [
+          "run tests",
+          "related tests",
+          "test watcher",
+          "tests on change",
+          "test status",
+          "esegui i test"
+        ]
+      }
     },
     {
       "name": "typecheck-gate",
@@ -893,7 +1629,27 @@
       "commands": [
         "/typecheck"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "tsconfig.json",
+          "pyrightconfig.json",
+          "mypy.ini"
+        ],
+        "deps": [
+          "typescript",
+          "pyright",
+          "mypy"
+        ],
+        "intents": [
+          "type check",
+          "typecheck",
+          "type errors",
+          "tsc --noemit",
+          "typescript errors",
+          "errori di tipo"
+        ]
+      }
     },
     {
       "name": "no-skip-tests",
@@ -909,7 +1665,23 @@
         "skip"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "deps": [
+          "jest",
+          "vitest",
+          "mocha",
+          "pytest"
+        ],
+        "intents": [
+          "skip test",
+          "skipped tests",
+          "test.skip",
+          "disable failing test",
+          "silence a test",
+          "comment out test"
+        ]
+      }
     },
     {
       "name": "todo-tracker",
@@ -927,7 +1699,17 @@
       "commands": [
         "/todos-added"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "todo comments",
+          "hack comments",
+          "left todos",
+          "unfinished stubs",
+          "commenti todo",
+          "cose lasciate da fare"
+        ]
+      }
     },
     {
       "name": "debug-catcher",
@@ -942,7 +1724,17 @@
         "cleanup"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "console.log",
+          "leftover debug",
+          "debugger statement",
+          "print statements",
+          "remove debug",
+          "breakpoint()"
+        ]
+      }
     },
     {
       "name": "no-any",
@@ -957,7 +1749,23 @@
         "types"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "tsconfig.json"
+        ],
+        "deps": [
+          "typescript"
+        ],
+        "intents": [
+          "any type",
+          "typescript any",
+          "ts-ignore",
+          "@ts-ignore",
+          "eslint-disable",
+          "strict typescript"
+        ]
+      }
     },
     {
       "name": "file-size-watch",
@@ -972,7 +1780,17 @@
         "refactoring"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "file too long",
+          "split into modules",
+          "long file",
+          "god file",
+          "file keeps growing",
+          "lines per file"
+        ]
+      }
     },
     {
       "name": "test-first",
@@ -989,7 +1807,17 @@
       "commands": [
         "/tdd"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "test driven",
+          "test-driven development",
+          "red green refactor",
+          "write tests first",
+          "test first",
+          "sviluppo guidato dai test"
+        ]
+      }
     },
     {
       "name": "tool-timeline",
@@ -1006,7 +1834,17 @@
       "commands": [
         "/timeline"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "tool calls",
+          "tool timeline",
+          "slow tool",
+          "tool duration",
+          "what tools ran",
+          "timeline of calls"
+        ]
+      }
     },
     {
       "name": "files-touched",
@@ -1023,7 +1861,17 @@
       "commands": [
         "/files"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "files touched",
+          "files read and edited",
+          "which files changed",
+          "file counts",
+          "touched files",
+          "file toccati"
+        ]
+      }
     },
     {
       "name": "session-stats",
@@ -1040,7 +1888,17 @@
       "commands": [
         "/session-stats"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "session stats",
+          "session statistics",
+          "session summary",
+          "usage dashboard",
+          "turns and tokens",
+          "statistiche della sessione"
+        ]
+      }
     },
     {
       "name": "subagent-monitor",
@@ -1057,7 +1915,17 @@
       "commands": [
         "/agents-live"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "subagents",
+          "monitor agents",
+          "running agents",
+          "agent status",
+          "parallel agent progress",
+          "watch agents"
+        ]
+      }
     },
     {
       "name": "error-feed",
@@ -1074,7 +1942,17 @@
       "commands": [
         "/errors"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "failed commands",
+          "tool errors",
+          "error feed",
+          "what failed",
+          "list of errors",
+          "command failed"
+        ]
+      }
     },
     {
       "name": "activity-heatmap",
@@ -1091,7 +1969,17 @@
       "commands": [
         "/heatmap"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "heat map",
+          "when do i work",
+          "usage by hour",
+          "work habits",
+          "mappa di calore",
+          "quando lavoro"
+        ]
+      }
     },
     {
       "name": "bash-history",
@@ -1108,7 +1996,17 @@
       "commands": [
         "/bash-history"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "bash history",
+          "commands claude ran",
+          "shell history",
+          "command log",
+          "commands executed",
+          "cronologia comandi"
+        ]
+      }
     },
     {
       "name": "web-trail",
@@ -1125,7 +2023,17 @@
       "commands": [
         "/sources"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "web sources",
+          "pages fetched",
+          "where did this come from",
+          "webfetch history",
+          "websearch",
+          "citations"
+        ]
+      }
     },
     {
       "name": "permission-log",
@@ -1142,7 +2050,17 @@
       "commands": [
         "/denied"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "permission denied",
+          "blocked tool calls",
+          "permissions log",
+          "why was it blocked",
+          "denied tool calls",
+          "permessi negati"
+        ]
+      }
     },
     {
       "name": "token-sparkline",
@@ -1159,7 +2077,17 @@
       "commands": [
         "/sparkline"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "tokens per turn",
+          "token usage",
+          "sparkline",
+          "token chart",
+          "token spike",
+          "consumo di token"
+        ]
+      }
     },
     {
       "name": "house-style",
@@ -1176,7 +2104,23 @@
       "commands": [
         "/style"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "STYLE.md",
+          ".claude/style.md",
+          "docs/STYLE.md",
+          "CONTRIBUTING.md"
+        ],
+        "intents": [
+          "style guide",
+          "house style",
+          "coding conventions",
+          "team conventions",
+          "coding standards",
+          "style.md"
+        ]
+      }
     },
     {
       "name": "language-lock",
@@ -1191,7 +2135,17 @@
         "i18n"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "answer in italian",
+          "reply in my language",
+          "respond in english",
+          "always reply in",
+          "rispondi in italiano",
+          "rispondi nella mia lingua"
+        ]
+      }
     },
     {
       "name": "concise-mode",
@@ -1208,7 +2162,17 @@
       "commands": [
         "/concise"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "short answers",
+          "be brief",
+          "brief answers",
+          "less verbose",
+          "no preamble",
+          "risposte brevi"
+        ]
+      }
     },
     {
       "name": "prompt-enhancer",
@@ -1225,7 +2189,17 @@
       "commands": [
         "/enhance"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "improve my prompt",
+          "rewrite prompt",
+          "better prompt",
+          "enhance prompt",
+          "prompt engineering",
+          "clarify request"
+        ]
+      }
     },
     {
       "name": "ticket-linker",
@@ -1240,7 +2214,16 @@
         "github"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "issue number",
+          "linear ticket",
+          "github issue #",
+          "ticket link",
+          "riferimento al ticket"
+        ]
+      }
     },
     {
       "name": "date-context",
@@ -1255,7 +2238,17 @@
         "date"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "current date",
+          "today's date",
+          "what time is it",
+          "timezone",
+          "what day is it",
+          "data di oggi"
+        ]
+      }
     },
     {
       "name": "persona-switch",
@@ -1273,7 +2266,17 @@
         "/persona",
         "/personas"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "act as a reviewer",
+          "act as an architect",
+          "act as a teacher",
+          "switch role",
+          "play the role of",
+          "agisci come"
+        ]
+      }
     },
     {
       "name": "explain-level",
@@ -1292,7 +2295,17 @@
         "/normal",
         "/expert"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "explain like i'm five",
+          "explain simply",
+          "expert level",
+          "explain in depth",
+          "beginner explanation",
+          "spiegami come se avessi 5 anni"
+        ]
+      }
     },
     {
       "name": "stack-detector",
@@ -1309,7 +2322,27 @@
       "commands": [
         "/stack"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "package.json",
+          "pyproject.toml",
+          "go.mod",
+          "Cargo.toml",
+          "Gemfile",
+          "composer.json",
+          "pom.xml",
+          "build.gradle"
+        ],
+        "intents": [
+          "detect stack",
+          "project conventions",
+          "framework conventions",
+          "what stack",
+          "which framework",
+          "tech stack"
+        ]
+      }
     },
     {
       "name": "prompt-lint",
@@ -1324,7 +2357,17 @@
         "tips"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "vague prompt",
+          "prompt quality",
+          "unclear request",
+          "write better prompts",
+          "prompt tips",
+          "too vague"
+        ]
+      }
     },
     {
       "name": "done-chime",
@@ -1339,7 +2382,17 @@
         "chime"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "notify when done",
+          "sound when finished",
+          "alert when done",
+          "turn finished",
+          "play a sound",
+          "avvisami quando finisce"
+        ]
+      }
     },
     {
       "name": "speak-summary",
@@ -1356,7 +2409,17 @@
       "commands": [
         "/speak"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "read aloud",
+          "text to speech",
+          "spoken summary",
+          "say the summary",
+          "leggi ad alta voce",
+          "riassunto vocale"
+        ]
+      }
     },
     {
       "name": "permission-ping",
@@ -1371,7 +2434,17 @@
         "sound"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "permission prompt",
+          "waiting for approval",
+          "approval needed",
+          "ping me",
+          "notify on permission",
+          "need my approval"
+        ]
+      }
     },
     {
       "name": "error-buzz",
@@ -1386,7 +2459,17 @@
         "tests"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "buzz on error",
+          "sound on failure",
+          "test failed alert",
+          "failure sound",
+          "error sound",
+          "alert on failure"
+        ]
+      }
     },
     {
       "name": "webhook-notify",
@@ -1403,7 +2486,17 @@
       "commands": [
         "/notify-test"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "slack notification",
+          "discord notification",
+          "teams notification",
+          "notify my phone",
+          "push notification",
+          "notifica slack"
+        ]
+      }
     },
     {
       "name": "desktop-notify",
@@ -1418,7 +2511,17 @@
         "toast"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "desktop notification",
+          "native notification",
+          "notify me",
+          "system notification",
+          "os notification",
+          "notifica desktop"
+        ]
+      }
     },
     {
       "name": "long-run-alert",
@@ -1433,7 +2536,17 @@
         "timer"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "long running command",
+          "command taking too long",
+          "still running",
+          "slow command",
+          "hung command",
+          "alert on long command"
+        ]
+      }
     },
     {
       "name": "ci-watch",
@@ -1450,7 +2563,21 @@
       "commands": [
         "/ci-watch"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".github/workflows/*.yml",
+          ".github/workflows/*.yaml"
+        ],
+        "intents": [
+          "ci status",
+          "workflow run",
+          "watch ci",
+          "ci passed",
+          "ci failed",
+          "pipeline status"
+        ]
+      }
     },
     {
       "name": "break-reminder",
@@ -1465,7 +2592,16 @@
         "timer"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "take a break",
+          "rest reminder",
+          "stand up",
+          "eye strain",
+          "promemoria pausa"
+        ]
+      }
     },
     {
       "name": "celebrate",
@@ -1480,7 +2616,17 @@
         "sound"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "tests green",
+          "all green",
+          "celebrate",
+          "tests pass again",
+          "confetti",
+          "test verdi"
+        ]
+      }
     },
     {
       "name": "decision-log",
@@ -1498,7 +2644,22 @@
         "/decide",
         "/decisions"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "docs/decisions/**",
+          "docs/adr/**",
+          "adr/**"
+        ],
+        "intents": [
+          "architecture decision record",
+          "decision record",
+          "document a decision",
+          "record a decision",
+          "why we chose",
+          "decision log"
+        ]
+      }
     },
     {
       "name": "session-journal",
@@ -1515,7 +2676,20 @@
       "commands": [
         "/journal"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".claude/journal/**"
+        ],
+        "intents": [
+          "session journal",
+          "daily log",
+          "work log",
+          "what did i do",
+          "dev diary",
+          "diario di lavoro"
+        ]
+      }
     },
     {
       "name": "glossary",
@@ -1533,7 +2707,22 @@
         "/define",
         "/glossary"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "GLOSSARY.md",
+          "glossary.md",
+          "docs/glossary.md"
+        ],
+        "intents": [
+          "glossary",
+          "domain terms",
+          "project vocabulary",
+          "terminology",
+          "define terms",
+          "domain language"
+        ]
+      }
     },
     {
       "name": "bookmark",
@@ -1553,7 +2742,17 @@
         "/bookmark-insert",
         "/bookmark-delete"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "bookmark",
+          "save answer",
+          "save this answer",
+          "keep this answer",
+          "bookmarks",
+          "favorite answers"
+        ]
+      }
     },
     {
       "name": "resume-brief",
@@ -1570,7 +2769,17 @@
       "commands": [
         "/resume-brief"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "resume work",
+          "continue where we left off",
+          "last session",
+          "previous session",
+          "pick up where",
+          "what was i doing"
+        ]
+      }
     },
     {
       "name": "lessons-learned",
@@ -1585,7 +2794,20 @@
         "debugging"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "CLAUDE.md"
+        ],
+        "intents": [
+          "lessons learned",
+          "save a lesson",
+          "claude.md",
+          "remember this mistake",
+          "avoid the same mistake",
+          "update claude.md"
+        ]
+      }
     },
     {
       "name": "codebase-map",
@@ -1602,7 +2824,17 @@
       "commands": [
         "/map"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "codebase map",
+          "repo map",
+          "repository overview",
+          "project structure",
+          "where things live",
+          "map the repo"
+        ]
+      }
     },
     {
       "name": "snippet-vault",
@@ -1622,7 +2854,17 @@
         "/vault",
         "/delete-snippet"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "save snippet",
+          "code snippet library",
+          "snippet vault",
+          "reuse snippet",
+          "store snippet",
+          "libreria di snippet"
+        ]
+      }
     },
     {
       "name": "link-vault",
@@ -1640,14 +2882,24 @@
         "/links",
         "/links-copy"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "links from the conversation",
+          "collect urls",
+          "list links",
+          "all urls",
+          "urls mentioned",
+          "link list"
+        ]
+      }
     },
     {
       "name": "recall",
       "category": "memory",
       "tier": "complex",
       "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1658,7 +2910,23 @@
         "/remember",
         "/recall"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".claude/journal/**",
+          "docs/decisions/**",
+          "docs/adr/**",
+          "CLAUDE.md"
+        ],
+        "intents": [
+          "search notes",
+          "remember",
+          "search my notes",
+          "what did we decide",
+          "search journal",
+          "search decisions"
+        ]
+      }
     },
     {
       "name": "changelog-keeper",
@@ -1675,7 +2943,22 @@
       "commands": [
         "/changelog"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "CHANGELOG.md",
+          "CHANGES.md",
+          "HISTORY.md"
+        ],
+        "intents": [
+          "changelog",
+          "release notes",
+          "unreleased",
+          "keep a changelog",
+          "update the changelog",
+          "conventional commits changelog"
+        ]
+      }
     },
     {
       "name": "readme-sync",
@@ -1690,7 +2973,21 @@
         "readme"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "README.md",
+          "docs/**/*.md"
+        ],
+        "intents": [
+          "update the readme",
+          "docs out of date",
+          "document the api",
+          "stale docs",
+          "keep docs in sync",
+          "documentazione obsoleta"
+        ]
+      }
     },
     {
       "name": "standup",
@@ -1707,14 +3004,24 @@
       "commands": [
         "/standup"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "stand-up",
+          "daily standup",
+          "what did i do yesterday",
+          "yesterday today blockers",
+          "daily scrum",
+          "standup giornaliero"
+        ]
+      }
     },
     {
       "name": "review-agent",
       "category": "team",
       "tier": "complex",
       "description": "Adds a dedicated code-reviewer subagent and a /review command.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -1724,7 +3031,17 @@
       "commands": [
         "/review"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "code review",
+          "review my changes",
+          "review the diff",
+          "reviewer",
+          "review pr",
+          "review this branch"
+        ]
+      }
     },
     {
       "name": "license-header",
@@ -1739,7 +3056,22 @@
         "spdx"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "LICENSE",
+          "LICENSE.md",
+          "LICENSE.txt"
+        ],
+        "intents": [
+          "license header",
+          "spdx header",
+          "copyright header",
+          "add license",
+          "licence header",
+          "source header"
+        ]
+      }
     },
     {
       "name": "issue-drafter",
@@ -1756,7 +3088,17 @@
       "commands": [
         "/issue"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "intents": [
+          "github issue",
+          "create an issue",
+          "bug report",
+          "draft an issue",
+          "file an issue",
+          "open an issue"
+        ]
+      }
     },
     {
       "name": "handoff",
@@ -1773,7 +3115,20 @@
       "commands": [
         "/handoff"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          ".claude/handoff/**"
+        ],
+        "intents": [
+          "hand off",
+          "handover",
+          "pass to teammate",
+          "pick up where i left",
+          "transfer work",
+          "passaggio di consegne"
+        ]
+      }
     },
     {
       "name": "i18n-guard",
@@ -1788,7 +3143,36 @@
         "lint"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "i18n/**",
+          "locales/**",
+          "**/locales/*.json",
+          "public/locales/**",
+          "messages/*.json",
+          "i18next.config.*",
+          "lingui.config.*"
+        ],
+        "deps": [
+          "i18next",
+          "react-i18next",
+          "next-i18next",
+          "next-intl",
+          "react-intl",
+          "vue-i18n",
+          "svelte-i18n",
+          "@lingui/core"
+        ],
+        "intents": [
+          "translation",
+          "hard-coded strings",
+          "localization",
+          "localisation",
+          "translate ui",
+          "internationalization"
+        ]
+      }
     },
     {
       "name": "migration-guard",
@@ -1804,7 +3188,32 @@
         "guardrail"
       ],
       "commands": [],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "**/migrations/**",
+          "db/migrate/**",
+          "prisma/migrations/**",
+          "alembic/versions/**"
+        ],
+        "deps": [
+          "prisma",
+          "django",
+          "alembic",
+          "knex",
+          "typeorm",
+          "sequelize",
+          "drizzle-kit"
+        ],
+        "intents": [
+          "edit a migration",
+          "existing migration",
+          "migration history",
+          "modify migration",
+          "database migration",
+          "change old migration"
+        ]
+      }
     },
     {
       "name": "codeowners-hint",
@@ -1821,7 +3230,22 @@
       "commands": [
         "/owners"
       ],
-      "since": "1.0.0"
+      "since": "1.0.0",
+      "signals": {
+        "files": [
+          "CODEOWNERS",
+          ".github/CODEOWNERS",
+          "docs/CODEOWNERS"
+        ],
+        "intents": [
+          "codeowners",
+          "who owns",
+          "file owner",
+          "code owner",
+          "owners of the file",
+          "responsabile del file"
+        ]
+      }
     },
     {
       "name": "react-doctor",
@@ -1836,7 +3260,26 @@
         "hooks"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "**/*.tsx",
+          "**/*.jsx"
+        ],
+        "deps": [
+          "react",
+          "react-dom",
+          "react-native"
+        ],
+        "intents": [
+          "react hooks",
+          "useeffect",
+          "usestate",
+          "missing dependency",
+          "exhaustive deps",
+          "react bug"
+        ]
+      }
     },
     {
       "name": "next-guard",
@@ -1851,7 +3294,27 @@
         "react"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "next.config.js",
+          "next.config.mjs",
+          "next.config.ts",
+          "app/**/page.tsx",
+          "src/app/**/page.tsx"
+        ],
+        "deps": [
+          "next"
+        ],
+        "intents": [
+          "use client",
+          "server component",
+          "server components",
+          "client component",
+          "app router",
+          "next/headers"
+        ]
+      }
     },
     {
       "name": "venv-guard",
@@ -1866,7 +3329,23 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "requirements*.txt",
+          "pyproject.toml",
+          "setup.py",
+          "Pipfile"
+        ],
+        "intents": [
+          "pip install",
+          "virtualenv",
+          "python environment",
+          "system python",
+          "pip --user",
+          "externally managed"
+        ]
+      }
     },
     {
       "name": "node-version-check",
@@ -1881,7 +3360,22 @@
         "nvm"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          ".nvmrc",
+          ".node-version",
+          ".tool-versions"
+        ],
+        "intents": [
+          "node version",
+          "wrong node version",
+          "node engines",
+          "node mismatch",
+          "versione di node",
+          "versione errata di node"
+        ]
+      }
     },
     {
       "name": "django-migrate-watch",
@@ -1896,7 +3390,24 @@
         "migrations"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "manage.py",
+          "**/migrations/*.py"
+        ],
+        "deps": [
+          "django"
+        ],
+        "intents": [
+          "makemigrations",
+          "django migrations",
+          "models.py",
+          "django model",
+          "missing migration",
+          "manage.py"
+        ]
+      }
     },
     {
       "name": "go-mod-tidy",
@@ -1911,7 +3422,21 @@
         "modules"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "go.mod",
+          "go.work"
+        ],
+        "intents": [
+          "go mod tidy",
+          "go modules",
+          "go dependencies",
+          "go imports",
+          "go.sum out of sync",
+          "dipendenze go"
+        ]
+      }
     },
     {
       "name": "strict-types",
@@ -1926,7 +3451,23 @@
         "python"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "composer.json",
+          "requirements.txt",
+          "pyproject.toml",
+          "setup.py"
+        ],
+        "intents": [
+          "strict types",
+          "strict_types",
+          "php strict types",
+          "future annotations",
+          "type hints python",
+          "new php file"
+        ]
+      }
     },
     {
       "name": "schema-sync",
@@ -1941,7 +3482,30 @@
         "drizzle"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "prisma/schema.prisma",
+          "**/*.prisma",
+          "drizzle.config.ts",
+          "drizzle.config.js",
+          "drizzle.config.mjs"
+        ],
+        "deps": [
+          "prisma",
+          "@prisma/client",
+          "drizzle-orm",
+          "drizzle-kit"
+        ],
+        "intents": [
+          "schema change",
+          "prisma generate",
+          "orm schema",
+          "migration missing",
+          "update prisma schema",
+          "modifica allo schema"
+        ]
+      }
     },
     {
       "name": "env-example-sync",
@@ -1956,7 +3520,26 @@
         "dotenv"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          ".env.example",
+          ".env.sample",
+          ".env.template"
+        ],
+        "deps": [
+          "dotenv",
+          "python-dotenv"
+        ],
+        "intents": [
+          ".env.example",
+          "env example",
+          "environment variables",
+          "new env var",
+          "missing env var",
+          "sync env"
+        ]
+      }
     },
     {
       "name": "monorepo-scope",
@@ -1973,7 +3556,30 @@
       "commands": [
         "/scope-pkg"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "pnpm-workspace.yaml",
+          "turbo.json",
+          "nx.json",
+          "lerna.json",
+          "rush.json"
+        ],
+        "deps": [
+          "turbo",
+          "nx",
+          "lerna",
+          "@nx/workspace"
+        ],
+        "intents": [
+          "monorepo",
+          "workspace",
+          "turborepo",
+          "pnpm workspace",
+          "run tests in one package",
+          "scope to package"
+        ]
+      }
     },
     {
       "name": "docker-lint",
@@ -1988,7 +3594,25 @@
         "lint"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "Dockerfile",
+          "Dockerfile.*",
+          "**/Dockerfile",
+          "**/Dockerfile.*",
+          "*.dockerfile",
+          "Containerfile"
+        ],
+        "intents": [
+          "dockerfile",
+          "docker image",
+          "container image",
+          "dockerize",
+          "lint dockerfile",
+          "hadolint"
+        ]
+      }
     },
     {
       "name": "k8s-dry-run",
@@ -2006,7 +3630,26 @@
         "/k8s-approve",
         "/k8s-diff"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "k8s/**",
+          "kubernetes/**",
+          "manifests/**",
+          "**/Chart.yaml",
+          "**/kustomization.yaml",
+          "skaffold.yaml",
+          "helmfile.yaml"
+        ],
+        "intents": [
+          "kubernetes",
+          "kubectl apply",
+          "dry run",
+          "manifests",
+          "apply manifests",
+          "manifest kubernetes"
+        ]
+      }
     },
     {
       "name": "terraform-plan-pane",
@@ -2023,7 +3666,24 @@
       "commands": [
         "/tfplan"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "*.tf",
+          "**/*.tf",
+          "*.tfvars",
+          "terragrunt.hcl",
+          ".terraform.lock.hcl"
+        ],
+        "intents": [
+          "terraform",
+          "terraform plan",
+          "opentofu",
+          "infrastructure as code",
+          "resources destroyed",
+          "plan output"
+        ]
+      }
     },
     {
       "name": "ci-yaml-check",
@@ -2038,7 +3698,21 @@
         "ci"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          ".github/workflows/*.yml",
+          ".github/workflows/*.yaml"
+        ],
+        "intents": [
+          "github actions",
+          "github workflow",
+          "pin action versions",
+          "ci pipeline",
+          "pull_request_target",
+          "actions permissions"
+        ]
+      }
     },
     {
       "name": "port-check",
@@ -2053,7 +3727,17 @@
         "dev-server"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "port already in use",
+          "address already in use",
+          "eaddrinuse",
+          "port 3000",
+          "which process is using",
+          "dev server port"
+        ]
+      }
     },
     {
       "name": "dev-server-pane",
@@ -2070,7 +3754,35 @@
       "commands": [
         "/dev"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "manage.py",
+          "bin/dev",
+          "artisan",
+          "mix.exs",
+          "Procfile",
+          "vite.config.*"
+        ],
+        "deps": [
+          "vite",
+          "next",
+          "nuxt",
+          "astro",
+          "webpack-dev-server",
+          "flask",
+          "uvicorn",
+          "django"
+        ],
+        "intents": [
+          "dev server",
+          "run the dev server",
+          "start dev server",
+          "localhost",
+          "npm run dev",
+          "runserver"
+        ]
+      }
     },
     {
       "name": "cloud-cost-warn",
@@ -2085,7 +3797,30 @@
         "cost"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "cdk.json",
+          "Pulumi.yaml",
+          "serverless.yml",
+          "serverless.yaml",
+          "samconfig.toml"
+        ],
+        "deps": [
+          "aws-cdk-lib",
+          "aws-cdk",
+          "@pulumi/pulumi",
+          "boto3"
+        ],
+        "intents": [
+          "cloud cost",
+          "aws cost",
+          "gpu instance",
+          "ec2 instance",
+          "rds database",
+          "eks cluster"
+        ]
+      }
     },
     {
       "name": "log-tail",
@@ -2102,7 +3837,25 @@
       "commands": [
         "/tail"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "docker-compose*.yml",
+          "docker-compose*.yaml",
+          "compose.yml",
+          "compose.yaml",
+          "logs/**",
+          "*.log"
+        ],
+        "intents": [
+          "tail logs",
+          "follow logs",
+          "docker logs",
+          "tail -f",
+          "container logs",
+          "log file"
+        ]
+      }
     },
     {
       "name": "docker-prune-guard",
@@ -2117,7 +3870,24 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "docker-compose*.yml",
+          "docker-compose*.yaml",
+          "compose.yml",
+          "compose.yaml",
+          "Dockerfile"
+        ],
+        "intents": [
+          "docker prune",
+          "docker system prune",
+          "docker volume",
+          "compose down -v",
+          "delete volumes",
+          "docker cleanup"
+        ]
+      }
     },
     {
       "name": "deploy-checklist",
@@ -2134,7 +3904,35 @@
       "commands": [
         "/deploy-checklist"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "vercel.json",
+          "netlify.toml",
+          "fly.toml",
+          "firebase.json",
+          "app.yaml",
+          "wrangler.toml",
+          "wrangler.jsonc",
+          "railway.json",
+          "render.yaml",
+          "Procfile"
+        ],
+        "deps": [
+          "vercel",
+          "netlify-cli",
+          "firebase-tools",
+          "wrangler"
+        ],
+        "intents": [
+          "deployment",
+          "go live",
+          "publish to npm",
+          "npm publish",
+          "pre-deploy",
+          "rilascio"
+        ]
+      }
     },
     {
       "name": "sql-safety",
@@ -2149,7 +3947,30 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "*.sql",
+          "**/*.sql"
+        ],
+        "deps": [
+          "pg",
+          "mysql2",
+          "better-sqlite3",
+          "psycopg2",
+          "psycopg",
+          "sqlalchemy",
+          "knex"
+        ],
+        "intents": [
+          "update without where",
+          "delete without where",
+          "drop table",
+          "truncate",
+          "raw sql",
+          "sql injection"
+        ]
+      }
     },
     {
       "name": "query-explain",
@@ -2166,7 +3987,26 @@
       "commands": [
         "/explain-query"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "pg",
+          "postgres",
+          "mysql2",
+          "better-sqlite3",
+          "psycopg2",
+          "psycopg",
+          "sqlalchemy"
+        ],
+        "intents": [
+          "slow query",
+          "explain query",
+          "explain analyze",
+          "query plan",
+          "missing index",
+          "create index"
+        ]
+      }
     },
     {
       "name": "seed-guard",
@@ -2181,7 +4021,31 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "prisma/seed.ts",
+          "prisma/seed.js",
+          "db/seeds.rb",
+          "database/seeders/**",
+          "seeds/**",
+          "knexfile.*"
+        ],
+        "deps": [
+          "prisma",
+          "@prisma/client",
+          "knex",
+          "sequelize"
+        ],
+        "intents": [
+          "seed database",
+          "db seed",
+          "reset database",
+          "drop database",
+          "migrate reset",
+          "wipe database"
+        ]
+      }
     },
     {
       "name": "schema-pane",
@@ -2198,7 +4062,33 @@
       "commands": [
         "/schema"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "prisma/schema.prisma",
+          "db/schema.rb",
+          "schema.sql",
+          "*.sqlite",
+          "*.db"
+        ],
+        "deps": [
+          "prisma",
+          "drizzle-orm",
+          "sqlalchemy",
+          "typeorm",
+          "sequelize",
+          "pg",
+          "mysql2"
+        ],
+        "intents": [
+          "database",
+          "database schema",
+          "table columns",
+          "db schema",
+          "list tables",
+          "what tables"
+        ]
+      }
     },
     {
       "name": "n-plus-one-hint",
@@ -2213,7 +4103,28 @@
         "performance"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "prisma",
+          "@prisma/client",
+          "sequelize",
+          "typeorm",
+          "django",
+          "sqlalchemy",
+          "mongoose",
+          "rails",
+          "drizzle-orm"
+        ],
+        "intents": [
+          "n+1 query",
+          "n plus one",
+          "queries in a loop",
+          "slow endpoint",
+          "eager loading",
+          "select_related"
+        ]
+      }
     },
     {
       "name": "migration-namer",
@@ -2231,7 +4142,32 @@
       "commands": [
         "/migration-name"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "**/migrations/**",
+          "db/migrate/**",
+          "prisma/migrations/**",
+          "alembic/versions/**",
+          "migrations/**"
+        ],
+        "deps": [
+          "prisma",
+          "alembic",
+          "knex",
+          "django",
+          "typeorm",
+          "sequelize"
+        ],
+        "intents": [
+          "name a migration",
+          "migration name",
+          "new migration",
+          "create migration",
+          "migration file",
+          "timestamped migration"
+        ]
+      }
     },
     {
       "name": "query-result-cap",
@@ -2247,7 +4183,23 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "pg",
+          "psycopg2",
+          "mysql2",
+          "better-sqlite3"
+        ],
+        "intents": [
+          "select *",
+          "query the database",
+          "limit rows",
+          "huge result set",
+          "table with millions of rows",
+          "limit query"
+        ]
+      }
     },
     {
       "name": "backup-before-migrate",
@@ -2265,7 +4217,35 @@
         "/db-backups",
         "/db-restore"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "prisma/schema.prisma",
+          "alembic.ini",
+          "manage.py",
+          "db/migrate/**",
+          "knexfile.*",
+          "drizzle.config.*",
+          "flyway.conf"
+        ],
+        "deps": [
+          "prisma",
+          "alembic",
+          "knex",
+          "typeorm",
+          "drizzle-kit",
+          "sequelize",
+          "django"
+        ],
+        "intents": [
+          "database backup",
+          "backup database",
+          "mysqldump",
+          "run a migration",
+          "undo a migration",
+          "before migrating"
+        ]
+      }
     },
     {
       "name": "csv-peek",
@@ -2283,7 +4263,23 @@
       "commands": [
         "/peek"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "*.csv",
+          "**/*.csv",
+          "**/*.tsv",
+          "**/*.jsonl"
+        ],
+        "intents": [
+          "csv columns",
+          "preview csv",
+          "large dataset",
+          "inferred types",
+          "dataset enorme",
+          "anteprima csv"
+        ]
+      }
     },
     {
       "name": "fixture-factory",
@@ -2300,7 +4296,29 @@
       "commands": [
         "/fixtures"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "fixtures/**",
+          "**/fixtures/**",
+          "factories/**"
+        ],
+        "deps": [
+          "@faker-js/faker",
+          "faker",
+          "factory_boy",
+          "factory-bot",
+          "fishery"
+        ],
+        "intents": [
+          "fixtures",
+          "test data",
+          "fake data",
+          "mock data",
+          "seed data",
+          "generate records"
+        ]
+      }
     },
     {
       "name": "a11y-guard",
@@ -2316,7 +4334,33 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "**/*.tsx",
+          "**/*.jsx",
+          "**/*.vue",
+          "**/*.svelte",
+          "**/*.astro"
+        ],
+        "deps": [
+          "react",
+          "vue",
+          "svelte",
+          "@angular/core",
+          "astro",
+          "axe-core",
+          "eslint-plugin-jsx-a11y"
+        ],
+        "intents": [
+          "accessibility",
+          "alt text",
+          "aria label",
+          "screen reader",
+          "keyboard navigation",
+          "accessible button"
+        ]
+      }
     },
     {
       "name": "screenshot-check",
@@ -2333,7 +4377,25 @@
       "commands": [
         "/screenshot"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "playwright.config.*"
+        ],
+        "deps": [
+          "playwright",
+          "@playwright/test",
+          "puppeteer"
+        ],
+        "intents": [
+          "screenshot",
+          "visual check",
+          "how does it look",
+          "see the page",
+          "playwright",
+          "ui screenshot"
+        ]
+      }
     },
     {
       "name": "bundle-size-watch",
@@ -2349,7 +4411,34 @@
         "build"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "vite.config.*",
+          "webpack.config.*",
+          "rollup.config.*",
+          "next.config.*",
+          "esbuild.config.*",
+          "tsup.config.*"
+        ],
+        "deps": [
+          "vite",
+          "webpack",
+          "rollup",
+          "esbuild",
+          "next",
+          "parcel",
+          "tsup"
+        ],
+        "intents": [
+          "bundle size",
+          "build size",
+          "webpack bundle",
+          "tree shaking",
+          "code splitting",
+          "bundle grew"
+        ]
+      }
     },
     {
       "name": "css-token-guard",
@@ -2365,7 +4454,31 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "tokens.json",
+          "design-tokens.json",
+          "**/tokens.css",
+          "**/tokens.ts",
+          "tailwind.config.*",
+          "style-dictionary.config.*"
+        ],
+        "deps": [
+          "style-dictionary",
+          "tailwindcss",
+          "@vanilla-extract/css",
+          "@pandacss/dev"
+        ],
+        "intents": [
+          "design tokens",
+          "hard-coded color",
+          "hex color",
+          "css variables",
+          "design system",
+          "spacing tokens"
+        ]
+      }
     },
     {
       "name": "lighthouse-run",
@@ -2382,7 +4495,25 @@
       "commands": [
         "/lighthouse"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "lighthouserc.*",
+          ".lighthouserc.*"
+        ],
+        "deps": [
+          "lighthouse",
+          "@lhci/cli"
+        ],
+        "intents": [
+          "lighthouse",
+          "page speed",
+          "core web vitals",
+          "performance score",
+          "seo score",
+          "web vitals"
+        ]
+      }
     },
     {
       "name": "heavy-asset-warn",
@@ -2398,7 +4529,22 @@
         "images"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "public/**",
+          "static/**",
+          "assets/**"
+        ],
+        "intents": [
+          "large image",
+          "heavy image",
+          "image size",
+          "optimize images",
+          "compress video",
+          "immagine pesante"
+        ]
+      }
     },
     {
       "name": "storybook-nudge",
@@ -2414,7 +4560,28 @@
         "reminder"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          ".storybook/**",
+          "**/*.stories.*"
+        ],
+        "deps": [
+          "storybook",
+          "@storybook/react",
+          "@storybook/vue3",
+          "@storybook/svelte",
+          "@storybook/addon-essentials"
+        ],
+        "intents": [
+          "storybook",
+          "story for component",
+          "component story",
+          "*.stories",
+          "visual testing components",
+          "component docs"
+        ]
+      }
     },
     {
       "name": "contrast-checker",
@@ -2429,7 +4596,26 @@
         "css"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "**/*.css",
+          "**/*.scss",
+          "tailwind.config.*"
+        ],
+        "deps": [
+          "tailwindcss",
+          "sass"
+        ],
+        "intents": [
+          "contrast",
+          "color contrast",
+          "wcag contrast",
+          "text readability",
+          "low contrast",
+          "contrast ratio"
+        ]
+      }
     },
     {
       "name": "dark-mode-check",
@@ -2445,7 +4631,24 @@
         "css"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "tailwind.config.*"
+        ],
+        "deps": [
+          "tailwindcss",
+          "next-themes"
+        ],
+        "intents": [
+          "dark mode",
+          "dark theme",
+          "dark: variant",
+          "dark variant",
+          "light and dark",
+          "prefers-color-scheme"
+        ]
+      }
     },
     {
       "name": "component-catalog",
@@ -2463,7 +4666,27 @@
       "commands": [
         "/components"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "components/**",
+          "src/components/**"
+        ],
+        "deps": [
+          "react",
+          "vue",
+          "svelte",
+          "@angular/core"
+        ],
+        "intents": [
+          "existing components",
+          "reuse component",
+          "duplicate component",
+          "component list",
+          "ui components",
+          "which component"
+        ]
+      }
     },
     {
       "name": "http-client",
@@ -2481,7 +4704,17 @@
       "commands": [
         "/http"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "send a request",
+          "http request",
+          "post request",
+          "api request",
+          "test an endpoint",
+          "call the api"
+        ]
+      }
     },
     {
       "name": "openapi-sync",
@@ -2497,7 +4730,31 @@
         "docs"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "openapi.yaml",
+          "openapi.yml",
+          "openapi.json",
+          "swagger.json",
+          "swagger.yaml"
+        ],
+        "deps": [
+          "swagger-ui-express",
+          "swagger-jsdoc",
+          "@nestjs/swagger",
+          "fastapi",
+          "drf-spectacular"
+        ],
+        "intents": [
+          "api spec",
+          "api docs",
+          "api routes",
+          "spec out of date",
+          "update openapi",
+          "rest api documentation"
+        ]
+      }
     },
     {
       "name": "url-allowlist",
@@ -2515,7 +4772,17 @@
       "commands": [
         "/allow-host"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "webfetch",
+          "allowlist",
+          "allowed domains",
+          "restrict fetch",
+          "block domains",
+          "which sites can claude"
+        ]
+      }
     },
     {
       "name": "offline-mode",
@@ -2533,7 +4800,17 @@
       "commands": [
         "/offline"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "no network",
+          "airplane mode",
+          "metered connection",
+          "block network",
+          "disable internet",
+          "senza rete"
+        ]
+      }
     },
     {
       "name": "mock-server",
@@ -2551,7 +4828,29 @@
       "commands": [
         "/mock"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "openapi.yaml",
+          "openapi.yml",
+          "openapi.json",
+          "swagger.json",
+          "swagger.yaml"
+        ],
+        "deps": [
+          "@stoplight/prism-cli",
+          "json-server",
+          "msw"
+        ],
+        "intents": [
+          "mock server",
+          "mock api",
+          "fake api",
+          "stub api",
+          "backend not ready",
+          "mock backend"
+        ]
+      }
     },
     {
       "name": "rate-limit-guard",
@@ -2567,7 +4866,17 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "rate limit",
+          "rate limiting",
+          "too many requests",
+          "hammering api",
+          "curl loop",
+          "api throttling"
+        ]
+      }
     },
     {
       "name": "jwt-decode",
@@ -2585,7 +4894,26 @@
       "commands": [
         "/jwt"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "jsonwebtoken",
+          "jose",
+          "pyjwt",
+          "passport-jwt",
+          "jwt-decode",
+          "@nestjs/jwt",
+          "djangorestframework-simplejwt"
+        ],
+        "intents": [
+          "json web token",
+          "decode token",
+          "token expiry",
+          "jwt claims",
+          "bearer token",
+          "expired token"
+        ]
+      }
     },
     {
       "name": "status-check",
@@ -2603,7 +4931,17 @@
       "commands": [
         "/service-status"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "is github down",
+          "npm down",
+          "service status",
+          "status page",
+          "pypi down",
+          "anthropic status"
+        ]
+      }
     },
     {
       "name": "graphql-context",
@@ -2621,7 +4959,35 @@
       "commands": [
         "/gql-schema"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "**/*.graphql",
+          "**/*.gql",
+          "schema.graphql",
+          "codegen.yml",
+          ".graphqlrc*",
+          "graphql.config.*"
+        ],
+        "deps": [
+          "graphql",
+          "@apollo/server",
+          "@apollo/client",
+          "graphql-yoga",
+          "type-graphql",
+          "strawberry-graphql",
+          "graphene",
+          "urql"
+        ],
+        "intents": [
+          "resolver",
+          "resolvers",
+          "graphql schema",
+          "graphql query",
+          "graphql mutation",
+          "schema graphql"
+        ]
+      }
     },
     {
       "name": "curl-to-code",
@@ -2638,7 +5004,17 @@
       "commands": [
         "/curl2code"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "curl command",
+          "curl to fetch",
+          "convert curl",
+          "curl to python",
+          "curl to axios",
+          "curl to go"
+        ]
+      }
     },
     {
       "name": "scope-lock",
@@ -2656,7 +5032,17 @@
       "commands": [
         "/scope"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "only touch",
+          "limit scope",
+          "stay in scope",
+          "restrict edits",
+          "lock to folder",
+          "don't touch other files"
+        ]
+      }
     },
     {
       "name": "second-opinion",
@@ -2674,14 +5060,24 @@
       "commands": [
         "/second-opinion"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "second opinion",
+          "another model",
+          "critique",
+          "challenge this",
+          "devil's advocate",
+          "sanity check my plan"
+        ]
+      }
     },
     {
       "name": "parallel-explore",
       "category": "agents",
       "tier": "complex",
       "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2692,7 +5088,17 @@
       "commands": [
         "/explore"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "explore the codebase",
+          "parallel exploration",
+          "understand architecture",
+          "how is this implemented",
+          "trace the flow",
+          "research the repo"
+        ]
+      }
     },
     {
       "name": "subagent-cap",
@@ -2707,7 +5113,17 @@
         "limit"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "too many agents",
+          "limit subagents",
+          "max agents",
+          "agent concurrency",
+          "rate limit agents",
+          "cap parallel agents"
+        ]
+      }
     },
     {
       "name": "task-queue",
@@ -2724,7 +5140,17 @@
       "commands": [
         "/queue"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "queue prompts",
+          "task queue",
+          "line up tasks",
+          "run one after another",
+          "batch of tasks",
+          "coda di task"
+        ]
+      }
     },
     {
       "name": "night-shift",
@@ -2741,7 +5167,17 @@
       "commands": [
         "/night-shift"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "overnight",
+          "run overnight",
+          "schedule tasks",
+          "night shift",
+          "while i sleep",
+          "scheduled run"
+        ]
+      }
     },
     {
       "name": "loop-breaker",
@@ -2756,7 +5192,17 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "stuck in a loop",
+          "repeating the same command",
+          "infinite loop",
+          "keeps failing",
+          "same error again",
+          "going in circles"
+        ]
+      }
     },
     {
       "name": "self-check",
@@ -2771,7 +5217,17 @@
         "quality"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "verify work",
+          "did it do what i asked",
+          "double check work",
+          "half-done",
+          "incomplete work",
+          "check requirements"
+        ]
+      }
     },
     {
       "name": "edit-limit",
@@ -2788,14 +5244,24 @@
       "commands": [
         "/edit-limit"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "too many files",
+          "limit edits",
+          "runaway refactor",
+          "big refactor",
+          "mass edit",
+          "confirm before editing many files"
+        ]
+      }
     },
     {
       "name": "agent-presets",
       "category": "agents",
       "tier": "complex",
       "description": "Ready-made subagents for focused jobs: debugger, test writer, doc writer and migrator.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2805,7 +5271,17 @@
       "commands": [
         "/presets"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "debugger agent",
+          "test writer",
+          "doc writer",
+          "migrator agent",
+          "subagent presets",
+          "delegate to agent"
+        ]
+      }
     },
     {
       "name": "explain-diff",
@@ -2822,7 +5298,17 @@
       "commands": [
         "/explain-diff"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "explain the diff",
+          "explain the changes",
+          "what did you change",
+          "why did you change",
+          "explain this change",
+          "walk me through the changes"
+        ]
+      }
     },
     {
       "name": "quiz-me",
@@ -2839,7 +5325,17 @@
       "commands": [
         "/quiz"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "quiz me",
+          "test my understanding",
+          "check my understanding",
+          "learn the code",
+          "do i understand",
+          "interrogami"
+        ]
+      }
     },
     {
       "name": "learning-mode",
@@ -2856,7 +5352,17 @@
       "commands": [
         "/learning"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "learning mode",
+          "teach me",
+          "explain why",
+          "i want to learn",
+          "learn by doing",
+          "todo for me"
+        ]
+      }
     },
     {
       "name": "onboarding-tour",
@@ -2873,7 +5379,17 @@
       "commands": [
         "/tour"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "onboarding",
+          "tour of the repo",
+          "new to this repo",
+          "new team member",
+          "walk me through the project",
+          "project tour"
+        ]
+      }
     },
     {
       "name": "command-coach",
@@ -2890,7 +5406,17 @@
       "commands": [
         "/coach"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "claude code tips",
+          "slash commands",
+          "best practices",
+          "how to use claude code",
+          "coach me",
+          "command suggestions"
+        ]
+      }
     },
     {
       "name": "shortcut-tips",
@@ -2907,7 +5433,17 @@
       "commands": [
         "/tip"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "keyboard shortcuts",
+          "shortcuts",
+          "tip of the day",
+          "daily tip",
+          "claude code shortcuts",
+          "hidden features"
+        ]
+      }
     },
     {
       "name": "why-log",
@@ -2924,7 +5460,17 @@
       "commands": [
         "/why"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "why was this changed",
+          "history of changes",
+          "reasoning behind an edit",
+          "change rationale",
+          "why log",
+          "perché è stato modificato"
+        ]
+      }
     },
     {
       "name": "cheatsheet",
@@ -2941,7 +5487,17 @@
       "commands": [
         "/cheat"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "cheatsheet",
+          "cheat sheet",
+          "quick reference",
+          "git commands",
+          "docker commands",
+          "comandi git"
+        ]
+      }
     },
     {
       "name": "pair-mode",
@@ -2958,7 +5514,17 @@
       "commands": [
         "/pair"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "pair programming",
+          "pair mode",
+          "i will type",
+          "show me the diff",
+          "practice coding",
+          "don't edit files"
+        ]
+      }
     },
     {
       "name": "skill-tracker",
@@ -2975,7 +5541,17 @@
       "commands": [
         "/my-skills"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "skill tracker",
+          "languages worked with",
+          "weekly language stats",
+          "tools used this week",
+          "what have i worked with",
+          "tech usage"
+        ]
+      }
     },
     {
       "name": "license-checker",
@@ -2990,7 +5566,26 @@
         "dependencies"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "LICENSE",
+          "LICENSE.md",
+          "LICENSE.txt"
+        ],
+        "deps": [
+          "license-checker",
+          "pip-licenses"
+        ],
+        "intents": [
+          "copyleft",
+          "dependency license",
+          "open source license",
+          "license compatibility",
+          "licenza gpl",
+          "compatibilità delle licenze"
+        ]
+      }
     },
     {
       "name": "pii-in-logs",
@@ -3005,7 +5600,25 @@
         "logging"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "winston",
+          "pino",
+          "bunyan",
+          "loguru",
+          "structlog",
+          "log4js"
+        ],
+        "intents": [
+          "logging passwords",
+          "log sensitive data",
+          "personal data in logs",
+          "logging email",
+          "console.log password",
+          "gdpr logs"
+        ]
+      }
     },
     {
       "name": "data-map",
@@ -3022,7 +5635,17 @@
       "commands": [
         "/data-map"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "data map",
+          "personal data",
+          "privacy audit",
+          "data protection",
+          "data inventory",
+          "where is personal data"
+        ]
+      }
     },
     {
       "name": "tracker-guard",
@@ -3037,7 +5660,27 @@
         "analytics"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "react-ga4",
+          "@segment/analytics-next",
+          "mixpanel-browser",
+          "posthog-js",
+          "@amplitude/analytics-browser",
+          "@vercel/analytics",
+          "@sentry/browser",
+          "@sentry/react"
+        ],
+        "intents": [
+          "analytics",
+          "tracking",
+          "tracking sdk",
+          "google analytics",
+          "telemetry",
+          "mixpanel"
+        ]
+      }
     },
     {
       "name": "no-upload",
@@ -3052,7 +5695,17 @@
         "exfiltration"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "pastebin",
+          "file sharing",
+          "exfiltration",
+          "data leak",
+          "gh gist",
+          "transfer.sh"
+        ]
+      }
     },
     {
       "name": "crypto-guard",
@@ -3067,7 +5720,28 @@
         "cryptography"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "bcrypt",
+          "bcryptjs",
+          "argon2",
+          "crypto-js",
+          "cryptography",
+          "pycryptodome",
+          "passlib",
+          "node-forge",
+          "jsonwebtoken"
+        ],
+        "intents": [
+          "cryptography",
+          "encryption",
+          "password hashing",
+          "weak hash",
+          "random token",
+          "crittografia"
+        ]
+      }
     },
     {
       "name": "sbom",
@@ -3084,7 +5758,32 @@
       "commands": [
         "/sbom"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "package-lock.json",
+          "pnpm-lock.yaml",
+          "yarn.lock",
+          "poetry.lock",
+          "uv.lock",
+          "Cargo.lock",
+          "Gemfile.lock",
+          "go.sum",
+          "requirements.txt"
+        ],
+        "deps": [
+          "@cyclonedx/cyclonedx-npm",
+          "cyclonedx-bom"
+        ],
+        "intents": [
+          "software bill of materials",
+          "bill of materials",
+          "cyclonedx",
+          "list dependencies",
+          "dependency inventory",
+          "supply chain compliance"
+        ]
+      }
     },
     {
       "name": "audit-trail",
@@ -3101,7 +5800,17 @@
       "commands": [
         "/audit"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "audit log",
+          "audit trail",
+          "compliance log",
+          "record everything claude does",
+          "jsonl log",
+          "traceability"
+        ]
+      }
     },
     {
       "name": "vuln-scan",
@@ -3118,7 +5827,28 @@
       "commands": [
         "/vulns"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "package-lock.json",
+          "pnpm-lock.yaml",
+          "yarn.lock",
+          "poetry.lock",
+          "uv.lock",
+          "Cargo.lock",
+          "Gemfile.lock",
+          "go.sum",
+          "requirements.txt"
+        ],
+        "intents": [
+          "vulnerability",
+          "vulnerabilities",
+          "npm audit",
+          "pip-audit",
+          "security advisory",
+          "cargo audit"
+        ]
+      }
     },
     {
       "name": "copyright-guard",
@@ -3133,7 +5863,22 @@
         "copyright"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "LICENSE",
+          "LICENSE.md",
+          "LICENSE.txt"
+        ],
+        "intents": [
+          "copyright",
+          "copied code",
+          "pasted code license",
+          "stack overflow code",
+          "license header found",
+          "copyright notice"
+        ]
+      }
     },
     {
       "name": "benchmark-compare",
@@ -3150,7 +5895,29 @@
       "commands": [
         "/bench"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "bench/**",
+          "benchmarks/**",
+          "**/*.bench.*"
+        ],
+        "deps": [
+          "benchmark",
+          "tinybench",
+          "mitata",
+          "pytest-benchmark",
+          "criterion"
+        ],
+        "intents": [
+          "benchmark",
+          "benchmarks",
+          "performance regression",
+          "before and after",
+          "faster or slower",
+          "micro-benchmark"
+        ]
+      }
     },
     {
       "name": "slow-test-flag",
@@ -3167,7 +5934,23 @@
       "commands": [
         "/slow-tests"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "jest",
+          "vitest",
+          "mocha",
+          "pytest"
+        ],
+        "intents": [
+          "slow tests",
+          "slowest tests",
+          "test duration",
+          "tests take too long",
+          "speed up tests",
+          "test performance"
+        ]
+      }
     },
     {
       "name": "flaky-detector",
@@ -3184,7 +5967,23 @@
       "commands": [
         "/flaky"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "jest",
+          "vitest",
+          "pytest",
+          "rspec"
+        ],
+        "intents": [
+          "flaky test",
+          "flaky tests",
+          "intermittent failure",
+          "passes sometimes",
+          "random test failure",
+          "nondeterministic"
+        ]
+      }
     },
     {
       "name": "leak-hint",
@@ -3199,7 +5998,17 @@
         "react"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "memory leak",
+          "event listener leak",
+          "useeffect cleanup",
+          "setinterval",
+          "unsubscribe",
+          "cleanup function"
+        ]
+      }
     },
     {
       "name": "outdated-deps",
@@ -3216,7 +6025,24 @@
       "commands": [
         "/outdated"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "files": [
+          "package.json",
+          "pyproject.toml",
+          "requirements.txt",
+          "Cargo.toml",
+          "go.mod"
+        ],
+        "intents": [
+          "outdated dependencies",
+          "outdated packages",
+          "upgrade dependencies",
+          "update packages",
+          "major upgrade",
+          "npm outdated"
+        ]
+      }
     },
     {
       "name": "profile-run",
@@ -3233,7 +6059,17 @@
       "commands": [
         "/profile"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "profiler",
+          "cpu profile",
+          "hot functions",
+          "flame graph",
+          "flamegraph",
+          "why is it slow"
+        ]
+      }
     },
     {
       "name": "net-retry",
@@ -3248,7 +6084,17 @@
         "retry"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "network error",
+          "etimedout",
+          "econnreset",
+          "flaky network",
+          "retry on failure",
+          "could not resolve host"
+        ]
+      }
     },
     {
       "name": "disk-guard",
@@ -3263,7 +6109,17 @@
         "guard"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "disk space",
+          "no space left on device",
+          "disk full",
+          "out of space",
+          "low disk",
+          "free space"
+        ]
+      }
     },
     {
       "name": "regression-guard",
@@ -3280,7 +6136,22 @@
       "commands": [
         "/baseline"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "deps": [
+          "jest",
+          "vitest",
+          "pytest"
+        ],
+        "intents": [
+          "regression",
+          "tests broke",
+          "previously passing",
+          "test regression",
+          "broke something",
+          "passing tests now fail"
+        ]
+      }
     },
     {
       "name": "watch-mode-guard",
@@ -3295,7 +6166,17 @@
         "watch-mode"
       ],
       "commands": [],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "watch mode",
+          "jest --watch",
+          "vitest watch",
+          "hanging command",
+          "never exits",
+          "command hangs"
+        ]
+      }
     },
     {
       "name": "mod-maker",
@@ -3312,7 +6193,17 @@
       "commands": [
         "/new-mod"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "create a mod",
+          "new mod",
+          "write a mod",
+          "scaffold a mod",
+          "make a plugin",
+          "build a mod"
+        ]
+      }
     },
     {
       "name": "mod-doctor",
@@ -3329,7 +6220,17 @@
       "commands": [
         "/mod-doctor"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "mod conflict",
+          "mods broken",
+          "mod not loading",
+          "check mods",
+          "outdated mods",
+          "plugin error"
+        ]
+      }
     },
     {
       "name": "mod-profiles",
@@ -3346,7 +6247,17 @@
       "commands": [
         "/profile-mods"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "mod profile",
+          "switch mods",
+          "work profile",
+          "enable mods",
+          "disable mods",
+          "mod set"
+        ]
+      }
     },
     {
       "name": "settings-sync",
@@ -3364,7 +6275,17 @@
         "/mods-export",
         "/mods-import"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "export settings",
+          "import settings",
+          "sync settings",
+          "move mods to another machine",
+          "backup mod config",
+          "new laptop"
+        ]
+      }
     },
     {
       "name": "quiet-mode",
@@ -3381,7 +6302,17 @@
       "commands": [
         "/quiet"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "silence notifications",
+          "do not disturb",
+          "focus mode",
+          "too many toasts",
+          "no sounds",
+          "silenzia"
+        ]
+      }
     },
     {
       "name": "achievements",
@@ -3398,7 +6329,17 @@
       "commands": [
         "/achievements"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "achievements",
+          "gamification",
+          "trophies",
+          "progress badges",
+          "traguardi",
+          "obiettivi sbloccati"
+        ]
+      }
     },
     {
       "name": "streaks",
@@ -3415,7 +6356,17 @@
       "commands": [
         "/streak"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "coding streak",
+          "daily streak",
+          "consecutive days",
+          "habit tracker",
+          "serie di giorni",
+          "giorni consecutivi"
+        ]
+      }
     },
     {
       "name": "soundpack",
@@ -3432,7 +6383,17 @@
       "commands": [
         "/soundpack"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "sound pack",
+          "retro sounds",
+          "8-bit sounds",
+          "change sounds",
+          "notification sounds",
+          "audio theme"
+        ]
+      }
     },
     {
       "name": "daily-goal",
@@ -3449,7 +6410,17 @@
       "commands": [
         "/daily-goal"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "daily goal",
+          "today's goal",
+          "goal for today",
+          "set a goal",
+          "end of day",
+          "obiettivo del giorno"
+        ]
+      }
     },
     {
       "name": "session-replay",
@@ -3466,7 +6437,17 @@
       "commands": [
         "/replay"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "replay session",
+          "session timeline",
+          "step through session",
+          "export session",
+          "session transcript",
+          "review session"
+        ]
+      }
     },
     {
       "name": "mod-advisor",
@@ -3483,14 +6464,25 @@
       "commands": [
         "/mods-advisor"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "recommend mods",
+          "which mod",
+          "suggest mods",
+          "what mods should i",
+          "mod for my project",
+          "best mods for"
+        ],
+        "always": true
+      }
     },
     {
       "name": "smart-router",
       "category": "agents",
       "tier": "complex",
       "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -3502,14 +6494,25 @@
         "/route",
         "/router"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "subagent model",
+          "model routing",
+          "route subagents",
+          "run in parallel",
+          "parallel agents",
+          "orchestrate agents"
+        ],
+        "always": true
+      }
     },
     {
       "name": "whatsapp-bridge",
       "category": "notifications",
       "tier": "complex",
       "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -3520,7 +6523,17 @@
       "commands": [
         "/wa"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "whatsapp",
+          "notify me",
+          "avvisami",
+          "telefono",
+          "remote control",
+          "update me"
+        ]
+      }
     },
     {
       "name": "autopilot",
@@ -3537,14 +6550,22 @@
       "commands": [
         "/autopilot"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "autopilot",
+          "pilota automatico",
+          "until tests pass",
+          "run unattended"
+        ]
+      }
     },
     {
       "name": "project-brain",
       "category": "memory",
       "tier": "complex",
       "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "memory",
@@ -3555,7 +6576,16 @@
       "commands": [
         "/brain"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "remember",
+          "why did we",
+          "convention",
+          "convenzione",
+          "decision"
+        ]
+      }
     },
     {
       "name": "context-optimizer",
@@ -3572,7 +6602,14 @@
       "commands": [
         "/ctx"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "contesto",
+          "too long",
+          "context window"
+        ]
+      }
     },
     {
       "name": "workflow-studio",
@@ -3589,7 +6626,16 @@
       "commands": [
         "/recipe"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "workflow",
+          "automate",
+          "automatizza",
+          "pipeline",
+          "release process"
+        ]
+      }
     },
     {
       "name": "mission-control",
@@ -3606,7 +6652,17 @@
       "commands": [
         "/mission"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "sessions",
+          "sessioni",
+          "dashboard",
+          "all sessions",
+          "tutte le sessioni",
+          "what is running"
+        ]
+      }
     },
     {
       "name": "session-sync",
@@ -3624,7 +6680,17 @@
         "/sync",
         "/handoff-to"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "conflict",
+          "conflitto",
+          "two sessions",
+          "due sessioni",
+          "parallel sessions",
+          "same repo"
+        ]
+      }
     },
     {
       "name": "team-hub",
@@ -3642,14 +6708,22 @@
       "commands": [
         "/team"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "onboarding",
+          "conventions",
+          "shared rules",
+          "regole comuni"
+        ]
+      }
     },
     {
       "name": "telegram-bridge",
       "category": "notifications",
       "tier": "simple",
       "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -3659,14 +6733,21 @@
       "commands": [
         "/telegram"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "telegram",
+          "notify me",
+          "avvisami"
+        ]
+      }
     },
     {
       "name": "slack-bridge",
       "category": "notifications",
       "tier": "simple",
       "description": "Posts progress and reports to Slack and takes questions and commands from a channel, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -3677,14 +6758,20 @@
       "commands": [
         "/slack"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "notify team",
+          "canale slack"
+        ]
+      }
     },
     {
       "name": "discord-bridge",
       "category": "notifications",
       "tier": "simple",
       "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -3695,7 +6782,13 @@
       "commands": [
         "/discord"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "server discord",
+          "notify team"
+        ]
+      }
     },
     {
       "name": "calendar-sync",
@@ -3713,7 +6806,15 @@
       "commands": [
         "/calendar"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "calendar",
+          "calendario",
+          "riunione",
+          "vacation"
+        ]
+      }
     },
     {
       "name": "email-digest",
@@ -3731,7 +6832,13 @@
       "commands": [
         "/digest"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "resoconto",
+          "weekly summary"
+        ]
+      }
     },
     {
       "name": "issue-pilot",
@@ -3750,7 +6857,13 @@
       "commands": [
         "/issues"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "github issue",
+          "work on issue"
+        ]
+      }
     },
     {
       "name": "guardian",
@@ -3767,7 +6880,15 @@
       "commands": [
         "/guardian"
       ],
-      "since": "2.0.0"
+      "since": "2.0.0",
+      "signals": {
+        "intents": [
+          "security",
+          "sicurezza",
+          "safety score",
+          "strict mode"
+        ]
+      }
     }
   ]
 }

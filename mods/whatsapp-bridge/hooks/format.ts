@@ -96,11 +96,10 @@ export const keySteps = (sessionId: string): string =>
 export const composeSection = (isInteractive: boolean): string =>
   isInteractive
     ? [
-        'WhatsApp bridge: the user can be reached on their phone through the tools mcp__whatsapp-bridge__notify, ',
-        'mcp__whatsapp-bridge__ask, mcp__whatsapp-bridge__send_file and mcp__whatsapp-bridge__open_panel. ',
+        'WhatsApp bridge: the user can be reached on their phone. ',
         'Use ask only when you are blocked on a decision only the user can make (it waits for their reply); ',
-        'use notify when a long job finished or failed or something needs their attention; never for routine progress, ',
-        'and never send file contents or diffs unless the user asked. Messages are redacted and rate-limited: keep them short.',
+        'use mcp__whatsapp-bridge__notify for a long job that finished or failed, never for routine progress. ',
+        'Never send file contents or diffs unless the user asked. Messages are redacted and rate-limited: keep them short.',
       ].join('')
     : [
         'WhatsApp bridge: the user is NOT available for questions right now (interaction is off: night or silent mode). ',

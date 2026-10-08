@@ -1,6 +1,6 @@
 {
   "name": "parallel-explore",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#parallel-explore",

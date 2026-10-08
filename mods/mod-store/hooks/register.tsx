@@ -15,6 +15,9 @@ import type {
   StoreJob,
   StoreMod,
   StoreNotice,
+  StorePack,
+  StorePlan,
+  StorePlanRow,
   StoreReadme,
   StoreSync,
   StoreView,
@@ -71,23 +74,51 @@ import {
   isClaudeFile,
   joinPath,
   parseInstalled,
+  pluginId,
   parseMarketplaceNames,
   parseOutcome,
   versionOrder,
 } from './cli'
 import type { CliOutcome } from './cli'
 import { barCells, barSvg, glyphOf, iconSvg, markSvg } from './icons'
+import {
+  changesOf,
+  disabledEntries,
+  editEnabledPlugins,
+  isDepFile,
+  mergeUsage,
+  parseDeps,
+  parseTranscript,
+  projectFolder,
+  proposeProfile,
+  proposeSlim,
+  SKIP_DIRS,
+  usesByMod,
+  WALK,
+} from './profile'
+import type { TranscriptUsage, Use } from './profile'
 
 type Dollar = EngineInterface
 type Action = 'install' | 'update' | 'uninstall'
 type Bulk = 'install-all' | 'update-all'
+/** The jobs of profiles, slims and packs: read a project or the transcripts, apply or undo a plan, enable a pack here. */
+type PlanTask = 'profile' | 'slim' | 'apply' | 'undo' | 'reset' | 'enable-pack'
+type Task = Action | Bulk | PlanTask
+/** What a job does: the task, the mod (or pack) it is on, the mods of a bulk install, the days of a slim, its title. */
+type JobSpec = { action: Task; name: string; names?: readonly string[]; days?: number; title?: string }
+/** What Undo restores: a settings file's entries as they were, or mods the CLI disabled at user scope. */
+type UndoRecord =
+  | { kind: 'local'; path: string; previous: Record<string, boolean | null>; label: string }
+  | { kind: 'cli'; names: string[]; label: string }
+/** The weekly slim tip: when it last looked, and whether the person turned it off. */
+type NudgeState = { lastAt?: number; isOff?: boolean }
 /** The store's settings, read from userConfig: where the catalog lives, or why it cannot be read. */
 type Config = { source: Source; problem: string | undefined }
 
 const PANE = 'mod-store'
 const PANE_TITLE = 'Mod Store'
 const PANE_ROWS = 26
-const ARGUMENT_HINT = '[search <words> | refresh | install-all | update-all | stop | install|update|uninstall <mod>]'
+const ARGUMENT_HINT = '[search <words> | profile [apply|reset] | slim [<days>|apply|off|on] | packs | pack <id> [install|enable] | undo | refresh | install-all | update-all | stop | install|update|uninstall <mod>]'
 const CACHE_KEY = 'catalog'
 const ANNOUNCED_KEY = 'announced-updates'
 const FRESH_MS = 10 * 60_000
@@ -112,11 +143,42 @@ const RELATED_LIMIT = 5
 const PICKS_LIMIT = 4
 const BAR_COLUMNS_MAX = 28
 const NOTICE_CHARS = 400
+/** Where a project's own on/off switches live: local scope, which Claude Code keeps out of git. */
+const SETTINGS_LOCAL = '.claude/settings.local.json'
+const UNDO_KEY = 'undo'
+const NUDGE_KEY = 'slim-nudge'
+const USAGE_CACHE_KEY = 'usage-cache'
+const ESSENTIALS_PACK = 'essentials'
+const SLIM_DAYS = 14
+/** The slim tip appears only when at least this many mods are idle, at most once a week, never at start. */
+const NUDGE_IDLE = 30
+const NUDGE_EVERY_MS = 7 * 24 * 60 * 60_000
+const NUDGE_DELAY_MS = 4 * 60_000
+const NUDGE_TOAST_MS = 12_000
+const DAY_MS = 24 * 60 * 60_000
+/** `$.fs.read` refuses files over 4 MiB; a bigger transcript is read as its newest chunk with `tail -c`. */
+const READ_CAP_BYTES = 4 * 1024 * 1024
+const CHUNK_BYTES = 3 * 1024 * 1024
+const TAIL_TIMEOUT_MS = 10_000
+/** Bounds of a usage scan: transcript folders listed, files read (newest first), bytes read in all. */
+const PROJECT_DIRS_MAX = 200
+const TRANSCRIPTS_MAX = 60
+const PROJECT_TRANSCRIPTS_MAX = 12
+const TRANSCRIPT_BYTES_MAX = 48 * 1024 * 1024
+const USAGE_CACHE_LIMIT = 150
+const FEED_LIMIT = 500
+const DEP_FILES_MAX = 20
+const DEP_FILE_DEPTH = 3
+/** Many installed mods at once: the outcome recommends a project profile. */
+const PROFILE_HINT_MODS = 30
+const INSTALL_ALL_WARNING = 50
+const PLAN_CHROME_ROWS = 12
 const VERBS: Record<Action, string> = { install: 'Installing', update: 'Updating', uninstall: 'Uninstalling' }
 const TONE_COLOR: Record<StoreNotice['tone'], string> = { success: 'success', error: 'error', info: 'suggestion' }
 const TONE_GLYPH: Record<StoreNotice['tone'], string> = { success: '✓', error: '✗', info: '•' }
 const STATUS_LABEL: Record<StatusFilter, string> = { all: 'All', installed: 'Installed', updates: 'Updates', new: 'New' }
 const HOME: StoreView = { query: '', category: FILTER_ALL, status: FILTER_ALL, selected: null, page: 0 }
+const PLAN_TITLE: Record<StorePlan['kind'], string> = { profile: 'Profile', slim: 'Slim' }
 
 const catalogState = atom({ plugin: 'mod-store', key: 'catalog' } as const, null)
 const syncState = atom({ plugin: 'mod-store', key: 'sync' } as const, { phase: 'idle' })
@@ -129,6 +191,8 @@ const noticeState = atom({ plugin: 'mod-store', key: 'notice' } as const, null)
 const readmesState = atom({ plugin: 'mod-store', key: 'readmes' } as const, {})
 const configsState = atom({ plugin: 'mod-store', key: 'configs' } as const, {})
 const picksState = atom({ plugin: 'mod-store', key: 'picks' } as const, [])
+/** The plan under review (a profile or a slim): written by the job that reads it and by the person's toggles. */
+const planState = atom({ plugin: 'mod-store', key: 'plan' } as const, null)
 
 /** The `claude` executable, resolved once per load. */
 let binary: string | undefined
@@ -505,12 +569,14 @@ async function installMods($: Dollar, catalog: StoreCatalog, bin: string, names:
     failed.text,
     left > 0 ? `Stopped with ${plural(left, 'mod')} left.` : '',
     added.length > 0 ? `Run /reload-plugins to activate ${added.length === 1 ? 'it' : 'them'}.` : '',
+    added.length >= PROFILE_HINT_MODS ? 'Every enabled mod adds start-up work to each response: a profile keeps only what this project needs.' : '',
   ]
     .filter(part => part !== '')
     .join(' ')
   const retry = failed.names.length > 0 ? { retry: { action: 'install' as const, names: failed.names } } : {}
+  const profile = added.length >= PROFILE_HINT_MODS ? { canProfile: true } : {}
 
-  return added.length > 0 ? { ...success(text), ...retry }
+  return added.length > 0 ? { ...success(text), ...retry, ...profile }
     : failed.names.length > 0 ? { ...failure(text), ...retry }
     : info(text === '' ? 'Stopped before anything was installed.' : text)
 }
@@ -597,12 +663,18 @@ async function runUpdateAll($: Dollar, catalog: StoreCatalog, bin: string): Prom
 }
 
 /** What a job is called while it runs: its verb and what it acts on. */
-function jobOf(action: Action | Bulk, name: string, names: readonly string[] | undefined): StoreJob {
-  const [verb, title] = action === 'update-all'
-    ? [VERBS.update, 'every mod with an update']
-    : action === 'install-all'
-      ? [VERBS.install, names === undefined ? 'every mod not yet installed' : plural(names.length, 'mod')]
-      : [VERBS[action], name]
+function jobOf(spec: JobSpec): StoreJob {
+  const { action, name, names } = spec
+  const [verb, title] =
+    action === 'update-all' ? [VERBS.update, 'every mod with an update']
+    : action === 'install-all' ? [VERBS.install, spec.title ?? (names === undefined ? 'every mod not yet installed' : plural(names.length, 'mod'))]
+    : action === 'profile' ? ['Reading', 'this project']
+    : action === 'slim' ? ['Reading', `the last ${spec.days ?? SLIM_DAYS} days of use`]
+    : action === 'apply' ? ['Applying', spec.title ?? 'the plan']
+    : action === 'undo' ? ['Undoing', 'the last apply']
+    : action === 'reset' ? ['Enabling', 'every mod in this project']
+    : action === 'enable-pack' ? ['Enabling', spec.title ?? name]
+    : [VERBS[action], name]
   return { verb, title, current: '', done: 0, total: 0, failed: 0, isStopping: false }
 }
 
@@ -610,36 +682,62 @@ function jobOf(action: Action | Bulk, name: string, names: readonly string[] | u
 const runningNotice = (): StoreNotice | undefined =>
   active === null ? undefined : info(`${active.verb} ${active.title} is still running. Wait for it, or stop it with s in the store or /mods stop.`)
 
+/** Runs the task of a job; null when it has nothing to say beyond what it drew (a plan read for review). */
+async function runTask($: Dollar, config: Config, catalog: StoreCatalog, bin: string, spec: JobSpec): Promise<StoreNotice | null> {
+  const { action, name, names } = spec
+  switch (action) {
+    case 'update-all':
+      return runUpdateAll($, catalog, bin)
+    case 'install-all':
+      return installMods($, catalog, bin, names)
+    case 'install':
+      return install($, catalog, bin, name)
+    case 'update':
+      return updateMods($, catalog, bin, [name])
+    case 'uninstall':
+      return uninstall($, catalog, bin, name)
+    case 'profile':
+      return readProfile($, catalog)
+    case 'slim':
+      return readSlim($, catalog, spec.days ?? SLIM_DAYS)
+    case 'apply':
+      return applyPlan($, catalog, bin)
+    case 'undo':
+      return undoLast($, catalog, bin)
+    case 'reset':
+      return resetProject($, catalog)
+    case 'enable-pack':
+      return enablePack($, catalog, name)
+  }
+}
+
 /**
- * Runs one job (`name` a mod, every mod with an update, or every mod of `names` not yet installed), drawing its
- * progress as the bar and its outcome as the notice, with a toast at the end. The caller has claimed `job` as
- * `active`; this frees it.
+ * Runs one job, drawing its progress as the bar and its outcome as the notice, with a toast at the end. The caller
+ * has claimed `job` as `active`; this frees it.
  */
-async function runJob($: Dollar, config: Config, job: StoreJob, action: Action | Bulk, name: string, names?: readonly string[]): Promise<StoreNotice> {
-  let notice: StoreNotice
+async function runJob($: Dollar, config: Config, job: StoreJob, spec: JobSpec): Promise<StoreNotice | null> {
+  let notice: StoreNotice | null
   try {
     await update($, jobState, () => job)
     await update($, noticeState, () => null)
-    if (action === 'install-all' || action === 'update-all') {
+    if (spec.action === 'install-all' || spec.action === 'update-all') {
       await refresh($, config, true)
     }
     const catalog = (await currentCatalog($, config)) ?? (await syncCatalog($, config, true))
     const bin = await claudeBin($)
     notice = catalog === null
       ? failure('The catalog is not available: check your connection, then run /mods refresh.')
-      : action === 'update-all' ? await runUpdateAll($, catalog, bin)
-      : action === 'install-all' ? await installMods($, catalog, bin, names)
-      : action === 'install' ? await install($, catalog, bin, name)
-      : action === 'update' ? await updateMods($, catalog, bin, [name])
-      : await uninstall($, catalog, bin, name)
+      : await runTask($, config, catalog, bin, spec)
   } catch (error) {
     notice = failure(`${job.verb} ${job.title} failed: ${describe(error)}`)
   } finally {
     if (active === job) active = null
   }
   await update($, jobState, () => null)
-  await update($, noticeState, () => notice)
-  $.ui.toast(said(notice))
+  if (notice !== null) {
+    await update($, noticeState, () => notice)
+    $.ui.toast(said(notice))
+  }
 
   return notice
 }
@@ -648,13 +746,13 @@ async function runJob($: Dollar, config: Config, job: StoreJob, action: Action |
  * Starts a job in the background, outside the press or command that asked (a timer of its own), so that press
  * settles and the command answers at once; the bar and the notice say the rest. Undefined when it started.
  */
-function launch($: Dollar, config: Config, action: Action | Bulk, name: string, names?: readonly string[]): StoreNotice | undefined {
+function launch($: Dollar, config: Config, spec: JobSpec): StoreNotice | undefined {
   const busy = runningNotice()
   if (busy !== undefined) return busy
-  const job = jobOf(action, name, names)
+  const job = jobOf(spec)
   active = job
   $.clock.after(0, () => {
-    void runJob($, config, job, action, name, names)
+    void runJob($, config, job, spec)
   })
 
   return undefined
@@ -665,6 +763,363 @@ async function stopJob($: Dollar): Promise<boolean> {
   if (active === null) return false
   const job = await setJob($, current => ({ ...current, isStopping: true }))
   return job !== null
+}
+
+// ── Profiles, slims and packs: read, review, apply, undo ─────────────────────
+
+/** Where Claude Code keeps its configuration (transcripts under `projects/`); undefined when no home is known. */
+async function configRoot($: Dollar): Promise<string | undefined> {
+  const [custom, home, profile] = await Promise.all([
+    $.env.get('CLAUDE_CONFIG_DIR').catch(() => undefined),
+    $.env.get('HOME').catch(() => undefined),
+    $.env.get('USERPROFILE').catch(() => undefined),
+  ])
+  if (custom !== undefined && custom !== '') return custom
+  const base = home !== undefined && home !== '' ? home : profile
+  return base === undefined || base === '' ? undefined : joinPath(base, '.claude')
+}
+
+/**
+ * The project's paths, breadth first and bounded (WALK): files as `a/b.ts`, folders as `a/` so a catalog glob such as
+ * `k8s/**` matches a folder the walk did not enter. Dependencies, build output and VCS folders are skipped.
+ */
+async function walkProject($: Dollar, root: string): Promise<string[]> {
+  const paths: string[] = []
+  const queue: { dir: string; rel: string; depth: number }[] = [{ dir: root, rel: '', depth: 0 }]
+  let listed = 0
+  while (queue.length > 0 && listed < WALK.dirs && paths.length < WALK.paths) {
+    const folder = queue.shift()
+    if (folder === undefined) break
+    listed += 1
+    const entries = await $.fs.list(folder.dir).catch(() => [])
+    for (const entry of entries) {
+      const rel = folder.rel === '' ? entry.name : `${folder.rel}/${entry.name}`
+      if (entry.kind === 'dir' && !SKIP_DIRS.has(entry.name)) {
+        paths.push(`${rel}/`)
+        if (folder.depth + 1 < WALK.depth) queue.push({ dir: joinPath(folder.dir, entry.name), rel, depth: folder.depth + 1 })
+      } else if (entry.kind === 'file') {
+        paths.push(rel)
+      }
+    }
+  }
+  return paths.slice(0, WALK.paths)
+}
+
+/** The dependencies the project's manifests declare (package.json, pyproject.toml, requirements, Gemfile, ...). */
+async function readDeps($: Dollar, root: string, paths: readonly string[]): Promise<string[]> {
+  const files = paths.filter(path => isDepFile(path) && path.split('/').length <= DEP_FILE_DEPTH).slice(0, DEP_FILES_MAX)
+  const texts = await Promise.all(files.map(path => $.fs.read(joinPath(root, ...path.split('/'))).catch(() => '')))
+  return [...new Set(files.flatMap((path, index) => parseDeps(path, texts[index] ?? '')))]
+}
+
+type TranscriptFile = { path: string; size: number; mtimeMs: number }
+type CachedUsage = { size: number; mtimeMs: number; usage: TranscriptUsage }
+type UsageScan = { usage: TranscriptUsage; scanned: number; skipped: number }
+
+/** Transcripts written since `since`, newest first and capped: of the named project folders, or of every project. */
+async function listTranscripts($: Dollar, projects: string, folders: readonly string[] | undefined, since: number, max: number): Promise<TranscriptFile[]> {
+  const names = folders ?? (await $.fs.list(projects).catch(() => []))
+    .filter(entry => entry.kind === 'dir')
+    .map(entry => entry.name)
+    .slice(0, PROJECT_DIRS_MAX)
+  const files: TranscriptFile[] = []
+  for (const name of names) {
+    const folder = joinPath(projects, name)
+    for (const entry of await $.fs.list(folder).catch(() => [])) {
+      if (entry.kind === 'file' && entry.name.endsWith('.jsonl') && entry.mtimeMs >= since) {
+        files.push({ path: joinPath(folder, entry.name), size: entry.size, mtimeMs: entry.mtimeMs })
+      }
+    }
+  }
+  return files.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, max)
+}
+
+/** One transcript's usage: read whole up to the 4 MiB cap, else its newest chunk through `tail`; undefined when unreadable. */
+async function readTranscript($: Dollar, file: TranscriptFile): Promise<TranscriptUsage | undefined> {
+  try {
+    if (file.size <= READ_CAP_BYTES) return parseTranscript(await $.fs.read(file.path))
+    const tail = await $.process.run(['tail', '-c', String(CHUNK_BYTES), file.path], { timeoutMs: TAIL_TIMEOUT_MS })
+    return tail.exitCode === 0 ? parseTranscript(tail.stdout, true) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Reads usage from transcripts, newest first, bounded in files and bytes, one file per step of the job's bar (Stop
+ * ends it early). Without prompts, each file's result is cached in $.store by path, size and time, so a second
+ * scan only reads what changed.
+ */
+async function scanUsage($: Dollar, files: readonly TranscriptFile[], withPrompts: boolean, isJob: boolean): Promise<UsageScan> {
+  const cache = withPrompts ? {} : (((await $.store.get(USAGE_CACHE_KEY).catch(() => undefined)) ?? {}) as Record<string, CachedUsage>)
+  const fresh: Record<string, CachedUsage> = {}
+  const found: TranscriptUsage[] = []
+  let skipped = 0
+  let bytes = 0
+  if (isJob) await setJob($, job => ({ ...job, done: 0, total: files.length }))
+  for (const [index, file] of files.entries()) {
+    if (isJob && (await isStopping($))) break
+    const known = cache[file.path]
+    if (known !== undefined && known.size === file.size && known.mtimeMs === file.mtimeMs) {
+      found.push(known.usage)
+      fresh[file.path] = known
+      continue
+    }
+    bytes += Math.min(file.size, READ_CAP_BYTES)
+    if (bytes > TRANSCRIPT_BYTES_MAX) {
+      skipped += files.length - index
+      break
+    }
+    if (isJob) await setJob($, job => ({ ...job, current: `transcript ${index + 1}/${files.length}`, done: index }))
+    const usage = await readTranscript($, file)
+    if (usage === undefined) {
+      skipped += 1
+      continue
+    }
+    found.push(usage)
+    if (!withPrompts) fresh[file.path] = { size: file.size, mtimeMs: file.mtimeMs, usage: { ...usage, prompts: [] } }
+  }
+  if (!withPrompts) {
+    const kept = Object.entries(fresh).slice(0, USAGE_CACHE_LIMIT)
+    await $.store.set(USAGE_CACHE_KEY, Object.fromEntries(kept)).catch(() => undefined)
+  }
+  return { usage: mergeUsage(found), scanned: found.length, skipped }
+}
+
+/** When each mod last published on the mods-hub feed in this session (`$.mods.recent`); empty without the hub. */
+async function feedUses($: Dollar): Promise<Record<string, number>> {
+  try {
+    const events = await $.mods.recent({ limit: FEED_LIMIT })
+    const last: Record<string, number> = {}
+    for (const event of events) last[event.source] = Math.max(last[event.source] ?? 0, event.at)
+    return last
+  } catch {
+    return {}
+  }
+}
+
+const basename = (path: string): string => path.split(/[\\/]/).filter(part => part !== '').pop() ?? path
+
+/** Reads this project (files, dependencies, its own transcripts) and puts the proposed profile up for review. */
+async function readProfile($: Dollar, catalog: StoreCatalog): Promise<StoreNotice | null> {
+  // A catalog from before profiles has no signals: every mod would read as "not needed", so say so instead.
+  if (!catalog.mods.some(mod => mod.signals !== undefined)) {
+    return info(`The catalog of ${catalog.repository}@${catalog.branch} has no project signals yet, so a profile cannot tell what this project needs. Run /mods refresh once it is updated.`)
+  }
+  const installed = await refreshInstalled($, catalog.marketplace)
+  if (!installed.isKnown) return failure(`Could not read the installed mods: ${installed.error}`)
+  const [root, now, config] = await Promise.all([$.session.root(), $.clock.now(), configRoot($)])
+  await setJob($, job => ({ ...job, current: 'project files' }))
+  const paths = await walkProject($, root)
+  const deps = await readDeps($, root, paths)
+  const files = config === undefined
+    ? []
+    : await listTranscripts($, joinPath(config, 'projects'), [projectFolder(root)], 0, PROJECT_TRANSCRIPTS_MAX)
+  const { usage } = await scanUsage($, files, true, true)
+  const essentials = catalog.packs?.find(pack => pack.id === ESSENTIALS_PACK)?.mods ?? []
+  const rows = proposeProfile({
+    mods: catalog.mods,
+    installed: installed.mods,
+    paths,
+    deps,
+    used: usesByMod(catalog.mods, usage),
+    prompts: usage.prompts,
+    essentials,
+  })
+  await update($, planState, (): StorePlan => ({ kind: 'profile', root, createdAt: now, rows }))
+  if (rows.length === 0) return info('No mod of this marketplace is installed, so there is nothing to profile.')
+  const kept = rows.filter(row => row.keep).length
+  $.ui.toast(`◆ ${basename(root)} needs ${kept} of ${plural(rows.length, 'installed mod')}. Review, then Apply (/mods profile apply).`)
+  return null
+}
+
+/** Reads the last `days` of use across every project and puts the idle mods up for review. */
+async function readSlim($: Dollar, catalog: StoreCatalog, days: number): Promise<StoreNotice | null> {
+  const installed = await refreshInstalled($, catalog.marketplace)
+  if (!installed.isKnown) return failure(`Could not read the installed mods: ${installed.error}`)
+  const [root, now, config] = await Promise.all([$.session.root(), $.clock.now(), configRoot($)])
+  const files = config === undefined ? [] : await listTranscripts($, joinPath(config, 'projects'), undefined, now - days * DAY_MS, TRANSCRIPTS_MAX)
+  const scan = await scanUsage($, files, false, true)
+  const uses = usesByMod(catalog.mods, scan.usage, await feedUses($))
+  const rows = proposeSlim({ mods: catalog.mods, installed: installed.mods, uses, now, days })
+  const historyDays = scan.usage.first === null ? 0 : Math.max(0, Math.floor((now - scan.usage.first) / DAY_MS))
+  await update($, planState, (): StorePlan => ({ kind: 'slim', root, createdAt: now, rows, days, scanned: scan.scanned, skipped: scan.skipped, historyDays }))
+  const idle = rows.filter(row => !row.keep).length
+  $.ui.toast(idle === 0
+    ? `◆ Every enabled mod was used in the last ${days} days.`
+    : `◆ ${plural(idle, 'mod')} idle for ${days} days. Review, then Apply (/mods slim apply).`)
+  return null
+}
+
+/** Brings the plan's "enabled now" up to date with the installed mods (after an apply or an undo), so it shows what is left to change. */
+async function syncPlan($: Dollar, installed: StoreInstalled): Promise<void> {
+  if (!installed.isKnown) return
+  await update($, planState, plan => plan === null ? null : {
+    ...plan,
+    rows: plan.rows.map(row => ({ ...row, isEnabled: installed.mods[row.name]?.isEnabled ?? row.isEnabled })),
+  })
+}
+
+/** Applies the plan under review: a profile to this project's settings.local.json, a slim through the CLI. */
+async function applyPlan($: Dollar, catalog: StoreCatalog, bin: string): Promise<StoreNotice> {
+  const plan = await read($, planState)
+  if (plan === null) return info('There is no plan to apply: run /mods profile or /mods slim first.')
+  const changes = changesOf(plan.rows)
+  if (changes.length === 0) return info('Nothing to change: every mod is already as the plan says.')
+  if (plan.kind === 'profile') {
+    const edits = Object.fromEntries(changes.map(row => [pluginId(row.name, catalog.marketplace), row.keep]))
+    const off = changes.filter(row => !row.keep).length
+    const on = changes.length - off
+    const what = [off > 0 ? `disabled ${plural(off, 'mod')}` : '', on > 0 ? `enabled ${plural(on, 'mod')}` : ''].filter(part => part !== '').join(' and ')
+    return writeLocal($, catalog, plan.root, edits, `the ${basename(plan.root)} profile`, `Profile applied to ${basename(plan.root)}: ${what}.`)
+  }
+  return slimWithCli($, catalog, bin, changes)
+}
+
+/**
+ * Writes `edits` to the project's `.claude/settings.local.json` in one go (the file `claude plugin disable --scope
+ * local` writes, one CLI run per mod), keeping every other key, and records what it replaced for Undo. A file that
+ * cannot be read or is not a JSON object is left untouched.
+ */
+async function writeLocal($: Dollar, catalog: StoreCatalog, root: string, edits: Record<string, boolean | null>, label: string, done: string): Promise<StoreNotice> {
+  const path = joinPath(root, ...SETTINGS_LOCAL.split('/'))
+  await setJob($, job => ({ ...job, current: SETTINGS_LOCAL, done: 0, total: 3 }))
+  let current: string | undefined
+  try {
+    current = await $.fs.read(path)
+  } catch (error) {
+    if (await $.fs.exists(path).catch(() => true)) {
+      return failure(`Could not read ${SETTINGS_LOCAL} (${describe(error)}), so nothing was changed.`)
+    }
+    current = undefined
+  }
+  const edit = editEnabledPlugins(current, edits)
+  if (!edit.isOk) return failure(`Left ${SETTINGS_LOCAL} untouched: ${edit.reason}. Fix or move it, then apply again.`)
+  await setJob($, job => ({ ...job, done: 1 }))
+  await $.fs.write(path, edit.text)
+  const undo: UndoRecord = { kind: 'local', path, previous: edit.previous, label }
+  await $.store.set(UNDO_KEY, undo)
+  await setJob($, job => ({ ...job, current: 'checking', done: 2 }))
+  await syncPlan($, await refreshInstalled($, catalog.marketplace))
+
+  return { ...success(`${done} Written to ${SETTINGS_LOCAL} (this project only, kept out of git). Reload plugins to apply.`), canUndo: true }
+}
+
+/** Disables a slim's mods at user scope with `claude plugin disable`, one per step; mods installed in other scopes are left. */
+async function slimWithCli($: Dollar, catalog: StoreCatalog, bin: string, changes: readonly StorePlanRow[]): Promise<StoreNotice> {
+  const installed = await knownInstalled($, catalog)
+  if (!installed.isKnown) return failure(`Could not read the installed mods: ${installed.error}`)
+  const targets = changes.filter(row => !row.keep && installed.mods[row.name]?.scope === 'user').map(row => row.name)
+  const elsewhere = changes.length - targets.length
+  const { results, left } = await eachStep($, targets, name => change($, argv.disable(bin, name, catalog.marketplace, 'user')))
+  const disabled = results.filter(result => result.outcome.isOk).map(result => result.name)
+  if (disabled.length > 0) {
+    const undo: UndoRecord = { kind: 'cli', names: disabled, label: 'the slim' }
+    await $.store.set(UNDO_KEY, undo)
+  }
+  await syncPlan($, await refreshInstalled($, catalog.marketplace))
+  const failed = failuresOf(results)
+  const text = [
+    disabled.length > 0 ? `Disabled ${plural(disabled.length, 'idle mod')} everywhere (${listed(disabled)}).` : '',
+    failed.text,
+    elsewhere > 0 ? `${plural(elsewhere, 'mod')} installed in a project scope left as they are.` : '',
+    left > 0 ? `Stopped with ${plural(left, 'mod')} left.` : '',
+    disabled.length > 0 ? 'Reload plugins to apply.' : '',
+  ].filter(part => part !== '').join(' ')
+
+  return disabled.length > 0 ? { ...success(text), canUndo: true } : failed.names.length > 0 ? failure(text) : info(text === '' ? 'Nothing was disabled.' : text)
+}
+
+/** Undoes the last apply: the settings entries it replaced, or the mods it disabled through the CLI. */
+async function undoLast($: Dollar, catalog: StoreCatalog, bin: string): Promise<StoreNotice> {
+  const undo = (await $.store.get(UNDO_KEY).catch(() => undefined)) as UndoRecord | undefined
+  if (undo === undefined || undo === null) return info('There is nothing to undo.')
+  if (undo.kind === 'local') {
+    let current: string | undefined
+    try {
+      current = await $.fs.read(undo.path)
+    } catch {
+      current = undefined
+    }
+    const edit = editEnabledPlugins(current, undo.previous)
+    if (!edit.isOk) return failure(`Could not undo: ${SETTINGS_LOCAL} ${edit.reason.replace(/^it /, '')}.`)
+    await $.fs.write(undo.path, edit.text)
+  } else {
+    const { results } = await eachStep($, undo.names, name => change($, argv.enable(bin, name, catalog.marketplace, 'user')))
+    const failed = failuresOf(results)
+    if (failed.names.length > 0) {
+      await $.store.set(UNDO_KEY, { ...undo, names: failed.names })
+      await refreshInstalled($, catalog.marketplace)
+      return failure(`Undo left ${plural(failed.names.length, 'mod')} disabled. ${failed.text}`)
+    }
+  }
+  await $.store.delete(UNDO_KEY)
+  await syncPlan($, await refreshInstalled($, catalog.marketplace))
+  return success(`Undid ${undo.label}. Reload plugins to apply.`)
+}
+
+/** `/mods profile reset`: removes every entry of this marketplace this project's settings.local.json turns off. */
+async function resetProject($: Dollar, catalog: StoreCatalog): Promise<StoreNotice> {
+  const root = await $.session.root()
+  const path = joinPath(root, ...SETTINGS_LOCAL.split('/'))
+  const current = await $.fs.read(path).catch(() => undefined)
+  const edits = disabledEntries(current, catalog.marketplace)
+  const count = Object.keys(edits).length
+  return count === 0
+    ? info(`No mod is turned off in ${basename(root)}'s ${SETTINGS_LOCAL}.`)
+    : writeLocal($, catalog, root, edits, `the reset of ${basename(root)}`, `Enabled ${plural(count, 'mod')} again in ${basename(root)}.`)
+}
+
+/** Enables a pack's installed members in this project (local `true` overrides a user-level off). */
+async function enablePack($: Dollar, catalog: StoreCatalog, id: string): Promise<StoreNotice> {
+  const pack = catalog.packs?.find(one => one.id === id)
+  if (pack === undefined) return failure(`There is no pack named ${id}.`)
+  const installed = await refreshInstalled($, catalog.marketplace)
+  if (!installed.isKnown) return failure(`Could not read the installed mods: ${installed.error}`)
+  const off = pack.mods.filter(name => installed.mods[name]?.isEnabled === false)
+  const missing = pack.mods.filter(name => installed.mods[name] === undefined).length
+  const tail = missing > 0 ? ` ${plural(missing, 'mod')} of it ${missing === 1 ? 'is' : 'are'} not installed: Install pack adds ${missing === 1 ? 'it' : 'them'}.` : ''
+  if (off.length === 0) return info(`Every installed mod of ${pack.title} is already enabled here.${tail}`)
+  const root = await $.session.root()
+  const edits = Object.fromEntries(off.map(name => [pluginId(name, catalog.marketplace), true]))
+  return writeLocal($, catalog, root, edits, `enabling ${pack.title}`, `Enabled ${plural(off.length, 'mod')} of ${pack.title} in ${basename(root)}.${tail}`)
+}
+
+/**
+ * The weekly slim tip, from a timer minutes after start (never inside session.start): at most once a week, only in
+ * an interactive session, never in Silent or Night mode, and only when at least NUDGE_IDLE mods are idle.
+ */
+async function nudgeSlim($: Dollar, config: Config): Promise<void> {
+  const state = ((await $.store.get(NUDGE_KEY).catch(() => undefined)) ?? {}) as NudgeState
+  const now = await $.clock.now()
+  if (state.isOff === true || (state.lastAt ?? 0) > now - NUDGE_EVERY_MS || active !== null) return
+  const isQuiet = async () => {
+    const mode = await hubMode($)
+    return mode?.isSilent === true || mode?.isNight === true
+  }
+  if (await isQuiet()) return
+  await $.store.set(NUDGE_KEY, { ...state, lastAt: now })
+  await refresh($, config, false)
+  const catalog = await currentCatalog($, config)
+  const installed = await read($, installedState)
+  if (catalog === null || installed?.isKnown !== true) return
+  if (Object.values(installed.mods).filter(mod => mod.isEnabled).length < NUDGE_IDLE) return
+  const root = await configRoot($)
+  const files = root === undefined ? [] : await listTranscripts($, joinPath(root, 'projects'), undefined, now - SLIM_DAYS * DAY_MS, TRANSCRIPTS_MAX)
+  const scan = await scanUsage($, files, false, false)
+  const uses = usesByMod(catalog.mods, scan.usage, await feedUses($))
+  const idle = proposeSlim({ mods: catalog.mods, installed: installed.mods, uses, now, days: SLIM_DAYS }).filter(row => !row.keep).length
+  if (idle < NUDGE_IDLE || (await isQuiet())) return
+  $.ui.toast(`◆ ${idle} mods unused for ${SLIM_DAYS} days still load on every response · /mods slim to review · /mods slim off hides this tip`, {
+    timeoutMs: NUDGE_TOAST_MS,
+  })
+}
+
+/** Turns the weekly slim tip off or on. */
+async function setNudge($: Dollar, isOff: boolean): Promise<string> {
+  const state = ((await $.store.get(NUDGE_KEY).catch(() => undefined)) ?? {}) as NudgeState
+  await $.store.set(NUDGE_KEY, { ...state, isOff })
+  return isOff ? '◆ The weekly slim tip is off. /mods slim on brings it back.' : '◆ The weekly slim tip is on (at most once a week, never in Silent or Night).'
 }
 
 // ── Pane helpers ─────────────────────────────────────────────────────────────
@@ -826,7 +1281,7 @@ async function startFromCommand($: Dollar, config: Config, action: Action | Bulk
   if (action === 'install' && catalog !== null && !catalog.mods.some(mod => mod.name === name)) {
     return { text: said(failure(`There is no mod named ${name} in ${catalog.repository}.`)) }
   }
-  const busy = launch($, config, action, name)
+  const busy = launch($, config, { action, name })
   if (busy !== undefined) {
     return { text: said(busy) }
   }
@@ -839,6 +1294,70 @@ async function startFromCommand($: Dollar, config: Config, action: Action | Bulk
   const where = opened.isPlaced ? 'Progress is in the store; s stops it.' : 'A toast says when it is done; /mods stop stops it.'
 
   return { text: `◆ ${what} in the background. ${where}` }
+}
+
+/** Where the plan screen is: the person's typing of `/mods profile` or `/mods slim`, or a press of Profile or Slim. */
+const showPlan = ($: Dollar): Promise<StoreView> =>
+  setNav($, nav => ({ ...nav, selected: null, screen: 'plan', planTab: 'disable', planPage: 0 }))
+
+/**
+ * Starts reading a profile or a slim in the background and opens the store on the plan screen, where the bar shows
+ * the reading and the lists appear when it is done; nothing is written until Apply.
+ */
+async function startPlan($: Dollar, config: Config, kind: StorePlan['kind'], days?: number): Promise<CommandRunResult> {
+  const busy = launch($, config, { action: kind, name: '', ...(days === undefined ? {} : { days }) })
+  if (busy !== undefined) return { text: said(busy) }
+  await update($, planState, () => null)
+  await showPlan($)
+  const opened = await openPane($).catch(() => ({ isPlaced: false as const }))
+  const what = kind === 'profile' ? 'Reading this project to see which mods it needs' : `Reading the last ${days ?? SLIM_DAYS} days of use`
+  const where = opened.isPlaced
+    ? 'The lists open in the store; nothing changes until you press Apply.'
+    : `A toast gives the count; /mods ${kind} apply applies it.`
+  return { text: `◆ ${what}. ${where}` }
+}
+
+/** `/mods profile apply` and `/mods slim apply`: applies the plan already read, never one the person has not seen. */
+async function applyFromCommand($: Dollar, config: Config, kind: StorePlan['kind']): Promise<CommandRunResult> {
+  const plan = await read($, planState)
+  if (plan === null || plan.kind !== kind) return { text: `• Nothing to apply yet: run /mods ${kind} to read the plan first.` }
+  const changes = changesOf(plan.rows)
+  if (changes.length === 0) return { text: '• Nothing to change: every mod is already as the plan says.' }
+  const busy = launch($, config, { action: 'apply', name: '', title: kind === 'profile' ? `the ${basename(plan.root)} profile` : 'the slim' })
+  return { text: busy === undefined ? `◆ Applying ${plural(changes.length, 'change')} in the background.` : said(busy) }
+}
+
+/** `/mods packs`: every pack with how much of it is installed. */
+async function packsText($: Dollar, config: Config): Promise<string> {
+  const catalog = await currentCatalog($, config) ?? await syncCatalog($, config, false)
+  if (catalog === null) return '✗ The catalog is not available: check your connection, then run /mods refresh.'
+  const packs = catalog.packs ?? []
+  if (packs.length === 0) return `• ${catalog.repository} defines no packs.`
+  const installed = await knownInstalled($, catalog)
+  const have = (pack: StorePack) => installed.isKnown ? pack.mods.filter(name => installed.mods[name] !== undefined).length : 0
+  return [
+    '◆ Packs: curated bundles, lighter than installing everything.',
+    ...packs.map(pack => `- ${pack.id}: ${pack.title}, ${plural(pack.mods.length, 'mod')} (${have(pack)} installed). ${pack.tagline}`),
+    'Install one with /mods pack <id> install, or enable its installed mods here with /mods pack <id> enable.',
+  ].join('\n')
+}
+
+/** `/mods pack <id> [install|enable]`: opens the pack, or starts its install or enable in the background. */
+async function packCommand($: Dollar, config: Config, id: string, step: 'show' | 'install' | 'enable'): Promise<CommandRunResult> {
+  const catalog = await currentCatalog($, config) ?? await syncCatalog($, config, false)
+  const pack = catalog?.packs?.find(one => one.id === id)
+  if (catalog === null || pack === undefined) {
+    return { text: `✗ There is no pack named ${id}. /mods packs lists them.` }
+  }
+  if (step === 'show') {
+    await setNav($, nav => ({ ...nav, selected: null, screen: 'pack', pack: pack.id }))
+    const opened = await openPane($).catch(() => ({ isPlaced: false as const }))
+    return { text: opened.isPlaced ? `◆ Opened the ${pack.title} pack.` : `◆ ${pack.title}: ${pack.mods.join(', ')}.` }
+  }
+  const busy = launch($, config, step === 'install'
+    ? { action: 'install-all', name: '', names: pack.mods, title: `the ${pack.title} pack` }
+    : { action: 'enable-pack', name: pack.id, title: `the ${pack.title} pack` })
+  return { text: busy === undefined ? `◆ ${step === 'install' ? 'Installing' : 'Enabling'} the ${pack.title} pack in the background.` : said(busy) }
 }
 
 async function announceUpdates($: Dollar, config: Config): Promise<void> {
@@ -860,6 +1379,23 @@ async function announceUpdates($: Dollar, config: Config): Promise<void> {
   })
 }
 
+/** Starts a job from the prompt and answers at once with `text`, or why it cannot start. */
+function launchText($: Dollar, config: Config, spec: JobSpec, text: string): CommandRunResult {
+  const busy = launch($, config, spec)
+  return { text: busy === undefined ? text : said(busy) }
+}
+
+/** Registers a slash command. A refused name is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: Dollar, spec: Parameters<Dollar['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`/${spec.name} was not registered (${describe(error)}).`)
+    return false
+  }
+}
+
 // ── Hooks ────────────────────────────────────────────────────────────────────
 
 export const register: Register = (on, options) => {
@@ -867,9 +1403,9 @@ export const register: Register = (on, options) => {
   const shouldAnnounce = options.checkForUpdates !== false
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({
+    await registerCommand($, {
       name: 'mods',
-      description: 'Browse, search, install and update Claude Mods',
+      description: 'Browse, install and update Claude Mods; profile a project, slim idle mods, install packs',
       argumentHint: ARGUMENT_HINT,
     })
     // Never awaited inside session.start: ~200 mods share one hooks worker (shared/hub-client.ts afterStart).
@@ -878,6 +1414,12 @@ export const register: Register = (on, options) => {
       void announceUpdates($, config).catch(error =>
         $.ui.log(`update check failed: ${describe(error)}`, { to: 'debug' }),
       )
+    }
+    if (e.isInteractive) {
+      // The weekly slim tip reads transcripts: minutes after start, on a timer, never on the start path.
+      $.clock.after(NUDGE_DELAY_MS, () => {
+        void nudgeSlim($, config).catch(error => $.ui.log(`slim tip failed: ${describe(error)}`, { to: 'debug' }))
+      })
     }
 
     return next(e)
@@ -899,6 +1441,20 @@ export const register: Register = (on, options) => {
       case 'update':
       case 'uninstall':
         return startFromCommand($, config, command.kind, command.name)
+      case 'profile':
+        return command.step === 'show' ? startPlan($, config, 'profile')
+          : command.step === 'apply' ? applyFromCommand($, config, 'profile')
+          : launchText($, config, { action: 'reset', name: '' }, '◆ Enabling every mod in this project again, in the background.')
+      case 'slim':
+        return command.step === 'show' ? startPlan($, config, 'slim', command.days ?? SLIM_DAYS)
+          : command.step === 'apply' ? applyFromCommand($, config, 'slim')
+          : { text: await setNudge($, command.step === 'off') }
+      case 'undo':
+        return launchText($, config, { action: 'undo', name: '' }, '◆ Undoing the last apply in the background.')
+      case 'packs':
+        return { text: await packsText($, config) }
+      case 'pack':
+        return packCommand($, config, command.id, command.step)
       case 'usage':
         return { text: `✗ ${command.reason} Usage: /mods ${ARGUMENT_HINT}` }
     }
@@ -929,7 +1485,7 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
   const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
   const Raster = e.surface === 'terminal' ? $.ui.resolve(e).Raster : undefined
   const isTerminal = e.surface === 'terminal'
-  const [shown, sync, installed, nav, held, notice, readmes, configs, picks, now] = await Promise.all([
+  const [shown, sync, installed, nav, held, notice, readmes, configs, picks, plan, now] = await Promise.all([
     read($, catalogState),
     read($, syncState),
     read($, installedState),
@@ -939,6 +1495,7 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
     read($, readmesState),
     read($, configsState),
     read($, picksState),
+    read($, planState),
     $.clock.now(),
   ])
   const catalog = shown !== null && isCatalogOf(shown, config.source) ? shown : null
@@ -948,9 +1505,16 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
   const isWide = width >= WIDE_COLUMNS
   const where = `${config.source.repository}@${config.source.branch}`
   const isIdle = job === null
-  const start = (action: Action | Bulk, name: string, names?: readonly string[]) => {
-    const busy = launch($, config, action, name, names)
+  const run = (spec: JobSpec) => {
+    const busy = launch($, config, spec)
     return busy === undefined ? undefined : update($, noticeState, () => busy)
+  }
+  const start = (action: Action | Bulk, name: string, names?: readonly string[]) => run({ action, name, ...(names === undefined ? {} : { names }) })
+  /** Profile or Slim pressed: the plan screen, with the reading on its bar. */
+  const startPlanPress = (kind: StorePlan['kind']) => {
+    const busy = launch($, config, { action: kind, name: '', ...(kind === 'slim' ? { days: SLIM_DAYS } : {}) })
+    if (busy !== undefined) return update($, noticeState, () => busy)
+    return update($, planState, () => null).then(() => showPlan($))
   }
 
   const icon = (category: string, size = 16) =>
@@ -1035,6 +1599,12 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
       {notice.canReload
         ? <Button key="reload" label="Reload plugins" plain hotkey="l" variant="primary" onPress={() => reloadPlugins($)} />
         : null}
+      {notice.canUndo === true && isIdle
+        ? <Button key="undo" label="Undo" plain hotkey="z" onPress={() => run({ action: 'undo', name: '' })} />
+        : null}
+      {notice.canProfile === true && isIdle
+        ? <Button key="profile-now" label="Profile this project" plain hotkey="f" onPress={() => startPlanPress('profile')} />
+        : null}
       <Button key="dismiss" label="Dismiss" plain hotkey="d" onPress={() => update($, noticeState, () => null)} />
     </Box>
   )
@@ -1110,7 +1680,7 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
         <Box flexDirection="row" columnGap={1} flexWrap="wrap">
           <Button key="back" label="← Mods" hotkey="b" plain onPress={() => setNav($, current => ({ ...current, selected: null }))} />
           <Text dimColor>›</Text>
-          <Button key="crumb-category" label={category.title} hotkey="g" plain dimColor onPress={() => setNav($, current => ({ ...current, selected: null, query: '', category: category.id, page: 0 }))} />
+          <Button key="crumb-category" label={category.title} hotkey="g" plain dimColor onPress={() => setNav($, current => ({ ...current, selected: null, screen: 'list', query: '', category: category.id, page: 0 }))} />
           <Text dimColor>›</Text>
           <Text wrap="truncate-end">{mod.name}</Text>
         </Box>
@@ -1175,6 +1745,166 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
     )
   }
 
+  const bodyRowsAll = e.props.scroll.bodyRows > 0 ? e.props.scroll.bodyRows : DEFAULT_BODY_ROWS
+  const backToList = () => setNav($, current => ({ ...current, selected: null, screen: 'list' }))
+  const crumb = (title: string, detail: string) => (
+    <Box flexDirection="row" columnGap={1} flexWrap="wrap">
+      <Button key="back" label="← Mods" hotkey="b" plain onPress={backToList} />
+      <Text dimColor>›</Text>
+      <Text>{title}</Text>
+      {detail === '' ? null : <Text dimColor wrap="truncate-end">· {detail}</Text>}
+    </Box>
+  )
+
+  // The plan screen: a profile or a slim under review, two tabs (what goes off, what stays), a toggle per mod, Apply.
+  if (nav.screen === 'plan') {
+    if (plan === null) {
+      return (
+        <Box flexDirection="column">
+          {header}
+          {crumb('Plan', '')}
+          <Box flexDirection="column" marginTop={1}>
+            {active === null
+              ? <Text dimColor wrap="wrap">No plan yet. Profile reads this project and keeps the mods it needs; Slim finds mods you have not used lately.</Text>
+              : <Text color="suggestion" wrap="wrap">Reading… the lists appear here when it is done. Nothing changes until you press Apply.</Text>}
+          </Box>
+          {statusLines}
+          <Box flexDirection="row" columnGap={2} marginTop={1}>
+            {isIdle ? <Button key="plan-profile" label="Profile this project" plain hotkey="f" variant="primary" autoFocus onPress={() => startPlanPress('profile')} /> : null}
+            {isIdle ? <Button key="plan-slim" label={`Slim (idle ${SLIM_DAYS} d)`} plain hotkey="w" onPress={() => startPlanPress('slim')} /> : null}
+          </Box>
+        </Box>
+      )
+    }
+    const tab = nav.planTab ?? 'disable'
+    const tabRows = plan.rows.filter(row => (tab === 'disable' ? !row.proposed : row.proposed))
+    const changes = changesOf(plan.rows)
+    const turningOff = changes.filter(row => !row.keep).length
+    const turningOn = changes.length - turningOff
+    const keptCount = plan.rows.filter(row => row.keep).length
+    const room = Math.max(MIN_PAGE_ROWS, bodyRowsAll - PLAN_CHROME_ROWS - statusRows)
+    const planPages = Math.max(1, Math.ceil(tabRows.length / room))
+    const planPage = Math.min(Math.max(0, nav.planPage ?? 0), planPages - 1)
+    const shown = tabRows.slice(planPage * room, (planPage + 1) * room)
+    const nameWidth = Math.min(NAME_COLUMNS_MAX, Math.max(NAME_COLUMNS_MIN, ...shown.map(row => row.name.length + 3)))
+    const flip = (name: string) => update($, planState, current => current === null ? null : {
+      ...current,
+      rows: current.rows.map(row => (row.name === name ? { ...row, keep: !row.keep } : row)),
+    })
+    const setAll = (keep: boolean) => update($, planState, current => current === null ? null : {
+      ...current,
+      rows: current.rows.map(row => ((tab === 'disable' ? !row.proposed : row.proposed) ? { ...row, keep } : row)),
+    })
+    const headline = plan.kind === 'profile'
+      ? `${basename(plan.root)} needs ${keptCount} of ${plural(plan.rows.length, 'mod')}`
+      : `${plural(plan.rows.length - keptCount, 'mod')} idle for ${plan.days ?? SLIM_DAYS} days, of ${plan.rows.length} enabled`
+    const evidence = plan.kind === 'profile'
+      ? `From its files, dependencies and what you ran here. Apply writes ${SETTINGS_LOCAL} (this project only, kept out of git).`
+      : `From ${plural(plan.scanned ?? 0, 'transcript')} covering ${plural(plan.historyDays ?? 0, 'day')}${(plan.skipped ?? 0) > 0 ? ` (${plan.skipped} skipped)` : ''}, and the hub's feed. Apply disables them everywhere with claude plugin disable.`
+    const applyLabel = [turningOff > 0 ? `disable ${turningOff}` : '', turningOn > 0 ? `enable ${turningOn}` : ''].filter(part => part !== '').join(', ')
+    const tabButton = (id: 'disable' | 'keep', label: string, hotkey: string) => (
+      <Button key={`tab:${id}`} label={label} plain hotkey={hotkey} dimColor={tab !== id} onPress={() => setNav($, current => ({ ...current, planTab: id, planPage: 0 }))} />
+    )
+
+    return (
+      <Box flexDirection="column">
+        {header}
+        {crumb(PLAN_TITLE[plan.kind], plan.kind === 'profile' ? basename(plan.root) : `unused for ${plan.days ?? SLIM_DAYS} days`)}
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color="claude" wrap="wrap">{headline}</Text>
+          <Text dimColor wrap="wrap">{evidence}</Text>
+        </Box>
+        {statusLines}
+        <Box flexDirection="row" columnGap={2} marginTop={1} flexWrap="wrap">
+          {tabButton('disable', `${plan.kind === 'profile' ? 'Not needed' : 'Idle'} (${plan.rows.filter(row => !row.proposed).length})`, 'x')}
+          {tabButton('keep', `Keep (${plan.rows.filter(row => row.proposed).length})`, 'k')}
+          <Text dimColor>☑ stays on · ☐ goes off</Text>
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          {shown.length === 0
+            ? <Text dimColor>{tab === 'disable' ? 'Nothing to turn off: every installed mod has a reason to stay.' : 'Nothing is kept.'}</Text>
+            : shown.map(row => (
+              <Box key={`plan-row:${row.name}`} flexDirection="row" columnGap={1}>
+                <Box width={nameWidth} flexShrink={0}>
+                  <Button key={`plan:${row.name}`} label={`${row.keep ? '☑' : '☐'} ${row.name}`} plain dimColor={!row.keep} onPress={() => flip(row.name)} />
+                </Box>
+                <Box flexGrow={1} flexShrink={1}>
+                  <Text wrap="truncate-end">
+                    {row.isProtected ? <Text color="suggestion">◆ </Text> : null}
+                    <Text dimColor>{row.reason}</Text>
+                    {row.keep !== row.isEnabled ? <Text color={row.keep ? 'success' : 'warning'}>{row.keep ? ' · turns on' : ' · turns off'}</Text> : null}
+                  </Text>
+                </Box>
+              </Box>
+            ))}
+        </Box>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={2} marginTop={1}>
+          {planPage > 0 ? <Button key="plan-prev" label="‹ Prev" plain hotkey="p" onPress={() => setNav($, current => ({ ...current, planPage: planPage - 1 }))} /> : null}
+          {planPages > 1 ? <Text dimColor>Page {planPage + 1}/{planPages}</Text> : null}
+          {planPage < planPages - 1 ? <Button key="plan-next" label="Next ›" plain hotkey="n" onPress={() => setNav($, current => ({ ...current, planPage: planPage + 1 }))} /> : null}
+          {isIdle && changes.length > 0
+            ? <Button key="apply" label={`Apply (${applyLabel})`} plain={isTerminal ? true : undefined} hotkey="a" variant="primary" onPress={() => run({ action: 'apply', name: '', title: plan.kind === 'profile' ? `the ${basename(plan.root)} profile` : 'the slim' })} />
+            : null}
+          {tabRows.length > 0 ? <Button key="plan-all-on" label="All on" plain hotkey="o" onPress={() => setAll(true)} /> : null}
+          {tabRows.length > 0 && tab === 'disable' ? <Button key="plan-all-off" label="All off" plain hotkey="v" onPress={() => setAll(false)} /> : null}
+          {isIdle ? <Button key="plan-reread" label="Read again" plain hotkey="r" onPress={() => startPlanPress(plan.kind)} /> : null}
+        </Box>
+        <Text dimColor wrap="wrap">◆ kept unless you untick it (always-on, core, safety) · Undo after Apply · /mods profile reset turns every mod back on here</Text>
+      </Box>
+    )
+  }
+
+  // A pack: its mods with their status, and the pack's two actions.
+  const openPack = nav.screen === 'pack' && nav.selected === null ? catalog.packs?.find(one => one.id === nav.pack) : undefined
+  if (openPack !== undefined) {
+    const members = openPack.mods.map(name => catalog.mods.find(mod => mod.name === name)).filter((mod): mod is StoreMod => mod !== undefined)
+    const known = installed?.isKnown === true ? installed : undefined
+    const missing = known === undefined ? [] : members.filter(mod => known.mods[mod.name] === undefined).map(mod => mod.name)
+    const off = known === undefined ? [] : members.filter(mod => known.mods[mod.name]?.isEnabled === false)
+    const nameWidth = Math.min(NAME_COLUMNS_MAX, Math.max(NAME_COLUMNS_MIN, ...members.map(mod => mod.name.length + 2)))
+    return (
+      <Box flexDirection="column">
+        {header}
+        {crumb('Packs', openPack.title)}
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color="claude">{openPack.title}</Text>
+          <Text dimColor wrap="wrap">{openPack.tagline}</Text>
+          {known === undefined ? null : (
+            <Text wrap="truncate-end">
+              <Text color={missing.length === 0 ? 'success' : 'inactive'}>{members.length - missing.length}/{members.length} installed</Text>
+              {off.length > 0 ? <Text color="warning"> · {off.length} off here</Text> : null}
+            </Text>
+          )}
+        </Box>
+        {statusLines}
+        <Box flexDirection="column" marginTop={1}>
+          {members.slice(0, Math.max(MIN_PAGE_ROWS, bodyRowsAll - PLAN_CHROME_ROWS - statusRows)).map(mod => {
+            const badge = badgeOf(catalog, mod, statusOf(mod, installed))
+            return (
+              <Box key={`pack-row:${mod.name}`} flexDirection="row" columnGap={1}>
+                <Box width={nameWidth} flexShrink={0} flexDirection="row" columnGap={1}>
+                  {icon(mod.category, 14)}
+                  <Button key={`member:${mod.name}`} label={mod.name} plain onPress={() => openDetail($, config, mod.name)} />
+                </Box>
+                <Box width={BADGE_COLUMNS} flexShrink={0}><Text color={badge.color} dimColor={badge.isDim}>{badge.text}</Text></Box>
+                {isWide ? <Box flexGrow={1} flexShrink={1}><Text dimColor wrap="truncate-end">{mod.description}</Text></Box> : null}
+              </Box>
+            )
+          })}
+        </Box>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={2} marginTop={1}>
+          {isIdle && missing.length > 0
+            ? <Button key="pack-install" label={`Install ${missing.length} missing`} plain={isTerminal ? true : undefined} hotkey="i" variant="primary" autoFocus onPress={() => run({ action: 'install-all', name: '', names: missing, title: `the ${openPack.title} pack` })} />
+            : null}
+          {isIdle && off.length > 0
+            ? <Button key="pack-enable" label={`Enable ${off.length} here`} plain hotkey="e" onPress={() => run({ action: 'enable-pack', name: openPack.id, title: `the ${openPack.title} pack` })} />
+            : null}
+          <Button key="close" label="Close" plain hotkey="q" role="dismiss" onPress={() => $.ui.close({ id: PANE })} />
+        </Box>
+      </Box>
+    )
+  }
+
   // Home: pickers, the featured shelf, the list and the action bar.
   const status: StatusFilter = isStatus(nav.status) && (nav.status !== STATUS_NEW || catalog.newest !== undefined) ? nav.status : FILTER_ALL
   const cats = categoryOptions(catalog, installed, status)
@@ -1191,6 +1921,25 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
   const recommended = nav.page === 0 && nav.query.trim() === ''
     ? shelf(picks).filter(mod => statusOf(mod, installed).kind === 'available').slice(0, PICKS_LIMIT)
     : []
+  const packs = isHome && nav.page === 0 ? catalog.packs ?? [] : []
+  const packStrip = packs.length === 0 ? null : (
+    <Box flexDirection="column" marginTop={1}>
+      <Text><Text color="claude">▪</Text><Text dimColor> PACKS · START HERE INSTEAD OF INSTALLING EVERYTHING</Text></Text>
+      <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+        {packs.map(pack => {
+          const have = installed?.isKnown === true ? pack.mods.filter(name => installed.mods[name] !== undefined).length : 0
+          return (
+            <Button
+              key={`pack:${pack.id}`}
+              label={`${pack.title} ${have === pack.mods.length ? '✓' : `${have}/${pack.mods.length}`}`}
+              plain
+              onPress={() => setNav($, current => ({ ...current, selected: null, screen: 'pack', pack: pack.id }))}
+            />
+          )
+        })}
+      </Box>
+    </Box>
+  )
   const strip = (kicker: string, list: readonly StoreMod[], prefix: string) => list.length === 0 ? null : (
     <Box flexDirection="column" marginTop={1}>
       <Text><Text color="claude">▪</Text><Text dimColor> {kicker}</Text></Text>
@@ -1205,11 +1954,11 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
     </Box>
   )
 
-  const bodyRows = e.props.scroll.bodyRows > 0 ? e.props.scroll.bodyRows : DEFAULT_BODY_ROWS
   const filterRows = fields === undefined ? 1 : isWide ? 1 : 3
-  const stripRows = (featured.length > 0 ? 3 : 0) + (recommended.length > 0 ? 3 : 0)
+  const isInstallAllHeavy = isIdle && installable.length >= INSTALL_ALL_WARNING
+  const stripRows = (featured.length > 0 ? 3 : 0) + (recommended.length > 0 ? 3 : 0) + (packs.length > 0 ? 3 : 0) + (isInstallAllHeavy ? 2 : 0)
   const chromeRows = 2 + filterRows + statusRows + stripRows + 1 + (isWide ? 2 : 3)
-  const pages = paginate(rowsOf(mods, catalog, nav.query.trim() === ''), Math.max(MIN_PAGE_ROWS, bodyRows - chromeRows))
+  const pages = paginate(rowsOf(mods, catalog, nav.query.trim() === ''), Math.max(MIN_PAGE_ROWS, bodyRowsAll - chromeRows))
   const last = Math.max(0, pages.length - 1)
   const pageIndex = Math.min(Math.max(0, nav.page), last)
   const page = pages[pageIndex] ?? []
@@ -1304,20 +2053,26 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
       {statusLines}
       {strip(`NEW IN ${releaseLabel(catalog.newest ?? '').toUpperCase()} · PICKS`, featured, 'feat')}
       {strip('RECOMMENDED FOR THIS PROJECT', recommended, 'pick')}
+      {packStrip}
       {list}
       <Box flexDirection="row" flexWrap="wrap" columnGap={2} marginTop={1}>
         {pageIndex > 0 ? <Button key="prev" label="‹ Prev" plain hotkey="p" onPress={() => turnPage(-1)} /> : null}
         {pages.length > 1 ? <Text dimColor>Page {pageIndex + 1}/{pages.length}</Text> : null}
         {pageIndex < last ? <Button key="next" label="Next ›" plain hotkey="n" onPress={() => turnPage(1)} /> : null}
-        {installable.length > 0 && isIdle
-          ? <Button key="install-all" label={`Install all (${installable.length})`} plain onPress={() => start('install-all', '', installable)} />
-          : null}
         {updatable > 0 && isIdle
           ? <Button key="update-all" label={`Update all (${updatable})`} plain hotkey="u" variant="primary" onPress={() => start('update-all', '')} />
+          : null}
+        {isIdle ? <Button key="profile" label="Profile" plain hotkey="f" onPress={() => startPlanPress('profile')} /> : null}
+        {isIdle ? <Button key="slim" label="Slim" plain hotkey="w" onPress={() => startPlanPress('slim')} /> : null}
+        {installable.length > 0 && isIdle
+          ? <Button key="install-all" label={`Install all (${installable.length})`} plain dimColor onPress={() => start('install-all', '', installable)} />
           : null}
         <Button key="refresh" label={sync.phase === 'offline' ? 'Retry' : 'Refresh'} plain hotkey="r" onPress={() => refresh($, config, true).then(() => refreshPicks($))} />
         <Button key="close" label="Close" plain hotkey="q" role="dismiss" onPress={() => $.ui.close({ id: PANE })} />
       </Box>
+      {isInstallAllHeavy
+        ? <Text color="warning" wrap="wrap">▲ Every enabled mod adds start-up work to each response (219 enabled: about 15 s; 33: about 5 s). Prefer a pack, and after installing run Profile to keep only what a project needs.</Text>
+        : null}
     </Box>
   )
 }

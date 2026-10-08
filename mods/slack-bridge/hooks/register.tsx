@@ -126,6 +126,8 @@ type Runtime = {
   isSubmitting: boolean
   outbox: { level: string; source: string; title: string; body?: string; url?: string }[]
   isSending: boolean
+  /** Whether Claude's tools are registered: they wait until the bridge is set up, so an unconfigured bridge costs the prompt nothing. */
+  areToolsOffered: boolean
   pendingSeq: number
   doneSeq: number
   doneIds: string[]
@@ -195,6 +197,7 @@ const newRuntime = (settings: Settings): Runtime => ({
   isSubmitting: false,
   outbox: [],
   isSending: false,
+  areToolsOffered: false,
   pendingSeq: 0,
   doneSeq: 0,
   doneIds: [],
@@ -1116,10 +1119,7 @@ const TOOL_SPECS = [
   {
     name: 'notify',
     description:
-      'Post a short message to the team Slack channel. Use it when a long job finished or failed, or something needs the ' +
-      "team's attention; never for routine progress. level: info, success (default), warning, error or critical (act now). " +
-      "The user's routing decides whether it is posted; the result says. Everyone in the channel reads it: no secrets, " +
-      'no private details. Secrets are masked and the text is capped.',
+      'Post a short message to the team Slack channel when a long job finished or failed or something needs attention; never for routine progress. level: info, success (default), warning, error or critical. Routing may hold it; the result says. No secrets.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1132,10 +1132,7 @@ const TOOL_SPECS = [
   {
     name: 'ask',
     description:
-      'Ask the owner a question in the Slack channel and wait for their answer (up to timeoutMinutes, default 10). Use it only ' +
-      'when you are blocked on a decision only they can make. options (2-9) are numbered; they answer with a number, the text, ' +
-      'or a reaction (✅ ❌ for yes/no). When interaction is off (night, silent or away-only mode), or Slack is push-only, it ' +
-      'returns at once: then proceed with your best judgement and state the assumption. On timeout, a later answer arrives as a message.',
+      'Ask the owner a question in Slack and wait for the answer (timeoutMinutes, default 10). Only when blocked on a decision only they can make. options (2-9) are numbered. If interaction is off or Slack is push-only it returns at once: proceed on your best judgement and state the assumption.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1148,8 +1145,9 @@ const TOOL_SPECS = [
   },
   {
     name: 'open_panel',
-    description: 'Open the Slack panel (connection, sessions, conversation) for the user.',
-    inputSchema: { type: 'object', properties: {} },
+    description:
+      'Open the Slack panel.',
+    inputSchema: { type: 'object' },
   },
 ] as const
 
@@ -1161,6 +1159,13 @@ async function registerTools($: EngineInterface): Promise<void> {
       $.ui.log(`${NAME}: could not register ${spec.name}: ${messageOf(error)}`, { to: 'debug' })
     }
   }
+}
+
+/** Registers Claude's tools once the bridge is set up (a token and a destination); until then they would only cost prompt tokens. */
+async function offerTools($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.areToolsOffered || !canSend(rt)) return
+  rt.areToolsOffered = true
+  await registerTools($)
 }
 
 const LEVELS: readonly string[] = ['info', 'success', 'warning', 'error', 'critical']
@@ -1360,6 +1365,7 @@ async function setConnection($: EngineInterface, connection: BrConnection): Prom
 
 /** auth.test and conversations.info: who the bot is, whether it is in the channel, and what is still missing. */
 async function checkConnection($: EngineInterface, rt: Runtime): Promise<BrConnection> {
+  await offerTools($, rt)
   const now = await $.clock.now()
   rt.lastConnectionTry = now
   const base = { checkedAt: now, isLeader: rt.isLeader }
@@ -1405,6 +1411,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   rt.startedAt = await $.clock.now()
   rt.lastActiveAt = rt.startedAt
   await loadShared($, rt)
+  await offerTools($, rt)
   const others = (await readSessionFiles($, rt, LIVE_MS)).filter(file => file.info.id !== rt.me && isLive(file.info, rt.startedAt))
   const kept = asSessionFile(await readJsonFile($, paths.session(rt, rt.me)))
   rt.label = kept?.info.label || defaultLabel(rt.project, rt.branch, others.map(file => file.info.label))
@@ -1429,6 +1436,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
 /** Every ten seconds: shared settings, this session's file, the lease, the panel. */
 async function heartbeat($: EngineInterface, rt: Runtime): Promise<void> {
   await loadShared($, rt)
+  await offerTools($, rt)
   if (rt.typed) {
     rt.typed = false
     rt.lastActiveAt = await $.clock.now()
@@ -1655,7 +1663,6 @@ async function drawTab($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>):
 
 async function startSession($: EngineInterface, rt: Runtime, isInteractive: boolean): Promise<void> {
   await registerCommand($, { name: 'slack', description: 'Slack bridge: panel, setup, channel, owner, presence, interaction', argumentHint: '[setup | channel <id> | owner <id> | test | away | here | interact on|off | help]', immediate: true })
-  await registerTools($)
   // Start-up (git, the channel, the hub) waits until session.start has returned (afterStart): with every mod
   // installed, waiting on a process or the hub here ran session.start past its 10 s budget.
   booting.set(rt, { isInteractive })

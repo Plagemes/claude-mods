@@ -33,6 +33,8 @@ export type World = {
   tg: FakeTg
   submitted: { text: string; asUser: boolean }[]
   toasts: string[]
+  /** The tools registered with the engine, in order. */
+  tools: string[]
   aborted: string[]
   forks: string[]
   processes: { argv: string[]; stdin?: string }[]
@@ -135,6 +137,7 @@ export function world(on: On, options: { now?: number; files?: Record<string, st
     tg: { updates: [], calls: [], nextUpdate: 100, nextMessage: 500, botName: 'claude_bot', isTokenValid: true, sent: [] },
     submitted: [],
     toasts: [],
+    tools: [],
     aborted: [],
     forks: [],
     processes: [],
@@ -193,7 +196,10 @@ export function world(on: On, options: { now?: number; files?: Record<string, st
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('command.list', () => ({ value: [] }))
-  on('tool.register', ($, e) => ({ value: { tool: `mcp__telegram-bridge__${e.name}` } }))
+  on('tool.register', ($, e) => {
+    seen.tools.push(e.name)
+    return { value: { tool: `mcp__telegram-bridge__${e.name}` } }
+  })
   on('tool.check', () => ({ decision: 'ask' }))
   on('prompt.submit', ($, e) => {
     if (e.origin.kind === 'plugin') seen.submitted.push({ text: e.text, asUser: (e.origin as { asUser?: boolean }).asUser === true })

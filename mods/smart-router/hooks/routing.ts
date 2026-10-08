@@ -190,7 +190,7 @@ export const modelWords = (model: string): string => {
 
 /** How parallel prompts reuse the prompt cache. */
 export const SHARED_OPENING =
-  'Start every parallel agent\'s prompt with the same shared context block (identical leading text: the goal and the facts they all need), then its own task: identical openings reuse the prompt cache.'
+  'Start every parallel agent\'s prompt with the same shared context block (the goal and the facts they all need), then its own task: identical openings reuse the prompt cache.'
 
 /** How tiny light chores are batched. */
 export const BATCHING = 'Many tiny chores of one kind (ten renames, a list of lookups) go to ONE light agent as a list, not one agent each.'
@@ -207,22 +207,22 @@ export function guidanceText(settings: GuidanceSettings): string {
     '# Routing work by difficulty (smart-router)',
     'Choose how to run each piece of work:',
     '- Inline, no subagent: about 3 tool calls or fewer, work that needs this conversation\'s details, or one small edit.',
-    '- One subagent: a self-contained chunk that would flood this context (a broad search, reading many files, long logs). Usually light; ask for a concise summary back.',
-    `- Parallel subagents: 2-${maxParallel} independent subtasks (no ordering between them, each describable in a self-contained prompt, not writing the same files): send all their Agent calls in ONE message. More than ${maxParallel}: run them in batches. Two that would write the same files: run them in order or give them isolation: "worktree". After parallel writes, run one verification step (tests or lint) before reporting done.`,
+    '- One subagent: a self-contained chunk that would flood this context (a broad search, many files, long logs); ask for a concise summary.',
+    `- Parallel subagents: 2-${maxParallel} independent subtasks (self-contained prompts, not writing the same files): send all their Agent calls in ONE message; more than ${maxParallel} go in batches. Two that would write the same files run in order or with isolation: "worktree". After parallel writes, verify once (tests or lint) before reporting done.`,
     `- ${SHARED_OPENING}`,
     `- ${BATCHING}`,
-    '- In order: subtasks that depend on each other run in sequence; independent ones inside each stage still run in parallel.',
+    '- In order: dependent subtasks run in sequence; independent ones within a stage still run in parallel.',
   ]
   if (settings.hasWorkflow) {
     lines.push(
-      '- Workflow (the Workflow tool): only when the user explicitly asked for it (they asked for a workflow or for orchestration, pressed "Run as workflow" in /route, or said "ultracode") and the job is big or structured: 6 or more subtasks, a multi-stage pipeline (fan out, verify, merge or fix), deterministic retries or resume, or more than 10 agents. Otherwise propose it with a rough cost (agents × tier) and wait; never start one on your own. In a workflow script set opts.model on each agent() by the same tiers.',
+      '- Workflow (the Workflow tool): only when the user explicitly asked (a workflow, orchestration, "Run as workflow" in /route, or "ultracode") and the job is big or structured: 6+ subtasks, a multi-stage pipeline, deterministic retries or resume, or 10+ agents. Otherwise propose it with a rough cost (agents × tier) and wait; never start one on your own. In a workflow script set opts.model on each agent() by the same tiers.',
     )
   }
   lines.push(
     'Set `model` on each Agent call by difficulty:',
-    `- light → ${modelWords(models.light)}: read-only exploration (search, grep or glob, list, read and summarise files, find where something is defined or used), reading docs, running a command and reporting its output, extracting or reformatting data, mechanical edits with exact instructions (rename, apply a given diff, format, bump versions), boilerplate from an existing template.`,
-    `- standard → ${modelWords(models.standard)} (the default when unsure): a feature with a clear spec, writing or fixing tests, a bug with a reproduction, a refactor within one module (up to 5 files), reviewing a small diff, writing docs, following an existing pattern.`,
-    `- deep → ${modelWords(models.deep)}: architecture and design trade-offs, ambiguous or conflicting requirements, cross-cutting changes (more than 5 modules, or public APIs), security review, concurrency, performance or memory root causes, irreversible or production work (data migrations, deploy scripts, auth, crypto), merging the results of parallel agents, and any task that already failed twice.`,
+    `- light → ${modelWords(models.light)}: read-only exploration (search, read, summarise, find usages), reading docs, running a command and reporting its output, extracting or reformatting data, mechanical edits with exact instructions, boilerplate from a template.`,
+    `- standard → ${modelWords(models.standard)} (default when unsure): a feature with a clear spec, tests, a bug with a reproduction, a refactor within one module (up to 5 files), reviewing a small diff, docs, following an existing pattern.`,
+    `- deep → ${modelWords(models.deep)}: architecture trade-offs, ambiguous or conflicting requirements, cross-cutting changes (over 5 modules, or public APIs), security review, concurrency, performance or memory root causes, irreversible or production work (migrations, deploy scripts, auth, crypto), merging parallel results, any task that already failed twice.`,
     'A retry of a subtask whose agent failed goes one tier up; never retry on the same tier twice. Never set `effort` unless the user asked for it.',
   )
   if (settings.isAuto) lines.push('When you leave `model` out, smart-router picks it by these rules; a model you set is kept.')
