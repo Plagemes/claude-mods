@@ -12,6 +12,10 @@ export type StoreMod = {
   author?: string
   /** The mod's folder in the repository (`mods/<name>`), when its source is relative. */
   path?: string
+  /** The release that brought the mod (`2.0.0`), from catalog.json or the site's data. */
+  since?: string
+  /** The slash commands it registers (`/mods`), from the site's data. */
+  commands?: string[]
 }
 
 /** The whole catalog as fetched from GitHub (and cached in $.store). */
@@ -23,6 +27,8 @@ export type StoreCatalog = {
   fetchedAt: number
   categories: StoreCategory[]
   mods: StoreMod[]
+  /** The newest release any mod came with, when not every mod did: what "New" means. */
+  newest?: string
 }
 
 /** One installed plugin of the marketplace, from `claude plugin list --json`. */
@@ -39,14 +45,31 @@ export type StoreSync = {
   message?: string
 }
 
-/** What the pane shows: the search, the filter, the open mod and the page. */
-export type StoreView = { query: string; filter: string; selected: string | null; page: number }
+/**
+ * Where the person is in the pane: the search, the category and status pickers, the open mod and the page.
+ * Only the person's own presses and typing write it; a job never does, so navigation is never undone by one.
+ */
+export type StoreView = { query: string; category: string; status: string; selected: string | null; page: number }
 
-/** The action running now, drawn as a busy line. */
-export type StoreBusy = { name: string; verb: string }
+/**
+ * The action running now (one at a time), drawn as the progress bar: what it does, the mod it is on, how far it
+ * is, how many failed so far, and whether the person asked it to stop.
+ */
+export type StoreJob = {
+  verb: string
+  title: string
+  current: string
+  done: number
+  total: number
+  failed: number
+  isStopping: boolean
+}
 
-/** The last action's outcome, drawn above the list until dismissed. */
-export type StoreNotice = { tone: 'success' | 'error' | 'info'; text: string; canReload: boolean }
+/** The last action's outcome, drawn above the list until dismissed; `retry` names the mods a Retry would install again. */
+export type StoreNotice = { tone: 'success' | 'error' | 'info'; text: string; canReload: boolean; retry?: { action: 'install' | 'update'; names: string[] } }
+
+/** One setting of a mod, from its manifest's `userConfig`. */
+export type StoreConfigRow = { key: string; default: string; description: string }
 
 /** A mod's README, fetched when its detail view opens. */
 export type StoreReadme = { phase: 'loading' | 'ready' | 'missing'; text: string }
@@ -57,10 +80,12 @@ declare module 'claude-code' {
       catalog: StoreCatalog | null
       sync: StoreSync
       installed: StoreInstalled | null
-      view: StoreView
-      busy: StoreBusy | null
+      nav: StoreView
+      job: StoreJob | null
       notice: StoreNotice | null
       readmes: Record<string, StoreReadme>
+      configs: Record<string, StoreConfigRow[]>
+      picks: string[]
     }
   }
 }

@@ -4,25 +4,34 @@ import {
   buildCatalog,
   compareVersions,
   countsOf,
+  categoryOptions,
+  clip,
   FILTER_ALL,
-  FILTER_INSTALLED,
-  FILTER_UPDATES,
-  filterOptions,
   formatAge,
   installLine,
   isCatalogOf,
+  isNewMod,
   matchMods,
   paginate,
   parseArgs,
   parseCatalogMeta,
+  parseConfig,
   parseMarketplace,
   readmeRawUrl,
   readmeUrl,
+  relatedOf,
+  releaseLabel,
   rowsOf,
+  STATUS_INSTALLED,
+  STATUS_NEW,
+  STATUS_UPDATES,
   statusOf,
+  statusOptions,
+  tierLabel,
   trimReadme,
   updatesOf,
 } from '../hooks/catalog'
+import { barCells, glyphOf, iconSvg, toBase64 } from '../hooks/icons'
 import { argv, claudeBinary, desktopRoots, isClaudeFile, joinPath, parseInstalled, parseMarketplaceNames, parseOutcome, versionOrder } from '../hooks/cli'
 import type { StoreInstalled } from '../types'
 
@@ -53,8 +62,10 @@ const META = JSON.stringify({
     { id: 'team', title: 'Team & Docs', tagline: 'Unused here.' },
   ],
   mods: [
-    { name: 'mod-store', category: 'core', tier: 'complex' },
-    { name: 'secret-shield', category: 'security', tier: 'simple' },
+    { name: 'mod-store', category: 'core', tier: 'complex', since: '1.0.0', commands: ['/mods', 'not a command'] },
+    { name: 'secret-shield', category: 'security', tier: 'simple', since: '1.0.0' },
+    { name: 'rm-rf-guard', category: 'security', since: '2.0.0' },
+    { name: 'cost-meter', category: 'cost', since: '2.0.0' },
   ],
 })
 
@@ -149,7 +160,8 @@ describe('versions and status', () => {
 })
 
 describe('search and filter', () => {
-  const names = (query: string, filter = FILTER_ALL) => matchMods(catalog, installed, query, filter).map(mod => mod.name)
+  const names = (query: string, category = FILTER_ALL, status = FILTER_ALL) =>
+    matchMods(catalog, installed, query, category, status).map(mod => mod.name)
 
   test('ranks name matches above keyword and description matches', () => {
     expect(names('guard')).toEqual(['rm-rf-guard', 'secret-shield'])
@@ -167,22 +179,78 @@ describe('search and filter', () => {
   test('filters by category, installed and updates; no query keeps category order', () => {
     expect(names('')).toEqual(['mod-store', 'secret-shield', 'rm-rf-guard', 'git-status-line', 'cost-meter', 'lab-thing'])
     expect(names('', 'security')).toEqual(['secret-shield', 'rm-rf-guard'])
-    expect(names('', FILTER_INSTALLED)).toEqual(['secret-shield', 'git-status-line'])
-    expect(names('', FILTER_UPDATES)).toEqual(['secret-shield'])
-    expect(names('git', FILTER_UPDATES)).toEqual([])
+    expect(names('', FILTER_ALL, STATUS_INSTALLED)).toEqual(['secret-shield', 'git-status-line'])
+    expect(names('', FILTER_ALL, STATUS_UPDATES)).toEqual(['secret-shield'])
+    expect(names('git', FILTER_ALL, STATUS_UPDATES)).toEqual([])
+    expect(names('', FILTER_ALL, STATUS_NEW)).toEqual(['rm-rf-guard', 'cost-meter'])
+    expect(names('', 'security', STATUS_NEW)).toEqual(['rm-rf-guard'])
   })
 
-  test('offers every category with its count in the picker', () => {
-    expect(filterOptions(catalog, installed).map(option => option.label)).toEqual([
+  test('offers every category with a count that follows the status, and every status with a count in the category', () => {
+    expect(categoryOptions(catalog, installed, FILTER_ALL).map(option => option.label)).toEqual([
       'All categories (6)',
-      'Installed (2)',
-      'Updates (1)',
       'Core (1)',
       'Security & Guardrails (2)',
       'Git & Versioning (1)',
       'Cost, Tokens & Context (1)',
       'Labs (1)',
     ])
+    expect(categoryOptions(catalog, installed, STATUS_NEW).map(option => option.label)).toEqual([
+      'All categories (2)',
+      'Core (0)',
+      'Security & Guardrails (1)',
+      'Git & Versioning (0)',
+      'Cost, Tokens & Context (1)',
+      'Labs (0)',
+    ])
+    expect(statusOptions(catalog, installed, FILTER_ALL).map(option => option.label)).toEqual(['All (6)', 'Installed (2)', 'Updates (1)', 'New in v2 (2)'])
+    expect(statusOptions(catalog, installed, 'security').map(option => option.label)).toEqual(['All (2)', 'Installed (1)', 'Updates (1)', 'New in v2 (1)'])
+  })
+
+  test('new is the newest release in the data, and nothing is new when every mod or none says', () => {
+    expect(catalog.newest).toBe('2.0.0')
+    expect(isNewMod(catalog, catalog.mods.find(mod => mod.name === 'cost-meter')!)).toBe(true)
+    expect(isNewMod(catalog, catalog.mods.find(mod => mod.name === 'mod-store')!)).toBe(false)
+    expect(buildCatalog(parseMarketplace(MARKETPLACE), undefined, SOURCE, 1).newest).toBeUndefined()
+    const allNew = JSON.stringify({ categories: [], mods: catalog.mods.map(mod => ({ name: mod.name, since: '2.0.0' })) })
+    expect(buildCatalog(parseMarketplace(MARKETPLACE), parseCatalogMeta(allNew), SOURCE, 1).newest).toBeUndefined()
+    expect(statusOptions(buildCatalog(parseMarketplace(MARKETPLACE), undefined, SOURCE, 1), installed, FILTER_ALL)).toHaveLength(3)
+    expect(releaseLabel('2.0.0')).toBe('v2')
+    expect(releaseLabel('2.1.0')).toBe('v2.1')
+    expect(tierLabel('simple')).toBe('Essential')
+    expect(tierLabel('complex')).toBe('Advanced')
+    expect(tierLabel(undefined)).toBeUndefined()
+  })
+
+  test('keeps only slash commands from the data', () => {
+    expect(catalog.mods.find(mod => mod.name === 'mod-store')?.commands).toEqual(['/mods'])
+    expect(catalog.mods.find(mod => mod.name === 'cost-meter')?.commands).toBeUndefined()
+  })
+
+  test('reads a manifest\'s settings, and nothing from what is not one', () => {
+    const manifest = JSON.stringify({
+      name: 'x',
+      userConfig: {
+        repository: { type: 'string', description: 'Where from.', default: 'plagemes/claude-mods' },
+        checkForUpdates: { type: 'boolean', title: 'Check', default: true },
+        long: { type: 'string', default: 'x'.repeat(60) },
+      },
+    })
+    expect(parseConfig(manifest)).toEqual([
+      { key: 'repository', default: 'plagemes/claude-mods', description: 'Where from.' },
+      { key: 'checkForUpdates', default: 'true', description: 'Check' },
+      { key: 'long', default: `${'x'.repeat(39)}…`, description: '' },
+    ])
+    expect(parseConfig('{"name":"x"}')).toEqual([])
+    expect(parseConfig('<html>')).toEqual([])
+  })
+
+  test('related mods are the category\'s others, the ones not installed first', () => {
+    const shield = catalog.mods.find(mod => mod.name === 'rm-rf-guard')!
+    expect(relatedOf(catalog, installed, shield, 5).map(mod => mod.name)).toEqual(['secret-shield'])
+    expect(relatedOf(catalog, installed, catalog.mods.find(mod => mod.name === 'cost-meter')!, 5)).toEqual([])
+    expect(clip('abcdef', 4)).toBe('abc…')
+    expect(clip('abc', 4)).toBe('abc')
   })
 })
 
@@ -216,6 +284,8 @@ describe('commands and links', () => {
     expect(parseArgs('')).toEqual({ kind: 'open' })
     expect(parseArgs('search git status')).toEqual({ kind: 'open', query: 'git status' })
     expect(parseArgs('refresh')).toEqual({ kind: 'refresh' })
+    expect(parseArgs('stop')).toEqual({ kind: 'stop' })
+    expect(parseArgs('cancel')).toEqual({ kind: 'stop' })
     expect(parseArgs('update-all')).toEqual({ kind: 'update-all' })
     expect(parseArgs('update all')).toEqual({ kind: 'update-all' })
     expect(parseArgs('install-all')).toEqual({ kind: 'install-all' })
@@ -234,6 +304,9 @@ describe('commands and links', () => {
     expect(readmeUrl(catalog, mod)).toBe('https://github.com/plagemes/claude-mods/blob/main/mods/cost-meter/README.md')
     expect(readmeRawUrl(catalog, mod)).toBe('https://raw.githubusercontent.com/plagemes/claude-mods/main/mods/cost-meter/README.md')
     expect(trimReadme('\n# cost-meter\n> Live session cost.\n\n## What it does\nShows it.\n', mod)).toBe('## What it does\nShows it.')
+    const full = '# cost-meter\n> Tag.\n\n**Category:** Cost · **Version:** 1.0.0\n\n## What it does\nShows it.\n\n## Install\n```\n## not a heading\n/plugin install x\n```\n\n## Configuration\n| a | b |\n\n## How it works\nLike so.\n'
+    expect(trimReadme(full, mod)).toBe('## What it does\nShows it.\n\n## Configuration\n| a | b |\n\n## How it works\nLike so.')
+    expect(trimReadme(full, mod, true)).toBe('## What it does\nShows it.\n\n## How it works\nLike so.')
     expect(formatAge(30_000)).toBe('just now')
     expect(formatAge(5 * 60_000)).toBe('5 min ago')
     expect(formatAge(3 * 3_600_000)).toBe('3 h ago')
@@ -291,5 +364,37 @@ describe('claude plugin CLI', () => {
     expect(parseInstalled(listed, 'claude-mods')).toEqual(installed.isKnown ? installed.mods : {})
     expect(() => parseInstalled('{}', 'claude-mods')).toThrow()
     expect(parseMarketplaceNames('[{"name":"claude-mods","source":"github"},{"name":"other"}]')).toEqual(['claude-mods', 'other'])
+  })
+})
+
+describe('icons and the progress bar', () => {
+  test('every category has an icon with one lit element, and an unknown one falls back to the Slot', () => {
+    const svg = iconSvg('security', 16)
+    expect(svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 24 24" width="16" height="16"/)
+    expect(svg).toContain('stroke="#ee8a4f"')
+    expect(svg).not.toContain('LIT')
+    expect(iconSvg('no-such-category')).toBe(iconSvg('core'))
+    expect(glyphOf('git')).toBe('⑂')
+    expect(glyphOf('no-such-category')).toBe('▦')
+  })
+
+  test('encodes base64 as the standard does, and a bar as Ember cells then quiet ones', () => {
+    expect(toBase64(new Uint8Array([102, 111, 111, 98, 97]))).toBe('Zm9vYmE=')
+    expect(toBase64(new Uint8Array([102, 111, 111]))).toBe('Zm9v')
+    expect(toBase64(new Uint8Array([102]))).toBe('Zg==')
+    const decode = (text: string) => {
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+      const bytes: number[] = []
+      for (let index = 0; index < text.length; index += 4) {
+        const chunk = text.slice(index, index + 4)
+        const value = [...chunk].reduce((sum, char) => sum * 64 + Math.max(0, alphabet.indexOf(char)), 0)
+        bytes.push((value >> 16) & 255, (value >> 8) & 255, value & 255)
+        if (chunk.endsWith('==')) bytes.splice(-2)
+        else if (chunk.endsWith('=')) bytes.splice(-1)
+      }
+      return new Uint32Array(new Uint8Array(bytes).buffer)
+    }
+    const words = decode(barCells(0.5, 4))
+    expect([...words]).toEqual([0x2501, 0xee8a4f, 0x01000000, 0x2501, 0xee8a4f, 0x01000000, 0x2500, 0x5c564d, 0x01000000, 0x2500, 0x5c564d, 0x01000000])
   })
 })
