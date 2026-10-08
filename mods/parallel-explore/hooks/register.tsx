@@ -41,7 +41,7 @@ const agentsAtom = atom({ plugin: 'parallel-explore', key: 'agents' } as const, 
 
 type Settings = { planAngles: boolean; mergeModel: string; timeoutMs: number }
 /** Timers of the running exploration, and the ids the `agent.spawn` hook saw for this mod's own spawns (by task). */
-type Timers = { tick?: Timer; deadline?: Timer; spawned: Map<string, string> }
+type Timers = { tick?: Timer; deadline?: Timer; spawned: Map<string, string>; isScoutRegistered?: boolean }
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
@@ -78,6 +78,11 @@ async function spawnAngle($: EngineInterface, settings: Settings, timers: Timers
   let why = 'no agent type could start it'
   const prompt = explorerPrompt(question, angle, index)
   for (const subagentType of [BUILT_IN_TYPE, SCOUT_TYPE]) {
+    if (subagentType === SCOUT_TYPE && timers.isScoutRegistered !== true) {
+      // The scout is only a fallback: it is registered when the built-in agent could not start, never for every session.
+      timers.isScoutRegistered = true
+      await registerScout($).catch((error: unknown) => $.ui.log(`parallel-explore: the fallback scout agent is unavailable: ${errorText(error)}`, { to: 'debug' }))
+    }
     const spawned = await $.agent
       .spawn({ subagentType, prompt, description: `Explore: ${angle.title}` })
       .catch((error: unknown) => ({ deny: errorText(error), agentId: undefined }))
@@ -202,7 +207,7 @@ async function registerScout($: EngineInterface): Promise<void> {
   const available = new Set((await $.tool.list().catch(() => [])).map(tool => tool.name))
   await $.agent.register({
     name: SCOUT,
-    description: 'Read-only code explorer used by /explore when the built-in Explore agent is unavailable.',
+    description: 'Read-only code explorer, the fallback of /explore.',
     prompt: SCOUT_PROMPT,
     tools: SCOUT_TOOLS.filter(tool => available.size === 0 || available.has(tool)),
     model: 'inherit',
@@ -233,11 +238,6 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await registerCommand($, { name: 'explore', description: 'Send three read-only agents to investigate the codebase in parallel and merge their findings', argumentHint: '<question>' })
     afterStart($, 'parallel-explore', () => greetHub($))
-    try {
-      await registerScout($)
-    } catch (error) {
-      $.ui.log(`parallel-explore: the fallback scout agent is unavailable: ${errorText(error)}`, { to: 'debug' })
-    }
     return next(e)
   })
 

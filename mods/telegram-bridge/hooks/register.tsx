@@ -122,6 +122,8 @@ type Runtime = {
   isSubmitting: boolean
   outbox: { level: string; source: string; title: string; body?: string; url?: string }[]
   isSending: boolean
+  /** Whether Claude's tools are registered: they wait until the bridge is set up, so an unconfigured bridge costs the prompt nothing. */
+  areToolsOffered: boolean
   pendingSeq: number
   doneSeq: number
   doneIds: string[]
@@ -189,6 +191,7 @@ const newRuntime = (settings: Settings): Runtime => ({
   isSubmitting: false,
   outbox: [],
   isSending: false,
+  areToolsOffered: false,
   pendingSeq: 0,
   doneSeq: 0,
   doneIds: [],
@@ -1127,10 +1130,7 @@ const TOOL_SPECS = [
   {
     name: 'notify',
     description:
-      "Send a short message to the user's phone on Telegram. Use it when a long job finished or failed, or something needs " +
-      'their attention while they may be away; never for routine progress. level: info, success (default), warning, error or ' +
-      "critical (act now). The user's mode decides whether it goes now, waits for the morning, or stays on the terminal; the result says which. " +
-      'Secrets are masked and the text is capped.',
+      "Send a short Telegram message to the user's phone when a long job finished or failed or something needs attention while they may be away; never for routine progress. level: info, success (default), warning, error or critical. Their mode decides when it arrives; the result says.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -1143,10 +1143,7 @@ const TOOL_SPECS = [
   {
     name: 'ask',
     description:
-      'Ask the user a question on Telegram and wait for their answer (up to timeoutMinutes, default 10). Use it only when you ' +
-      'are blocked on a decision only they can make. options (2-8) become buttons they tap; without options they answer in words. ' +
-      'When interaction is off (night, silent or away-only mode) it returns at once: then proceed with your best judgement and ' +
-      'state the assumption. On timeout, a later answer arrives as a message.',
+      'Ask the user a question on Telegram and wait for the answer (timeoutMinutes, default 10). Only when blocked on a decision only they can make. options (2-8) become buttons. If interaction is off it returns at once: proceed on your best judgement and state the assumption.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1160,14 +1157,14 @@ const TOOL_SPECS = [
   {
     name: 'send_file',
     description:
-      'Send a file inside this project (a screenshot, chart, PDF, log) to the user on Telegram, with a caption. Only when ' +
-      'the user asked for it or it is the result they wait for; never source files or diffs unasked. Up to the size cap.',
+      'Send a file from this project (screenshot, chart, PDF, log) to the user on Telegram with a caption. Only when asked or when it is the result awaited; never source files or diffs unasked.',
     inputSchema: { type: 'object', properties: { path: { type: 'string' }, caption: { type: 'string' } }, required: ['path'] },
   },
   {
     name: 'open_panel',
-    description: 'Open the Telegram panel (connection, sessions, conversation) for the user.',
-    inputSchema: { type: 'object', properties: {} },
+    description:
+      'Open the Telegram panel.',
+    inputSchema: { type: 'object' },
   },
 ] as const
 
@@ -1179,6 +1176,13 @@ async function registerTools($: EngineInterface): Promise<void> {
       $.ui.log(`${NAME}: could not register ${spec.name}: ${messageOf(error)}`, { to: 'debug' })
     }
   }
+}
+
+/** Registers Claude's tools once the bridge is set up (a token and a destination); until then they would only cost prompt tokens. */
+async function offerTools($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.areToolsOffered || !isReady(rt)) return
+  rt.areToolsOffered = true
+  await registerTools($)
 }
 
 const LEVELS: readonly string[] = ['info', 'success', 'warning', 'error', 'critical']
@@ -1440,6 +1444,7 @@ async function setConnection($: EngineInterface, connection: BrConnection): Prom
 
 /** getMe with the token: who the bot is, and what is still missing (a token, an owner). */
 async function checkConnection($: EngineInterface, rt: Runtime): Promise<BrConnection> {
+  await offerTools($, rt)
   const now = await $.clock.now()
   rt.lastConnectionTry = now
   const base = { checkedAt: now, isLeader: rt.isLeader }
@@ -1478,6 +1483,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   rt.startedAt = await $.clock.now()
   rt.lastActiveAt = rt.startedAt
   await loadShared($, rt)
+  await offerTools($, rt)
   const others = (await readSessionFiles($, rt, LIVE_MS)).filter(file => file.info.id !== rt.me && isLive(file.info, rt.startedAt))
   const kept = asSessionFile(await readJsonFile($, paths.session(rt, rt.me)))
   rt.label = kept?.info.label || defaultLabel(rt.project, rt.branch, others.map(file => file.info.label))
@@ -1502,6 +1508,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
 /** Every ten seconds: shared settings, this session's file, the lease, the panel. */
 async function heartbeat($: EngineInterface, rt: Runtime): Promise<void> {
   await loadShared($, rt)
+  await offerTools($, rt)
   if (rt.typed) {
     rt.typed = false
     rt.lastActiveAt = await $.clock.now()
@@ -1737,7 +1744,6 @@ async function drawTab($: EngineInterface, rt: Runtime, e: RenderInput<'Pane'>):
 
 async function startSession($: EngineInterface, rt: Runtime, isInteractive: boolean): Promise<void> {
   await registerCommand($, { name: 'telegram', description: 'Telegram bridge: panel, setup, owner, project group, presence, interaction', argumentHint: '[setup | owner <id> | test | link-project | away | here | interact on|off | help]', immediate: true })
-  await registerTools($)
   // Start-up (git, the channel, the hub) waits until session.start has returned (afterStart): with every mod
   // installed, waiting on a process or the hub here ran session.start past its 10 s budget.
   booting.set(rt, { isInteractive })

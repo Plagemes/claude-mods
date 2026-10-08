@@ -491,3 +491,20 @@ test('two leaders overlapping in a takeover: each delivers into its own inbox fi
   await $.session.end({ reason: 'exit' } as never)
   expect(seen.files.get(`${DIR}/lease.json`)).toBe(theirs)
 })
+
+test('Claude’s tools are registered only once the bridge is set up', { plugins, options: { botToken: TOKEN, pollSeconds: 3 } }, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await discord($, 'setup')
+  expect(seen.tools).toEqual([])
+  await discord($, `channel ${CHANNEL}`)
+  expect(seen.tools).toEqual(['notify', 'ask', 'send_file', 'open_panel'])
+  await discord($, `channel ${CHANNEL}`)
+  expect(seen.tools).toHaveLength(4)
+})
+
+test('a configured bridge registers its tools at start-up', { plugins, options: OPTIONS }, async ($, on) => {
+  const seen = world(on, { files: configured() })
+  await start($)
+  expect(seen.tools).toEqual(['notify', 'ask', 'send_file', 'open_panel'])
+})

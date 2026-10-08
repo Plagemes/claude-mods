@@ -98,8 +98,7 @@ export const PRESETS: readonly Preset[] = [
   {
     name: 'debugger',
     title: 'Debugger',
-    description:
-      'Use for a bug, failing test or error that needs a proper fix: reproduces it, isolates the root cause, applies the minimal fix and adds a regression test.',
+    description: 'Fixes a bug or failing test: reproduces it, finds the root cause, applies a minimal fix and adds a regression test.',
     tools: [...EDITING_TOOLS, 'Bash'],
     scope: 'project',
     scopeLabel: 'anywhere in the project',
@@ -109,7 +108,7 @@ export const PRESETS: readonly Preset[] = [
   {
     name: 'test-writer',
     title: 'Test writer',
-    description: 'Use to add or improve tests for existing code. Writes test files only, never changes source code, and reports the bugs it finds.',
+    description: 'Adds or improves tests for existing code. Writes test files only and reports the bugs it finds.',
     tools: [...EDITING_TOOLS, 'Bash'],
     scope: 'tests',
     scopeLabel: 'test files and fixtures only',
@@ -119,8 +118,7 @@ export const PRESETS: readonly Preset[] = [
   {
     name: 'doc-writer',
     title: 'Doc writer',
-    description:
-      'Use to write or update documentation: README, docs/, guides, changelogs, docstrings and comments. Never changes code behaviour.',
+    description: 'Writes or updates docs, changelogs, docstrings and comments. Never changes code behaviour.',
     tools: EDITING_TOOLS,
     scope: 'docs',
     scopeLabel: 'docs, plus comments and docstrings in code',
@@ -130,8 +128,7 @@ export const PRESETS: readonly Preset[] = [
   {
     name: 'migrator',
     title: 'Migrator',
-    description:
-      'Use for mechanical changes across many files (renames, API or import migrations, codemods): takes a baseline, applies one rule consistently, then verifies with the build and tests.',
+    description: 'Mechanical changes across many files (renames, API migrations, codemods): applies one rule consistently, then verifies with build and tests.',
     tools: [...EDITING_TOOLS, 'Bash'],
     scope: 'project',
     scopeLabel: 'anywhere in the project',

@@ -12,6 +12,7 @@ for m in "${mods[@]}"; do
   fi
 done
 node scripts/check-startup.mjs "${mods[@]/#/mods/}" >/dev/null && echo "✓ session.start stays fast" || { echo "✗ session.start waits on slow work (node scripts/check-startup.mjs)"; failed+=(startup); }
+node scripts/check-prompt-budget.mjs >/dev/null && echo "✓ tool and agent descriptions stay short" || { echo "✗ a tool or agent description is over its prompt budget (node scripts/check-prompt-budget.mjs)"; failed+=(prompt-budget); }
 claude plugin validate . >/dev/null 2>&1 && echo "✓ marketplace" || { echo "✗ marketplace"; failed+=(marketplace); }
 echo "${#mods[@]} mods checked, ${#failed[@]} failed ${failed[*]:-}"
 [ ${#failed[@]} -eq 0 ]

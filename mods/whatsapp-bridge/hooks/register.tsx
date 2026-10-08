@@ -200,6 +200,8 @@ type Runtime = {
   label: string
   isInteractive: boolean
   isStarted: boolean
+  /** Whether Claude's tools are registered: they wait until the bridge is set up, so an unconfigured bridge costs the prompt nothing. */
+  areToolsOffered: boolean
   config: SharedConfig
   apiKey: string
   sessionId: string
@@ -285,6 +287,7 @@ const newRuntime = (settings: Settings): Runtime => ({
   label: '',
   isInteractive: false,
   isStarted: false,
+  areToolsOffered: false,
   config: {},
   apiKey: '',
   sessionId: '',
@@ -656,6 +659,7 @@ async function saveGroups($: EngineInterface, rt: Runtime, change: (groups: Reco
 
 /** Asks OpenWA where things stand (health, key, session, link) and shows it on the pane. */
 async function checkConnection($: EngineInterface, rt: Runtime): Promise<WaConnection> {
+  await offerTools($, rt)
   const now = await $.clock.now()
   const base: WaConnection = { ...EMPTY_CONNECTION, checkedAt: now, isLeader: rt.isLeader, mode: rt.mode }
   const set = async (connection: WaConnection): Promise<WaConnection> => {
@@ -1769,10 +1773,7 @@ const TOOL_SPECS = [
   {
     name: 'notify',
     description:
-      "Send a short message to the user's phone on WhatsApp. Use it when a long job finished or failed, or something needs " +
-      'their attention while they may be away; never for routine progress. priority: critical (now, even at night), normal ' +
-      '(default: now when they are away), info (batched into a digest). Optional attachPath: an image or document inside the ' +
-      'project to send with it. Secrets are masked and the text is capped; it may be held for the digest, and the result says so.',
+      "Send a short WhatsApp message to the user's phone when a long job finished or failed or needs attention while they are away; never for routine progress. priority: critical (now), normal (default), info (batched into a digest). attachPath: optional project file. The result says if it was held.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -1786,10 +1787,7 @@ const TOOL_SPECS = [
   {
     name: 'ask',
     description:
-      "Ask the user a question on WhatsApp and wait for their answer (up to timeoutMinutes, default 10). Use it only when you " +
-      'are blocked on a decision only they can make. options (2-12) are shown numbered; they answer with a number, the text, ' +
-      'or 👍/❌ for yes/no. When interaction is off (night or silent mode) it returns at once: then proceed with your best ' +
-      'judgement and state the assumption; the question is parked for them. On timeout, a later answer arrives as a message.',
+      'Ask the user a question on WhatsApp and wait for the answer (timeoutMinutes, default 10). Only when blocked on a decision only they can make. options (2-12) are numbered. If interaction is off it returns at once: proceed on your best judgement and state the assumption.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1803,8 +1801,7 @@ const TOOL_SPECS = [
   {
     name: 'send_file',
     description:
-      'Send a file inside this project (a screenshot, chart, PDF, log) to the user on WhatsApp, with a caption. Only when ' +
-      `the user asked for it or it is the result they wait for; never source files or diffs unasked. Up to the size cap.`,
+      'Send a file from this project (screenshot, chart, PDF, log) to the user on WhatsApp with a caption. Only when asked or when it is the result awaited; never source files or diffs unasked.',
     inputSchema: {
       type: 'object',
       properties: { path: { type: 'string' }, caption: { type: 'string' } },
@@ -1813,8 +1810,9 @@ const TOOL_SPECS = [
   },
   {
     name: 'open_panel',
-    description: 'Open the WhatsApp side panel (connection, sessions, conversation, settings) for the user.',
-    inputSchema: { type: 'object', properties: {} },
+    description:
+      'Open the WhatsApp panel.',
+    inputSchema: { type: 'object' },
   },
 ] as const
 
@@ -1826,6 +1824,13 @@ async function registerTools($: EngineInterface): Promise<void> {
       $.ui.log(`${NAME}: could not register ${spec.name}: ${messageOf(error)}`, { to: 'debug' })
     }
   }
+}
+
+/** Registers Claude's tools once the bridge is set up (a token and a destination); until then they would only cost prompt tokens. */
+async function offerTools($: EngineInterface, rt: Runtime): Promise<void> {
+  if (rt.areToolsOffered || !isConfigured(rt)) return
+  rt.areToolsOffered = true
+  await registerTools($)
 }
 
 /** A path inside the project, resolved through links; undefined when it is outside or missing. */
@@ -2322,6 +2327,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
   rt.startedAt = await $.clock.now()
   rt.lastActiveAt = rt.startedAt
   await loadShared($, rt)
+  await offerTools($, rt)
   const others = (await readSessionFiles($, rt, LIVE_MS)).filter(file => file.info.id !== rt.me && isLive(file.info, rt.startedAt))
   const kept = asSessionFile(await readJsonFile($, paths.session(rt, rt.me)))
   rt.label = kept?.info.label || defaultLabel(rt.project, rt.branch, others.map(file => file.info.label))
@@ -2349,6 +2355,7 @@ async function startUp($: EngineInterface, rt: Runtime, isInteractive: boolean):
 /** Every ten seconds: shared settings, this session's file, the lease, the pane. */
 async function heartbeat($: EngineInterface, rt: Runtime): Promise<void> {
   await loadShared($, rt)
+  await offerTools($, rt)
   if (rt.typed) {
     rt.typed = false
     rt.lastActiveAt = await $.clock.now()
@@ -2875,7 +2882,6 @@ async function closePane($: EngineInterface, rt: Runtime): Promise<void> {
 
 async function startSession($: EngineInterface, rt: Runtime, isInteractive: boolean): Promise<void> {
   await registerCommand($, { name: 'wa', description: 'WhatsApp bridge: panel, setup, presence, interaction, project group', argumentHint: '[setup | test | away | here | interact on|off | night | link-project | help]', immediate: true })
-  await registerTools($)
   // Start-up (git, the channel, the hub) waits until session.start has returned (afterStart): with every mod
   // installed, waiting on a process or the hub here ran session.start past its 10 s budget.
   booting.set(rt, { isInteractive })

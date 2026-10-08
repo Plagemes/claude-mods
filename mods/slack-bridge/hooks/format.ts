@@ -35,11 +35,10 @@ export const sessionsText = (sessions: readonly BrSessionInfo[], now: number): s
 export const composeSection = (platform: string, toolPrefix: string, canAsk: boolean): string =>
   canAsk
     ? [
-        `${platform} bridge: the team channel is readable by everyone in it; the owner can answer there through the tools ${toolPrefix}notify, `,
-        `${toolPrefix}ask and ${toolPrefix}open_panel. `,
+        `${platform} bridge: the team channel is readable by everyone in it; the owner can answer there. `,
         'Use ask only when you are blocked on a decision only the owner can make (it waits for their reply); ',
-        'use notify when a long job finished or failed or something needs the team\'s attention; never for routine progress, ',
-        'and never post file contents, diffs or anything private. Messages are redacted and rate-limited: keep them short.',
+        `use ${toolPrefix}notify for a long job that finished or failed, never for routine progress. `,
+        'Never post file contents, diffs or anything private. Messages are redacted and rate-limited: keep them short.',
       ].join('')
     : [
         `${platform} bridge: the owner is NOT available for questions right now (interaction is off: night, silent or away-only mode). `,

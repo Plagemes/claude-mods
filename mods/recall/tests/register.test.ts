@@ -38,8 +38,8 @@ const command = (name: string, args: string) => ({
 })
 
 /** A small project on a virtual disk, plus the store and UI nouns the mod calls. */
-const project = (on: On, entries: Record<string, unknown> = {}) => {
-  const files = new Map(Object.entries(NOTES).map(([path, text]) => [`${ROOT}/${path}`, text]))
+const project = (on: On, entries: Record<string, unknown> = {}, notes: Record<string, string> = NOTES) => {
+  const files = new Map(Object.entries(notes).map(([path, text]) => [`${ROOT}/${path}`, text]))
   const isDir = (path: string) => [...files.keys()].some(file => file.startsWith(`${path}/`))
   startClock = mock.clock(on, { now: Date.UTC(2026, 9, 7, 12) })
   mock.store(on, entries)
@@ -104,6 +104,24 @@ test('the search tool ranks passages from decisions, journal and CLAUDE.md', asy
   expect(empty).toContain('the query is empty')
 })
 
+test('a project with no notes registers no search tool until the first /remember', async ($, on) => {
+  const tools: string[] = []
+  project(on, {}, {})
+  on('tool.register', ($, e) => {
+    tools.push(e.name)
+    return { value: { tool: `mcp__recall__${e.name}` } }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(tools).toEqual([])
+  await $.command.run(command('remember', 'Deploys go out on Tuesdays'))
+  expect(tools).toEqual(['search'])
+  await $.command.run(command('remember', 'Staging is eu-west-1'))
+  expect(tools).toEqual(['search'])
+})
+
 test('/remember saves memories the tool can find, per project or global', async ($, on) => {
   project(on, {
     memories: [{ id: 'old', text: 'Staging deploys need the VPN on.', project: '/work/other', createdAt: 0 }],
@@ -126,6 +144,7 @@ test('/remember saves memories the tool can find, per project or global', async 
 })
 
 test('session start registers the tool and both commands; the tool skips the default prompt', async ($, on) => {
+  project(on)
   const tools: string[] = []
   const commands: string[] = []
   on('tool.register', ($, e) => {

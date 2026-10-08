@@ -114,7 +114,7 @@ test('a session with no hub: imports, learns from edits and a fix, recalls into 
   const w = world(on)
   await start($)
   await w.clock.advance(6_000) // import, then the debounced save
-  expect(w.tools).toEqual(['brain_recall', 'brain_remember'])
+  expect(w.tools).toEqual(['brain_remember', 'brain_recall'])
   expect(textsOf(w)).toContain('Use Postgres for orders: Orders are stored in Postgres through the pool in src/db.ts.')
   expect(textsOf(w)).toContain('Always use pnpm for scripts, never npm.')
 
@@ -180,6 +180,18 @@ test('Claude remembers and recalls with its tools; secrets are masked and code i
   await $.tool.call({ tool: 'mcp__project-brain__brain_remember', text: 'Refunds are issued from the payments service only', kind: 'convention' })
   await $.session.end({ reason: 'other', sessionId: 'sess-1', resume: { id: 'sess-1' } })
   expect(textsOf(w)).toContain('Refunds are issued from the payments service only')
+})
+
+test('brain_recall is registered only once the brain holds a memory', async ($, on) => {
+  const w = world(on)
+  w.files.clear()
+  await start($)
+  await w.clock.settle()
+  expect(w.tools).toEqual(['brain_remember'])
+  await $.tool.call({ tool: 'mcp__project-brain__brain_remember', text: 'Orders are stored in Postgres through src/db.ts', kind: 'decision' })
+  expect(w.tools).toEqual(['brain_remember', 'brain_recall'])
+  await $.tool.call({ tool: 'mcp__project-brain__brain_remember', text: 'Refunds are issued from the payments service only', kind: 'convention' })
+  expect(w.tools).toEqual(['brain_remember', 'brain_recall'])
 })
 
 test('the Brain pane without the hub, on terminal, desktop and vscode (mobile without a text field): active memories, graph, search, pin, edit, forget', { timeoutMs: 20_000 }, async ($, on) => {

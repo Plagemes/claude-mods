@@ -27,16 +27,14 @@ const HUB_TOPICS = ['decision.recorded', 'lesson.learned'] as const
 const MAX_HUB_EVENTS = 50
 
 const TOOL_DESCRIPTION =
-  "Search this project's saved knowledge: memories saved with /remember, CLAUDE.md, the session journal " +
-  '(.claude/journal), decision records (docs/decisions, docs/adr) and handoff notes (.claude/handoff). ' +
-  'Returns the best-matching passages ranked by relevance (BM25), each with its file and line. Use it before ' +
-  'deciding something that may already have been decided, when the user refers to earlier work or "what we ' +
-  'agreed", or to recall project conventions. Query with a few distinctive keywords rather than a sentence.'
+  "Search this project's saved notes: /remember memories, CLAUDE.md, the journal, decision records and handoff notes. " +
+  'Returns the best-matching passages with file and line. Use it before deciding something that may already be decided, ' +
+  'or when the user refers to earlier work.'
 const TOOL_SCHEMA = {
   type: 'object',
   properties: {
-    query: { type: 'string', description: 'A few distinctive keywords, e.g. "postgres migration rollback".' },
-    limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, description: `How many passages to return (default ${DEFAULT_LIMIT}).` },
+    query: { type: 'string', description: 'A few distinctive keywords.' },
+    limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, description: `Passages to return (default ${DEFAULT_LIMIT}).` },
   },
   required: ['query'],
 }
@@ -46,6 +44,9 @@ const memoriesAtom = atom({ plugin: 'recall', key: 'memories' } as const, [])
 const busyAtom = atom({ plugin: 'recall', key: 'isBusy' } as const, false)
 
 type Settings = { limit: number; extraPaths: string[] }
+
+/** Whether this load has registered the search tool (it waits until there are notes to search). */
+type Offer = { isOffered: boolean }
 
 const clamp = (value: unknown, low: number, high: number, fallback: number): number => {
   const n = Number(value)
@@ -226,9 +227,29 @@ async function forget($: EngineInterface, id: string): Promise<void> {
   if (gone !== undefined) $.ui.toast(`Forgot "${preview(gone.text)}"`)
 }
 
-async function registerAll($: EngineInterface): Promise<void> {
+/** Whether anything is there to search: a memory for this project, or one of the note files or folders. */
+async function hasNotes($: EngineInterface, settings: Settings): Promise<boolean> {
+  const root = await $.session.root()
+  if (inProject(await loadMemories($), root).length > 0) return true
+  const paths = [...NOTE_FILES, ...settings.extraPaths, ...NOTE_DIRS]
+  const stats = await Promise.all(paths.map(path => $.fs.stat(resolvePath(root, path)).catch(() => undefined)))
+  return stats.some(stat => stat !== undefined)
+}
+
+/** Registers the search tool once there is something to search; a project with no notes never pays for its description. */
+async function offerSearch($: EngineInterface, state: Offer, settings: Settings, isKnown = false): Promise<void> {
+  if (state.isOffered) return
+  try {
+    if (!isKnown && !(await hasNotes($, settings))) return
+    await $.tool.register({ name: 'search', description: TOOL_DESCRIPTION, inputSchema: TOOL_SCHEMA })
+    state.isOffered = true
+  } catch (error) {
+    $.ui.log(`${NAME}: registration failed: ${errorText(error)}`, { to: 'debug' })
+  }
+}
+
+async function registerCommands($: EngineInterface): Promise<void> {
   const steps = [
-    () => $.tool.register({ name: 'search', description: TOOL_DESCRIPTION, inputSchema: TOOL_SCHEMA }),
     () => registerCommand($, { name: 'remember', description: 'Save a memory Claude can find with the recall tool', argumentHint: '[-g] <text>' }),
     () => registerCommand($, { name: 'recall', description: 'Search your notes, decisions, journal and memories', argumentHint: '[query]' }),
   ]
@@ -250,8 +271,11 @@ export const register: Register = (on, options) => {
       .filter(Boolean),
   }
 
+  const offer: Offer = { isOffered: false }
+
   on('session.start', async ($, e, next) => {
-    await registerAll($)
+    await registerCommands($)
+    await offerSearch($, offer, settings)
     afterStart($, 'recall', () => greetHub($))
     return next(e)
   })
@@ -297,6 +321,7 @@ export const register: Register = (on, options) => {
       createdAt: await $.clock.now(),
     }
     await $.store.set(STORE_KEY, [...all, memory].slice(-MAX_MEMORIES))
+    await offerSearch($, offer, settings, true)
     const count = (await showMemories($)).length
     return {
       text: `Remembered${isGlobal ? ' for every project' : ''}: "${preview(text)}" ` +

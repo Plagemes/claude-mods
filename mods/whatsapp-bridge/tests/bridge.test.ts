@@ -215,3 +215,16 @@ test('a session that lost the lease does not clear the new leader\'s lease when 
   await $.session.end({ reason: 'exit' } as never)
   expect(seen.files.get(`${DIR}/lease.json`)).toBe(theirs)
 })
+
+test('Claude’s tools are registered only once the bridge is set up', async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await wa($, 'setup')
+  expect(seen.tools).toEqual([])
+})
+
+test('a configured bridge registers its tools at start-up', async ($, on) => {
+  const seen = world(on, { files: configured() })
+  await start($)
+  expect(seen.tools).toEqual(['notify', 'ask', 'send_file', 'open_panel'])
+})

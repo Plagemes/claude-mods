@@ -1647,7 +1647,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "Gives Claude a recall tool to search your saved notes, decisions and journal.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "memory",
@@ -1714,7 +1714,7 @@
       "category": "team",
       "tier": "complex",
       "description": "Adds a dedicated code-reviewer subagent and a /review command.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "team",
@@ -2681,7 +2681,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "/explore sends three subagents to investigate different parts of the codebase and merges their findings.",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -2795,7 +2795,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "Ready-made subagents for focused jobs: debugger, test writer, doc writer and migrator.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -3490,7 +3490,7 @@
       "category": "agents",
       "tier": "complex",
       "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "agents",
@@ -3509,7 +3509,7 @@
       "category": "notifications",
       "tier": "complex",
       "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -3544,7 +3544,7 @@
       "category": "memory",
       "tier": "complex",
       "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "memory",
@@ -3649,7 +3649,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -3666,7 +3666,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Posts progress and reports to Slack and takes questions and commands from a channel, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "notifications",
@@ -3684,7 +3684,7 @@
       "category": "notifications",
       "tier": "simple",
       "description": "Posts progress and reports to Discord and takes questions and commands from a channel, through the mods-hub channel system.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "claude-mods",
         "notifications",

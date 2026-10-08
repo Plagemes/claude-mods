@@ -24,7 +24,7 @@ Registers a `search` tool (listed to Claude as `mcp__recall__search`) that searc
 | `paths` | string | `""` | Extra files or folders to search, comma-separated (e.g. `notes, docs/rfcs`). |
 
 ## How it works
-- `session.start` registers the tool with `$.tool.register` and the two commands; `tool.call` serves searches by reading the notes through `$.fs` at call time, so new notes are found at once.
+- `session.start` registers the two commands, and the tool with `$.tool.register` once there is something to search (a memory for this project, `CLAUDE.md`, or one of the notes folders), or at the first `/remember`, so a project without notes does not pay for its description in every request; `tool.call` serves searches by reading the notes through `$.fs` at call time, so new notes are found at once.
 - `tool.check` lets this read-only tool run without a permission prompt, unless one of your permission rules or an organization ceiling says otherwise.
 - Memories live in the mod's own `$.store` (up to 500); other mods' stores cannot be read. Searches cover Markdown and text files only, at most 400 files of up to 512 KB each.
 - With [mods-hub](../mods-hub) installed, searches also cover the decisions (`decision.recorded`, from decision-log) and lessons (`lesson.learned`, from lessons-learned) published this session: their files are searched even outside the folders above (a lessons file set to `docs/AGENTS.md`, a custom ADR folder), and one without a readable file is searched as published (`hub · lesson`). Without the hub nothing changes.

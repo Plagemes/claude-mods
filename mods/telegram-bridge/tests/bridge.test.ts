@@ -511,3 +511,21 @@ test('two leaders overlapping in a takeover: each delivers into its own inbox fi
   await $.session.end({ reason: 'exit' } as never)
   expect(seen.files.get(`${DIR}/lease.json`)).toBe(theirs)
 })
+
+test('Claude’s tools are registered only once the bridge is set up', { plugins, options: { botToken: TOKEN } }, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await telegram($, 'setup')
+  expect(seen.tools).toEqual([])
+  await telegram($, `owner ${OWNER}`)
+  expect(seen.tools).toEqual(['notify', 'ask', 'send_file', 'open_panel'])
+  await telegram($, `owner ${OWNER}`)
+  expect(seen.tools).toHaveLength(4)
+})
+
+test('a configured bridge registers its tools at start-up', { plugins, options: OPTIONS }, async ($, on) => {
+  const seen = world(on, { files: configured() })
+  await start($)
+  await pass(seen, 2_000)
+  expect(seen.tools).toEqual(['notify', 'ask', 'send_file', 'open_panel'])
+})
