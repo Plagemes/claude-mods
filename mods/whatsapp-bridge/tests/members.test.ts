@@ -24,7 +24,7 @@ test('a member’s question is answered from the transcript by a fork, with cost
   expect(seen.submitted).toEqual([])
 })
 
-test('members cannot command: chatter is ignored, "? stop" is refused, a question is answered, the owner’s stop works', async ($, on) => {
+test('trigger mode keeps the old rule: chatter is ignored, "? stop" is refused, a question is answered, the owner’s stop works', { options: { memberMode: 'trigger' } }, async ($, on) => {
   const seen = world(on, { files: noConfirm() })
   await lead($, seen)
   await $.turn.start({ text: 'refactor the cart', turnId: 'turn-1' })

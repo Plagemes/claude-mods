@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-bridge",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Lets Claude keep you posted on WhatsApp — progress, problems, reports, questions — and lets you steer every session from your phone, through one self-hosted OpenWA number.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#whatsapp-bridge",
@@ -121,11 +121,24 @@
       "description": "Time of the evening digest (HH:MM, empty: off).",
       "default": "19:00"
     },
+    "memberMode": {
+      "type": "string",
+      "title": "Members' messages",
+      "description": "all: in a group linked to a project or session, every member's message is for Claude (acknowledgements like \"ok\" or 👍 are ignored); trigger: only messages starting with a trigger word, mentioning the bot or replying to it. Other groups always need a trigger.",
+      "options": ["all", "trigger"],
+      "default": "all"
+    },
     "memberTrigger": {
       "type": "string",
       "title": "Member trigger words",
-      "description": "Group members' messages starting with one of these (comma-separated) are questions for Claude; mentions and replies to the bot count too.",
+      "description": "Group members' messages starting with one of these (comma-separated) are questions for Claude (always in groups not linked to a project, and in trigger mode); mentions and replies to the bot count too.",
       "default": "?,claude"
+    },
+    "memberSeesCost": {
+      "type": "boolean",
+      "title": "Members may see the cost",
+      "description": "Let group members ask for the cost (cost / costo) and see the cost chart in their report. Off: cost stays owner-only.",
+      "default": false
     },
     "memberRate": {
       "type": "number",

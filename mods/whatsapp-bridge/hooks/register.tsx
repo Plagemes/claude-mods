@@ -51,7 +51,6 @@ import {
   helperCandidates,
   inboundHealth,
   inboxText,
-  isMemberCommand,
   maskChat,
   normalizeJid,
   parseGroupCreate,
@@ -62,8 +61,8 @@ import {
   takeQa,
 } from './inbound'
 import type { QaBook, QaContext, Usage } from './inbound'
-import { bugPrompt, emptyBook, isOwnerPhone, memberTrigger, parseIssueDraft, phoneOf, takeQuota } from './members'
-import type { RateBook } from './members'
+import { bugPrompt, emptyBook, isOwnerPhone, memberDigestText, memberHelpText, memberIntent, memberRefusal, memberRoute, memberStatusText, parseIssueDraft, phoneOf, takeQuota } from './members'
+import type { MemberCommand, RateBook } from './members'
 import {
   api,
   dataUrlBase64,
@@ -1281,11 +1280,11 @@ async function createGroup($: EngineInterface, rt: Runtime, requested: string, o
     removed = dropped.ok ? ' The helper member was removed again.' : ` The helper member could not be removed (${failure(dropped)}).`
   }
   await linkGroup($, rt, groupId, name, ownGroupKey(rt))
-  void waCall($, rt, api.groupDescription(rt.sessionId, groupId, `Claude Code updates for ${rt.project}. Owner: send "help". Members: start with "?" to ask about progress, "bug:" to report a bug.`))
+  void waCall($, rt, api.groupDescription(rt.sessionId, groupId, `Claude Code updates for ${rt.project}. Owner: send "help". Members: ${rt.settings.memberMode === 'all' ? 'just write to ask about progress (or send "help")' : 'start with "?" to ask about progress'}, "bug:" to report a bug.`))
   await waSendText($, rt, {
     chatId: groupId,
     kind: 'welcome',
-    text: `🤖 This group gets Claude Code updates for *${rt.project}*${rt.settings.groupScope === 'session' ? ` (session #${rt.label})` : ''}.\nSend *help* for what you can do from here. Ask anything ("what are you doing?"); members start with *?*, or report a bug with *bug:* …`,
+    text: `🤖 This group gets Claude Code updates for *${rt.project}*${rt.settings.groupScope === 'session' ? ` (session #${rt.label})` : ''}.\nSend *help* for what you can do from here. ${rt.settings.memberMode === 'all' ? 'Members can just write a question ("what are you doing?") or *status*, no prefix needed' : 'Ask anything ("what are you doing?"); members start with *?*'}, or report a bug with *bug:* …`,
   })
   return `Created the WhatsApp group "${name}" and linked it to ${rt.settings.groupScope === 'session' ? `#${rt.label} (${rt.project})` : rt.project}.${removed}`
 }
@@ -1822,18 +1821,34 @@ async function handleRow($: EngineInterface, rt: Runtime, files: SessionFile[], 
 }
 
 /**
- * A group member's message: only when meant for Claude (mention, reply, trigger word, bug report), within the limits.
- * Members ask; they never command: a command or a work request gets a one-line refusal and nothing runs.
+ * A group member's message. In a group linked to a project or session with members mode "all" (the default) every
+ * text is for Claude, except acknowledgements ("ok", 👍); elsewhere (or in "trigger" mode) only a mention, a reply to
+ * the bot, a trigger word or a bug report is. Within the member limits: read-only commands (help, status, report,
+ * digest, cost when allowed) get member-safe answers, questions the member Q&A, and anything that would act (a
+ * command or a work request) a one-line refusal: nothing runs.
  */
 async function handleMemberRow($: EngineInterface, rt: Runtime, files: SessionFile[], row: WaRow, now: number): Promise<boolean> {
   const sentBy = sentIndex(files)
-  const trigger = memberTrigger(row.body, {
+  const key = projectOfChat(rt.groups, row.chatId)
+  const isOpen = rt.settings.memberMode === 'all' && key !== undefined
+  if (row.body.trim() === '') {
+    await noteInbound($, rt, row, 'member', 'dropped', 'no text (media without caption, sticker or reaction)', true)
+    return false
+  }
+  const trigger = memberRoute(row.body, {
     triggers: rt.settings.memberTriggers,
     botPhone: rt.botPhone,
     isReplyToBot: row.quotedId !== undefined && sentBy.has(row.quotedId),
+    isOpen,
   })
   if (!trigger.isTriggered) {
-    await noteInbound($, rt, row, 'member', 'dropped', 'chatter (no "?", mention or reply to the bot)', true)
+    const why =
+      trigger.isAck === true
+        ? 'acknowledgement ("ok", 👍): nothing to answer'
+        : key === undefined
+          ? 'chatter in a group not linked to a project (needs "?", a mention or a reply to the bot)'
+          : 'chatter (members mode "trigger": no "?", mention or reply to the bot)'
+    await noteInbound($, rt, row, 'member', 'dropped', why, true)
     return false
   }
   const event: WaEventKey = trigger.isBug ? 'bugReports' : 'memberQuestions'
@@ -1848,20 +1863,34 @@ async function handleMemberRow($: EngineInterface, rt: Runtime, files: SessionFi
   }
   const leader = rt.leader ?? emptyLeader()
   const member = row.author ?? row.from
-  if (!trigger.isBug && isMemberCommand(trigger.text, parseCommand(trigger.text).command.kind !== 'prompt')) {
-    await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'member', audience: 'member', text: '🔒 Only the owner can ask Claude to do things. You can ask questions about the work (start with *?*).' })
-    await appendMemberLog($, rt, { at: now, member: memberName(row), question: trigger.text, answer: '', outcome: 'limited' })
-    await noteInbound($, rt, row, 'member', 'dropped', 'a command from a member (refused)', true)
-    return true
-  }
   const quota = takeQuota(leader.book, member, now, dayKey(now), { perTenMinutes: rt.settings.memberRate, dailyCap: rt.settings.memberDailyCap })
   leader.book = quota.book
   if (!quota.isAllowed) {
     await appendMemberLog($, rt, { at: now, member: memberName(row), question: trigger.text, answer: '', outcome: 'limited' })
-    await noteInbound($, rt, row, 'member', 'dropped', quota.why ?? 'member limit', true)
+    await noteInbound($, rt, row, 'member', 'dropped', `member limit: ${quota.why ?? 'reached'}`, true)
     return false
   }
-  const key = projectOfChat(rt.groups, row.chatId)
+  const intent = trigger.isBug ? ({ kind: 'question' } as const) : memberIntent(trigger.text)
+  if (intent.kind === 'refuse') {
+    await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'member', audience: 'member', text: memberRefusal(isOpen) })
+    await appendMemberLog($, rt, { at: now, member: memberName(row), question: trigger.text, answer: '', outcome: 'limited' })
+    await noteInbound($, rt, row, 'member', 'dropped', 'owner-only command or work request from a member (refused)', true)
+    return true
+  }
+  if (intent.kind === 'command') {
+    if (!mayReply(rt, now)) {
+      if (!leader.toldLater.includes(row.chatId)) {
+        leader.toldLater = [...leader.toldLater, row.chatId]
+        await waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'later', audience: 'member', text: "🌙 Claude isn't answering right now (silent or night mode). I'll answer when interaction is back on." })
+      }
+      await noteInbound($, rt, row, 'member', 'dropped', `member command "${intent.command}" while interaction is off`, true)
+      return true
+    }
+    await memberCommand($, rt, files, row, intent.command, { key, isOpen, now })
+    await appendMemberLog($, rt, { at: now, member: memberName(row), question: trigger.text, answer: `(${intent.command})`, outcome: 'answered' })
+    await noteInbound($, rt, row, 'member', 'accepted', `member command: ${intent.command} (read-only, member-safe)`, true)
+    return true
+  }
   const target = files
     .map(file => file.info)
     .filter(session => key !== undefined && isSessionOfKey(session, key) && isLive(session, now))
@@ -1879,6 +1908,49 @@ async function handleMemberRow($: EngineInterface, rt: Runtime, files: SessionFi
   await noteInbound($, rt, row, 'member', 'accepted', 'question: answered from WhatsApp', true)
   await answerQuestion($, rt, files, { row, text: trigger.text, audience: 'member', author: memberName(row), targetId: target?.id ?? null })
   return true
+}
+
+/**
+ * A member's read-only command, answered in the group under the member rules: only the group's project, counts and
+ * summaries, never paths, secrets, env values or diffs; the cost only with `memberSeesCost`.
+ */
+async function memberCommand(
+  $: EngineInterface,
+  rt: Runtime,
+  files: SessionFile[],
+  row: WaRow,
+  command: MemberCommand,
+  scope: { key: string | undefined; isOpen: boolean; now: number },
+): Promise<void> {
+  const { key, now } = scope
+  const own = files.filter(file => key !== undefined && isSessionOfKey(file.info, key))
+  const reply = (text: string, audience: 'owner' | 'member' = 'member'): Promise<string> =>
+    waSendText($, rt, { chatId: row.chatId, quotedId: row.waMessageId, kind: 'member', audience, text })
+  switch (command) {
+    case 'help':
+      await reply(memberHelpText({ isOpen: scope.isOpen, seesCost: rt.settings.memberSeesCost }))
+      return
+    case 'status':
+      await reply(memberStatusText(own.map(file => file.info).filter(info => isLive(info, now)), now))
+      return
+    case 'digest':
+      await reply(memberDigestText(own.flatMap(file => file.digest), now, rt.root))
+      return
+    case 'report':
+      await sendReport($, rt, own, row.chatId, { forMembers: true })
+      return
+    case 'cost': {
+      if (!rt.settings.memberSeesCost) {
+        await reply('🔒 Sorry, the cost is shared with the owner only.')
+        return
+      }
+      const today = dayKey(now)
+      const spent = own.reduce((sum, file) => sum + (file.stats.costByDay[today] ?? 0), 0)
+      // The owner allowed members to see the cost: sent with the owner rules, which keep the figures (secrets stay masked).
+      await reply(costText(own.map(file => file.info).filter(info => isLive(info, now)), spent), 'owner')
+      return
+    }
+  }
 }
 
 const memberName = (row: WaRow): string => {
@@ -2641,7 +2713,7 @@ async function renderChart($: EngineInterface, rt: Runtime, chart: Chart, name: 
 }
 
 /** Cost per day, test runs and (when smart-router writes its stats) router savings, as PNGs or text tables. */
-async function sendReport($: EngineInterface, rt: Runtime, files: SessionFile[], chatId: string): Promise<void> {
+async function sendReport($: EngineInterface, rt: Runtime, files: SessionFile[], chatId: string, audience: { forMembers?: boolean } = {}): Promise<void> {
   const now = await $.clock.now()
   const today = dayKey(now)
   const recent = files.filter(file => now - file.info.lastSeen < STATS_DAYS_MS)
@@ -2651,9 +2723,16 @@ async function sendReport($: EngineInterface, rt: Runtime, files: SessionFile[],
     for (const [day, usd] of Object.entries(file.stats.costByDay)) costByDay[day] = (costByDay[day] ?? 0) + usd
     for (const [day, runs] of Object.entries(file.stats.tests)) tests[day] = { pass: (tests[day]?.pass ?? 0) + runs.pass, fail: (tests[day]?.fail ?? 0) + runs.fail }
   }
+  const forMembers = audience.forMembers === true
   const home = rt.dir.replace(/\/\.claude\/claude-mods\/whatsapp$/, '')
-  const router = routerChart(await readJsonFile($, `${home}/.claude/claude-mods/smart-router/daily.json`))
-  const charts: [string, Chart][] = [['cost', costChart(costByDay, today)], ['tests', testsChart(tests, today)], ...(router !== null ? ([['router', router]] as [string, Chart][]) : [])]
+  // Members get the tests chart, and the cost chart only when the owner allowed it; never the model router's.
+  const router = forMembers ? null : routerChart(await readJsonFile($, `${home}/.claude/claude-mods/smart-router/daily.json`))
+  const showsCost = !forMembers || rt.settings.memberSeesCost
+  const charts: [string, Chart][] = [
+    ...(showsCost ? ([['cost', costChart(costByDay, today)]] as [string, Chart][]) : []),
+    ['tests', testsChart(tests, today)],
+    ...(router !== null ? ([['router', router]] as [string, Chart][]) : []),
+  ]
   const fallback: string[] = []
   for (const [name, chart] of charts) {
     const base64 = await renderChart($, rt, chart, name)
@@ -2661,8 +2740,8 @@ async function sendReport($: EngineInterface, rt: Runtime, files: SessionFile[],
     else await waSendFile($, rt, { chatId, path: `${name}.png`, base64, caption: chart.title, kind: 'report' })
   }
   if (fallback.length > 0) {
-    const note = rt.converter === null ? '\n_(Install rsvg-convert or ImageMagick for PNG charts.)_' : ''
-    await waSendText($, rt, { chatId, kind: 'report', text: `📊 ${fallback.join('\n\n')}${note}` })
+    const note = rt.converter === null && !forMembers ? '\n_(Install rsvg-convert or ImageMagick for PNG charts.)_' : ''
+    await waSendText($, rt, { chatId, kind: 'report', audience: forMembers && !showsCost ? 'member' : 'owner', text: `📊 ${fallback.join('\n\n')}${note}` })
   }
 }
 
