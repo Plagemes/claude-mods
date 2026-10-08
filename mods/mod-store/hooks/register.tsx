@@ -471,10 +471,13 @@ async function greetHub($: Dollar): Promise<void> {
 }
 
 /** Moves the progress bar; a job that already ended is left ended. */
-const setJob = ($: Dollar, next: (job: StoreJob) => StoreJob): Promise<StoreJob | null> =>
-  update($, jobState, job => (job === null ? null : next(job)))
+function setJob($: Dollar, next: (job: StoreJob) => StoreJob): Promise<StoreJob | null> {
+  return update($, jobState, job => (job === null ? null : next(job)))
+}
 
-const isStopping = async ($: Dollar): Promise<boolean> => (await read($, jobState))?.isStopping === true
+async function isStopping($: Dollar): Promise<boolean> {
+  return (await read($, jobState))?.isStopping === true
+}
 
 /** Names as a notice lists them: the first few, then how many more. */
 function listed(names: readonly string[]): string {
@@ -971,8 +974,8 @@ async function applyPlan($: Dollar, catalog: StoreCatalog, bin: string): Promise
   if (plan.kind === 'profile') {
     const edits = Object.fromEntries(changes.map(row => [pluginId(row.name, catalog.marketplace), row.keep]))
     const off = changes.filter(row => !row.keep).length
-    const on = changes.length - off
-    const what = [off > 0 ? `disabled ${plural(off, 'mod')}` : '', on > 0 ? `enabled ${plural(on, 'mod')}` : ''].filter(part => part !== '').join(' and ')
+    const enabled = changes.length - off
+    const what = [off > 0 ? `disabled ${plural(off, 'mod')}` : '', enabled > 0 ? `enabled ${plural(enabled, 'mod')}` : ''].filter(part => part !== '').join(' and ')
     return writeLocal($, catalog, plan.root, edits, `the ${basename(plan.root)} profile`, `Profile applied to ${basename(plan.root)}: ${what}.`)
   }
   return slimWithCli($, catalog, bin, changes)
@@ -1157,7 +1160,9 @@ async function loadDetail($: Dollar, catalog: StoreCatalog, mod: StoreMod): Prom
   }
 }
 
-const setNav = ($: Dollar, next: (nav: StoreView) => StoreView): Promise<StoreView> => update($, navState, next)
+function setNav($: Dollar, next: (nav: StoreView) => StoreView): Promise<StoreView> {
+  return update($, navState, next)
+}
 
 async function openDetail($: Dollar, config: Config, name: string): Promise<void> {
   await setNav($, nav => ({ ...nav, selected: name }))
@@ -1244,7 +1249,9 @@ async function refreshReport($: Dollar, config: Config): Promise<string> {
   return `◆ ${plural(counts.mods, 'mod')} in ${categories}, ${status}.${offline}`
 }
 
-const openPane = ($: Dollar) => $.ui.open({ id: PANE, title: PANE_TITLE, focus: true, closeOnEscape: true, rows: PANE_ROWS })
+function openPane($: Dollar) {
+  return $.ui.open({ id: PANE, title: PANE_TITLE, focus: true, closeOnEscape: true, rows: PANE_ROWS })
+}
 
 async function openStore($: Dollar, config: Config, query: string | undefined): Promise<CommandRunResult> {
   await update($, navState, () => ({ ...HOME, query: query ?? '' }))
@@ -1299,8 +1306,9 @@ async function startFromCommand($: Dollar, config: Config, action: Action | Bulk
 }
 
 /** Where the plan screen is: the person's typing of `/mods profile` or `/mods slim`, or a press of Profile or Slim. */
-const showPlan = ($: Dollar): Promise<StoreView> =>
-  setNav($, nav => ({ ...nav, selected: null, screen: 'plan', planTab: 'disable', planPage: 0 }))
+function showPlan($: Dollar): Promise<StoreView> {
+  return setNav($, nav => ({ ...nav, selected: null, screen: 'plan', planTab: 'disable', planPage: 0 }))
+}
 
 /**
  * Starts reading a profile or a slim in the background and opens the store on the plan screen, where the bar shows
