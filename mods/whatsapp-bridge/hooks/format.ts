@@ -53,7 +53,7 @@ export const briefingText = (kind: 'morning' | 'evening', sessions: readonly WaS
   return [title, ...body, body.length === 0 ? 'No session was active.' : '', `_${clockTime(now)}_`].filter(line => line !== '').join('\n')
 }
 
-const DOCKER_IMAGE = 'ghcr.io/rmyndharis/openwa:latest'
+const DOCKER_IMAGE = 'ghcr.io/rmyndharis/openwa:0.24'
 
 /** What /wa setup prints when no OpenWA answers: a local-only container and the scoped-key steps. */
 export const dockerSteps = (baseUrl: string): string =>

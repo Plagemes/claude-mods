@@ -1,4 +1,4 @@
-// @vendored mods/mods-hub/types/index.d.ts sha256:3067da5cb269 by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
+// @vendored mods/mods-hub/types/index.d.ts sha256:6a9c6ec03ef2 by scripts/sync-shared.mjs: edit the source, then run `node scripts/sync-shared.mjs`; never this copy.
 // The mods-hub contract: the `$.mods` noun every Claude Mod can talk to, the standard events, and the
 // hub's public state. Self-contained (no import) so it can be laid beside a dependent mod by the engine
 // (`"dependencies": ["mods-hub"]`) or vendored as `types/mods-hub.d.ts` by scripts/sync-shared.mjs.
@@ -196,6 +196,8 @@ export type ModsSetModeInput = { interaction?: ModsInteraction; isSilent?: boole
 
 /** A tab of the shared "Claude Mods" panel. Its owner draws the body (see MOD_CONTRACT.md). */
 export type ModsTab = { id: string; title: string; owner: string; order: number; command?: string }
+/** How the shared panel is folded: the tab bar's More row (terminal and mobile) and the channel whose setup help is open. */
+export type ModsPanelView = { isMoreOpen: boolean; openChannel: string | null }
 export type ModsTabInput = { id: string; title: string; order?: number; command?: string }
 
 export type ModsChannelStatus = 'connected' | 'connecting' | 'disconnected' | 'error' | 'unconfigured'
@@ -298,6 +300,8 @@ declare module 'claude-code' {
       /** The shared panel's active tab (`home` or a registered tab id). */
       tab: string
       tabs: ModsTab[]
+      /** The panel's folds (More open, a channel's setup help open); this session's alone. */
+      view: ModsPanelView
       channels: ModsChannel[]
       /** The latest event per topic, the member id being the topic. */
       latest: StateFamily<ModsEvent | null>

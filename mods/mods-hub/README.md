@@ -1,7 +1,7 @@
 # mods-hub
 > The shared core that lets mods talk to each other: one event bus, one side panel with tabs, one place that routes notifications to your channels.
 
-**Category:** Core · **Version:** 1.1.0
+**Category:** Core · **Version:** 1.1.1
 
 ## What it does
 Adds `$.mods` to every mod: an event bus with typed standard events (`test.result`, `ci.result`, `cost.update`, `deploy.failed`, …), a blackboard of shared facts, and a notification router that knows whether you are here, idle or away, Silent, or inside your Night hours, and sends each notification to the terminal, your phone or your team's channel accordingly. It also opens one **Claude Mods** panel whose tabs other mods fill (Advisor, Router, Mission Control, Channels, …), with a Home tab for the global mode, channels, routing and the last notifications.
@@ -22,17 +22,17 @@ Every mod keeps working without the hub; with it, they cooperate.
 
 ### What you see
 
-**The frame.** Every tab of the Claude Mods panel shares one header: `▪▪▪ Claude Mods · Hub` (the Slot mark, the last tile lit; *Mods* in italic Ember), then the counts `165 mods · 25 tabs · 6 channels` and the mode as a pill (`● Here`, `◐ Idle`, `○ Away`, with `· Silent 12m` and `· Night` when they hold). The counts give way first on a narrow pane. Under it is the tab bar: `0: ▦ Home  1: ⋔ Router  2: ◔ Cost …`. Each tab carries its owner's category glyph in the terminal and its category icon on the desktop and the phone. The shown tab is drawn at full strength, the rest dim. Tabs past the ninth stay on the bar without a digit. A registered tab opens under a title line (`⋔ Router by smart-router · full view: /router`). When its mod draws nothing there, the tab says so and names the command that opens it.
+**The frame.** Every tab of the Claude Mods panel shares one header: `▪▪▪ Claude Mods · Hub` (the Slot mark, the last tile lit; *Mods* in italic Ember), then the counts `165 mods · 25 tabs · 6 channels` and the mode as a pill (`● Here`, `◐ Idle`, `○ Away`, with `· Silent 12m` and `· Night` when they hold). The counts give way first on a narrow pane. Under it is the tab bar: `0: ▦ Home  1: ⋔ Router  2: ◔ Cost …`. Each tab carries its owner's category glyph in the terminal and its category icon on the desktop and the phone. The shown tab is drawn at full strength, the rest dim. Home and the first nine tabs are pinned with their digits `0`–`9`; the rest sit behind **More**: a menu on the desktop, a dim second row on the terminal (what fits, then `+N more ▾`), a `More ▾` fold on the phone. A registered tab opens under a title line (`⋔ Router by smart-router · full view: /router`). When its mod draws nothing there, the tab says so and names the command that opens it.
 
 **Home.** It is a stack of cards, each opened by a small Ember kicker (`▪ MODE`, `▪ CHANNELS`, `▪ ROUTING`, `▪ MODS`, `▪ RECENT`):
 - **Mode** is segmented controls with a fixed label column: Presence `[ Here ] [ Away ]`, Interaction `[ Auto ] [ On ] [ Off ]`, Silent `[ Off ] [ On · 15m ]`, Night `[ Off ] [ On ] 22:00-07:00`. The current value is the primary.
 - **The control strip** is one line: `● Automatic work is running  [ Pause ] [ Stop ]`, or `⏸ Paused by you, at the terminal: … [ Resume ]`. Its height never changes.
-- **Channels** have a health dot (`●` connected, `◐` connecting, `○` disconnected, `◌` not set up; a filled SVG dot on the desktop), the status and audience, and an `[on]` / `[off]` switch.
+- **Channels** have a health dot (`●` connected, `◐` connecting, `○` disconnected, `◌` not set up; a filled SVG dot on the desktop), a short state (`Connected`, `Not set up`, `Error`, `Offline`), and an `[ On ] [ Off ]` switch drawn like the mode's segments. A channel that is not set up or failing shows its mod's hint dim under the row (two lines at most) and a **Set up** button: it opens that mod's tab in the panel, or, when the mod has none, unfolds the whole hint and where its options live.
 - **Routing** is one button per level that cycles terminal → when away → always → off.
 - **Mods** counts the installed Claude Mods, the enabled ones and those on the bus.
 - **Recent** is the activity feed, newest first, one line per row: the time (`now`, `4m`, `2h`), the level glyph in its colour, the mod's name as a fixed-width badge, the text cut to the line, and where it went (`→ phone`, `held for the morning`).
 
-Every row is a single truncated line, so new data never moves what is below it.
+Every row is a single line cut with an ellipsis to the pane's width on every surface (the hub cuts the text itself as well as asking the surface to), so nothing runs past the edge and new data never moves what is below it; only a channel's hint and the empty-state sentences wrap.
 
 **`/hub status`** prints the same in aligned rows:
 ```

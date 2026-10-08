@@ -195,6 +195,8 @@ export type ModsSetModeInput = { interaction?: ModsInteraction; isSilent?: boole
 
 /** A tab of the shared "Claude Mods" panel. Its owner draws the body (see MOD_CONTRACT.md). */
 export type ModsTab = { id: string; title: string; owner: string; order: number; command?: string }
+/** How the shared panel is folded: the tab bar's More row (terminal and mobile) and the channel whose setup help is open. */
+export type ModsPanelView = { isMoreOpen: boolean; openChannel: string | null }
 export type ModsTabInput = { id: string; title: string; order?: number; command?: string }
 
 export type ModsChannelStatus = 'connected' | 'connecting' | 'disconnected' | 'error' | 'unconfigured'
@@ -297,6 +299,8 @@ declare module 'claude-code' {
       /** The shared panel's active tab (`home` or a registered tab id). */
       tab: string
       tabs: ModsTab[]
+      /** The panel's folds (More open, a channel's setup help open); this session's alone. */
+      view: ModsPanelView
       channels: ModsChannel[]
       /** The latest event per topic, the member id being the topic. */
       latest: StateFamily<ModsEvent | null>

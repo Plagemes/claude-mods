@@ -3,7 +3,7 @@ import type { Engine, Plugin } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
 import { categoryOf, glyphOf } from '../hooks/icons'
-import { ago, badge, controlLine, feedRow, headerCounts, modePill, statusReport, statusText } from '../hooks/look'
+import { ago, badge, controlLine, feedRow, fit, headerCounts, modePill, statusReport, statusText, tabLayout } from '../hooks/look'
 import { DEFAULT_PREFS, deriveMode } from '../hooks/router'
 import type { ModsControl, ModsInstalled, ModsNotice } from '../types'
 
@@ -80,6 +80,18 @@ const probe: Plugin = {
   },
 }
 
+/** A second stand-in mod with no tab of its own: `bare {json}` registers its channel. */
+const bare: Plugin = {
+  name: 'bare',
+  register(on) {
+    on('tool.call', async ($, e, next) => {
+      if (e.tool !== 'Bash' || !String(e.command).startsWith('bare ')) return next(e)
+      const call = JSON.parse(String(e.command).slice(5)) as { input: never }
+      return { result: JSON.stringify({ value: await $.mods.registerChannel(call.input) }) }
+    })
+  },
+}
+
 function world(on: On) {
   const clock = mock.clock(on, { now: NOON })
   mock.env(on, { HOME: '/home/me' })
@@ -110,8 +122,8 @@ function world(on: On) {
 
 const start = ($: Engine) => $.session.start({ cwd: '/work/shop', surface: 'terminal', isInteractive: true })
 
-async function mods($: Engine, method: string, input: unknown = {}): Promise<{ value?: any; error?: string }> {
-  const ran = await $.tool.call({ tool: 'Bash', command: `probe ${JSON.stringify({ method, input })}` })
+async function mods($: Engine, method: string, input: unknown = {}, as = 'probe'): Promise<{ value?: any; error?: string }> {
+  const ran = await $.tool.call({ tool: 'Bash', command: `${as} ${JSON.stringify({ method, input })}` })
   return JSON.parse(String((ran as { result?: unknown }).result)) as { value?: any; error?: string }
 }
 
@@ -150,12 +162,24 @@ for (const { surface, columns, label } of SURFACES) {
     const tabSlot = JSON.stringify(await ui.find({ key: 'slot-tab-t0' }))
     expect(tabSlot.includes('"type":"Svg"')).toBe(!isTerminal)
 
-    // Tabs: digits 0-9 only, every tab still on the bar; the shown one is the primary.
+    // Tabs: digits 0-9 on the pinned row; the tenth tab on goes behind More (a menu on the desktop, a dim second row
+    // on the terminal, a fold on the phone); the shown one is the primary.
     expect((await ui.find({ key: 'tab-home' }))?.props).toMatchObject({ hotkey: '0', variant: 'primary' })
     expect((await ui.find({ key: 'tab-t8' }))?.props).toMatchObject({ hotkey: '9', dimColor: true, label: isTerminal ? '▦ Tab 8' : 'Tab 8' })
-    const tenth = await ui.find({ key: 'tab-t9' })
-    expect(tenth).toBeDefined()
-    expect(tenth?.props.hotkey).toBeUndefined()
+    if (surface === 'desktop') {
+      expect(await ui.find({ key: 'tab-t9' })).toBeUndefined()
+      expect((await ui.find({ key: 'tab-more' }))?.props).toMatchObject({ value: '·more', options: [{ label: 'More · 2' }, { value: 't9' }, { value: 't10' }] })
+    } else if (surface === 'mobile') {
+      expect(await ui.find({ key: 'tab-t9' })).toBeUndefined()
+      await ui.press({ key: 'tab-more' })
+      expect(await ui.find({ key: 'tab-t9' })).toBeDefined()
+      expect((await ui.find({ key: 'tab-t9' }))?.props.hotkey).toBeUndefined()
+      await ui.press({ key: 'tab-more' })
+    } else {
+      const tenth = await ui.find({ key: 'tab-t9' })
+      expect(tenth).toBeDefined()
+      expect(tenth?.props.hotkey).toBeUndefined()
+    }
 
     // Mode as segmented controls, the current value the primary.
     expect((await ui.find({ key: 'interaction-auto' }))?.props).toMatchObject({ variant: 'primary' })
@@ -204,3 +228,135 @@ test('empty states: no channels, nothing in Recent, a tab whose owner draws noth
   expect(await ui.find({ type: 'Text', text: 'by probe · full view: /quiet' })).toBeDefined()
   await ui.unmount()
 })
+
+// ── Never past the edge: long hints, many tabs, long Recent rows ───────────────────────────────────
+
+/** The 25 tabs of a full install, by the order convention (docs/ARCHITECTURE.md). */
+const MANY_TABS = [
+  'Advisor', 'Router', 'Mission Control', 'Autopilot', 'Workflows', 'Brain', 'Guardian', 'Channels', 'Cost', 'Context',
+  'Tests', 'Errors', 'Slack', 'Discord', 'Issues', 'Telegram', 'Queue', 'Team', 'Calendar', 'Changes', 'Files', 'Tasks',
+  'Timeline', 'Notes', 'Stats',
+].map((title, index) => ({ id: title.toLowerCase().replace(/\s+/g, '-'), title, order: (index + 1) * 10 }))
+
+const LONG_HINT = 'Set the sender address (`from`), for example "Acme Studio <digest@acme.studio>", and an API key in the plugin options, then run /email-digest test to send yourself one.'
+
+type Node = { type?: string; props?: Record<string, unknown>; children?: unknown }
+
+/** Every element of a drawn tree, depth first, with the plain text each Text shows. */
+function walk(tree: unknown, out: { type: string; props: Record<string, unknown>; text: string }[] = []) {
+  if (tree === null || typeof tree !== 'object') return out
+  if (Array.isArray(tree)) {
+    for (const child of tree) walk(child, out)
+    return out
+  }
+  const node = tree as Node
+  const textOf = (value: unknown): string =>
+    typeof value === 'string' || typeof value === 'number' ? String(value) : Array.isArray(value) ? value.map(textOf).join('') : value !== null && typeof value === 'object' ? textOf((value as Node).children) : ''
+  out.push({ type: String(node.type), props: node.props ?? {}, text: node.type === 'Text' ? textOf(node.children) : '' })
+  walk(node.children, out)
+  return out
+}
+
+test('fit cuts to the cells with an ellipsis; the tab layout pins 0-9 and fits the terminal row', () => {
+  expect(fit('short', 10)).toBe('short')
+  expect(fit('a  long\nline of text', 8)).toBe('a long…')
+  expect([...fit('x'.repeat(500), 40)].length).toBe(40)
+  const tabs = MANY_TABS.map(tab => ({ ...tab, owner: 'someone' }))
+  for (const columns of [56, 96, 180]) {
+    const layout = tabLayout(tabs, { currentId: 'stats', columns, isRow: true, labelOf: tab => `▦ ${tab.title}` })
+    expect(layout.pinned.map(tab => tab.title)).toEqual(MANY_TABS.slice(0, 9).map(tab => tab.title))
+    expect(layout.overflow).toHaveLength(16)
+    // The second row and its `+N more ▾` fit; the shown tab (the last one) is always on it.
+    const used = layout.shown.reduce((sum, tab, index) => sum + tab.title.length + 2 + (index === 0 ? 0 : 2), 0)
+    expect(used + (layout.hidden.length === 0 ? 0 : 10)).toBeLessThanOrEqual(columns)
+    expect(layout.shown.map(tab => tab.id)).toContain('stats')
+    expect(layout.shown.length + layout.hidden.length).toBe(16)
+  }
+  const menu = tabLayout(tabs, { currentId: undefined, columns: 100, isRow: false, labelOf: tab => tab.title })
+  expect(menu.shown).toEqual([])
+  expect(menu.hidden).toHaveLength(16)
+})
+
+const WIDE = [
+  { surface: 'desktop', columns: 96, label: 'desktop side panel (about 800px)' },
+  { surface: 'terminal', columns: 56, label: 'terminal at 56 columns' },
+  { surface: 'terminal', columns: 180, label: 'terminal at 180 columns' },
+  { surface: 'mobile', columns: 40, label: 'phone' },
+] as const
+
+for (const { surface, columns, label } of WIDE) {
+  test(`nothing runs past the edge on the ${label}: long channel hints, 25 tabs, long Recent rows`, { plugins: [probe, bare] }, async ($, on) => {
+    const w = world(on)
+    await start($)
+    await w.clock.settle()
+    for (const tab of MANY_TABS) await mods($, 'registerTab', tab)
+    await mods($, 'registerChannel', { id: 'email', title: 'Email digest', audience: 'me', delivery: 'pull', status: 'unconfigured', detail: LONG_HINT }, 'bare')
+    await mods($, 'registerChannel', { id: 'slack', title: 'Slack', audience: 'team', delivery: 'push', status: 'unconfigured', detail: 'No Slack credentials: set the botToken and channelId options, or run /slack-bridge setup to paste them.' })
+    await mods($, 'registerChannel', { id: 'telegram', title: 'Telegram', audience: 'me', delivery: 'push', status: 'error', detail: 'The bot token was refused by api.telegram.org (401 Unauthorized); make a new one with @BotFather.' })
+    await mods($, 'registerChannel', { id: 'desktop', title: 'Desktop', audience: 'me', delivery: 'push', status: 'connected' })
+    const updated = Array.from({ length: 12 }, (_, i) => `mod-number-${i} 1.0.${i} → 1.0.${i + 1}`).join(', ')
+    await mods($, 'notify', { level: 'success', title: `Updated ${updated}. Run /reload-plugins to apply.` })
+    await w.clock.settle()
+    const ui = await $.ui.mount({ plugin: 'mods-hub', surface, component: 'Pane', requestId: 'claude-mods', props: pane(columns, 60) })
+
+    const elements = walk(await ui.drawn())
+    // Every one-line Text is cut to the pane; the texts that wrap do so on purpose and stay within two lines.
+    for (const one of elements.filter(el => el.type === 'Text')) {
+      const cells = [...one.text].length
+      if (one.props.wrap === 'wrap') expect(cells).toBeLessThanOrEqual(2 * columns)
+      else expect(cells).toBeLessThanOrEqual(columns)
+    }
+    // Every Box that grows into the rest of its row may shrink below its text (the desktop's flex needs minWidth 0).
+    for (const box of elements.filter(el => el.type === 'Box' && el.props.flexGrow === 1)) expect(box.props.minWidth).toBe(0)
+
+    // Channels: a short state in the row, the hint dim and wrapping under it, a switch drawn like the mode's segments.
+    expect(await ui.find({ type: 'Text', text: 'Not set up' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Error$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Connected$/ })).toBeDefined()
+    const hint = await ui.find({ type: 'Text', text: /^Set the sender address/ })
+    expect(hint?.props).toMatchObject({ dimColor: true, wrap: 'wrap' })
+    expect(await ui.find({ type: 'Button', text: /^\[o(n|ff)\]$/ })).toBeUndefined()
+    expect((await ui.find({ key: 'channel-email-on' }))?.props).toMatchObject({ variant: 'primary' })
+    expect(await ui.find({ key: 'setup-email' })).toBeDefined()
+    expect(await ui.find({ key: 'setup-telegram' })).toBeDefined()
+    expect(await ui.find({ key: 'setup-desktop' })).toBeUndefined()
+    await ui.press({ key: 'channel-email-off' })
+    expect((await ui.find({ key: 'channel-email-off' }))?.props).toMatchObject({ variant: 'primary' })
+    expect(JSON.parse(w.files.get('/home/me/.claude/claude-mods/hub/prefs.json') ?? '{}').channels?.email?.isEnabled).toBe(false)
+
+    // Set up with no tab of the owner's: the whole hint unfolds with where the options live; again, it folds.
+    await ui.press({ key: 'setup-email' })
+    expect(await ui.find({ type: 'Text', text: LONG_HINT })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'Its options: /plugin, then bare.' })).toBeDefined()
+    await ui.press({ key: 'setup-email' })
+    expect(await ui.find({ type: 'Text', text: 'Its options: /plugin, then bare.' })).toBeUndefined()
+
+    // Recent: one line, cut with an ellipsis.
+    const recent = await ui.find({ type: 'Text', text: /^Updated mod-number-0/ })
+    expect(recent?.props).toMatchObject({ wrap: 'truncate-end' })
+    expect(String(recent?.text).endsWith('…')).toBe(true)
+
+    // Tabs: 0-9 pinned, the rest behind More.
+    expect((await ui.find({ key: 'tab-cost' }))?.props).toMatchObject({ hotkey: '9' })
+    expect((await ui.find({ key: 'tab-context' }))?.props.hotkey).toBeUndefined()
+    if (surface === 'desktop') {
+      expect(await ui.find({ key: 'tab-stats' })).toBeUndefined()
+      await (ui as unknown as { select: (target: { key: string; value: string }) => Promise<unknown> }).select({ key: 'tab-more', value: 'stats' })
+      expect((await ui.find({ key: 'tab-more' }))?.props).toMatchObject({ value: 'stats' })
+      expect(await ui.find({ type: 'Text', text: 'Stats has nothing to show here yet.' })).toBeDefined()
+    } else {
+      if ((await ui.find({ key: 'tab-more' })) !== undefined) await ui.press({ key: 'tab-more' })
+      expect(await ui.find({ key: 'tab-stats' })).toBeDefined()
+      await ui.press({ key: 'tab-stats' })
+      expect(await ui.find({ type: 'Text', text: 'Stats has nothing to show here yet.' })).toBeDefined()
+      // A tab press folds More again; the shown tab stays on the bar (the terminal's second row, the phone's More).
+      if (surface === 'terminal') expect((await ui.find({ key: 'tab-stats' }))?.props).toMatchObject({ variant: 'primary' })
+      else expect((await ui.find({ key: 'tab-more' }))?.props).toMatchObject({ label: 'Stats ▾' })
+    }
+    // Set up of a channel whose owner has a tab opens that tab in the panel.
+    await ui.press({ key: 'tab-home' })
+    await ui.press({ key: 'setup-slack' })
+    expect(await ui.find({ type: 'Text', text: 'CHANNELS' })).toBeUndefined()
+    await ui.unmount()
+  })
+}

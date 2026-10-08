@@ -115,3 +115,63 @@ export function statusReport(input: {
     ROW('Mods', `${plural(counts.installed, 'mod')}${counts.isListed ? ` (${counts.enabled} enabled)` : ''} · ${counts.onBus} on the bus`),
   ].join('\n')
 }
+
+// ── Fitting text to the room ────────────────────────────────────────────────────────────────────────
+//
+// Every surface is told to truncate (`wrap="truncate-end"`) and every shrinking Box has `minWidth={0}`, but a remote
+// surface lays text out with its own font, so the hub also cuts the text itself to the cells it has: a row can
+// never be wider than the pane, whatever the renderer does with a long word.
+
+/** `text` on one line, cut to `cells` with an ellipsis when longer (never fewer than one cell). */
+export function fit(text: string, cells: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  const room = Math.max(1, Math.floor(cells))
+  const chars = [...flat]
+  return chars.length <= room ? flat : `${chars.slice(0, room - 1).join('').trimEnd()}…`
+}
+
+/** A channel's state in two words, for the row; the owner's long detail goes on the dim line under it. */
+export const CHANNEL_STATUS: Record<ModsChannel['status'], { text: string; tone: Tone }> = {
+  connected: { text: 'Connected', tone: 'success' },
+  connecting: { text: 'Connecting', tone: 'warning' },
+  disconnected: { text: 'Offline', tone: 'inactive' },
+  error: { text: 'Error', tone: 'error' },
+  unconfigured: { text: 'Not set up', tone: 'subtle' },
+}
+
+/** Whether a channel needs the person: not set up, or failing. Only these offer Set up and show their detail. */
+export const needsSetup = (status: ModsChannel['status']): boolean => status === 'unconfigured' || status === 'error'
+
+/** Hotkeys `0`–`9`: Home and the first nine tabs. Their buttons always draw; the rest go behind More. */
+export const PINNED_TABS = 9
+
+/**
+ * The tab bar's two parts: the pinned tabs (the ones with a digit, in order) and the overflow. On the terminal the
+ * overflow is a second dim row of what fits in `columns` (the shown tab always among them) and a `+N` for the rest;
+ * `shown` is that row, `hidden` what the `+N` stands for. Elsewhere it is one menu: `shown` empty.
+ */
+export function tabLayout<T extends { id: string; title: string }>(
+  tabs: readonly T[],
+  input: { currentId: string | undefined; columns: number; isRow: boolean; labelOf: (tab: T) => string },
+): { pinned: T[]; overflow: T[]; shown: T[]; hidden: T[] } {
+  const pinned = tabs.slice(0, PINNED_TABS)
+  const overflow = tabs.slice(PINNED_TABS)
+  if (!input.isRow || overflow.length === 0) return { pinned, overflow, shown: [], hidden: overflow }
+  const MORE_CELLS = 10 // `+NN more ▾` and its gap
+  const GAP = 2
+  let used = 0
+  const shown: T[] = []
+  for (const [index, tab] of overflow.entries()) {
+    const width = [...input.labelOf(tab)].length + (shown.length === 0 ? 0 : GAP)
+    const isLast = index === overflow.length - 1
+    if (used + width + (isLast ? 0 : MORE_CELLS) > input.columns) break
+    shown.push(tab)
+    used += width
+  }
+  const current = overflow.find(tab => tab.id === input.currentId)
+  if (current !== undefined && !shown.includes(current)) {
+    if (shown.length > 0) shown.pop()
+    shown.push(current)
+  }
+  return { pinned, overflow, shown, hidden: overflow.filter(tab => !shown.includes(tab)) }
+}

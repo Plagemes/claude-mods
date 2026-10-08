@@ -72,13 +72,42 @@ export const route = (input: RouteInput, context: RouteContext): Route => {
   return { sessionId: first.id, text, reason: 'recent' }
 }
 
-/** A short, unique-ish label for a session: the branch when it says something, else the project. */
-export const defaultLabel = (project: string, branch: string, taken: readonly string[]): string => {
-  const base = (branch !== '' && !['main', 'master', 'develop', 'trunk', 'HEAD'].includes(branch) ? branch.split('/').at(-1) ?? branch : project)
+/**
+ * The project's name: the last segment of its root, on Windows (`C:\Users\me\OneDrive - Acme\my-app`) as on
+ * POSIX (`/home/me/my-app/`); a bare drive (`C:\`) or an empty root has none ('project').
+ */
+export const projectNameOf = (root: string): string => {
+  const last = root.split(/[\\/]+/).filter(Boolean).at(-1) ?? ''
+  return last === '' || /^[a-z]:$/i.test(last) ? 'project' : last
+}
+
+/** A label as a `#tag`: lower case, letters, digits, `_ . -`, at most 24 characters. */
+export const slugLabel = (text: string): string =>
+  text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_.-]+/gu, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 24)
+    .replace(/[-.]+$/g, '')
+
+/**
+ * Whether a stored label is the one older versions derived from a whole Windows path (the root was split on `/`
+ * only, so `C:\Users\me\OneDrive\app` became `c-users-me-onedrive-app`, cut): such a label is derived again.
+ */
+export const isPathLabel = (label: string, root: string): boolean => {
+  if (!root.includes('\\')) return false
+  const legacy = (root.split('/').filter(Boolean).at(-1) ?? '')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}_.-]+/gu, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 24) || 'claude'
+    .slice(0, 24)
+  return label !== '' && (label === legacy || /^\p{L}-users-/u.test(label))
+}
+
+/** A short, unique-ish label for a session: the branch when it says something, else the project. */
+export const defaultLabel = (project: string, branch: string, taken: readonly string[]): string => {
+  const base = slugLabel(branch !== '' && !['main', 'master', 'develop', 'trunk', 'HEAD'].includes(branch) ? branch.split('/').at(-1) ?? branch : projectNameOf(project)) || 'claude'
   if (!taken.includes(base)) return base
   for (let n = 2; n < 100; n += 1) if (!taken.includes(`${base}${n}`)) return `${base}${n}`
   return `${base}-${Math.floor(Math.random() * 1000)}`
