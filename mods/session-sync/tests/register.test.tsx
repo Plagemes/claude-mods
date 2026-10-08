@@ -5,6 +5,9 @@ import type { On, RenderPropsOf, TurnCompleteInput } from 'claude-code'
 import { repoKey } from '../hooks/sync'
 import type { SyncLeaseFile, SyncMessage, SyncPeer } from '../types'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const NOW = new Date(2026, 9, 7, 12, 0, 0).getTime()
 const MINUTE = 60_000
 const ME = 'a1b2c3d4-0000-4000-8000-000000000001'
@@ -17,7 +20,7 @@ type World = ReturnType<typeof world>
 
 /** The engine and the machine: files with their times, git, the session, the prompt and the screen. */
 function world(on: On, options: { isRepo?: boolean } = {}) {
-  const clock = mock.clock(on, { now: NOW })
+  const clock = (startClock = mock.clock(on, { now: NOW }))
   mock.env(on, { HOME: '/home/me' })
   const files = new Map<string, { text: string; at: number }>()
   const git = { status: '## main...origin/main\n M src/api/user.ts\n' }
@@ -135,6 +138,7 @@ const refusal = (ran: unknown): string => JSON.stringify(ran)
 test('a file another live session holds is refused with who and what, until the person says SYNC-OK; that session is told', async ($, on) => {
   const w = world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await w.clock.settle()
   peerSession(w)
   peerLease(w, 'src/api/user.ts')
@@ -170,11 +174,12 @@ test('a file another live session holds is refused with who and what, until the 
 test('leases are renewed while the session works, expire when it idles, die with a gone session, and are released at the end', async ($, on) => {
   const w = world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await w.clock.settle()
   peerSession(w)
 
   await edit($, '/work/shop/src/a.ts')
-  expect(leases(w).leases['/work/shop/src/a.ts']).toMatchObject({ session: ME, expiresAt: NOW + 10 * MINUTE })
+  expect(leases(w).leases['/work/shop/src/a.ts']).toMatchObject({ session: ME, expiresAt: NOW + 1_500 + 10 * MINUTE })
 
   await w.clock.advance(4 * MINUTE)
   peerSession(w)
@@ -204,6 +209,7 @@ test('leases are renewed while the session works, expire when it idles, die with
 test('two sessions in one folder and on one dirty branch: a toast and a note for the model, once each', async ($, on) => {
   const w = world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await w.clock.settle()
   peerSession(w)
 
@@ -232,6 +238,7 @@ test('two sessions in one folder and on one dirty branch: a toast and a note for
 test('hand-off: /handoff-to writes the note (worktree advice when overlap is heavy) and a hand-off received runs once idle', async ($, on) => {
   const w = world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await w.clock.settle()
   peerSession(w, { touched: [{ path: 'src/api/auth.ts', at: NOW }, { path: 'src/api/user.ts', at: NOW }] })
   await edit($, '/work/shop/src/api/auth.ts')
@@ -316,6 +323,7 @@ const hub: Plugin = {
 test('with mods-hub: warnings go through the hub, conflicts are published, the section joins the Mission Control tab', { plugins: [hub] }, async ($, on) => {
   const w = world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await w.clock.settle()
   peerSession(w)
   peerLease(w, 'src/api/user.ts')
@@ -346,6 +354,7 @@ test('outside a git repository it stays out of the way', async ($, on) => {
 test('two sessions at once: a lease the other session takes while this one renews or takes its own is never lost', async ($, on) => {
   const w = world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await w.clock.settle()
   peerSession(w)
   await edit($, '/work/shop/src/a.ts')

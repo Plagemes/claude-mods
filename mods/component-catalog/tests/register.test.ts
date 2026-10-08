@@ -5,6 +5,9 @@ import type { On } from 'claude-code'
 import { catalogSection, factOf, levenshtein, parseComponents, similarComponents } from '../hooks/catalog'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/work/shop'
 const BUTTON = [
   "import React from 'react'",
@@ -55,7 +58,7 @@ type World = { files: Map<string, string>; toasts: string[]; filled: string[] }
 const world = (on: On): World => {
   const state: World = { files: new Map(Object.entries(FILES).map(([path, text]) => [`${ROOT}/${path}`, text])), toasts: [], filled: [] }
   const isDir = (path: string) => [...state.files.keys()].some(file => file.startsWith(`${path}/`))
-  mock.clock(on, { now: 1_000_000 })
+  startClock = mock.clock(on, { now: 1_000_000 })
   on('session.root', () => ({ value: ROOT }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -220,6 +223,8 @@ test('with mods-hub: says hello and shares the catalog as the fact component-cat
   const hub = fakeHub(on)
   world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
   expect(hub.facts.get('components')).toEqual({
     count: 3,

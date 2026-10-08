@@ -4,6 +4,9 @@ import type { AgentSpawnInput, ModelCompleteResult, On, TurnUsage } from 'claude
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const SURFACES = ['terminal', 'desktop'] as const
 const MAIN = 'claude-opus-5-5'
 const PANE = {
@@ -28,7 +31,7 @@ type World = {
 }
 
 const world = (on: On, options: { planner?: () => ModelCompleteResult } = {}): World => {
-  const state: World = { spawned: [], prompts: [], statuses: [], toasts: [], writes: new Map(), store: new Map(), efforts: [], commands: [], bash: { failing: false }, clock: mock.clock(on, { now: Date.UTC(2026, 9, 7, 12) }) }
+  const state: World = { spawned: [], prompts: [], statuses: [], toasts: [], writes: new Map(), store: new Map(), efforts: [], commands: [], bash: { failing: false }, clock: (startClock = mock.clock(on, { now: Date.UTC(2026, 9, 7, 12) })) }
   let ids = 0
   mock.env(on, { HOME: '/home/tester' })
   on('store.get', ($, e) => ({ value: state.store.get(e.key) }) as never)
@@ -377,6 +380,8 @@ test('with mods-hub: the Router tab, its policy fact, and agent.routed / agent.f
   const hub = fakeHub(on, {}, w.clock)
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['agent.routed', 'agent.finished', 'cost.update'], consumes: ['budget.threshold', 'test.result'] }])
   expect(hub.tabs).toEqual([{ id: 'router', title: 'Router', order: 20, command: 'router' }])
   expect(hub.facts.get('policy')).toEqual({
@@ -417,6 +422,8 @@ test('with mods-hub: a budget alert on the bus moves borderline work down; test-
   const w = world(on)
   const hub = fakeHub(on, {}, w.clock)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   const at = w.clock.now()
   hub.events.push({ topic: 'budget.threshold', data: { kind: 'usd', scope: 'session', used: 8.5, limit: 10, percent: 85 }, at: at + 1, source: 'token-budget' })
   await spawn($, 'Update the config')

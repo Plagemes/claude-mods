@@ -130,19 +130,30 @@ const deleteSnippet = async ($: EngineInterface, args: string): Promise<Reply> =
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({
+    await registerCommand($, {
       name: 'save-snippet',
       description: 'Save the selected text, or the last code block Claude wrote, as a snippet',
       argumentHint: '<name>',
     })
-    await $.command.register({ name: 'snippet', description: 'Put a saved snippet into the prompt', argumentHint: '<name>' })
-    await $.command.register({ name: 'snippets', description: 'List the saved snippets' })
-    await $.command.register({ name: 'delete-snippet', description: 'Delete a saved snippet', argumentHint: '<name>' })
+    await registerCommand($, { name: 'snippet', description: 'Put a saved snippet into the prompt', argumentHint: '<name>' })
+    await registerCommand($, { name: 'vault', description: 'List the saved snippets' })
+    await registerCommand($, { name: 'delete-snippet', description: 'Delete a saved snippet', argumentHint: '<name>' })
     return next(e)
   })
 
   on('command.run', { command: 'save-snippet' }, ($, e) => saveSnippet($, e.args))
   on('command.run', { command: 'snippet' }, ($, e) => useSnippet($, e.args))
-  on('command.run', { command: 'snippets' }, $ => listSnippets($))
+  on('command.run', { command: 'vault' }, $ => listSnippets($))
   on('command.run', { command: 'delete-snippet' }, ($, e) => deleteSnippet($, e.args))
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

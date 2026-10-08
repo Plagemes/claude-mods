@@ -98,7 +98,7 @@ export const register: Register = (on, options: PluginOptions) => {
   const session: Session = { root: undefined, turn: undefined, queue: Promise.resolve() }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'why', description: "Why files were changed: the last turn's reasons, or a file's history", argumentHint: '[file]' })
+    await registerCommand($, { name: 'why', description: "Why files were changed: the last turn's reasons, or a file's history", argumentHint: '[file]' })
     return next(e)
   })
 
@@ -152,4 +152,15 @@ export const register: Register = (on, options: PluginOptions) => {
       return { text: `Failed: ${messageOf(error)}` }
     }
   })
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

@@ -1,6 +1,6 @@
 {
   "name": "second-opinion",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "/second-opinion has a different model critique Claude's last answer or plan.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#second-opinion",

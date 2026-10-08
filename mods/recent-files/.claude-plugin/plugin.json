@@ -1,6 +1,6 @@
 {
   "name": "recent-files",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/recent lists the files read and edited in this session, newest first.",
   "author": {
     "name": "Plagemes",

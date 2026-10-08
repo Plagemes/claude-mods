@@ -810,6 +810,9 @@ test('with mods-hub: says hello and publishes mod.installed for every install an
   const hub = fakeHub(on, {}, w.clock)
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: false })
+  // The hello goes out after session.start returned (afterStart: within 1.35 s), never inside it.
+  expect(hub.hellos).toEqual([])
+  await w.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['mod.installed'], consumes: ['mod.recommended'] }])
 
   await mods($, 'install cost-meter')

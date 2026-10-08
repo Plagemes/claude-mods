@@ -155,6 +155,7 @@ test('with mods-hub: the scope is shared as a fact and each deny is published as
   const state = world(on)
   const hub = fakeHub(on)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect(hub.facts.get('scope')).toEqual([])
   await $.command.run(scope('src/auth/**'))

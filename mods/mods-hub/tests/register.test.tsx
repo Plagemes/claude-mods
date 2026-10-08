@@ -73,6 +73,7 @@ function world(on: On) {
   const files = new Map<string, string>()
   const toasts: string[] = []
   const sounds: string[] = []
+  const statuses: (string | undefined)[] = []
   on('fs.read', ($, e) => (files.has(e.path) ? { value: files.get(e.path) ?? '' } : { deny: `ENOENT: ${e.path}` }))
   on('fs.write', ($, e) => {
     files.set(e.path, e.text)
@@ -101,6 +102,10 @@ function world(on: On) {
     return { value: undefined }
   })
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('ui.status', ($, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
   on('ui.render', () => ({ type: 'Box', props: {}, children: [] }) as never)
   on('tool.call', ($, e) => {
     const command = e.tool === 'Bash' ? String(e.command) : ''
@@ -110,7 +115,7 @@ function world(on: On) {
     if (command.startsWith('false')) return { isError: true as const, result: 'Exit code 1', text: 'boom' }
     return { result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }
   })
-  return { clock, files, toasts, sounds }
+  return { clock, files, toasts, sounds, statuses }
 }
 
 const start = ($: Engine) => $.session.start({ cwd: '/work/shop', surface: 'terminal', isInteractive: true })
@@ -215,19 +220,21 @@ test('the shared panel: Home on every surface, a mod draws its own tab and keeps
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'mods-hub', surface, component: 'Pane', requestId: 'claude-mods', props: PANE })
-    expect(await ui.find({ type: 'Text', text: 'Channels' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'CHANNELS' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'WhatsApp' })).toBeDefined()
     expect(await ui.find({ key: 'tab-router' })).toBeDefined()
     // The tab buttons are plain with their digit, so the terminal draws `0: Home` and `1: Router`.
-    expect((await ui.find({ key: 'tab-home' }))?.props).toMatchObject({ plain: true, hotkey: '0', label: 'Home', variant: 'primary' })
-    expect((await ui.find({ key: 'tab-router' }))?.props).toMatchObject({ plain: true, hotkey: '1', label: 'Router', dimColor: true })
+    // In the terminal each tab carries its owner's category glyph (`0: ▦ Home`); elsewhere the icon is drawn beside it.
+    const glyph = surface === 'terminal' ? '▦ ' : ''
+    expect((await ui.find({ key: 'tab-home' }))?.props).toMatchObject({ plain: true, hotkey: '0', label: `${glyph}Home`, variant: 'primary' })
+    expect((await ui.find({ key: 'tab-router' }))?.props).toMatchObject({ plain: true, hotkey: '1', label: `${glyph}Router`, dimColor: true })
 
-    await ui.press({ key: 'interaction' })
+    await ui.press({ key: surface === 'terminal' ? 'interaction-on' : 'interaction-off' })
     expect(JSON.parse(w.files.get(PREFS_FILE) ?? '{}').interaction).toBe(surface === 'terminal' ? 'on' : 'off')
 
     await ui.press({ key: 'tab-router' })
     expect(await ui.find({ type: 'Text', text: 'ROUTER BODY' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'Channels' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: 'CHANNELS' })).toBeUndefined()
     await ui.press({ plugin: 'probe', key: 'probe-btn' })
     expect(w.toasts).toContain('router pressed')
 
@@ -245,8 +252,10 @@ test('discovery and status: who said hello, what is installed, /hub status', { p
   expect(hello.value.installed.hello).toEqual([{ name: 'probe', version: '1.2.0', publishes: ['x.probe.ping'], consumes: ['test.result'] }])
   expect(hello.value.installed.plugins.map((plugin: { name: string }) => plugin.name)).toEqual(['mods-hub', 'probe'])
   const status = String((await hub($, 'status')).text)
-  expect(status).toContain('Mode: here · interaction auto')
-  expect(status).toContain('Channels: none registered')
+  expect(status).toContain('▪▪▪ Claude Mods · Hub')
+  expect(status).toContain('Mode      here · interaction auto')
+  expect(status).toContain('Channels  none registered')
+  expect(status).toContain('Mods      2 mods (2 enabled) · 1 on the bus')
   expect(String((await hub($, 'route error loud')).text)).toContain('Usage: /hub')
 })
 
@@ -302,7 +311,7 @@ test('stop, pause, resume: control.* on the bus and in state, all sessions throu
   // One writer per file: this session's controls go to its own file, never the shared one.
   expect(JSON.parse(w.files.get(OWN_CONTROL_FILE) ?? '{}').controls).toHaveLength(1)
   expect(w.files.has(CONTROL_FILE)).toBe(false)
-  expect(String((await hub($, 'status')).text)).toContain('Automatic work: stopped by owner via whatsapp')
+  expect(String((await hub($, 'status')).text)).toContain('Work      ⏹ Stopped by owner via whatsapp: STOP ALL from the phone · every session')
 
   expect((await mods($, 'publish', { topic: 'control.stop', data: { id: 'x', scope: 'all', reason: 'r', by: 'b', session: 's' } })).error).toContain('$.mods.stop')
   expect((await mods($, 'stop', { reason: '' })).error).toContain('needs a reason')
@@ -328,7 +337,7 @@ test('/hub away, then /hub status and /hub test: looking does not end the away y
   await start($)
   await mods($, 'registerChannel', { id: 'phone', title: 'WhatsApp', audience: 'me', delivery: 'push', status: 'connected' })
   await hub($, 'away')
-  expect(String((await hub($, 'status')).text)).toContain('Mode: away')
+  expect(String((await hub($, 'status')).text)).toContain('Mode      away')
   expect(String((await hub($, 'test error')).text)).toContain('Routed to toast, phone')
   await w.clock.settle()
   expect(w.toasts).toContain('phone got: Test notification | Sent with /hub test')

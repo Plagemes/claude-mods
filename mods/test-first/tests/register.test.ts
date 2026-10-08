@@ -153,6 +153,7 @@ test('with mods-hub: a red run test-watch reported opens the code, and a locked 
   const { reached } = engine(on)
   const hub = fakeHub(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: ['test.result'] }])
   // A red run from before TDD mode was turned on says nothing about this cycle.
   hub.events.push({ topic: 'test.result', source: 'test-watch', at: 1, data: { runner: 'vitest', outcome: 'failed', passed: 0, failed: 1 } })

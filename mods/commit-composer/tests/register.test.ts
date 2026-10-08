@@ -147,6 +147,7 @@ test('with mods-hub: a commit made from the pane is published as git.commit', as
   on('command.register', ($, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['git.commit'], consumes: [] }])
   await runCommit($)
   const ui = await mountPane($, 'terminal')

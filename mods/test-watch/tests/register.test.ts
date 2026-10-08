@@ -169,6 +169,7 @@ test('with mods-hub: publishes test.result and its plan, and /tests-last opens t
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['test.result'], consumes: [] }])
   expect(hub.tabs).toEqual([{ id: 'tests', title: 'Tests', order: 100, command: 'tests-last' }])
 

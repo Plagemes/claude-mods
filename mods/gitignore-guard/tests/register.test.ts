@@ -133,6 +133,7 @@ test('with mods-hub: a deny is published as risk.blocked with what would be stag
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect((await $.tool.call(bash('git add -A'))).deny).toContain('node_modules/')
   expect(hub.published).toEqual([

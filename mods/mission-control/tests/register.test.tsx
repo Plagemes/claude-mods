@@ -181,6 +181,7 @@ test('the heartbeat follows the session: working, waiting on approval, working a
 
 test('inbox commands from another session: priority, a note as your words when idle, pause, stop and resume', async ($, on) => {
   const w = world(on)
+  const session = mock.session(on)
   await start($)
   await w.clock.settle()
 
@@ -201,9 +202,9 @@ test('inbox commands from another session: priority, a note as your words when i
   await $.turn.start({ text: 'Please rebase on main first.', turnId: 't2' })
   sendToMe(w, [{ id: 'p1', kind: 'pause' }])
   await w.clock.advance(2_000)
-  // Claude is asked to stop after its step by a row appended to the running turn. The test kit has nothing
-  // beneath a plugin's own $.session.append (a test hook is never reached), so the attempt shows as its debug line.
-  expect(w.seen.logs).toEqual(['mission-control: could not tell Claude: no implementation for session.append'])
+  // Claude is asked to stop after its step by a row appended to the running turn (the kit's session stores it).
+  expect(w.seen.logs).toEqual([])
+  expect(session.appended()).toHaveLength(1)
   expect(myBeat(w).paused).toBe(true)
   expect(w.seen.statuses).toContain('⏸ paused from Mission Control · /mission resume')
 
@@ -357,7 +358,7 @@ const hubCall = (w: World, method: string): unknown[] =>
 test('with mods-hub: a Mission Control tab, long waits routed by the hub, facts shared', { plugins: [hub] }, async ($, on) => {
   const w = world(on)
   await start($)
-  await w.clock.settle()
+  await w.clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(hubCall(w, 'registerTab')).toEqual([{ id: 'mission', title: 'Mission Control', order: 30, command: 'mission' }])
 
   expect(String((await mission($)).text)).toBe('Mission Control is open in the Claude Mods panel.')

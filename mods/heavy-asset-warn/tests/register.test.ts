@@ -6,6 +6,9 @@ import { adviceFor, heavyKind, limitsFrom } from '../hooks/assets'
 import { additionsOf, simpleCommands } from '../hooks/commands'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const NOW = 1_800_000_000_000
 const KB = 1024
 const MB = 1024 * KB
@@ -16,7 +19,7 @@ type Disk = Record<string, { size: number; mtimeMs?: number }>
 
 /** The project beneath the plugin: a disk (what the command "did" is already on it), git, a clock and the toasts. */
 const project = (on: On, disk: Disk, staged: string[] = [], run = { fails: false }) => {
-  mock.clock(on, { now: NOW })
+  startClock = mock.clock(on, { now: NOW })
   const seen = { toasts: [] as string[], git: [] as string[][] }
   on('session.cwd', () => ({ value: '/app' }))
   on('session.repo', () => ({ value: { root: '/app', remote: null, internal: false, name: null } }))
@@ -175,6 +178,8 @@ test('with mods-hub: says hello, sends the warning through notify (no toast) and
   const seen = project(on, { '/app/public/img/hero.png': { size: 1.8 * MB } })
 
   await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
 
   const result = await bash($, 'cp ~/Downloads/hero.png public/img/hero.png')

@@ -772,7 +772,7 @@ export const register: Register = (on, options) => {
   const ctx = contextOf(options)
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({
+    await registerCommand($, {
       name: 'autopilot',
       description: 'Reach a goal on its own: plan, delegate, run the checks, retry until they pass',
       argumentHint: '<goal> | go | pause | resume [answer] | stop | status',
@@ -783,15 +783,19 @@ export const register: Register = (on, options) => {
     } catch (error) {
       $.ui.log(`autopilot: could not restore the run: ${messageOf(error)}`, { to: 'debug' })
     }
-    await hubHello(
-      $,
-      {
-        version: VERSION,
-        publishes: ['task.started', 'task.finished', 'approval.requested', 'test.result', 'build.result', 'x.autopilot.started', 'x.autopilot.step', 'x.autopilot.check', 'x.autopilot.blocked', 'x.autopilot.paused', 'x.autopilot.finished'],
-        consumes: ['channel.inbound', 'approval.answered', 'budget.threshold'],
-      },
-      { id: TAB, title: PANE_TITLE, order: TAB_ORDER, command: 'autopilot' },
-    )
+    // Waits until session.start has returned (afterStart): with every mod installed, waiting on the hub, the disk
+    // or a process here ran session.start past its 10 s budget.
+    afterStart($, 'autopilot', async () => {
+      await hubHello(
+        $,
+        {
+          version: VERSION,
+          publishes: ['task.started', 'task.finished', 'approval.requested', 'test.result', 'build.result', 'x.autopilot.started', 'x.autopilot.step', 'x.autopilot.check', 'x.autopilot.blocked', 'x.autopilot.paused', 'x.autopilot.finished'],
+          consumes: ['channel.inbound', 'approval.answered', 'budget.threshold'],
+        },
+        { id: TAB, title: PANE_TITLE, order: TAB_ORDER, command: 'autopilot' },
+      )
+    })
     return next(e)
   })
 
@@ -860,7 +864,18 @@ export const register: Register = (on, options) => {
   })
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -954,5 +969,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

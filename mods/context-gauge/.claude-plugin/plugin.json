@@ -1,6 +1,6 @@
 {
   "name": "context-gauge",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A slim band above the prompt showing how full the context window is.",
   "author": {
     "name": "Plagemes",

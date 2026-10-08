@@ -5,6 +5,9 @@ import type { On } from 'claude-code'
 import { GO_FAIL } from './fixtures'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PANE_PROPS = { title: 'Flaky tests', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 const GO_PASS = 'ok  \texample.com/shop/calc\t0.004s\nok  \texample.com/shop/store\t0.002s\n'
 
@@ -27,7 +30,7 @@ const world = (on: On): World => {
     toasts: [],
     submitted: [],
     gitIndex: [],
-    clock: mock.clock(on, { now: Date.parse('2026-10-07T09:00:00Z') }),
+    clock: (startClock = mock.clock(on, { now: Date.parse('2026-10-07T09:00:00Z') })),
   }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/repo' }))
@@ -144,6 +147,8 @@ test('with mods-hub: says hello, publishes each new suspect and notifies a warni
   const hub = fakeHub(on)
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.flaky-detector.suspect'], consumes: [] }])
 
   await goTest($)

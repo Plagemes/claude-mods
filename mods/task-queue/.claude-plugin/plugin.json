@@ -1,6 +1,6 @@
 {
   "name": "task-queue",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "/queue lines up prompts that run one after another whenever Claude is free.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#task-queue",

@@ -2,6 +2,9 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, Plugin } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/work/shop'
 const T0 = Date.UTC(2026, 9, 7, 9, 0)
 const MINUTE = 60_000
@@ -29,7 +32,7 @@ type World = {
 
 /** The engine beneath the plugin: a small project on a virtual disk, a model, the screen, the transcript. */
 function world(on: On, modelReply = '{"items":[{"kind":"convention","text":"Money amounts are integers in cents (src/cart.ts)","files":["src/cart.ts"]}]}'): World {
-  const clock = mock.clock(on, { now: T0 })
+  const clock = (startClock = mock.clock(on, { now: T0 }))
   const files = new Map(Object.entries(PROJECT).map(([path, text]) => [`${ROOT}/${path}`, text]))
   const mtimes = new Map<string, number>()
   const w: World = { clock, files, contexts: [], toasts: [], opened: [], tools: [], modelPrompts: [], answers: [] }
@@ -274,6 +277,7 @@ const standInHub: Plugin = {
 test('with the hub: a Brain tab, recalled events, shared facts, and decisions other mods publish', { timeoutMs: 20_000, plugins: [standInHub] }, async ($, on) => {
   const w = world(on)
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await w.clock.settle()
   expect(w.toasts).toContain('hub tab brain')
   expect(w.toasts).toContain('hub share stats')

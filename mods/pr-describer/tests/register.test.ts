@@ -157,6 +157,7 @@ test('with mods-hub: a newer commit on the branch marks the draft stale, and the
   on('tool.call', () => ({ result: { stdout: 'https://github.com/acme/app/pull/42\n', stderr: '', interrupted: false }, text: 'https://github.com/acme/app/pull/42\n' }))
 
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['pr.opened'], consumes: ['git.commit'] }])
   await runPrDesc($)
   for (const surface of ['terminal', 'desktop'] as const) {

@@ -5,12 +5,15 @@ import type { On } from 'claude-code'
 import { fakeHub } from './hub'
 import { TIPS, dayKey, positionOf, tipAt } from '../hooks/tips'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const DAY = 86_400_000
 const START = Date.parse('2026-10-07T12:00:00Z')
 
 /** The engine beneath the plugin: a clock and a store in memory, the registered commands and the toasts recorded. */
 const world = (on: On, stored: Record<string, unknown> = {}) => {
-  const clock = mock.clock(on, { now: START })
+  const clock = (startClock = mock.clock(on, { now: START }))
   mock.store(on, stored)
   const seen = { toasts: [] as string[], registered: [] as string[], advance: clock.advance }
   on('ui.toast', (_$, e) => {
@@ -42,6 +45,7 @@ test('registers /tip and toasts one tip when the first session of the day starts
 
   await startSession($)
 
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(seen.registered).toEqual(['tip'])
   expect(seen.toasts).toEqual([`💡 ${tipAt(0).text}  ·  /tip for another`])
 })
@@ -52,10 +56,14 @@ test('with mods-hub: says hello, and the daily tip is an info notification inste
 
   await startSession($)
 
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
   expect(seen.toasts).toEqual([])
   expect(hub.notified).toEqual([{ level: 'info', title: `💡 ${tipAt(0).text}  ·  /tip for another` }])
   await startSession($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.notified).toHaveLength(1)
 })
 
@@ -63,11 +71,14 @@ test('shows at most one tip a day, and the next one on the next day', async ($, 
   const seen = world(on)
 
   await startSession($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   await startSession($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(seen.toasts).toHaveLength(1)
 
   await seen.advance(DAY)
   await startSession($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(seen.toasts).toHaveLength(2)
   expect(seen.toasts[1]).toContain(tipAt(1).text)
 })
@@ -89,6 +100,7 @@ test('/tip shows the next tip each time, wraps around, and does not use up the d
   expect(await tip($)).toBe(`Tip 2 of ${TIPS.length}: ${tipAt(1).text}`)
 
   await startSession($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(seen.toasts).toEqual([`💡 ${tipAt(2).text}  ·  /tip for another`])
 })
 
@@ -97,6 +109,7 @@ test('the rotation survives in the store, so tips do not repeat from one day to 
 
   await startSession($)
 
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(seen.toasts[0]).toContain(tipAt(5).text)
 })
 
@@ -110,7 +123,7 @@ test('the daily toast can be turned off', { options: { showAtStart: false } }, a
 })
 
 test('a broken store means no tip, not a failed session start', async ($, on) => {
-  mock.clock(on, { now: START })
+  startClock = mock.clock(on, { now: START })
   const toasts: string[] = []
   on('store.get', () => ({ deny: 'EIO' }))
   on('store.set', () => ({ deny: 'EIO' }))

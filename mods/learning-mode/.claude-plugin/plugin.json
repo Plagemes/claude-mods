@@ -1,6 +1,6 @@
 {
   "name": "learning-mode",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Claude explains the why behind each change and leaves small TODOs for you to complete yourself.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#learning-mode",

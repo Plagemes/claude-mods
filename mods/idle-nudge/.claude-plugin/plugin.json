@@ -1,6 +1,6 @@
 {
   "name": "idle-nudge",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Reminds you about uncommitted changes after a stretch of inactivity.",
   "author": {
     "name": "Plagemes",

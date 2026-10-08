@@ -164,6 +164,7 @@ test('with mods-hub: says hello and publishes mod.installed for each mod a profi
   const hub = fakeHub(on, {}, w.clock)
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['mod.installed'], consumes: [] }])
 
   await profiles($, 'save work')

@@ -285,6 +285,7 @@ test('with mods-hub: the checklist reads test.result and the branch\'s ci.result
   on('command.register', ($, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  await repo.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['deploy.started', 'deploy.finished', 'deploy.failed'], consumes: ['test.result', 'ci.result'] }])
 
   // test-watch ran the tests on its own, and CI failed on main: no guessing from Bash history.

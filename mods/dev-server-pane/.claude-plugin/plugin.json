@@ -1,6 +1,6 @@
 {
   "name": "dev-server-pane",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Starts your dev server in the background and shows its errors in a live pane.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#dev-server-pane",

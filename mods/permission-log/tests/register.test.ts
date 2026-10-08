@@ -4,6 +4,9 @@ import type { Engine } from 'claude-code/testing'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 /** Answers `$.state` from memory, as the host does: a value and the version it stands at. */
 const memoryState = (on: On) => {
   const cells = new Map<string, { value: unknown; version: number }>()
@@ -23,7 +26,7 @@ const memoryState = (on: On) => {
 const engine = (on: On) => {
   const statuses: (string | undefined)[] = []
   memoryState(on)
-  mock.clock(on, { now: Date.UTC(2026, 9, 7, 12, 0, 0) })
+  startClock = mock.clock(on, { now: Date.UTC(2026, 9, 7, 12, 0, 0) })
   on('ui.status', (_$, e) => {
     statuses.push(e.text)
     return { value: undefined }
@@ -59,6 +62,7 @@ test('registers /denied when the session starts', async ($, on) => {
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
 
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(registered).toEqual(['denied'])
 })
 
@@ -124,6 +128,8 @@ test('with mods-hub: each refusal names the guard and severity it reported, and 
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['risk.blocked'] }])
   await $.tool.call({ tool: 'Bash', command: 'rm -rf build' })
   hub.events.push(

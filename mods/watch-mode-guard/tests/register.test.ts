@@ -286,6 +286,7 @@ test('with mods-hub: a refusal is published as risk.blocked', async ($, on) => {
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect((await $.tool.call({ tool: 'Bash', command: 'cd web && npm run dev' })).deny).toContain('watch-mode-guard')
   expect((await $.tool.call({ tool: 'Bash', command: 'npm run build' })).deny).toBeUndefined()

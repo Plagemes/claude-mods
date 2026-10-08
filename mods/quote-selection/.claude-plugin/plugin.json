@@ -1,6 +1,6 @@
 {
   "name": "quote-selection",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/quote pastes your mouse selection into the prompt as a Markdown quote.",
   "author": {
     "name": "Plagemes",

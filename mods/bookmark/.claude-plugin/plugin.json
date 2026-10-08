@@ -1,6 +1,6 @@
 {
   "name": "bookmark",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/bookmark saves the last answer; /bookmarks lists and reuses them.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#bookmark",

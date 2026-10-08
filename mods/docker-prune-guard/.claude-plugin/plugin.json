@@ -1,6 +1,6 @@
 {
   "name": "docker-prune-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Blocks docker system prune -a --volumes and volume deletion that can wipe local databases.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#docker-prune-guard",

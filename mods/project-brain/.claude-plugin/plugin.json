@@ -1,6 +1,6 @@
 {
   "name": "project-brain",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A self-organising project memory that learns which decisions, conventions and fixes matter and recalls them like a neural network.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#project-brain",

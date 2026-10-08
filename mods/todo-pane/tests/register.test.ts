@@ -1,4 +1,4 @@
-import { test, expect } from 'claude-code/testing'
+import { test, expect, mock } from 'claude-code/testing'
 import type { On, UiOpenResult } from 'claude-code'
 
 import { taskEvents } from '../hooks/todos'
@@ -27,7 +27,11 @@ const PLAN = [
 ] as const
 
 /** Stands for the engine: the tools answer as the built-ins do, panes are recorded. */
+/** The mock clock of the running test, moved on past afterStart's delay (the hub hello, the pane at start). */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const answerEngine = (on: On, placed = true) => {
+  startClock = mock.clock(on)
   const engine = { opened: [] as string[], closed: [] as string[], open: new Set<string>(), nextTask: 0 }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -77,6 +81,7 @@ test('a TodoWrite list draws a progress bar and ☑ ◐ ☐ items on every surfa
 test('TaskCreate and TaskUpdate keep the list too, and the open pane tab shows the progress', async ($, on) => {
   const engine = answerEngine(on)
   await $.session.start(START)
+  await startClock?.advance(1_500) // afterStart: the hello and the pane at start
 
   await $.tool.call({ tool: 'TaskCreate', subject: 'Write the migration', description: 'add the column', activeForm: 'Writing the migration' })
   await $.tool.call({ tool: 'TaskCreate', subject: 'Backfill rows', description: 'batch update' })
@@ -102,6 +107,7 @@ test('TaskCreate and TaskUpdate keep the list too, and the open pane tab shows t
 test('/todos opens the pane; at start it stays only where the engine placed it', async ($, on) => {
   const engine = answerEngine(on, false)
   await $.session.start(START)
+  await startClock?.advance(1_500) // afterStart: the hello and the pane at start
   expect(engine.opened).toEqual(['Todos'])
   expect(engine.closed).toEqual(['todos'])
 
@@ -122,6 +128,7 @@ test('/todos opens the pane; at start it stays only where the engine placed it',
 test('with autoOpen off nothing opens at start', { options: { autoOpen: false } }, async ($, on) => {
   const engine = answerEngine(on)
   await $.session.start(START)
+  await startClock?.advance(1_500) // afterStart: the hello and the pane at start
   expect(engine.opened).toHaveLength(0)
 })
 
@@ -134,6 +141,7 @@ test('with mods-hub: the Tasks tab opens with /todos, shows the list under the h
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['HUB STRIP'] }) as never)
   await $.session.start(START)
+  await startClock?.advance(1_500) // afterStart: the hello and the pane at start
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['task.started', 'task.finished'], consumes: [] }])
   expect(hub.tabs).toEqual([{ id: 'tasks', title: 'Tasks', order: 260, command: 'todos' }])
   expect(engine.opened).toEqual([])
@@ -161,6 +169,7 @@ test('with mods-hub: items turning in progress and finished are published as tas
   const hub = fakeHub(on)
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   await $.session.start(START)
+  await startClock?.advance(1_500) // afterStart: the hello and the pane at start
 
   await $.tool.call({ tool: 'TodoWrite', todos: [...PLAN] })
   expect(hub.published).toEqual([{ topic: 'task.started', data: { id: 'todo-2', title: 'Fixing the off-by-one' } }])
@@ -203,6 +212,7 @@ test('with mods-hub: another tab of the panel is left to its owner', async ($, o
 test('without mods-hub nothing is published, no tab is registered and /todos opens the own pane', async ($, on) => {
   const engine = answerEngine(on)
   await $.session.start(START)
+  await startClock?.advance(1_500) // afterStart: the hello and the pane at start
   await $.tool.call({ tool: 'TodoWrite', todos: [...PLAN] })
   await $.command.run(RUN)
   expect(engine.opened.at(-1)).toBe('Todos 1/3')

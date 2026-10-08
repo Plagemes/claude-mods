@@ -4,6 +4,9 @@ import type { CommandRunInput, ModelForkResult, On, SessionMessage, TurnComplete
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/home/me/shop'
 const TODAY = `${ROOT}/.claude/journal/2026-10-07.md`
 const USAGE = { input_tokens: 5, output_tokens: 50, cache_read_input_tokens: 4000, cache_creation_input_tokens: 0 }
@@ -69,7 +72,7 @@ function world(on: On, reply: ModelForkResult, files: Record<string, string> = {
   return seen
 }
 
-const startAt = (on: On) => mock.clock(on, { now: new Date(2026, 9, 7, 18, 5).getTime() })
+const startAt = (on: On) => (startClock = mock.clock(on, { now: new Date(2026, 9, 7, 18, 5).getTime() }))
 
 async function start($: Engine, isInteractive = true): Promise<void> {
   await $.session.start({ cwd: ROOT, surface: isInteractive ? 'terminal' : null, isInteractive })
@@ -183,6 +186,8 @@ test('with mods-hub: the entry lists the commits, decisions, lessons and last te
   )
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos[0]?.publishes).toEqual(['x.session-journal.entry'])
   expect(hub.hellos[0]?.consumes).toContain('decision.recorded')
   await end($)

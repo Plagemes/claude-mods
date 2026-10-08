@@ -5,11 +5,11 @@ import { groupByDirectory, isChanged, mentionOf, nameOf, shown, touchOf, withTou
 
 const PANE = 'files'
 /**
- * The hub's shared panel, and the Changes tab in it: diff-pane's changed-files list and this mod's files-read-and-edited
- * list share it (whichever of the two registers it first owns it; both draw into it). Order 250, after the fixed tabs.
+ * The hub's shared panel, and this mod's Files tab in it. diff-pane owns the `changes` tab: a tab id belongs to one mod
+ * (the hub refuses a second owner), so this list has a tab of its own, right after Changes (order 251).
  */
 const HUB_PANE = 'claude-mods'
-const TAB = { id: 'changes', title: 'Changes', order: 250, command: 'files' } as const
+const TAB = { id: 'files', title: 'Files', order: 251, command: 'files' } as const
 const COMMAND = 'files'
 const COUNT_WIDTH = 7
 
@@ -21,8 +21,8 @@ let root = ''
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     root = e.cwd
-    await $.command.register({ name: COMMAND, description: 'Show every file read, edited or created this session' })
-    await greetHub($)
+    await registerCommand($, { name: COMMAND, description: 'Show every file read, edited or created this session' })
+    afterStart($, 'files-touched', () => greetHub($))
     return next(e)
   })
 
@@ -31,7 +31,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // `/files`: the Changes tab of the hub's panel when the hub is installed, this mod's own pane otherwise.
+  // `/files`: the Files tab of the hub's panel when the hub is installed, this mod's own pane otherwise.
   on('command.run', { command: COMMAND }, async $ => {
     if (!(await hubShowTab($, TAB.id))) await $.ui.open({ id: PANE, title: 'Files' })
     return {}
@@ -54,7 +54,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawFiles($, e, false))
 
-  // The Changes tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
+  // The Files tab: drawn beneath the hub's tab strip when it is the tab shown; any other tab passes through.
   on('ui.render', { component: 'Pane', requestId: HUB_PANE }, async ($, e, next) => {
     if (!(await hubTabIs($, TAB.id))) return next(e)
     const { Box } = $.ui.resolve(e)
@@ -78,13 +78,13 @@ async function ownVersion($: EngineInterface): Promise<string> {
   }
 }
 
-/** With mods-hub installed: hello (this mod trades nothing on the bus) and its half of the Changes tab. */
+/** With mods-hub installed: hello (this mod trades nothing on the bus) and its Files tab. */
 async function greetHub($: EngineInterface): Promise<void> {
   if ((await hubMode($)) === undefined) return
   await hubHello($, { version: await ownVersion($), publishes: [], consumes: [] }, TAB)
 }
 
-/** The files view: this mod's own pane, or its section of the Changes tab in the hub's panel (`isTab`). */
+/** The files view: this mod's own pane, or the Files tab in the hub's panel (`isTab`). */
 async function drawFiles($: EngineInterface, e: RenderInput<'Pane'>, isTab: boolean): Promise<RenderElement> {
   const { Box, Button, Text } = $.ui.resolve(e)
   const all = await read($, files)
@@ -151,7 +151,18 @@ const mention = async ($: EngineInterface, path: string): Promise<void> => {
   if (filled?.isFilled !== true) $.ui.toast('The prompt box is not available right now')
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -245,5 +256,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

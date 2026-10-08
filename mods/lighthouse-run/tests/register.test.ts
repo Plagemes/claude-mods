@@ -138,6 +138,7 @@ test('with mods-hub: says hello and publishes the scores of each finished run', 
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/work/site', surface: 'terminal', isInteractive: true })
+  await state.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.lighthouse-run.scores'], consumes: [] }])
 
   await lighthouse($, '')

@@ -304,6 +304,7 @@ test('with mods-hub: says hello, notifies the slowest tests as one info notice w
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['test.result'] }])
 
   await hubbedRun($, hub, clock, 'pytest --durations=10', 2410)

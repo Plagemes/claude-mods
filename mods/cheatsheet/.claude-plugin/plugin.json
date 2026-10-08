@@ -1,6 +1,6 @@
 {
   "name": "cheatsheet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/cheat shows a quick reference for git, docker, regex, tmux and more, offline.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#cheatsheet",

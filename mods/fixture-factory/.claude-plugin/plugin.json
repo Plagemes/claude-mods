@@ -1,6 +1,6 @@
 {
   "name": "fixture-factory",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/fixtures generates realistic test data that matches your schema or types.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#fixture-factory",

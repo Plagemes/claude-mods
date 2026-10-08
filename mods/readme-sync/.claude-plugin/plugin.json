@@ -1,6 +1,6 @@
 {
   "name": "readme-sync",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Warns when public APIs, CLI flags or env vars change but the docs do not.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#readme-sync",

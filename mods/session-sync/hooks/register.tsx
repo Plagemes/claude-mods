@@ -238,35 +238,39 @@ async function git($: EngineInterface, rt: Runtime, args: readonly string[]): Pr
 
 async function startSession($: EngineInterface, rt: Runtime): Promise<void> {
   const now = await $.clock.now()
-  await $.command.register({
+  await registerCommand($, {
     name: 'sync',
     description: 'Shows the other Claude sessions on this repo, their branches, files and leases; ask one something, or release your leases.',
     argumentHint: '[status | ask <session> <message> | release]',
   })
-  await $.command.register({
+  await registerCommand($, {
     name: 'handoff-to',
     description: 'Hands your work over to another Claude session on this repo: it gets a note with your context as a prompt when it is idle.',
     argumentHint: '<session> [message]',
   })
-  await hubHello($, { version: '1.0.0', publishes: ['x.session-sync.conflict', 'x.session-sync.handoff'], consumes: [] })
-  rt.cwd = await $.session.cwd()
-  rt.me = await $.session.id()
-  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
-  const top = (await git($, rt, ['rev-parse', '--show-toplevel']))?.trim()
-  const repo = await $.session.repo().catch(() => null)
-  if (home === undefined || home === '' || top === undefined || top === '') return
-  rt.tree = top
-  const key = repoKey(repo?.remote ?? null, repo?.root ?? top)
-  rt.repo = key.slice(0, key.lastIndexOf('-'))
-  rt.dir = `${home}/${DIR}/${key}`
-  const project = (repo?.root ?? top).split('/').pop() || rt.repo
-  rt.self = { ...blankPeer(), id: rt.me, label: labelOf(project, rt.me), project, tree: top, startedAt: now }
-  // A hot reload keeps the session: its own leases come back from its file.
-  const own = parseLeaseFile(await readJson($, paths.leaseOf(rt, rt.me)))
-  rt.leases = { v: 1, leases: Object.fromEntries(Object.entries(own.leases).filter(([, lease]) => lease.session === rt.me)) }
-  for (const timer of rt.timers) timer.cancel()
-  rt.timers = [$.clock.every(TICK_MS, () => void tick($, rt)), $.clock.every(INBOX_MS, () => void poll($, rt))]
-  $.clock.after(0, () => void tick($, rt))
+  // Waits until session.start has returned (afterStart): with every mod installed, waiting on the hub, the disk
+  // or a process here ran session.start past its 10 s budget.
+  afterStart($, 'session-sync', async () => {
+    await hubHello($, { version: '1.0.0', publishes: ['x.session-sync.conflict', 'x.session-sync.handoff'], consumes: [] })
+    rt.cwd = await $.session.cwd()
+    rt.me = await $.session.id()
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+    const top = (await git($, rt, ['rev-parse', '--show-toplevel']))?.trim()
+    const repo = await $.session.repo().catch(() => null)
+    if (home === undefined || home === '' || top === undefined || top === '') return
+    rt.tree = top
+    const key = repoKey(repo?.remote ?? null, repo?.root ?? top)
+    rt.repo = key.slice(0, key.lastIndexOf('-'))
+    rt.dir = `${home}/${DIR}/${key}`
+    const project = (repo?.root ?? top).split('/').pop() || rt.repo
+    rt.self = { ...blankPeer(), id: rt.me, label: labelOf(project, rt.me), project, tree: top, startedAt: now }
+    // A hot reload keeps the session: its own leases come back from its file.
+    const own = parseLeaseFile(await readJson($, paths.leaseOf(rt, rt.me)))
+    rt.leases = { v: 1, leases: Object.fromEntries(Object.entries(own.leases).filter(([, lease]) => lease.session === rt.me)) }
+    for (const timer of rt.timers) timer.cancel()
+    rt.timers = [$.clock.every(TICK_MS, () => void tick($, rt)), $.clock.every(INBOX_MS, () => void poll($, rt))]
+    $.clock.after(0, () => void tick($, rt))
+  })
 }
 
 async function refreshGit($: EngineInterface, rt: Runtime): Promise<void> {
@@ -713,7 +717,18 @@ export const register: Register = (on, options) => {
   })
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -807,5 +822,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

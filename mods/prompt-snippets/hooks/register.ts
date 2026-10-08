@@ -97,16 +97,16 @@ export const register: Register = (on, options) => {
   const configured = parseConfigured(options.snippets)
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({
+    await registerCommand($, {
       name: 'snippets',
       description: 'List the :shortcode: prompt snippets',
     })
-    await $.command.register({
+    await registerCommand($, {
       name: 'snippet-add',
       description: 'Save a :shortcode: prompt snippet',
       argumentHint: '<name> <text>',
     })
-    await $.command.register({
+    await registerCommand($, {
       name: 'snippet-remove',
       description: 'Remove a snippet you added with /snippet-add',
       argumentHint: '<name>',
@@ -167,4 +167,15 @@ export const register: Register = (on, options) => {
 
     return { text: `Removed :${name}:.` }
   })
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

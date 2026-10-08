@@ -214,6 +214,7 @@ test('with mods-hub: says hello, publishes x.conflict-helper.found once, and sen
   repo.unmerged.add('src/client.ts')
 
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.conflict-helper.found'], consumes: [] }])
 
   await bash($, 'git merge feature/retry')

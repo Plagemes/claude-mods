@@ -5,6 +5,9 @@ import type { Engine } from 'claude-code/testing'
 import type { ModsNotice } from '../types/mods-hub'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 type Run = { argv: readonly string[]; env?: Record<string, string> }
 
 const KERNELS: Record<string, string> = { macos: 'Darwin\n', linux: 'Linux\n' }
@@ -122,12 +125,14 @@ const notice = (fields: Partial<ModsNotice>): ModsNotice => ({
 const start = ($: Engine) => $.session.start({ cwd: '/home/me/shop', surface: 'terminal', isInteractive: true })
 
 test('with mods-hub: registers the desktop pull channel and shows what the hub queued for it', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const runs = host(on, 'linux')
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
   expect(hub.channels).toEqual([{ id: 'desktop', title: 'Desktop', audience: 'me', delivery: 'pull', status: 'connected' }])
 
@@ -149,13 +154,17 @@ test('with mods-hub: registers the desktop pull channel and shows what the hub q
 })
 
 test('with mods-hub: a second session start does not start a second collector, and its own turn notice still goes straight out', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const runs = host(on, 'linux')
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   hub.outbox.push(notice({ title: 'once' }))
   await clock.advance(5_000)
   expect(runs.map(run => run.argv.at(-1))).toEqual(['once'])
@@ -166,7 +175,7 @@ test('with mods-hub: a second session start does not start a second collector, a
 })
 
 test('with mods-hub on a host with no notifier: the channel is unconfigured and nothing is collected', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const runs = host(on, 'plan9')
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   const hub = fakeHub(on)
@@ -180,7 +189,7 @@ test('with mods-hub on a host with no notifier: the channel is unconfigured and 
 })
 
 test('without mods-hub: session start does nothing and there is no timer', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const runs = host(on, 'linux')
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
@@ -191,7 +200,7 @@ test('without mods-hub: session start does nothing and there is no timer', async
 })
 
 test('with mods-hub: a notice the notifier fails on stays queued and is shown on a later collection, once', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   mock.env(on, {})
   on('session.cwd', () => ({ value: '/home/me/shop' }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -207,6 +216,8 @@ test('with mods-hub: a notice the notifier fails on stays queued and is shown on
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   hub.outbox.push(notice({ title: 'Deploy failed' }), notice({ id: 'n2', title: 'Budget at 80%' }))
   await clock.advance(5_000)
   expect(shown).toEqual([])
@@ -224,7 +235,7 @@ test('with mods-hub: a notice the notifier fails on stays queued and is shown on
 })
 
 test('with mods-hub: a notice the notifier keeps refusing is given up after five tries, so the next one is not held back', async ($, on) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   mock.env(on, {})
   on('session.cwd', () => ({ value: '/home/me/shop' }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -239,6 +250,8 @@ test('with mods-hub: a notice the notifier keeps refusing is given up after five
   const hub = fakeHub(on)
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   hub.outbox.push(notice({ title: 'poison' }), notice({ id: 'n2', title: 'after it' }))
   for (let tick = 0; tick < 4; tick += 1) await clock.advance(5_000)
   expect(shown).toEqual([])

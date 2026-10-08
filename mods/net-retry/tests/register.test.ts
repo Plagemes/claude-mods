@@ -223,6 +223,7 @@ test('with mods-hub: says hello and retries exactly as without it', async ($, on
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: [] }])
 
   const pending = $.tool.call({ tool: 'Bash', command: 'npm install' })

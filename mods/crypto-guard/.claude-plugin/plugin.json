@@ -1,6 +1,6 @@
 {
   "name": "crypto-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Flags weak cryptography: MD5 or SHA1 for passwords, Math.random for tokens, ECB mode, hard-coded IVs.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#crypto-guard",

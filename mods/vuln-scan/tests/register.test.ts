@@ -5,6 +5,9 @@ import type { On } from 'claude-code'
 import { NPM_AUDIT_V2, PIP_AUDIT } from './fixtures'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PANE_PROPS = { title: 'Vulnerabilities', isFocused: false, bodyColumns: 110, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 const OSV: Record<string, string> = {
   'https://api.osv.dev/v1/vulns/GHSA-jjg7-2v4v-x38h': JSON.stringify({ id: 'GHSA-jjg7-2v4v-x38h', database_specific: { severity: 'MODERATE' } }),
@@ -26,7 +29,7 @@ type World = {
 /** A repository at /repo with an npm app and a Python API in api/ whose virtualenv lives in api/.venv. */
 const world = (on: On, options: { missing?: string[]; npmOutput?: string } = {}): World => {
   const files = new Set(['/repo/package-lock.json', '/repo/package.json', '/repo/api/requirements.txt', '/repo/api/.venv/lib/python3.12/site-packages'])
-  const state: World = { runs: [], statuses: [], toasts: [], submitted: [], fetched: [], clock: mock.clock(on, { now: 1_000_000 }), installFails: false }
+  const state: World = { runs: [], statuses: [], toasts: [], submitted: [], fetched: [], clock: (startClock = mock.clock(on, { now: 1_000_000 })), installFails: false }
   mock.env(on, {})
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/repo' }))
@@ -158,6 +161,8 @@ test('with mods-hub: says hello, publishes x.vuln-scan.found, raises an error no
   const state = world(on, { missing: ['pip-audit'] })
   const hub = fakeHub(on, {}, state.clock)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['x.vuln-scan.found'], consumes: [] }])
 
   await bash($, 'npm install lodash')

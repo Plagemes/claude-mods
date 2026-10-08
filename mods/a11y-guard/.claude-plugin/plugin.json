@@ -1,6 +1,6 @@
 {
   "name": "a11y-guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Flags accessibility misses as Claude writes UI: images without alt, unlabeled buttons, clickable divs.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#a11y-guard",

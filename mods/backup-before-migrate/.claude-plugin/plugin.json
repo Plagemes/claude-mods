@@ -1,6 +1,6 @@
 {
   "name": "backup-before-migrate",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Dumps your local database before every migration so a bad one is one command away from undo.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#backup-before-migrate",

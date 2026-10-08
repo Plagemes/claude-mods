@@ -310,21 +310,22 @@ function raise(seen: World, topic: string, at: number): void {
 test('with the hub: control.pause holds a queued run until control.resume; control.stop cancels the waiting run and skips the sent one\'s checks', { plugins: [hub] }, async ($, on) => {
   const seen = world(on)
   await start($)
+  await seen.clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   // A run waits for the current turn; a pause holds it past that turn's end.
   await $.turn.start({ text: 'my own question', turnId: 'mine' })
   expect(await recipe($, 'run flaky-test-hunt runs=3')).toContain('Queued flaky-test-hunt')
-  raise(seen, 'control.pause', NOON + 1_000)
+  raise(seen, 'control.pause', NOON + 2_500)
   await seen.clock.advance(6_000)
   await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'mine', reason: 'answer' })
   await seen.clock.advance(10_000)
   expect(seen.prompts).toHaveLength(0)
-  raise(seen, 'control.resume', NOON + 17_000)
+  raise(seen, 'control.resume', NOON + 18_500)
   await seen.clock.advance(6_000)
   expect(seen.prompts).toHaveLength(1)
 
   // A stop while its turn runs: the turn finishes, its checks do not run, it is filed as cancelled.
   await $.turn.start({ text: seen.prompts[0] ?? '', turnId: 't1' })
-  raise(seen, 'control.stop', NOON + 25_000)
+  raise(seen, 'control.stop', NOON + 26_500)
   await seen.clock.advance(6_000)
   await $.turn.complete({ answer: 'Fixed.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
   await seen.clock.settle()
@@ -334,7 +335,7 @@ test('with the hub: control.pause holds a queued run until control.resume; contr
   // A stop while a run waits for the turn: it never goes out.
   await $.turn.start({ text: 'another question', turnId: 'mine-2' })
   expect(await recipe($, 'run flaky-test-hunt runs=2')).toContain('Queued flaky-test-hunt')
-  raise(seen, 'control.stop', NOON + 40_000)
+  raise(seen, 'control.stop', NOON + 41_500)
   await seen.clock.advance(10_000)
   await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'mine-2', reason: 'answer' })
   await seen.clock.advance(10_000)

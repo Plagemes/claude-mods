@@ -202,6 +202,7 @@ test('with mods-hub: each check is published as typecheck.result and its errors 
   const hub = fakeHub(on)
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['typecheck.result'], consumes: [] }])
   await $.tool.call(edit('/repo/src/a.ts'))
   await $.turn.complete(TURN_END)

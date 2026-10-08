@@ -6,13 +6,16 @@ import { installsIn, lookupOf } from '../hooks/install'
 import { fakeHub } from './hub'
 import { isPermissive, kindOf, licenseOfNpm, licenseOfPackageJson, licenseOfPypi, licenseOfPyproject, licenseOfText } from '../hooks/licenses'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const MIT_PROJECT = { 'package.json': JSON.stringify({ name: 'app', license: 'MIT' }) }
 
 type Registry = Record<string, { status?: number; body?: unknown; text?: string } | 'hang'>
 
 /** The engine beneath the plugin: a project of `files` in /proj, a registry by URL, a clock and a store, Bash that succeeds unless asked. */
 const world = (on: On, files: Record<string, string>, registry: Registry) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   mock.store(on)
   const seen = { fetched: [] as string[], toasts: [] as string[], advance: clock.advance, isFailing: false, ran: 0 }
   on('session.cwd', () => ({ value: '/proj' }))
@@ -291,6 +294,8 @@ test('with mods-hub: says hello, publishes risk.blocked for each license worth a
   const hub = fakeHub(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
 
   const result = await bash($, 'npm install gpl-lib nolicense left-pad')

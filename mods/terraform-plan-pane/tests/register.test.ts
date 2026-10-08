@@ -230,6 +230,7 @@ test('with mods-hub: says hello, publishes deploy.started once per plan with cha
   const w = world(on, PLAN_TEXT)
   const hub = fakeHub(on, {}, w.clock)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['deploy.started'], consumes: [] }])
 
   await $.tool.call({ tool: 'Bash', command: 'cd envs/prod && terraform plan -out=tf.plan' })

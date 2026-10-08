@@ -1,6 +1,6 @@
 {
   "name": "schema-pane",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A pane of your local database's tables and columns, ready to hand to Claude as context.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#schema-pane",

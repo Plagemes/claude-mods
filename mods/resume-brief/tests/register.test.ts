@@ -4,6 +4,9 @@ import type { CommandRunInput, On, RenderPropsOf, SessionMessage, TurnCompleteIn
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const ROOT = '/home/me/shop'
 const KEY = `brief:${ROOT}`
 const NOW = Date.UTC(2026, 9, 7, 12)
@@ -46,7 +49,7 @@ type World = { prompts: { text: string; asUser: boolean }[]; store: Map<string, 
 
 /** A project with `stored` saved by an earlier session; this session is "new-session". */
 function world(on: On, stored: Record<string, unknown> = {}): World {
-  const seen: World = { prompts: [], store: new Map(Object.entries(stored)), clock: mock.clock(on, { now: NOW }) }
+  const seen: World = { prompts: [], store: new Map(Object.entries(stored)), clock: (startClock = mock.clock(on, { now: NOW })) }
   on('store.get', ($, e) => ({ value: seen.store.get(e.key) }))
   on('store.set', ($, e) => {
     seen.store.set(e.key, e.value)
@@ -221,6 +224,8 @@ test('with mods-hub: warns about other sessions open on the project and passes o
   on('fs.read', ($, e) => (e.path === '/home/me/.claude/claude-mods/hub/sessions.json' ? { value: JSON.stringify(SESSIONS) } : { deny: 'ENOENT' }))
 
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['session.started', 'decision.recorded'] }])
   for (const surface of ['terminal', 'desktop'] as const) {
     const band = await $.ui.mount({ plugin: 'resume-brief', surface, component: 'AbovePrompt', props: BAND })

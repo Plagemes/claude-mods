@@ -1,6 +1,6 @@
 {
   "name": "prompt-snippets",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Type :review:, :tests: or your own shortcodes and they expand into full prompts.",
   "author": {
     "name": "Plagemes",

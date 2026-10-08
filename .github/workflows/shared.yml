@@ -2,9 +2,9 @@
 name: shared
 on:
   push:
-    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', '.github/workflows/shared.yml']
+    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', '.github/workflows/shared.yml']
   pull_request:
-    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', '.github/workflows/shared.yml']
+    paths: ['shared/**', 'mods/**', 'scripts/sync-shared.mjs', 'scripts/check-collisions.mjs', '.github/workflows/shared.yml']
 jobs:
   shared:
     runs-on: ubuntu-latest
@@ -20,3 +20,5 @@ jobs:
         run: bun test shared/tests
       - name: No function handed $ is redeclared
         run: node scripts/lint-dollar.mjs
+      - name: No two mods claim the same command, tab, pane or folder
+        run: node scripts/check-collisions.mjs

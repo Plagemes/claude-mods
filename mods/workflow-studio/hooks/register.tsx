@@ -769,31 +769,35 @@ export const register: Register = on => {
   const ctx: Ctx = { root: undefined, home: undefined, isTurnRunning: false, queued: null, controlSeenAt: 0, heldBy: '', stopped: new Map() }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({
+    await registerCommand($, {
       name: 'recipe',
       description: 'Reusable multi-step recipes (release, dependency update, security audit…): list, edit, run',
       argumentHint: '[list | run <name> [param=value …] | new | edit | copy | save | validate | history]',
     })
-    try {
-      await loadAll($, ctx)
-      const stored = await $.store.get(`${HISTORY_PREFIX}${await rootOf($, ctx)}`).catch(() => undefined)
-      if (Array.isArray(stored)) {
-        // A run the last session left open never got its turn's end: mark it, so the history stays true.
-        const runs = (stored as RecipeRun[]).map(run => (run.endedAt === null ? { ...run, outcome: 'cancelled' as const, endedAt: run.startedAt, summary: run.summary || 'the session ended first' } : run))
-        await update($, runsAtom, () => runs.slice(-MAX_HISTORY))
+    // Loading the recipes and the hub hello wait until session.start has returned (afterStart): with every mod
+    // installed, waiting on the disk or the hub here ran session.start past its 10 s budget.
+    afterStart($, 'workflow-studio', async () => {
+      try {
+        await loadAll($, ctx)
+        const stored = await $.store.get(`${HISTORY_PREFIX}${await rootOf($, ctx)}`).catch(() => undefined)
+        if (Array.isArray(stored)) {
+          // A run the last session left open never got its turn's end: mark it, so the history stays true.
+          const runs = (stored as RecipeRun[]).map(run => (run.endedAt === null ? { ...run, outcome: 'cancelled' as const, endedAt: run.startedAt, summary: run.summary || 'the session ended first' } : run))
+          await update($, runsAtom, () => runs.slice(-MAX_HISTORY))
+        }
+      } catch (error) {
+        $.ui.log(`workflow-studio: could not load: ${messageOf(error)}`, { to: 'debug' })
       }
-    } catch (error) {
-      $.ui.log(`workflow-studio: could not load: ${messageOf(error)}`, { to: 'debug' })
-    }
-    const hasHub = await hubHello(
-      $,
-      { version: VERSION, publishes: ['task.queued', 'task.started', 'task.finished', 'x.workflow-studio.finished'], consumes: ['agent.finished', 'smart-router.policy', 'control.stop', 'control.pause', 'control.resume'] },
-      { id: TAB, title: PANE_TITLE, order: TAB_ORDER, command: 'recipe' },
-    )
-    if (hasHub && ctx.controlSeenAt === 0) {
-      ctx.controlSeenAt = await $.clock.now()
-      $.clock.every(CONTROL_POLL_MS, () => void obeyControl($, ctx).catch(error => $.ui.log(`workflow-studio: ${messageOf(error)}`, { to: 'debug' })))
-    }
+      const hasHub = await hubHello(
+        $,
+        { version: VERSION, publishes: ['task.queued', 'task.started', 'task.finished', 'x.workflow-studio.finished'], consumes: ['agent.finished', 'smart-router.policy', 'control.stop', 'control.pause', 'control.resume'] },
+        { id: TAB, title: PANE_TITLE, order: TAB_ORDER, command: 'recipe' },
+      )
+      if (hasHub && ctx.controlSeenAt === 0) {
+        ctx.controlSeenAt = await $.clock.now()
+        $.clock.every(CONTROL_POLL_MS, () => void obeyControl($, ctx).catch(error => $.ui.log(`workflow-studio: ${messageOf(error)}`, { to: 'debug' })))
+      }
+    })
     return next(e)
   })
 
@@ -844,7 +848,18 @@ export const register: Register = on => {
   })
 }
 
-// #region @vendored shared/hub-client.ts sha256:0acb840d81b7: edit the source, then run `node scripts/sync-shared.mjs`.
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
+}
+
+// #region @vendored shared/hub-client.ts sha256:6b153e2e759f: edit the source, then run `node scripts/sync-shared.mjs`.
 // mods-hub client (docs/MOD_CONTRACT.md): uses the hub when it is installed, keeps working when it is not.
 
 type HubMods = EngineInterface['mods']
@@ -938,5 +953,19 @@ async function hubReadFact($: EngineInterface, key: string): Promise<Awaited<Ret
 async function hubTabIs($: EngineInterface, id: string): Promise<boolean> {
   const { value } = await $.state.get({ plugin: 'mods-hub', key: 'tab' })
   return value === id
+}
+/**
+ * Runs a mod's start-up work (the hub hello, a first scan, loading what it keeps) once `session.start` has returned,
+ * after a short delay staggered by the mod's name (0.15–1.35 s), so ~200 mods sharing one hooks worker do not all wait
+ * on the hub, a process or the disk inside the session.start chain (`ran past its 10s budget`). A failure is logged
+ * to the debug log. Call it from `session.start` in place of `await work()`; never await the hub there
+ * (scripts/check-startup.mjs).
+ */
+function afterStart($: EngineInterface, mod: string, work: () => Promise<unknown>): void {
+  let hash = 7
+  for (let i = 0; i < mod.length; i += 1) hash = (hash * 31 + mod.charCodeAt(i)) % 1_200
+  $.clock.after(150 + hash, () => {
+    void work().catch(error => $.ui.log(`${mod}: start-up work failed: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' }))
+  })
 }
 // #endregion @vendored shared/hub-client.ts

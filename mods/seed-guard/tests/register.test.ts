@@ -224,6 +224,7 @@ test('with mods-hub: a deny is published as risk.blocked, credentials in the com
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   const command = 'DATABASE_URL=postgresql://app:Xk9pQ2vL7mR4tZ8w@prod.example.com/app npx prisma migrate reset'
   expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('prod.example.com')

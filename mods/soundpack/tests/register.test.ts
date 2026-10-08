@@ -234,6 +234,7 @@ test('with mods-hub: test-watch\'s runs and a guard\'s refusal have their sounds
   const hub = fakeHub(on, {}, clock)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['test.result', 'risk.blocked'] }])
 
   hub.events.push({ topic: 'test.result', source: 'test-watch', at: clock.now() + 1, data: { runner: 'vitest', outcome: 'passed', passed: 3, failed: 0 } })

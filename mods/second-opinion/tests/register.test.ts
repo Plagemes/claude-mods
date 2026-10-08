@@ -163,6 +163,7 @@ test('with mods-hub: says hello; each second opinion is published as agent.finis
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   await $.session.start(START)
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['agent.finished'], consumes: [] }])
 
   await $.command.run(command())

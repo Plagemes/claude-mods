@@ -141,10 +141,11 @@ test('leading package-manager options and env do not hide the install', () => {
 })
 
 test('with mods-hub: a hold is published as risk.blocked and asked about through the hub', async ($, on) => {
-  const { toasts } = world(on, {})
+  const { toasts, clock } = world(on, {})
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect(await bash($, 'npm install lodahs')).toContain('held back')
   expect(hub.published).toEqual([

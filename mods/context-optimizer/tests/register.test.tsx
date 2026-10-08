@@ -323,6 +323,7 @@ const hub: Plugin = {
 test('with mods-hub: context.pressure once per step, saved tokens on the bus, the Context tab in the shared panel', { plugins: [hub] }, async ($, on) => {
   const w = world(on)
   await start($, w)
+  await w.clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(w.toasts).toContain('tab context')
 
   await measure($, w, 72)

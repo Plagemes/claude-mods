@@ -7,6 +7,9 @@ import { whyNotReadOnly } from '../hooks/readonly'
 import { routesOf } from '../hooks/routes'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const USAGE = { input_tokens: 500, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const QUESTION = 'How does the session token get refreshed?'
 const ANGLES = [
@@ -31,7 +34,7 @@ type World = { spawns: Spawn[]; asked: Asked[]; prompts: string[]; copied: strin
 
 const world = (on: On, options: { exploreMissing?: boolean; plan?: () => ModelCompleteResult; merge?: () => ModelCompleteResult } = {}) => {
   const state: World = { spawns: [], asked: [], prompts: [], copied: [], toasts: [], registered: [], ran: [] }
-  const clock = mock.clock(on, { now: 100_000 })
+  const clock = (startClock = mock.clock(on, { now: 100_000 }))
   let nextId = 0
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -422,6 +425,8 @@ test('with mods-hub: says hello, publishes agent.finished per explorer, shows th
   ]
   on('state.get', { plugin: 'mods-hub', key: 'feed' }, () => ({ value: { value: feed, version: 1 } }))
   await start($)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['agent.finished'], consumes: ['agent.routed'] }])
 
   await $.command.run(explore(QUESTION))

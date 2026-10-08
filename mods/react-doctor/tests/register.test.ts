@@ -210,6 +210,7 @@ test('with mods-hub: each file\'s new issues are published as lint.result (rules
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/app', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['lint.result'], consumes: [] }])
 
   const first = await $.tool.call({ tool: 'Write', file_path: '/app/src/List.tsx', content: RENDER })

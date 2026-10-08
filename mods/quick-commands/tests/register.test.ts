@@ -5,6 +5,9 @@ import type { On } from 'claude-code'
 import { checkCountsOf, toolOf } from '../hooks/results'
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const run = ($: Engine, command: string, args = '') =>
   $.command.run({
     command,
@@ -17,7 +20,7 @@ type World = { submitted: string[]; advance: (ms: number) => Promise<void> }
 
 /** A project made of `files` (path to content); records the prompts the engine is asked to run. */
 const project = (on: On, files: Record<string, string>): World => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const world: World = { submitted: [], advance: clock.advance }
   on('session.cwd', () => ({ value: '/proj' }))
   on('fs.exists', (_$, e) => ({ value: e.path.startsWith('/proj/') && e.path.slice('/proj/'.length) in files }))
@@ -145,6 +148,8 @@ test('with mods-hub: the result of the command it asked for is published, and th
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
 
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos[0]?.publishes).toEqual(['test.result', 'build.result', 'lint.result', 'typecheck.result'])
 
   await run($, 'l')

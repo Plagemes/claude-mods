@@ -4,6 +4,9 @@ import type { On } from 'claude-code'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PLUGIN = 'auto-checkpoint'
 const PANE_PROPS = {
   title: 'Checkpoints',
@@ -18,7 +21,7 @@ const PANE_PROPS = {
 const fakeGit = (on: On, options: { isRepo?: boolean } = {}) => {
   const repo = { worktree: 'tree-a', refs: new Map<string, string>(), calls: [] as string[], statuses: [] as (string | undefined)[] }
   mock.store(on)
-  mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') })
+  startClock = mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') })
   on('process.run', ($, e) => {
     const args = e.argv.slice(1)
     const line = args.join(' ')
@@ -157,7 +160,7 @@ test('regression: a snapshot that times out pauses checkpoints for the session i
   const calls: string[] = []
   const statuses: (string | undefined)[] = []
   mock.store(on)
-  mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') })
+  startClock = mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') })
   on('process.run', ($, e) => {
     const line = e.argv.slice(1).join(' ')
     calls.push(line)
@@ -191,6 +194,8 @@ test('with mods-hub: says hello and publishes each saved checkpoint as x.auto-ch
   on('fs.read', () => ({ value: '{"version":"1.0.0"}' }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start(START)
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: ['x.auto-checkpoint.saved'], consumes: [] }])
 
   await startTurn($, 't1', 'fix the login bug')
@@ -209,7 +214,7 @@ test('with mods-hub: says hello and publishes each saved checkpoint as x.auto-ch
 test('with mods-hub: a snapshot that times out is also a warning notice; without it only the status line says so', async ($, on) => {
   const statuses: (string | undefined)[] = []
   mock.store(on)
-  mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') })
+  startClock = mock.clock(on, { now: Date.parse('2026-10-07T12:00:00Z') })
   const hub = fakeHub(on)
   on('process.run', ($, e) => {
     const line = e.argv.slice(1).join(' ')

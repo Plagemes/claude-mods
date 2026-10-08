@@ -1,6 +1,6 @@
 {
   "name": "pair-mode",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Claude proposes, you type: edits become diffs you apply yourself, for deliberate practice.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#pair-mode",

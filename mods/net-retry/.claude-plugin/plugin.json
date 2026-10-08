@@ -1,6 +1,6 @@
 {
   "name": "net-retry",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Automatically retries commands that failed because of a temporary network error.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#net-retry",

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 import type { ExplainLevelName } from '../types'
 
@@ -30,9 +30,9 @@ export const register: Register = (on, options) => {
     current === 'normal' ? undefined : `explain: ${current}`
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'eli5', description: 'Explain things simply, in plain words with analogies.' })
-    await $.command.register({ name: 'normal', description: 'Explain things at the usual depth.' })
-    await $.command.register({ name: 'expert', description: 'Explain things densely and precisely, skipping the basics.' })
+    await registerCommand($, { name: 'eli5', description: 'Explain things simply, in plain words with analogies.' })
+    await registerCommand($, { name: 'normal', description: 'Explain things at the usual depth.' })
+    await registerCommand($, { name: 'expert', description: 'Explain things densely and precisely, skipping the basics.' })
     $.ui.status(status(await read($, level)))
     return next(e)
   })
@@ -51,4 +51,15 @@ export const register: Register = (on, options) => {
 
     return { sections: [...composed.sections, { id: 'explain-level:depth', text: INSTRUCTION[current], scope: 'session' }] }
   })
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

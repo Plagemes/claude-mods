@@ -124,6 +124,7 @@ test('with mods-hub: the stack is shared as the fact stack-detector.stack, skipp
   const hub = fakeHub(on)
   await start($)
 
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: [] }])
   const shared = hub.facts.get('stack') as { root: string; ids: string[]; packageManager: string | null; testCommand: string | null; techs: { id: string; evidence: string }[] }
   expect(shared.root).toBe(ROOT)

@@ -4,13 +4,16 @@ import type { AgentInfo, On } from 'claude-code'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 type Agents = AgentInfo[]
 
 const agent = (id: string, status: AgentInfo['status']): AgentInfo => ({ id, status, type: 'general-purpose', description: id })
 
 /** The engine beneath the plugin: a mutable list of agents, the status line and toasts recorded, and an Agent tool that always runs. */
 const world = (on: On, agents: Agents = []) => {
-  const clock = mock.clock(on)
+  const clock = (startClock = mock.clock(on))
   const seen = { statuses: [] as (string | undefined)[], toasts: [] as string[], reached: 0, agents, advance: clock.advance }
   on('agent.list', () => ({ value: [...seen.agents] }))
   on('ui.status', (_$, e) => {
@@ -128,6 +131,8 @@ test('with mods-hub: smart-router\'s lower parallel limit holds here, and a refu
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: ['smart-router.policy'] }])
   const refused = await spawn($)
   expect(refused.deny).toContain('subagent-cap: 2 of 2 subagents are already running')

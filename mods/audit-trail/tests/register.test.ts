@@ -6,6 +6,7 @@ import { sha256Hex } from '../hooks/sha256'
 import { redact, summarize } from '../hooks/summary'
 import { fakeHub } from './hub'
 
+
 const NOON = Date.UTC(2026, 9, 7, 12, 0, 0)
 const LOG = '/repo/.claude/audit/2026-10-07.jsonl'
 const SESSION = 'session-1'
@@ -277,10 +278,11 @@ test('with mods-hub: every event on the bus goes in the log, a guard\'s refusal 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: [], consumes: ['*', 'risk.blocked'] }])
   hub.events.push(
-    { topic: 'risk.blocked', source: 'rm-rf-guard', at: NOON + 1, data: { guard: 'rm-rf-guard', tool: 'Bash', reason: 'recursive delete of /', severity: 'high', command: 'rm -rf /' } },
-    { topic: 'deploy.started', source: 'deploy-checklist', at: NOON + 2, data: { target: 'vercel', environment: 'production', url: `https://x.dev/?token=${GITHUB_TOKEN}` } },
+    { topic: 'risk.blocked', source: 'rm-rf-guard', at: clock.now() + 1, data: { guard: 'rm-rf-guard', tool: 'Bash', reason: 'recursive delete of /', severity: 'high', command: 'rm -rf /' } },
+    { topic: 'deploy.started', source: 'deploy-checklist', at: clock.now() + 2, data: { target: 'vercel', environment: 'production', url: `https://x.dev/?token=${GITHUB_TOKEN}` } },
   )
   await clock.advance(10_000)
   await clock.settle()

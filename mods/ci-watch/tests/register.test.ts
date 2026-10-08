@@ -181,6 +181,7 @@ test('with mods-hub: follows the branch just pushed, publishes ci.result and not
   seen.runs = [run(8, 'test', 'in_progress')]
 
   await $.session.start({ cwd: '/home/me/shop', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['ci.result'], consumes: ['git.push'] }])
 
   expect((await $.command.run(typed(''))).text).toContain('watching CI on feature/cart')

@@ -41,7 +41,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     // The name is spelled out here and in the command.run matcher: validate reads both as literals.
-    await $.command.register({
+    await registerCommand($, {
       name: 'git-branch',
       description: 'Create and switch to a well-named git branch from a short description',
       argumentHint: '[what you are about to do]',
@@ -62,4 +62,15 @@ export const register: Register = (on, options) => {
     const text = await switchToNewBranch($, branch.name)
     return text.includes('Created and switched') ? { text, context: [`The user ran /git-branch: the git branch is now ${branch.name}.`] } : { text }
   })
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

@@ -164,6 +164,7 @@ test('with mods-hub: says hello; a heavy command on a nearly full disk is a warn
   const hub = fakeHub(on, {}, w.clock)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  await w.clock.advance(1_500)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
 
   const ran = await $.tool.call({ tool: 'Bash', command: 'npm install' })

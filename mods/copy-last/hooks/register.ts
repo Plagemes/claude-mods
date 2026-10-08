@@ -72,11 +72,11 @@ const copy = async ($: EngineInterface, text: string, what: string): Promise<{ t
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({
+    await registerCommand($, {
       name: 'copy-last',
       description: "Copy Claude's last answer to the clipboard",
     })
-    await $.command.register({
+    await registerCommand($, {
       name: 'copy-code',
       description: "Copy the last fenced code block of Claude's answers to the clipboard",
       argumentHint: '[n]',
@@ -115,4 +115,15 @@ export const register: Register = on => {
 
     return copy($, block.code, block.language === '' ? 'the code block' : `the ${block.language} code block`)
   })
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

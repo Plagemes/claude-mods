@@ -3,6 +3,9 @@ import { mock, test, expect } from 'claude-code/testing'
 
 import { fakeHub } from './hub'
 
+/** The mock clock of the running test, moved on past afterStart's delay so the hub hello is sent. */
+let startClock: ReturnType<typeof mock.clock> | undefined
+
 const PERSON = { wait: false, origin: { kind: 'composer' } } as const
 
 /** Stands in for the engine; `kubeContext` is what `kubectl config current-context` prints. */
@@ -141,7 +144,7 @@ test('an approval does not carry into a turn the person did not start', async ($
 })
 
 test('with mods-hub: a deny is published as risk.blocked, and a production deploy on the bus is mentioned', async ($, on) => {
-  mock.clock(on, { now: 10_000_000 })
+  startClock = mock.clock(on, { now: 10_000_000 })
   engine(on)
   const hub = fakeHub(on)
   hub.events.push({ topic: 'deploy.started', data: { target: 'api', environment: 'production' }, at: 10_000_000 - 5 * 60_000, source: 'deploy-checklist' })
@@ -162,12 +165,14 @@ test('with mods-hub: a deny is published as risk.blocked, and a production deplo
 })
 
 test('with mods-hub: an old or non-production deploy is not mentioned, and hello lists what it trades', async ($, on) => {
-  mock.clock(on, { now: 10_000_000 })
+  startClock = mock.clock(on, { now: 10_000_000 })
   engine(on)
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   hub.events.push({ topic: 'deploy.started', data: { target: 'api', environment: 'staging' }, at: 10_000_000 - 60_000, source: 'deploy-checklist' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await startClock?.advance(1_500) // the hello waits for session.start to return (afterStart)
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve()
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: ['deploy.started'] }])
   expect((await $.tool.call({ tool: 'Bash', command: 'terraform apply' })).deny).not.toContain('deploy (')
 })

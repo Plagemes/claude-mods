@@ -183,7 +183,7 @@ export const register: Register = on => {
   const cache: Cache = { steps: new Map() }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'replay', description: 'Step through this session (prompts, tool calls, edits) like a video timeline', argumentHint: ARGUMENT_HINT })
+    await registerCommand($, { name: 'replay', description: 'Step through this session (prompts, tool calls, edits) like a video timeline', argumentHint: ARGUMENT_HINT })
 
     return next(e)
   })
@@ -307,4 +307,15 @@ export const register: Register = on => {
       </Box>
     )
   })
+}
+
+/** Registers a slash command. A refused name (Claude Code's own, or another mod's) is reported as a notice, never thrown, so the rest of session.start still runs. */
+async function registerCommand($: EngineInterface, spec: Parameters<EngineInterface['command']['register']>[0]): Promise<boolean> {
+  try {
+    await $.command.register(spec)
+    return true
+  } catch (error) {
+    $.ui.log(`${$.plugin.name}: /${spec.name} was not registered (${error instanceof Error ? error.message : String(error)}).`)
+    return false
+  }
 }

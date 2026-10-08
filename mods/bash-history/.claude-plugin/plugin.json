@@ -1,6 +1,6 @@
 {
   "name": "bash-history",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "/bash-history lists recent shell commands Claude ran, with exit status and duration.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#bash-history",

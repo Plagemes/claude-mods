@@ -1,6 +1,6 @@
 {
   "name": "prompt-lint",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Gently flags vague prompts like 'fix it' and suggests what to add.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#prompt-lint",

@@ -3,6 +3,7 @@ import { test, expect, mock } from 'claude-code/testing'
 
 import { fakeHub } from './hub'
 
+
 const DIRTY = [
   '# branch.oid 1111111111111111111111111111111111111111',
   '# branch.head feat/x',
@@ -41,7 +42,8 @@ test('shows branch, ahead/behind and the dirty count when the session starts', a
   const clock = mock.clock(on)
   const { lines } = world(on, { stdout: DIRTY })
   await $.session.start(START)
-  await clock.advance(10)
+  expect(lines).toEqual([]) // git waits until session.start has returned (afterStart)
+  await clock.advance(1_500)
   expect(lines).toEqual(['⎇ feat/x ↑2 ↓0 ●3'])
 })
 
@@ -106,6 +108,7 @@ test('with mods-hub: says hello, shares the branch as a fact and refreshes when 
   on('fs.read', () => ({ value: MANIFEST }))
 
   await $.session.start(START)
+  await clock.advance(1_500) // the hello waits for session.start to return (afterStart)
   await clock.advance(10)
   expect(hub.hellos).toEqual([{ version: '1.0.0', publishes: [], consumes: ['git.commit', 'git.push'] }])
   expect(hub.facts.get('branch')).toEqual({ branch: 'feat/x', ahead: 2, behind: 0, dirty: 3, isDetached: false })
@@ -114,7 +117,7 @@ test('with mods-hub: says hello, shares the branch as a fact and refreshes when 
   // commit-composer commits through $.process, not through a tool call: only the hub's event tells.
   git.stdout = ['# branch.oid 2222222', '# branch.head feat/x', '# branch.upstream origin/feat/x', '# branch.ab +3 -0'].join('\n')
   await clock.advance(1000)
-  hub.events.push({ topic: 'git.commit', data: { sha: 'abc', message: 'x', branch: 'feat/x', files: 3 }, at: 500, source: 'commit-composer' })
+  hub.events.push({ topic: 'git.commit', data: { sha: 'abc', message: 'x', branch: 'feat/x', files: 3 }, at: clock.now(), source: 'commit-composer' })
   await $.turn.complete(TURN)
   await clock.advance(10)
   expect(calls).toHaveLength(2)
@@ -128,6 +131,7 @@ test('with mods-hub but no git event, a finished turn does not run git', async (
   const hub = fakeHub(on, {}, clock)
   on('fs.read', () => ({ value: MANIFEST }))
   await $.session.start(START)
+  await clock.advance(1_500)
   await clock.advance(10)
   hub.events.push({ topic: 'test.result', data: {}, at: 5, source: 'x' })
   await $.turn.complete(TURN)
@@ -139,6 +143,7 @@ test('without mods-hub nothing is shared and a finished turn changes nothing', a
   const clock = mock.clock(on)
   const { calls, lines } = world(on, { stdout: DIRTY })
   await $.session.start(START)
+  await clock.advance(1_500)
   await clock.advance(10)
   await $.turn.complete(TURN)
   await clock.advance(10)

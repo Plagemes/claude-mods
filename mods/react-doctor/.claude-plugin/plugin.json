@@ -1,6 +1,6 @@
 {
   "name": "react-doctor",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Catches React hook mistakes as Claude writes them: missing effect deps, setState in render, conditional hooks.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#react-doctor",

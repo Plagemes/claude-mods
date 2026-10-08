@@ -88,20 +88,20 @@ test('explains itself when there is nothing to save or the name is bad', async (
   expect(await run($, 'save-snippet', 'bad name!')).toContain('usage:')
 })
 
-test('/snippets lists, saving again updates, /delete-snippet removes', async ($, on) => {
+test('/vault lists, saving again updates, /delete-snippet removes', async ($, on) => {
   const state = engine(on)
   await run($, 'save-snippet', 'retry')
   state.messages = [reply('```sh\nls -la\n```')]
   await run($, 'save-snippet', 'ls')
   expect(await run($, 'save-snippet', 'ls')).toContain('updated')
 
-  const listed = await run($, 'snippets')
+  const listed = await run($, 'vault')
   expect(listed).toContain('📎 Snippets (2)')
   expect(listed).toContain('ls · sh · 1 line · 2026-10-07')
   expect(listed).toContain('retry · js · 5 lines · 2026-10-07')
 
   expect(await run($, 'delete-snippet', 'ls')).toBe('📎 snippet ls deleted.')
-  expect(await run($, 'snippets')).toContain('📎 Snippets (1)')
+  expect(await run($, 'vault')).toContain('📎 Snippets (1)')
   expect(await run($, 'delete-snippet', 'ls')).toContain('No snippet called ls')
 })
 
@@ -118,7 +118,7 @@ test('registers its four commands when the session starts', async ($, on) => {
 
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
 
-  expect(state.commands.sort()).toEqual(['delete-snippet', 'save-snippet', 'snippet', 'snippets'])
+  expect(state.commands.sort()).toEqual(['delete-snippet', 'save-snippet', 'snippet', 'vault'])
 })
 
 test('a snippet named like an Object.prototype key (constructor) is a normal snippet', async ($, on) => {

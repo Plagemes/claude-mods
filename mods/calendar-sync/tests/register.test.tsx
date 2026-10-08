@@ -170,6 +170,7 @@ test('errors: a failing server keeps the old copy and says so without the secret
 test('a calendar server that never answers is given up on after 30 seconds, without the address in the message', { options: OPTIONS }, async ($, on) => {
   const w = world(on)
   await start($)
+  await w.clock.advance(1_500) // start-up (the first fetch) waits for session.start to return (afterStart)
   w.net.hang = true
   const pending = calendarCommand($, 'refresh')
   await w.clock.advance(31_000)
@@ -322,3 +323,11 @@ for (const surface of ALL_SURFACES) {
     await ui.unmount()
   })
 }
+
+test('regression: session.start fetches nothing and waits on nothing; the first fetch follows once it returned, or at the first /calendar', { options: OPTIONS }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  expect(w.net.urls).toEqual([])
+  await w.clock.advance(1_500)
+  expect(w.net.urls).toEqual([URL])
+})

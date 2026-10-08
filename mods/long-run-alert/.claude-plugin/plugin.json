@@ -1,6 +1,6 @@
 {
   "name": "long-run-alert",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Alerts you when a single command has been running too long.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#long-run-alert",

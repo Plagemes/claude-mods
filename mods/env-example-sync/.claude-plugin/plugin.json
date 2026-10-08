@@ -1,6 +1,6 @@
 {
   "name": "env-example-sync",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Keeps .env.example in sync with the environment variables your code actually reads.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#env-example-sync",

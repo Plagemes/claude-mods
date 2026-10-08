@@ -1,6 +1,6 @@
 {
   "name": "telegram-bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Progress, questions and remote control over a Telegram bot, through the mods-hub channel system.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#telegram-bridge",

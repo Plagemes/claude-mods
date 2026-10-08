@@ -1,6 +1,6 @@
 {
   "name": "done-chime",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Plays a chime when a long turn finishes.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#done-chime",

@@ -1,6 +1,6 @@
 {
   "name": "smart-router",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Routes every subagent to the right model for the task's difficulty, runs independent work in parallel and starts workflows when a job needs one.",
   "author": {
     "name": "Plagemes",

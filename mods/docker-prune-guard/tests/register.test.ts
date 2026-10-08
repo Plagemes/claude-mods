@@ -155,6 +155,7 @@ test('with mods-hub: a deny is published as risk.blocked with the rule and what 
   const hub = fakeHub(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 1_000; i += 1) await Promise.resolve() // the hello waits for session.start to return (afterStart)
   expect(hub.hellos).toEqual([{ version: 'unknown', publishes: ['risk.blocked'], consumes: [] }])
   expect((await $.tool.call({ tool: 'Bash', command: 'docker volume rm pgdata' })).deny).toContain('docker-prune-guard')
   expect((await $.tool.call({ tool: 'Bash', command: 'docker ps' })).deny).toBeUndefined()

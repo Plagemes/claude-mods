@@ -1,6 +1,6 @@
 {
   "name": "email-digest",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Daily or weekly email summaries in plain language for clients and managers who don't live in chat.",
   "author": { "name": "Plagemes", "url": "https://github.com/plagemes" },
   "homepage": "https://plagemes.github.io/claude-mods/#email-digest",
