@@ -48,6 +48,29 @@ function commandsOf(name) {
   return []
 }
 
+// Packs: curated bundles the store offers in place of a bare "Install all"; every member must be a mod.
+const packs = (catalog.packs ?? []).map(pack => {
+  for (const name of pack.mods) {
+    if (!catalog.mods.some(m => m.name === name)) problems.push(`pack ${pack.id}: unknown mod ${name}`)
+  }
+  return { id: pack.id, title: pack.title, tagline: pack.tagline, mods: pack.mods }
+})
+
+// What the store scores a project with (mod-store /mods profile): files, dependencies, always-on, and the few
+// intents specific enough to tell (a phrase or a long word, at most six), so the site's data stays small.
+const INTENTS_KEPT = 6
+const isTellingIntent = intent => (intent.includes(' ') && intent.length >= 6) || intent.length >= 8
+function signalsOf(signals = {}) {
+  const intents = (signals.intents ?? []).map(i => i.trim().toLowerCase()).filter(isTellingIntent).slice(0, INTENTS_KEPT)
+  const kept = {
+    ...(signals.files?.length ? { files: signals.files } : {}),
+    ...(signals.deps?.length ? { deps: signals.deps } : {}),
+    ...(intents.length ? { intents } : {}),
+    ...(signals.always === true ? { always: true } : {}),
+  }
+  return Object.keys(kept).length === 0 ? undefined : kept
+}
+
 const marketplace = {
   name: MARKETPLACE,
   owner: AUTHOR,
@@ -72,8 +95,11 @@ const siteData = {
   repository: REPO,
   marketplace: MARKETPLACE,
   categories: catalog.categories.map(c => ({ ...c, count: mods.filter(m => m.category === c.id).length })),
-  mods: mods.map(({ name, category, tier, description, version, keywords, commands, since = '1.0.0' }) =>
-    ({ name, category, tier, description, version, keywords, commands, since })),
+  ...(packs.length === 0 ? {} : { packs }),
+  mods: mods.map(({ name, category, tier, description, version, keywords, commands, since = '1.0.0', signals }) => {
+    const kept = signalsOf(signals)
+    return { name, category, tier, description, version, keywords, commands, since, ...(kept === undefined ? {} : { signals: kept }) }
+  }),
 }
 
 // Each category is a heading (the README's jump index links to it) over a

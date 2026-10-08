@@ -1,6 +1,6 @@
 import type { SelectOption } from 'claude-code'
 
-import type { StoreCatalog, StoreCategory, StoreConfigRow, StoreInstall, StoreInstalled, StoreMod } from '../types'
+import type { StoreCatalog, StoreCategory, StoreConfigRow, StoreInstall, StoreInstalled, StoreMod, StorePack, StoreSignals } from '../types'
 
 export const DEFAULT_REPOSITORY = 'plagemes/claude-mods'
 export const DEFAULT_BRANCH = 'main'
@@ -36,10 +36,10 @@ export type Source = { repository: string; branch: string }
 export type Marketplace = { name: string; mods: StoreMod[] }
 
 /** What a mod gets from catalog.json or the site's data beside its marketplace entry. */
-export type ModMeta = { tier?: string; since?: string; commands?: string[] }
+export type ModMeta = { tier?: string; since?: string; commands?: string[]; signals?: StoreSignals }
 
 /** What catalog.json (or docs/data/mods.json) adds: category titles and taglines, and each mod's tier, release and commands. */
-export type CatalogMeta = { categories: StoreCategory[]; mods: Record<string, ModMeta> }
+export type CatalogMeta = { categories: StoreCategory[]; mods: Record<string, ModMeta>; packs: StorePack[] }
 
 /** Where a mod stands for this person. */
 export type ModStatus =
@@ -59,6 +59,11 @@ export type ModsCommand =
   | { kind: 'stop' }
   | { kind: 'install-all' | 'update-all' }
   | { kind: 'install' | 'update' | 'uninstall'; name: string }
+  | { kind: 'profile'; step: 'show' | 'apply' | 'reset' }
+  | { kind: 'slim'; step: 'show' | 'apply' | 'off' | 'on'; days?: number }
+  | { kind: 'undo' }
+  | { kind: 'packs' }
+  | { kind: 'pack'; id: string; step: 'show' | 'install' | 'enable' }
   | { kind: 'usage'; reason: string }
 
 export const isModName = (value: string): boolean => NAME.test(value)
@@ -78,6 +83,44 @@ const asText = (value: unknown): string | undefined =>
 
 const asTexts = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+
+const SIGNAL_LIMIT = 40
+const PACK_LIMIT = 16
+const PACK_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
+
+/** An intent specific enough to tell a project needs the mod: a phrase (`write pr`) or a long word (`kubernetes`), not `test`. */
+export const isTellingIntent = (intent: string): boolean =>
+  (intent.includes(' ') && intent.length >= 6) || intent.length >= 8
+
+/** A mod's `signals` (files, deps, intents, always); undefined when it has none. */
+function parseSignals(value: unknown): StoreSignals | undefined {
+  const record = asRecord(value)
+  if (record === undefined) return undefined
+  const files = asTexts(record.files).filter(file => file.trim() !== '' && !file.includes('..')).slice(0, SIGNAL_LIMIT)
+  const deps = asTexts(record.deps).map(dep => dep.trim().toLowerCase()).filter(dep => dep !== '').slice(0, SIGNAL_LIMIT)
+  const intents = asTexts(record.intents).map(intent => intent.trim().toLowerCase()).filter(isTellingIntent).slice(0, SIGNAL_LIMIT)
+  const signals: StoreSignals = {
+    ...(files.length === 0 ? {} : { files }),
+    ...(deps.length === 0 ? {} : { deps }),
+    ...(intents.length === 0 ? {} : { intents }),
+    ...(record.always === true ? { always: true } : {}),
+  }
+  return Object.keys(signals).length === 0 ? undefined : signals
+}
+
+/** catalog.json's `packs`: valid, de-duplicated, each with its mods named once. */
+export function parsePacks(value: unknown): StorePack[] {
+  const packs: StorePack[] = []
+  for (const entry of Array.isArray(value) ? value.slice(0, PACK_LIMIT) : []) {
+    const record = asRecord(entry)
+    const id = asText(record?.id)?.toLowerCase()
+    if (record === undefined || id === undefined || !PACK_ID.test(id) || packs.some(pack => pack.id === id)) continue
+    const mods = [...new Set(asTexts(record.mods).filter(isModName))]
+    if (mods.length === 0) continue
+    packs.push({ id, title: asText(record.title) ?? titleOf(id), tagline: asText(record.tagline) ?? '', mods })
+  }
+  return packs
+}
 
 const titleOf = (id: string): string =>
   id.replace(/[-_]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
@@ -143,14 +186,16 @@ export function parseCatalogMeta(text: string): CatalogMeta {
     const tier = asText(record.tier)
     const since = asText(record.since)
     const commands = asTexts(record.commands).filter(command => /^\/[a-z0-9][a-z0-9:-]*$/.test(command)).slice(0, 12)
+    const signals = parseSignals(record.signals)
     mods[name] = {
       ...(tier === undefined ? {} : { tier }),
       ...(since === undefined ? {} : { since }),
       ...(commands.length === 0 ? {} : { commands }),
+      ...(signals === undefined ? {} : { signals }),
     }
   }
 
-  return { categories, mods }
+  return { categories, mods, packs: parsePacks(root?.packs) }
 }
 
 /** Merges the marketplace with catalog.json (when it was readable) into the catalog the store shows. */
@@ -173,6 +218,10 @@ export function buildCatalog(
   const releases = [...new Set(mods.map(mod => mod.since ?? ''))]
   const newest = releases.filter(release => release !== '').sort(compareVersions).pop()
   const isAllNew = newest !== undefined && mods.every(mod => mod.since === newest)
+  const known = new Set(mods.map(mod => mod.name))
+  const packs = (meta?.packs ?? [])
+    .map(pack => ({ ...pack, mods: pack.mods.filter(name => known.has(name)) }))
+    .filter(pack => pack.mods.length > 0)
 
   return {
     marketplace: marketplace.name,
@@ -180,6 +229,7 @@ export function buildCatalog(
     fetchedAt,
     categories,
     mods,
+    ...(packs.length === 0 ? {} : { packs }),
     ...(newest === undefined || isAllNew ? {} : { newest }),
   }
 }
@@ -449,6 +499,9 @@ export function parseArgs(args: string): ModsCommand {
   if (action === 'update' && isAll) {
     return { kind: 'update-all' }
   }
+  if (verb === 'profile' || verb === 'slim' || verb === 'pack' || verb === 'packs' || verb === 'undo') {
+    return parsePlanArgs(verb, rest.map(word => word.toLowerCase()))
+  }
   if (action !== undefined) {
     return isModName(tail)
       ? { kind: action, name: tail }
@@ -462,6 +515,42 @@ export function parseArgs(args: string): ModsCommand {
     : verb === 'install-all' ? { kind: 'install-all' }
     : verb === 'update-all' ? { kind: 'update-all' }
     : { kind: 'open', query: args.trim() }
+}
+
+const DAYS_MIN = 1
+const DAYS_MAX = 365
+
+/** `/mods profile [apply|reset|undo]`, `/mods slim [<days>|apply|off|on]`, `/mods packs`, `/mods pack <id> [install|enable]`, `/mods undo`. */
+function parsePlanArgs(verb: string, words: readonly string[]): ModsCommand {
+  const [first = '', second = ''] = words
+  if (verb === 'undo' || first === 'undo') {
+    return { kind: 'undo' }
+  }
+  if (verb === 'packs') {
+    return { kind: 'packs' }
+  }
+  if (verb === 'pack') {
+    if (first === '') return { kind: 'packs' }
+    const step = second === '' ? 'show' : second === 'install' || second === 'enable' ? second : undefined
+    return step === undefined || !PACK_ID.test(first)
+      ? { kind: 'usage', reason: '/mods pack takes a pack id, then install or enable.' }
+      : { kind: 'pack', id: first, step }
+  }
+  if (verb === 'profile') {
+    return first === '' ? { kind: 'profile', step: 'show' }
+      : first === 'apply' || first === 'reset' ? { kind: 'profile', step: first }
+      : { kind: 'usage', reason: `/mods profile takes apply, reset or undo, not "${first}".` }
+  }
+  if (first === 'apply' || first === 'off' || first === 'on') {
+    return { kind: 'slim', step: first }
+  }
+  if (first === '') {
+    return { kind: 'slim', step: 'show' }
+  }
+  const days = /^\d+d?$/.test(first) ? Number.parseInt(first, 10) : Number.NaN
+  return days >= DAYS_MIN && days <= DAYS_MAX
+    ? { kind: 'slim', step: 'show', days }
+    : { kind: 'usage', reason: `/mods slim takes a number of days (${DAYS_MIN}–${DAYS_MAX}), apply, off or on.` }
 }
 
 export function formatAge(ms: number): string {

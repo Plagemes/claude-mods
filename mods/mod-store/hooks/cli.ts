@@ -67,6 +67,11 @@ export const argv = {
     [bin, 'plugin', 'update', pluginId(name, marketplace), '--scope', scope, '--json'],
   uninstall: (bin: string, name: string, marketplace: string, scope: string): string[] =>
     [bin, 'plugin', 'uninstall', pluginId(name, marketplace), '--scope', scope, '--json'],
+  /** Turns a mod off or on in one scope (`claude plugin disable|enable --scope`), leaving it installed. */
+  disable: (bin: string, name: string, marketplace: string, scope: string): string[] =>
+    [bin, 'plugin', 'disable', pluginId(name, marketplace), '--scope', scope, '--json'],
+  enable: (bin: string, name: string, marketplace: string, scope: string): string[] =>
+    [bin, 'plugin', 'enable', pluginId(name, marketplace), '--scope', scope, '--json'],
 }
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
@@ -131,10 +136,12 @@ export function parseInstalled(stdout: string, marketplace: string): Record<stri
     if (record === undefined || at <= 0 || id.slice(at + 1) !== marketplace || mods[name] !== undefined) {
       continue
     }
+    const installedAt = Date.parse(asText(record.installedAt) ?? '')
     mods[name] = {
       version: asText(record.version) ?? '',
       scope: asText(record.scope) ?? 'user',
       isEnabled: record.enabled !== false,
+      ...(Number.isFinite(installedAt) ? { installedAt } : {}),
     }
   }
 
