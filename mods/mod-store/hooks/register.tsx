@@ -10,6 +10,7 @@ import type {
 
 import type {
   StoreCatalog,
+  StoreConfirm,
   StoreConfigRow,
   StoreInstalled,
   StoreJob,
@@ -20,6 +21,7 @@ import type {
   StorePlanRow,
   StoreReadme,
   StoreSync,
+  StoreUninstalled,
   StoreView,
 } from '../types'
 import {
@@ -43,6 +45,7 @@ import {
   isNewMod,
   isRepository,
   isStatus,
+  KEEP_HUB_FLAG,
   MARKETPLACE_PATH,
   matchMods,
   paginate,
@@ -58,11 +61,13 @@ import {
   releaseLabel,
   rowsOf,
   STATUS_NEW,
+  STORE_MOD,
   statusOf,
   statusOptions,
   STATUSES,
   tierLabel,
   trimReadme,
+  uninstallTargets,
   updatesOf,
 } from './catalog'
 import type { CatalogMeta, ModStatus, Row, Source, StatusFilter } from './catalog'
@@ -86,6 +91,7 @@ import {
   disabledEntries,
   editEnabledPlugins,
   isDepFile,
+  listedEntries,
   mergeUsage,
   parseDeps,
   parseTranscript,
@@ -102,11 +108,13 @@ import { paneFailure } from './shared/render-safe'
 type Dollar = EngineInterface
 type Action = 'install' | 'update' | 'uninstall'
 type Bulk = 'install-all' | 'update-all'
+/** Uninstalling every mod but the store (after a confirmation), and installing that list again. */
+type Wipe = 'uninstall-all' | 'reinstall-last'
 /** The jobs of profiles, slims and packs: read a project or the transcripts, apply or undo a plan, enable a pack here. */
 type PlanTask = 'profile' | 'slim' | 'apply' | 'undo' | 'reset' | 'enable-pack'
-type Task = Action | Bulk | PlanTask
-/** What a job does: the task, the mod (or pack) it is on, the mods of a bulk install, the days of a slim, its title. */
-type JobSpec = { action: Task; name: string; names?: readonly string[]; days?: number; title?: string }
+type Task = Action | Bulk | Wipe | PlanTask
+/** What a job does: the task, the mod (or pack) it is on, the mods of a bulk run, the days of a slim, its title, mods-hub kept, a retry. */
+type JobSpec = { action: Task; name: string; names?: readonly string[]; days?: number; title?: string; keepHub?: boolean; isRetry?: boolean }
 /** What Undo restores: a settings file's entries as they were, or mods the CLI disabled at user scope. */
 type UndoRecord =
   | { kind: 'local'; path: string; previous: Record<string, boolean | null>; label: string }
@@ -119,7 +127,7 @@ type Config = { source: Source; problem: string | undefined }
 const PANE = 'mod-store'
 const PANE_TITLE = 'Mod Store'
 const PANE_ROWS = 26
-const ARGUMENT_HINT = '[search <words> | profile [apply|reset] | slim [<days>|apply|off|on] | packs | pack <id> [install|enable] | undo | refresh | install-all | update-all | stop | install|update|uninstall <mod>]'
+const ARGUMENT_HINT = '[search <words> | profile [apply|reset] | slim [<days>|apply|off|on] | packs | pack <id> [install|enable] | undo | refresh | install-all | update-all | uninstall-all [confirm|cancel] [--keep-hub] | reinstall-last | stop | install|update|uninstall <mod>]'
 const CACHE_KEY = 'catalog'
 const ANNOUNCED_KEY = 'announced-updates'
 const FRESH_MS = 10 * 60_000
@@ -148,6 +156,8 @@ const NOTICE_CHARS = 400
 /** Where a project's own on/off switches live: local scope, which Claude Code keeps out of git. */
 const SETTINGS_LOCAL = '.claude/settings.local.json'
 const UNDO_KEY = 'undo'
+/** What the last uninstall-all removed (and whether each mod was enabled), for Reinstall these. */
+const LAST_UNINSTALL_KEY = 'lastUninstallAll'
 const NUDGE_KEY = 'slim-nudge'
 const USAGE_CACHE_KEY = 'usage-cache'
 const ESSENTIALS_PACK = 'essentials'
@@ -195,6 +205,8 @@ const configsState = atom({ plugin: 'mod-store', key: 'configs' } as const, {})
 const picksState = atom({ plugin: 'mod-store', key: 'picks' } as const, [])
 /** The plan under review (a profile or a slim): written by the job that reads it and by the person's toggles. */
 const planState = atom({ plugin: 'mod-store', key: 'plan' } as const, null)
+/** An uninstall-all waiting for the person's confirmation: nothing is uninstalled while this is set. */
+const confirmState = atom({ plugin: 'mod-store', key: 'confirm' } as const, null)
 
 /** The `claude` executable, resolved once per load. */
 let binary: string | undefined
@@ -658,6 +670,116 @@ async function uninstall($: Dollar, catalog: StoreCatalog, bin: string, name: st
     : failure(`Could not uninstall ${name}: ${outcome.message}`)
 }
 
+const lastUninstall = async ($: Dollar): Promise<StoreUninstalled | undefined> => {
+  const saved = (await $.store.get(LAST_UNINSTALL_KEY).catch(() => undefined)) as StoreUninstalled | null | undefined
+  return saved === null || saved === undefined || !Array.isArray(saved.mods) ? undefined : saved
+}
+
+/**
+ * Takes the uninstalled mods' entries out of this project's `.claude/settings.local.json` (`enabledPlugins`), so a
+ * profile leaves no stale `false` behind, and out of the last Undo record, which would put them back. Only entries
+ * of those mods are touched; a file that cannot be read or edited is left as it is. Resolves how many it removed.
+ */
+async function forgetMods($: Dollar, catalog: StoreCatalog, names: readonly string[]): Promise<number> {
+  const ids = names.map(name => pluginId(name, catalog.marketplace))
+  let removed = 0
+  try {
+    const path = joinPath(await $.session.root(), ...SETTINGS_LOCAL.split('/'))
+    const current = await $.fs.read(path).catch(() => undefined)
+    const edits = current === undefined ? {} : listedEntries(current, ids)
+    const edit = Object.keys(edits).length === 0 ? undefined : editEnabledPlugins(current, edits)
+    if (edit?.isOk === true) {
+      await $.fs.write(path, edit.text)
+      removed = Object.keys(edits).length
+    }
+    const undo = (await $.store.get(UNDO_KEY).catch(() => undefined)) as UndoRecord | null | undefined
+    if (undo !== null && undo !== undefined) {
+      const left = undo.kind === 'local'
+        ? Object.fromEntries(Object.entries(undo.previous).filter(([id]) => !ids.includes(id)))
+        : undo.names.filter(name => !names.includes(name))
+      const isEmpty = Array.isArray(left) ? left.length === 0 : Object.keys(left).length === 0
+      if (isEmpty) await $.store.delete(UNDO_KEY)
+      else await $.store.set(UNDO_KEY, undo.kind === 'local' ? { ...undo, previous: left } : { ...undo, names: left })
+    }
+  } catch {
+    // A project file that cannot be edited is not worth failing the run for.
+  }
+  return removed
+}
+
+/**
+ * Uninstalls, one after another, every installed mod of the marketplace but mod-store (mods-hub last, or kept):
+ * `spec.names` is what the person confirmed. The list, with each mod's enabled state, is saved before the first
+ * uninstall and trimmed afterwards to the mods that are really gone, so Reinstall these restores exactly those.
+ */
+async function uninstallAll($: Dollar, catalog: StoreCatalog, bin: string, spec: JobSpec): Promise<StoreNotice> {
+  const installed = await knownInstalled($, catalog)
+  if (!installed.isKnown) {
+    return failure(`Could not read the installed mods: ${installed.error}`)
+  }
+  const confirmed = spec.names
+  const targets = uninstallTargets(installed.mods, spec.keepHub === true).filter(name => confirmed === undefined || confirmed.includes(name))
+  if (targets.length === 0) {
+    return info(`There is nothing to uninstall: only ${STORE_MOD} is installed.`)
+  }
+  const earlier = spec.isRetry === true ? (await lastUninstall($))?.mods ?? [] : []
+  const entries = targets.map(name => ({ name, isEnabled: installed.mods[name]?.isEnabled !== false }))
+  const at = await $.clock.now()
+  const keep = earlier.filter(mod => !targets.includes(mod.name))
+  const save = (mods: StoreUninstalled['mods']) =>
+    mods.length === 0 ? $.store.delete(LAST_UNINSTALL_KEY) : $.store.set(LAST_UNINSTALL_KEY, { at, mods })
+  await save([...keep, ...entries])
+  await setJob($, job => ({ ...job, title: plural(targets.length, 'mod'), total: targets.length }))
+  const { results, left } = await eachStep($, targets, name =>
+    change($, argv.uninstall(bin, name, catalog.marketplace, installed.mods[name]?.scope ?? 'user')),
+  )
+  await refreshInstalled($, catalog.marketplace)
+  const gone = results.filter(result => result.outcome.isOk).map(result => result.name)
+  await save([...keep, ...entries.filter(entry => gone.includes(entry.name))])
+  const cleared = await forgetMods($, catalog, gone)
+  const failed = failuresOf(results)
+  const text = [
+    gone.length > 0 ? `Uninstalled ${plural(gone.length, 'mod')} (${listed(gone)}). ${STORE_MOD} stays installed.` : '',
+    failed.text,
+    left > 0 ? `Stopped with ${plural(left, 'mod')} left.` : '',
+    cleared > 0 ? `Cleared ${plural(cleared, 'entry', 'entries')} from this project's profile.` : '',
+    gone.length > 0 ? `Run /reload-plugins to unload ${gone.length === 1 ? 'it' : 'them'}.` : '',
+  ].filter(part => part !== '').join(' ')
+  const retry = failed.names.length > 0 ? { retry: { action: 'uninstall' as const, names: failed.names } } : {}
+
+  return gone.length > 0 ? { ...success(text), ...retry, canReinstall: true }
+    : failed.names.length > 0 ? { ...failure(text), ...retry }
+    : info(text === '' ? 'Stopped before anything was uninstalled.' : text)
+}
+
+/** Installs exactly the mods the last uninstall-all removed, then turns off again the ones that were disabled. */
+async function reinstallLast($: Dollar, catalog: StoreCatalog, bin: string): Promise<StoreNotice> {
+  const saved = await lastUninstall($)
+  if (saved === undefined || saved.mods.length === 0) {
+    return info('There is nothing to reinstall: no uninstall-all is saved.')
+  }
+  const before = await refreshInstalled($, catalog.marketplace)
+  if (!before.isKnown) {
+    return failure(`Could not read the installed mods: ${before.error}`)
+  }
+  const notice = await installMods($, catalog, bin, saved.mods.map(mod => mod.name))
+  const after = await refreshInstalled($, catalog.marketplace)
+  if (!after.isKnown) {
+    return notice
+  }
+  const off = saved.mods.filter(mod => !mod.isEnabled && before.mods[mod.name] === undefined && after.mods[mod.name] !== undefined)
+  for (const mod of off) {
+    await setJob($, job => ({ ...job, current: `${mod.name} (disabled before)` }))
+    await change($, argv.disable(bin, mod.name, catalog.marketplace, 'user'))
+  }
+  if (off.length > 0) await refreshInstalled($, catalog.marketplace)
+  const remaining = saved.mods.filter(mod => after.mods[mod.name] === undefined)
+  if (remaining.length === 0) await $.store.delete(LAST_UNINSTALL_KEY)
+  else await $.store.set(LAST_UNINSTALL_KEY, { ...saved, mods: remaining })
+
+  return off.length === 0 ? notice : { ...notice, text: `${notice.text} ${plural(off.length, 'mod')} left disabled, as before.` }
+}
+
 async function runUpdateAll($: Dollar, catalog: StoreCatalog, bin: string): Promise<StoreNotice> {
   const installed = await knownInstalled($, catalog)
   if (!installed.isKnown) {
@@ -672,6 +794,8 @@ function jobOf(spec: JobSpec): StoreJob {
   const { action, name, names } = spec
   const [verb, title] =
     action === 'update-all' ? [VERBS.update, 'every mod with an update']
+    : action === 'uninstall-all' ? [VERBS.uninstall, spec.title ?? plural(names?.length ?? 0, 'mod')]
+    : action === 'reinstall-last' ? [VERBS.install, spec.title ?? 'the mods you uninstalled']
     : action === 'install-all' ? [VERBS.install, spec.title ?? (names === undefined ? 'every mod not yet installed' : plural(names.length, 'mod'))]
     : action === 'profile' ? ['Reading', 'this project']
     : action === 'slim' ? ['Reading', `the last ${spec.days ?? SLIM_DAYS} days of use`]
@@ -695,6 +819,10 @@ async function runTask($: Dollar, config: Config, catalog: StoreCatalog, bin: st
       return runUpdateAll($, catalog, bin)
     case 'install-all':
       return installMods($, catalog, bin, names)
+    case 'uninstall-all':
+      return uninstallAll($, catalog, bin, spec)
+    case 'reinstall-last':
+      return reinstallLast($, catalog, bin)
     case 'install':
       return install($, catalog, bin, name)
     case 'update':
@@ -725,7 +853,7 @@ async function runJob($: Dollar, config: Config, job: StoreJob, spec: JobSpec): 
   try {
     await update($, jobState, () => job)
     await update($, noticeState, () => null)
-    if (spec.action === 'install-all' || spec.action === 'update-all') {
+    if (spec.action === 'install-all' || spec.action === 'update-all' || spec.action === 'uninstall-all') {
       await refresh($, config, true)
     }
     const catalog = (await currentCatalog($, config)) ?? (await syncCatalog($, config, true))
@@ -1305,6 +1433,57 @@ async function startFromCommand($: Dollar, config: Config, action: Action | Bulk
   return { text: `◆ ${what} in the background. ${where}` }
 }
 
+/** The sentence that asks for the confirmation of an uninstall-all: what goes, what stays, how to proceed. */
+const confirmText = (pending: StoreConfirm): string =>
+  `This will uninstall ${plural(pending.names.length, 'mod')}: ${listed(pending.names)}. ${STORE_MOD} stays installed${pending.keepHub ? ' and so does mods-hub' : ''}. Run \`/mods uninstall-all confirm${pending.keepHub ? ` ${KEEP_HUB_FLAG}` : ''}\` to proceed.`
+
+/** Starts the confirmed uninstall-all; false (with the notice shown) when another job runs. Nothing else starts it. */
+async function startUninstallAll($: Dollar, config: Config, pending: StoreConfirm): Promise<StoreNotice | undefined> {
+  const busy = launch($, config, { action: 'uninstall-all', name: '', names: pending.names, keepHub: pending.keepHub })
+  if (busy === undefined) await update($, confirmState, () => null)
+  return busy
+}
+
+/** `/mods uninstall-all`: lists what would go and waits for `confirm`; nothing is uninstalled yet. */
+async function askUninstallAll($: Dollar, config: Config, keepHub: boolean): Promise<CommandRunResult> {
+  const busy = runningNotice()
+  if (busy !== undefined) return { text: said(busy) }
+  const catalog = (await currentCatalog($, config)) ?? (await syncCatalog($, config, false))
+  if (catalog === null) return { text: '✗ The catalog is not available: check your connection, then run /mods refresh.' }
+  const installed = await refreshInstalled($, catalog.marketplace)
+  if (!installed.isKnown) return { text: said(failure(`Could not read the installed mods: ${installed.error}`)) }
+  const names = uninstallTargets(installed.mods, keepHub)
+  if (names.length === 0) {
+    await update($, confirmState, () => null)
+    return { text: `• There is nothing to uninstall: only ${STORE_MOD} is installed.` }
+  }
+  const pending: StoreConfirm = { names, keepHub }
+  await update($, confirmState, () => pending)
+  await openPane($).catch(() => undefined)
+  return { text: `◆ ${confirmText(pending)}` }
+}
+
+/** `/mods uninstall-all confirm`: runs what the last `/mods uninstall-all` showed; without one it does nothing. */
+async function confirmUninstallAll($: Dollar, config: Config, keepHub: boolean): Promise<CommandRunResult> {
+  const pending = await read($, confirmState)
+  if (pending === null) return { text: '• Nothing to confirm: run /mods uninstall-all first to see what it would remove.' }
+  if (pending.keepHub !== keepHub) {
+    return { text: `✗ That is not what was asked: run /mods uninstall-all confirm${pending.keepHub ? ` ${KEEP_HUB_FLAG}` : ''}, or start again with /mods uninstall-all.` }
+  }
+  const busy = await startUninstallAll($, config, pending)
+  if (busy !== undefined) return { text: said(busy) }
+  const opened = await openPane($).catch(() => ({ isPlaced: false as const }))
+  const where = opened.isPlaced ? 'Progress is in the store; s stops it.' : 'A toast says when it is done; /mods stop stops it.'
+  return { text: `◆ Uninstalling ${plural(pending.names.length, 'mod')} in the background. ${where}` }
+}
+
+/** `/mods reinstall-last`: installs the list the last uninstall-all saved. */
+async function reinstallFromCommand($: Dollar, config: Config): Promise<CommandRunResult> {
+  const saved = await lastUninstall($)
+  if (saved === undefined || saved.mods.length === 0) return { text: '• There is nothing to reinstall: no uninstall-all is saved.' }
+  return launchText($, config, { action: 'reinstall-last', name: '' }, `◆ Reinstalling ${plural(saved.mods.length, 'mod')} in the background. Progress is in the store; s stops it.`)
+}
+
 /** Where the plan screen is: the person's typing of `/mods profile` or `/mods slim`, or a press of Profile or Slim. */
 function showPlan($: Dollar): Promise<StoreView> {
   return setNav($, nav => ({ ...nav, selected: null, screen: 'plan', planTab: 'disable', planPage: 0 }))
@@ -1459,6 +1638,15 @@ export const register: Register = (on, options) => {
         return command.step === 'show' ? startPlan($, config, 'slim', command.days ?? SLIM_DAYS)
           : command.step === 'apply' ? applyFromCommand($, config, 'slim')
           : { text: await setNudge($, command.step === 'off') }
+      case 'uninstall-all':
+        if (command.step === 'cancel') {
+          const had = (await read($, confirmState)) !== null
+          await update($, confirmState, () => null)
+          return { text: had ? '◆ Cancelled: nothing was uninstalled.' : '• Nothing to cancel.' }
+        }
+        return command.step === 'ask' ? askUninstallAll($, config, command.keepHub) : confirmUninstallAll($, config, command.keepHub)
+      case 'reinstall-last':
+        return reinstallFromCommand($, config)
       case 'undo':
         return launchText($, config, { action: 'undo', name: '' }, '◆ Undoing the last apply in the background.')
       case 'packs':
@@ -1499,7 +1687,7 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
   const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
   const Raster = e.surface === 'terminal' ? $.ui.resolve(e).Raster : undefined
   const isTerminal = e.surface === 'terminal'
-  const [shown, sync, installed, nav, held, notice, readmes, configs, picks, plan, now] = await Promise.all([
+  const [shown, sync, installed, nav, held, notice, readmes, configs, picks, plan, pending, now] = await Promise.all([
     read($, catalogState),
     read($, syncState),
     read($, installedState),
@@ -1510,6 +1698,7 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
     read($, configsState),
     read($, picksState),
     read($, planState),
+    read($, confirmState),
     $.clock.now(),
   ])
   const catalog = shown !== null && isCatalogOf(shown, config.source) ? shown : null
@@ -1608,10 +1797,13 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
     <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
       <Text color={TONE_COLOR[notice.tone]} wrap="wrap">{TONE_GLYPH[notice.tone]} {clip(notice.text, NOTICE_CHARS)}</Text>
       {notice.retry !== undefined && isIdle
-        ? <Button key="retry-failed" label={`Retry ${plural(notice.retry.names.length, 'failed mod')}`} plain hotkey="t" onPress={() => notice.retry === undefined ? undefined : start(notice.retry.action === 'install' ? 'install-all' : notice.retry.names.length === 1 ? 'update' : 'update-all', notice.retry.names[0] ?? '', notice.retry.names)} />
+        ? <Button key="retry-failed" label={`Retry ${plural(notice.retry.names.length, 'failed mod')}`} plain hotkey="t" onPress={() => notice.retry === undefined ? undefined : notice.retry.action === 'uninstall' ? run({ action: 'uninstall-all', name: '', names: notice.retry.names, isRetry: true }) : start(notice.retry.action === 'install' ? 'install-all' : notice.retry.names.length === 1 ? 'update' : 'update-all', notice.retry.names[0] ?? '', notice.retry.names)} />
         : null}
       {notice.canReload
         ? <Button key="reload" label="Reload plugins" plain hotkey="l" variant="primary" onPress={() => reloadPlugins($)} />
+        : null}
+      {notice.canReinstall === true && isIdle
+        ? <Button key="reinstall" label="Reinstall these" plain hotkey="e" onPress={() => run({ action: 'reinstall-last', name: '' })} />
         : null}
       {notice.canUndo === true && isIdle
         ? <Button key="undo" label="Undo" plain hotkey="z" onPress={() => run({ action: 'undo', name: '' })} />
@@ -1655,6 +1847,37 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
         {header}
         {body}
         {statusLines}
+      </Box>
+    )
+  }
+
+  // The confirmation of an uninstall-all: what goes, what stays; nothing runs until the person presses the button.
+  if (pending !== null) {
+    const known = installed?.isKnown === true ? installed : undefined
+    const toggleHub = () => known === undefined ? undefined : update($, confirmState, current => current === null ? null : {
+      names: uninstallTargets(known.mods, !current.keepHub),
+      keepHub: !current.keepHub,
+    })
+    const cancel = () => update($, confirmState, () => null)
+    const proceed = async () => {
+      const busy = await startUninstallAll($, config, pending)
+      if (busy !== undefined) await update($, noticeState, () => busy)
+    }
+    return (
+      <Box flexDirection="column">
+        {header}
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color="warning">Uninstall {plural(pending.names.length, 'mod')}?</Text>
+          <Text wrap="wrap">{confirmText(pending).replace(/ Run `.*$/, '')}</Text>
+          <Text dimColor wrap="wrap">{pending.names.join(', ')}</Text>
+          <Text dimColor wrap="wrap">Only mods of {catalog.marketplace} are touched. Then Reinstall these (or /mods reinstall-last) brings exactly this list back.</Text>
+        </Box>
+        {statusLines}
+        <Box flexDirection="row" flexWrap="wrap" columnGap={2} marginTop={1}>
+          <Button key="confirm-cancel" label="Cancel" plain hotkey="c" role="dismiss" autoFocus onPress={cancel} />
+          {isIdle ? <Button key="confirm-uninstall" label={`Uninstall ${plural(pending.names.length, 'mod')}`} plain hotkey="y" onPress={proceed} /> : null}
+          <Button key="confirm-keep-hub" label={pending.keepHub ? 'Also uninstall mods-hub' : 'Keep mods-hub'} plain hotkey="h" dimColor onPress={toggleHub} />
+        </Box>
       </Box>
     )
   }
@@ -1929,6 +2152,7 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
   const installable = installed?.isKnown === true
     ? mods.filter(mod => statusOf(mod, installed).kind === 'available').map(mod => mod.name)
     : []
+  const removable = installed?.isKnown === true ? uninstallTargets(installed.mods, false) : []
   const updatable = installed?.isKnown === true ? updatesOf(catalog, installed).length : 0
   const shelf = (names: readonly string[]) => names.map(name => catalog.mods.find(mod => mod.name === name)).filter((mod): mod is StoreMod => mod !== undefined)
   const featured = isHome && nav.page === 0 && catalog.newest !== undefined ? shelf(FEATURED) : []
@@ -2078,6 +2302,9 @@ async function drawStore($: Dollar, e: RenderInput<'Pane'>, config: Config) {
           : null}
         {isIdle ? <Button key="profile" label="Profile" plain hotkey="f" onPress={() => startPlanPress('profile')} /> : null}
         {isIdle ? <Button key="slim" label="Slim" plain hotkey="w" onPress={() => startPlanPress('slim')} /> : null}
+        {isIdle && status === 'installed' && removable.length > 0
+          ? <Button key="uninstall-all" label={`Uninstall all (${removable.length})`} plain dimColor onPress={() => update($, confirmState, () => ({ names: removable, keepHub: false }))} />
+          : null}
         {installable.length > 0 && isIdle
           ? <Button key="install-all" label={`Install all (${installable.length})`} plain dimColor onPress={() => start('install-all', '', installable)} />
           : null}

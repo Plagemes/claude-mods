@@ -403,3 +403,14 @@ export function disabledEntries(current: string | undefined, marketplace: string
     Object.entries(plugins ?? {}).filter(([id, value]) => value === false && id.endsWith(`@${marketplace}`)).map(([id]) => [id, null]),
   )
 }
+
+/** The ids of `ids` that `current`'s `enabledPlugins` lists (set to either value), as removal edits for `editEnabledPlugins`. */
+export function listedEntries(current: string | undefined, ids: readonly string[]): Record<string, null> {
+  let plugins: Record<string, unknown> | undefined
+  try {
+    plugins = asRecord(asRecord(JSON.parse(current ?? '{}'))?.enabledPlugins)
+  } catch {
+    plugins = undefined
+  }
+  return Object.fromEntries(ids.filter(id => typeof plugins?.[id] === 'boolean').map(id => [id, null]))
+}

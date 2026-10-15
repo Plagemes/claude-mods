@@ -332,7 +332,7 @@
       "category": "core",
       "tier": "complex",
       "description": "An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.",
-      "version": "1.4.2",
+      "version": "1.4.3",
       "keywords": [
         "claude-mods",
         "core",
