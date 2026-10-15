@@ -124,12 +124,20 @@ export type StoreNotice = {
   tone: 'success' | 'error' | 'info'
   text: string
   canReload: boolean
-  retry?: { action: 'install' | 'update'; names: string[] }
+  retry?: { action: 'install' | 'update' | 'uninstall'; names: string[] }
+  /** Mods were just uninstalled in bulk: the notice offers to reinstall exactly those. */
+  canReinstall?: boolean
   /** The last Apply can be undone from the notice. */
   canUndo?: boolean
   /** Many mods were just installed: the notice offers a project profile. */
   canProfile?: boolean
 }
+
+/** An `uninstall-all` waiting for the person's confirmation: the mods it would uninstall, and whether mods-hub stays. */
+export type StoreConfirm = { names: string[]; keepHub: boolean }
+
+/** What `uninstall-all` saved in `$.store` as `lastUninstallAll`: the mods it uninstalled and whether each was enabled. */
+export type StoreUninstalled = { at: number; mods: { name: string; isEnabled: boolean }[] }
 
 /** One setting of a mod, from its manifest's `userConfig`. */
 export type StoreConfigRow = { key: string; default: string; description: string }
@@ -150,6 +158,7 @@ declare module 'claude-code' {
       configs: Record<string, StoreConfigRow[]>
       picks: string[]
       plan: StorePlan | null
+      confirm: StoreConfirm | null
     }
   }
 }

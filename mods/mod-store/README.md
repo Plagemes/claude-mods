@@ -1,7 +1,7 @@
 # mod-store
 > An in-terminal app store: browse, search, install and update every Claude Mod from GitHub.
 
-**Category:** Core · **Version:** 1.4.2
+**Category:** Core · **Version:** 1.4.3
 
 ## What it does
 `/mods` opens a store pane listing every mod of the collection, grouped by category, with what you already have installed, what has an update and what is new in the latest release. Search as you type, narrow by category and by status (*All*, *Installed*, *Updates*, *New in v2*), install or update a mod straight from its row, or open it to read its README, settings and commands. Installs run in the background with a progress bar you can stop, so you can keep browsing while 200 mods install. The catalog is cached, so the store still opens offline, and a session start tells you once when a new update is out.
@@ -23,6 +23,9 @@ It also keeps a big collection fast. Every enabled mod adds start-up work to eve
 | `/mods install-all` | Install every mod you do not have yet (`/mods install all` works too). |
 | `/mods update-all` | Update every installed mod that has a newer version. |
 | `/mods install <mod>` · `update <mod>` · `uninstall <mod>` | Do it without browsing. |
+| `/mods uninstall-all [--keep-hub]` (or `uninstall all`) | Ask to uninstall every installed claude-mods mod. It only lists what would go (`This will uninstall 12 mods: a, b and 10 more. mod-store stays installed. Run /mods uninstall-all confirm to proceed.`); nothing runs until you confirm. mod-store always stays; mods-hub goes last, or stays with `--keep-hub`. |
+| `/mods uninstall-all confirm [--keep-hub]` · `cancel` | Run what the last `/mods uninstall-all` showed (with the same flag), or drop it. |
+| `/mods reinstall-last` | Install exactly the mods the last uninstall-all removed, and disable again the ones that were disabled. |
 | `/mods stop` | Stop the running install or update after the mod it is on. |
 | `/mods profile` | Read this project and open the profile: which installed mods it needs, which it does not, and why. |
 | `/mods profile apply` | Apply the profile you have read (same as **Apply** in the store). |
@@ -33,6 +36,9 @@ It also keeps a big collection fast. Every enabled mod adds start-up work to eve
 | `/mods packs` | List the packs. `/mods pack <id>` opens one; `/mods pack <id> install` installs what is missing; `/mods pack <id> enable` turns its installed mods on in this project. |
 
 Every change runs in the background, one at a time: the command answers at once (`◆ Installing 79 mods in the background. Progress is in the store; s stops it.`), the store opens on its progress bar, and the outcome arrives as the store's message and a toast. Asking for a second one while one runs says so instead of starting it. A mod that fails to install does not stop the rest; the summary names it and offers **Retry**.
+
+### Uninstall all, with a way back
+**Uninstall all (N)** sits in the action bar of the **Installed** view (dim, never on the home view). It, like the command, opens a confirmation first: the mods that would go, **Cancel**, **Uninstall N mods** and a toggle to keep mods-hub. Then it runs as the usual background job (one mod per step, the progress bar, `s` or `/mods stop`, a failure never stops the rest), only on mods of the claude-mods marketplace, each in the scope it is installed in; mods your organization manages are skipped. Before the first uninstall the list is saved to the store as `lastUninstallAll` (each mod with its enabled or disabled state) and trimmed afterwards to the mods really gone; the summary offers **Retry failed**, **Reload plugins** and **Reinstall these** (`/mods reinstall-last`), which installs exactly that list. In the project you are in, the uninstalled mods' entries are also removed from `.claude/settings.local.json` (`enabledPlugins`), so a profile leaves no stale `false` behind; other projects' files are not touched.
 
 ### Profiles: only what this project needs
 `/mods profile` (or **Profile**, `f`, in the store) reads the project in the background, with the usual progress bar:
@@ -77,7 +83,8 @@ Keys work while the pane has the keyboard; Tab walks the controls, Esc closes it
 | Pack | `i` install the missing mods · `e` enable them here · `b` back · `q` close |
 | Mod page | `b` back · `g` the category · `i` install · `u` update · `x` uninstall · `c` copy the install line · `o` copy the README link · `m` load the README |
 | While a job runs | `s` stop it after the current mod |
-| After a job | `l` run `/reload-plugins` · `t` retry the mods that failed · `z` undo the last apply · `f` profile this project · `d` dismiss |
+| Uninstall all | `c` cancel · `y` uninstall · `h` keep or also remove mods-hub |
+| After a job | `l` run `/reload-plugins` · `t` retry the mods that failed · `e` reinstall what uninstall-all removed · `z` undo the last apply · `f` profile this project · `d` dismiss |
 
 **Install all (N)** installs every mod the list shows that you do not have yet, so it follows the search and both pickers; it has no key, so Tab to it.
 
@@ -118,7 +125,8 @@ Each request has a 15 s timeout. The answers are cached in `$.store` on this mac
 | `claude plugin install <mod>@<marketplace> --scope user --json` | when you press Install, or run `/mods install <mod>` or `/mods install-all` |
 | `claude plugin update <mod>@<marketplace> --scope <scope> --json` | when you press Update, or run `/mods update <mod>` or `/mods update-all` |
 | `claude plugin uninstall <mod>@<marketplace> --scope <scope> --json` | when you press Uninstall, or run `/mods uninstall <mod>` |
-| `claude plugin disable <mod>@<marketplace> --scope user --json` | when you apply a slim (only mods installed at user scope) |
+| `claude plugin uninstall <mod>@<marketplace> --scope <scope> --json` | also for each mod of a confirmed `/mods uninstall-all` |
+| `claude plugin disable <mod>@<marketplace> --scope user --json` | when you apply a slim (only mods installed at user scope), and after `reinstall-last` for mods that were disabled |
 | `claude plugin enable <mod>@<marketplace> --scope user --json` | when you undo a slim |
 | `tail -c 3145728 <transcript>` | during a slim (or the weekly tip), for a transcript over the 4 MiB read cap; skipped where `tail` does not exist |
 
@@ -147,4 +155,4 @@ A short, code-checked summary for reviewers; the section above has the full list
 - **Files it writes:** (1) the project's `.claude/settings.local.json`, only when you press Apply, Undo, reset or Enable here; it changes just the `enabledPlugins` entries, which Claude Code obeys, and it is a local-scope file kept out of git. What it replaced is kept for Undo. Nothing else is written to disk; the catalog cache and undo record live in `$.store`.
 - **Slash commands it runs:** only `/reload-plugins`, through `$.command.run`, when you press **Reload plugins** after a change. If that fails it shows a toast asking you to run it yourself.
 - **mods-hub:** when the separate [mods-hub](../mods-hub) plugin is installed, the store calls its `$.mods` API: `hello` at session start (version, publishes `mod.installed`, consumes `mod.recommended`), `mode` (to hold the weekly slim tip back in Silent or Night), `recent` (reads the `mod.recommended` events from [mod-advisor](../mod-advisor), and the last time each mod published, to tell idle mods apart in a slim; this is the call a scanner may not recognize), and `publish` of `mod.installed` (mod name and version) after a successful install or update. These calls stay on the hub's local bus. Without mods-hub they fail quietly and nothing changes.
-- **The `command.run` hook:** `on("command.run", { command: "mods" })` handles `/mods` and its arguments (`search`, `profile`, `slim`, `packs`, `pack`, `undo`, `refresh`, `install`, `update`, `uninstall`, `install-all`, `update-all`, `stop`). It answers only `/mods`; it does not see, block or change any other command. It is separate from the `$.command.run` call above, which only runs `/reload-plugins`.
+- **The `command.run` hook:** `on("command.run", { command: "mods" })` handles `/mods` and its arguments (`search`, `profile`, `slim`, `packs`, `pack`, `undo`, `refresh`, `install`, `update`, `uninstall`, `install-all`, `update-all`, `uninstall-all`, `reinstall-last`, `stop`). It answers only `/mods`; it does not see, block or change any other command. It is separate from the `$.command.run` call above, which only runs `/reload-plugins`.

@@ -62,6 +62,8 @@ export type ModsCommand =
   | { kind: 'profile'; step: 'show' | 'apply' | 'reset' }
   | { kind: 'slim'; step: 'show' | 'apply' | 'off' | 'on'; days?: number }
   | { kind: 'undo' }
+  | { kind: 'uninstall-all'; step: 'ask' | 'confirm' | 'cancel'; keepHub: boolean }
+  | { kind: 'reinstall-last' }
   | { kind: 'packs' }
   | { kind: 'pack'; id: string; step: 'show' | 'install' | 'enable' }
   | { kind: 'usage'; reason: string }
@@ -499,6 +501,12 @@ export function parseArgs(args: string): ModsCommand {
   if (action === 'update' && isAll) {
     return { kind: 'update-all' }
   }
+  if (verb === 'uninstall-all' || (action === 'uninstall' && rest[0]?.toLowerCase() === 'all')) {
+    return parseUninstallAll(verb === 'uninstall-all' ? rest : rest.slice(1))
+  }
+  if (verb === 'reinstall-last' || (verb === 'reinstall' && tail.toLowerCase() === 'last')) {
+    return { kind: 'reinstall-last' }
+  }
   if (verb === 'profile' || verb === 'slim' || verb === 'pack' || verb === 'packs' || verb === 'undo') {
     return parsePlanArgs(verb, rest.map(word => word.toLowerCase()))
   }
@@ -515,6 +523,31 @@ export function parseArgs(args: string): ModsCommand {
     : verb === 'install-all' ? { kind: 'install-all' }
     : verb === 'update-all' ? { kind: 'update-all' }
     : { kind: 'open', query: args.trim() }
+}
+
+/** `/mods uninstall-all [confirm|cancel] [--keep-hub]` (also `uninstall all ...`). */
+function parseUninstallAll(words: readonly string[]): ModsCommand {
+  const lower = words.map(word => word.toLowerCase())
+  const keepHub = lower.includes(KEEP_HUB_FLAG)
+  const rest = lower.filter(word => word !== KEEP_HUB_FLAG)
+  const [step = '', ...extra] = rest
+  return extra.length === 0 && (step === '' || step === 'confirm' || step === 'cancel')
+    ? { kind: 'uninstall-all', step: step === '' ? 'ask' : step, keepHub }
+    : { kind: 'usage', reason: `/mods uninstall-all takes confirm, cancel or ${KEEP_HUB_FLAG}, not "${rest.join(' ')}".` }
+}
+
+/** The mod the store never uninstalls, so the person can reinstall the rest, and the hub that goes last. */
+export const STORE_MOD = 'mod-store'
+export const HUB_MOD = 'mods-hub'
+export const KEEP_HUB_FLAG = '--keep-hub'
+
+/**
+ * The mods `uninstall-all` removes, in order: every installed mod of the marketplace except mod-store (and mods-hub
+ * with `keepHub`), mods-hub last; mods managed by the organization cannot be uninstalled and are left out.
+ */
+export function uninstallTargets(mods: Readonly<Record<string, StoreInstall>>, keepHub: boolean): string[] {
+  const names = Object.keys(mods).filter(name => name !== STORE_MOD && mods[name]?.scope !== 'managed' && !(keepHub && name === HUB_MOD))
+  return [...names.filter(name => name !== HUB_MOD), ...names.filter(name => name === HUB_MOD)]
 }
 
 const DAYS_MIN = 1

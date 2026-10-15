@@ -73,11 +73,13 @@ export type WorldOptions = {
   isPlaced?: boolean
   copies?: boolean
   listFails?: boolean
-  /** Each `claude plugin install` / `update` takes this long on the mocked clock (a slow CLI). */
+  /** Each `claude plugin install` / `update` / `uninstall` takes this long on the mocked clock (a slow CLI). */
   slowMs?: number
   /** Mods whose install the CLI refuses, and mods whose install cannot even start. */
   refuses?: string[]
   crashes?: string[]
+  /** Mods whose uninstall the CLI refuses. */
+  keeps?: string[]
   /** The marketplace served, when not the default one. */
   plugins?: typeof MARKETPLACE.plugins
   /** The desktop app: no CLAUDE_CODE_EXECPATH, its environment, its folders by path, and the engine version. */
@@ -101,7 +103,18 @@ export const TRANSCRIPTS = `${CONFIG}/projects/-work-app`
 /** Stands for everything beneath the plugin: GitHub, the claude CLI, the surface. */
 export function world(on: On, options: WorldOptions = {}) {
   const clock = mock.clock(on, { now: NOW })
-  mock.store(on, options.store ?? {})
+  // The store in memory (what mock.store does), kept in the open so tests can see what the plugin saved.
+  const stored: Record<string, unknown> = { ...(options.store ?? {}) }
+  on('store.get', ($, e) => ({ value: stored[e.key] }))
+  on('store.set', ($, e) => {
+    stored[e.key] = e.value
+    return { value: undefined }
+  })
+  on('store.delete', ($, e) => {
+    delete stored[e.key]
+    return { value: undefined }
+  })
+  on('store.keys', () => ({ value: Object.keys(stored) }))
   const bin = options.desktop?.bin ?? BIN
   mock.env(on, { ...(options.desktop === undefined ? { CLAUDE_CODE_EXECPATH: BIN } : options.desktop.env), ...options.env })
   const files = new Map(Object.entries(options.files ?? {}).map(([path, file]) => [path, typeof file === 'string' ? { text: file } : file]))
@@ -221,7 +234,7 @@ export function world(on: On, options: WorldOptions = {}) {
     if (verb === 'marketplace') {
       return result(json({ command: 'marketplace-update', outcome: 'ok', message: 'Updated' }))
     }
-    if ((verb === 'install' || verb === 'update') && options.slowMs !== undefined) {
+    if ((verb === 'install' || verb === 'update' || verb === 'uninstall') && options.slowMs !== undefined) {
       await clock.sleep(options.slowMs)
     }
     if (verb === 'install' && options.crashes?.includes(name) === true) {
@@ -245,6 +258,9 @@ export function world(on: On, options: WorldOptions = {}) {
       if (one !== undefined) installed.set(name, { ...one, enabled: verb === 'enable' })
       return result(json({ command: verb, outcome: 'ok', message: `${verb}d ${name}` }))
     }
+    if (verb === 'uninstall' && options.keeps?.includes(name) === true) {
+      return result(json({ command: 'uninstall', outcome: 'failed', message: `Could not remove ${name}` }), 1)
+    }
     if (verb === 'uninstall') {
       installed.delete(name)
       return result(json({ command: 'uninstall', outcome: 'ok', message: `Uninstalled ${name}` }))
@@ -254,7 +270,7 @@ export function world(on: On, options: WorldOptions = {}) {
 
   const fileText = (path: string): string | undefined => files.get(path)?.text
 
-  return { clock, net, installed, calls, fetched, toasts, commands, writes, fileText }
+  return { clock, stored, net, installed, calls, fetched, toasts, commands, writes, fileText }
 }
 
 export const pane = (bodyRows = 40, bodyColumns = 100) => ({
